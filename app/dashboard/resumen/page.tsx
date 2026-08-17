@@ -1,14 +1,60 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
 
-// Tab "Resumen" — disponible en Core (no solo en Pro). Por ahora es un
-// resumen de lo personal (gastos, metas, alertas), con números reales de
-// Supabase. Cuando el multi-entidad de Pro esté listo, esta pantalla
-// también consolidará Negocio + Personal, como en el mockup — por ahora
-// solo hay Personal, así que eso es lo que se resume.
-export default async function ResumenPage() {
+// Tab "Resumen" — disponible en Core (no solo en Pro). Resumen de lo
+// personal (gastos, metas, alertas) con números reales de Supabase, más
+// los filtros de temporalidad del mockup (Este mes / Mes anterior /
+// Trimestre / YTD / Rango) — usan la URL (?rango=...) en vez de estado de
+// React, así no hace falta convertir la pantalla a cliente. Cuando el
+// multi-entidad de Pro esté listo, esta pantalla también consolidará
+// Negocio + Personal, como en el mockup — por ahora solo hay Personal.
+
+type Rango = "mes_actual" | "mes_anterior" | "trimestre" | "ytd" | "custom";
+
+function fmt(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+function calcularRango(sp: { rango?: string; desde?: string; hasta?: string }) {
+  const hoy = new Date();
+  const rango = (sp.rango as Rango) || "mes_actual";
+
+  if (rango === "mes_anterior") {
+    const inicio = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+    const fin = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+    return { rango, inicio: fmt(inicio), fin: fmt(fin), etiqueta: inicio.toLocaleDateString("es-PR", { month: "long", year: "numeric" }) };
+  }
+  if (rango === "trimestre") {
+    const qStartMonth = Math.floor(hoy.getMonth() / 3) * 3;
+    const inicio = new Date(hoy.getFullYear(), qStartMonth, 1);
+    return { rango, inicio: fmt(inicio), fin: fmt(hoy), etiqueta: `Q${Math.floor(qStartMonth / 3) + 1} ${hoy.getFullYear()}` };
+  }
+  if (rango === "ytd") {
+    const inicio = new Date(hoy.getFullYear(), 0, 1);
+    return { rango, inicio: fmt(inicio), fin: fmt(hoy), etiqueta: `Año ${hoy.getFullYear()} (a la fecha)` };
+  }
+  if (rango === "custom" && sp.desde && sp.hasta) {
+    return { rango, inicio: sp.desde, fin: sp.hasta, etiqueta: `${sp.desde} a ${sp.hasta}` };
+  }
+  const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  return { rango: "mes_actual" as Rango, inicio: fmt(inicio), fin: fmt(hoy), etiqueta: hoy.toLocaleDateString("es-PR", { month: "long", year: "numeric" }) };
+}
+
+const PILLS: { rango: Rango; label: string }[] = [
+  { rango: "mes_actual", label: "Este mes" },
+  { rango: "mes_anterior", label: "Mes anterior" },
+  { rango: "trimestre", label: "Trimestre" },
+  { rango: "ytd", label: "YTD" },
+];
+
+export default async function ResumenPage({
+  searchParams,
+}: {
+  searchParams: { rango?: string; desde?: string; hasta?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
@@ -16,23 +62,23 @@ export default async function ResumenPage() {
 
   if (!user) redirect("/login");
 
-  const hoy = new Date();
-  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
-  const mesLbl = hoy.toLocaleDateString("es-PR", { month: "long", year: "numeric" });
+  const { rango, inicio, fin, etiqueta } = calcularRango(searchParams);
 
   const { data: transacciones } = await supabase
     .from("transactions")
     .select("amount, hacienda_category_id")
     .eq("owner_id", user.id)
     .is("entity_id", null)
-    .gte("fecha", inicioMes);
+    .gte("fecha", inicio)
+    .lte("fecha", fin);
 
-  const gastosDelMes = (transacciones ?? []).reduce((sum, t) => sum + (t.amount > 0 ? Number(t.amount) : 0), 0);
+  const gastosDelPeriodo = (transacciones ?? []).reduce((sum, t) => sum + (t.amount > 0 ? Number(t.amount) : 0), 0);
+  const ingresosDelPeriodo = (transacciones ?? []).reduce((sum, t) => sum + (t.amount < 0 ? Math.abs(Number(t.amount)) : 0), 0);
 
-  // Reporte contable básico: gastos del mes agrupados por categoría. El
-  // agrupado se hace aquí en JS (no en SQL) porque el volumen mensual de un
-  // usuario Core es chico — si esto crece mucho, se puede mover a una vista
-  // o función de Postgres más adelante.
+  // Reporte contable básico: gastos del período agrupados por categoría. El
+  // agrupado se hace aquí en JS (no en SQL) porque el volumen de un usuario
+  // Core es chico — si esto crece mucho, se puede mover a una vista o
+  // función de Postgres más adelante.
   const { data: categoriasDisponibles } = await supabase
     .from("hacienda_categories")
     .select("id, nombre")
@@ -66,6 +112,7 @@ export default async function ResumenPage() {
     .eq("estado", "activo")
     .not("fecha_vencimiento", "is", null);
 
+  const hoy = new Date();
   const en30dias = new Date(hoy.getTime() + 30 * 24 * 60 * 60 * 1000);
   const alertasProximas = (docs ?? []).filter((d) => new Date(d.fecha_vencimiento) <= en30dias).length;
 
@@ -73,15 +120,68 @@ export default async function ResumenPage() {
     <div className="vc-shell">
       <div className="mb-4">
         <h1 className="text-xl font-medium">Resumen</h1>
-        <p className="mt-0.5 text-xs capitalize text-muted">Personal · {mesLbl}</p>
+        <p className="mt-0.5 text-xs capitalize text-muted">Personal · {etiqueta}</p>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {PILLS.map((p) => (
+          <Link
+            key={p.rango}
+            href={`/dashboard/resumen?rango=${p.rango}`}
+            className="rounded-pill border px-3 py-1.5 text-xs font-medium"
+            style={
+              rango === p.rango
+                ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
+                : { borderColor: "var(--border)", color: "var(--muted)" }
+            }
+          >
+            {p.label}
+          </Link>
+        ))}
+        <details className="relative">
+          <summary
+            className="list-none cursor-pointer rounded-pill border px-3 py-1.5 text-xs font-medium"
+            style={
+              rango === "custom"
+                ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
+                : { borderColor: "var(--border)", color: "var(--muted)" }
+            }
+          >
+            Rango →
+          </summary>
+          <form
+            method="GET"
+            action="/dashboard/resumen"
+            className="vc-card absolute right-0 top-9 z-10 flex w-64 flex-col gap-2"
+          >
+            <input type="hidden" name="rango" value="custom" />
+            <div>
+              <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Desde</label>
+              <input className="vc-input" type="date" name="desde" defaultValue={rango === "custom" ? inicio : undefined} required />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Hasta</label>
+              <input className="vc-input" type="date" name="hasta" defaultValue={rango === "custom" ? fin : undefined} required />
+            </div>
+            <button type="submit" className="vc-btn-primary mt-1">
+              Aplicar
+            </button>
+          </form>
+        </details>
       </div>
 
       <div className="vc-card mb-3">
-        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">Este mes</p>
+        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">{etiqueta}</p>
+        <div className="rw flex justify-between border-b border-border py-2 text-sm">
+          <span className="text-muted">Ingresos</span>
+          <span className="font-medium text-grn">
+            <Sensitive>{formatMoney(ingresosDelPeriodo)}</Sensitive>
+          </span>
+        </div>
         <div className="rw flex justify-between border-b border-border py-2 text-sm">
           <span className="text-muted">Gastos</span>
           <span className="font-medium text-red">
-            <Sensitive>{formatMoney(gastosDelMes)}</Sensitive>
+            <Sensitive>{formatMoney(gastosDelPeriodo)}</Sensitive>
           </span>
         </div>
         <div className="rw flex justify-between py-2 text-sm">
@@ -93,11 +193,11 @@ export default async function ResumenPage() {
       <div className="vc-card mb-3">
         <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">Gastos por categoría</p>
         {reporteCategoria.length === 0 ? (
-          <p className="text-xs text-muted">Sin gastos categorizados este mes todavía.</p>
+          <p className="text-xs text-muted">Sin gastos categorizados en este período todavía.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {reporteCategoria.map(([nombre, monto]) => {
-              const pct = gastosDelMes > 0 ? Math.round((monto / gastosDelMes) * 100) : 0;
+              const pct = gastosDelPeriodo > 0 ? Math.round((monto / gastosDelPeriodo) * 100) : 0;
               return (
                 <div key={nombre}>
                   <div className="flex justify-between text-sm">
