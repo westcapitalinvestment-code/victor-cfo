@@ -38,9 +38,28 @@ export default function VictorChat({ autoOpenOnboarding = false }: { autoOpenOnb
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Continuidad real entre dispositivos: al montar, trae la conversación
+  // más reciente del usuario desde el servidor (no solo lo que haya en
+  // localStorage de ESTE navegador) — así si empezaste en el celular y
+  // sigues en desktop, VICTOR se ve tal como quedó, no en blanco.
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved) setConversationId(saved);
+
+    fetch("/api/victor")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data || !data.conversationId) return;
+        setConversationId(data.conversationId);
+        window.localStorage.setItem(STORAGE_KEY, data.conversationId);
+        if (Array.isArray(data.messages) && data.messages.length > 0) {
+          setMessages(data.messages);
+        }
+      })
+      .catch(() => {
+        // Sin conexión o error puntual — el chat sigue funcionando, solo
+        // arranca sin el historial visual hasta el próximo mensaje.
+      });
   }, []);
 
   useEffect(() => {
@@ -257,24 +276,39 @@ export default function VictorChat({ autoOpenOnboarding = false }: { autoOpenOnb
                 <i className={`ti ${listening ? "ti-player-stop-filled" : "ti-microphone"}`} style={{ fontSize: 16 }} />
               </button>
             )}
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              placeholder={listening ? "Escuchando…" : "Pregúntale a VICTOR..."}
-              className="vc-input flex-1 rounded-pill"
-              disabled={loading}
-            />
+            <div className="relative flex-1">
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                placeholder={listening ? "Escuchando…" : "Pregúntale a VICTOR..."}
+                className="vc-input w-full rounded-pill"
+                disabled={loading}
+              />
+              {listening && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-pill bg-bg">
+                  <div className="vc-wave">
+                    <span className="vc-wave-bar" />
+                    <span className="vc-wave-bar" />
+                    <span className="vc-wave-bar" />
+                    <span className="vc-wave-bar" />
+                    <span className="vc-wave-bar" />
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => send()}
               disabled={loading || !input.trim()}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-white disabled:opacity-50"
+              className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-white ${
+                listening ? "vc-send-listening" : "disabled:opacity-50"
+              }`}
               style={{ background: "#1D9E75" }}
             >
               <i className="ti ti-send" style={{ fontSize: 16 }} />

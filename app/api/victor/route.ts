@@ -29,6 +29,39 @@ const FOUNDER_EMAILS = ["dr.jvalentin@gmail.com"];
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
+// GET — trae la conversación más reciente del usuario (mensajes + id) para
+// que el chat se pinte con continuidad real al cargar, sin importar en qué
+// dispositivo/navegador esté — el localStorage de conversationId solo sirve
+// como atajo en el MISMO navegador, esto es lo que da continuidad real
+// entre teléfono y desktop.
+export async function GET() {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+  }
+
+  const { data } = await supabase
+    .from("conversations")
+    .select("id, messages_json")
+    .eq("user_id", user.id)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) {
+    return NextResponse.json({ conversationId: null, messages: [] });
+  }
+
+  return NextResponse.json({
+    conversationId: data.id,
+    messages: Array.isArray(data.messages_json) ? data.messages_json : [],
+  });
+}
+
 export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
@@ -76,7 +109,11 @@ export async function POST(req: NextRequest) {
     .eq("id", user.id)
     .maybeSingle();
 
-  // 3. Conversación activa — la retomamos si viene un id, o creamos una nueva.
+  // 3. Conversación activa — la retomamos si viene un id válido; si no,
+  // retomamos la más reciente del usuario (así la conversación sigue igual
+  // si entra desde otro dispositivo/navegador, donde el conversationId
+  // guardado en localStorage no existe — el mismo comportamiento que
+  // Gemini/ChatGPT). Solo se crea una nueva si de verdad no tiene ninguna.
   type ConversationRow = { id: string; messages_json: ChatMessage[]; tokens_usados: number };
   let conversation: ConversationRow | null = null;
 
@@ -87,6 +124,17 @@ export async function POST(req: NextRequest) {
       .eq("id", conversationId)
       .eq("user_id", user.id)
       .single();
+    if (data) conversation = data as ConversationRow;
+  }
+
+  if (!conversation) {
+    const { data } = await supabase
+      .from("conversations")
+      .select("id, messages_json, tokens_usados")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     if (data) conversation = data as ConversationRow;
   }
 
