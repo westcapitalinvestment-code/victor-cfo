@@ -85,6 +85,7 @@ export async function POST() {
 
       totalPlaidAdded += added.length;
       totalPlaidModified += modified.length;
+      let huboErrorEnEsteItem = false;
 
       const esDeNegocioYNoEsPro = (accountId: string) => !esPro && negocioPorCuenta.get(accountId) === true;
 
@@ -108,8 +109,10 @@ export async function POST() {
         const { error: upsertError } = await supabase
           .from("transactions")
           .upsert(filasNuevas, { onConflict: "plaid_transaction_id", ignoreDuplicates: true });
-        if (upsertError) errores.push(`${item.id}: ${upsertError.message}`);
-        else totalNuevas += filasNuevas.length;
+        if (upsertError) {
+          errores.push(`${item.id}: ${upsertError.message}`);
+          huboErrorEnEsteItem = true;
+        } else totalNuevas += filasNuevas.length;
       }
 
       const filasModificadas = modified
@@ -127,11 +130,19 @@ export async function POST() {
         const { error: modError } = await supabase
           .from("transactions")
           .upsert(filasModificadas, { onConflict: "plaid_transaction_id" });
-        if (modError) errores.push(`${item.id}: ${modError.message}`);
-        else totalModificadas += filasModificadas.length;
+        if (modError) {
+          errores.push(`${item.id}: ${modError.message}`);
+          huboErrorEnEsteItem = true;
+        } else totalModificadas += filasModificadas.length;
       }
 
-      await supabase.from("plaid_items").update({ cursor, updated_at: new Date().toISOString() }).eq("id", item.id);
+      // Solo avanzamos el cursor si de verdad se guardó todo — si no, la
+      // próxima vez Plaid no vuelve a mandar esas transacciones (las da
+      // por "ya vistas") y se pierden para siempre. Antes esto se
+      // guardaba siempre, pasara lo que pasara con el upsert.
+      if (!huboErrorEnEsteItem) {
+        await supabase.from("plaid_items").update({ cursor, updated_at: new Date().toISOString() }).eq("id", item.id);
+      }
     } catch (err) {
       console.error("Error sincronizando transacciones de Plaid:", err);
       errores.push(err instanceof Error ? err.message : "Error desconocido");
