@@ -138,7 +138,7 @@ export default async function ResumenPage({
             {p.label}
           </Link>
         ))}
-        <details className="relative">
+        <details key={`${rango}-${inicio}-${fin}`} open={rango === "custom"} className="relative">
           <summary
             className="list-none cursor-pointer rounded-pill border px-3 py-1.5 text-xs font-medium"
             style={
