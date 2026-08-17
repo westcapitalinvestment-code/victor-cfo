@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens — copiados de VICTOR Pro — Producto Completo_FINAL.html
+   para que la app real y los mockups compartan exactamente los mismos
+   colores, sin reinterpretar nada. */
+:root {
+  --bg: #f5f5f0;
+  --card: #ffffff;
+  --border: #d0d7de;
+  --text: #1f2328;
+  --muted: #57606a;
+  --grn: #1a7f37;
+  --red: #cf222e;
+  --amb: #9a6700;
+}
+html.dark {
+  --bg: #0d1117;
+  --card: #161b22;
+  --border: #21262d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --grn: #3fb950;
+  --red: #f85149;
+  --amb: #d29922;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  transition: background .3s, color .3s;
+}
+
+/* Contenedor compartido de las pantallas del dashboard — mismos
+   breakpoints que VICTOR — Dashboard Core.html (.app), para que la vista
+   de escritorio no se quede angosta como en mobile. */
+.vc-shell { margin: 0 auto; max-width: 672px; padding: 32px 24px 32px; }
+@media (min-width: 768px) {
+  .vc-shell { max-width: 900px; padding: 32px 32px; }
+}
+@media (min-width: 1024px) {
+  .vc-shell { max-width: 1100px; padding: 32px 40px; }
+}
+
+/* Topbar — calcado de VICTOR — Dashboard Core.html (.topbar) */
+.vc-topbar-wrap { border-bottom: .5px solid var(--border); background: var(--card); }
+.vc-topbar { margin: 0 auto; max-width: 1100px; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.vc-topbar-top { display: flex; align-items: center; justify-content: space-between; }
+@media (min-width: 640px) {
+  .vc-topbar { flex-direction: row; align-items: center; justify-content: space-between; padding: 14px 24px; }
+  .vc-topbar-top { display: contents; }
+  .vc-topbar-logo { order: 1; }
+  .vc-invite-banner { order: 2; }
+  .vc-topbar-icons { order: 3; }
+}
+.vc-logo-name { font-size: 17px; font-weight: 600; }
+.vc-plan-badge { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; padding: 2px 8px; border-radius: 999px; background: rgba(29,158,117,.12); color: #1D9E75; }
+.vc-plan-badge.pro { background: rgba(83,74,183,.12); color: #534AB7; }
+
+/* Toggle día/noche — calcado de .tw/.tt/.tk del mockup */
+.vc-tw { display: flex; align-items: center; gap: 6px; cursor: pointer; background: none; border: none; padding: 0; }
+.vc-tt { width: 34px; height: 18px; border-radius: 999px; background: var(--border); position: relative; transition: background .2s; }
+.vc-tk { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.vc-tk.on { left: 18px; background: #1D9E75; }
+
+.vc-bell { position: relative; display: flex; height: 32px; width: 32px; align-items: center; justify-content: center; border-radius: 50%; color: var(--muted); background: transparent; border: none; cursor: pointer; }
+.vc-bell:hover { background: rgba(0,0,0,.04); }
+
+/* Pill decorativo de VICTOR en el topbar (el chat de verdad ya vive
+   siempre visible como flotante — esto solo indica que está activo) */
+.vc-victor-pill { display: flex; align-items: center; gap: 6px; background: rgba(29,158,117,.1); border: .5px solid rgba(29,158,117,.35); color: #1D9E75; border-radius: 999px; padding: 6px 11px; }
+.vc-victor-dot { width: 6px; height: 6px; border-radius: 50%; background: #1D9E75; }
+
+/* Banner central "Invita a tu contable" — gratis para cualquier plan,
+   por eso va centrado y visible, no escondido como un upsell más. */
+.vc-invite-banner { display: flex; align-items: center; gap: 8px; background: #1B3A5C; color: #fff; border-radius: 10px; padding: 8px 16px; text-decoration: none; flex-shrink: 0; }
+.vc-invite-banner:hover { opacity: .92; }
+.vc-invite-title { display: block; font-size: 12px; font-weight: 600; }
+.vc-invite-sub { display: block; font-size: 10px; color: rgba(255,255,255,.75); margin-top: 1px; }
+
+/* Tabs de contexto — Personal / Resumen (Negocio llega con Pro multi-entidad) */
+.vc-ctxbar { padding: 0 24px 12px; background: var(--card); }
+.vc-ctxwrap { margin: 0 auto; max-width: 1100px; display: flex; gap: 6px; background: var(--bg); border: .5px solid var(--border); border-radius: 10px; padding: 4px; }
+.vc-ctxtab { flex: 1; text-align: center; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--muted); text-decoration: none; }
+.vc-ctxtab.on { background: #1D9E75; color: #fff; }
+
+/* Ojito de privacidad sobre montos sensibles */
+.vc-eye { background: rgba(255,255,255,.2); border: none; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #fff; font-size: 16px; flex-shrink: 0; }
+.vc-eye:hover { background: rgba(255,255,255,.3); }
+
+/* Componentes compartidos — mismos nombres/estilo que los mockups HTML
+   (VICTOR Pro — Producto Completo_FINAL.html) para continuidad visual. */
+.vc-card {
+  background: var(--card);
+  border: .5px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+}
+.vc-input {
+  width: 100%;
+  background: var(--bg);
+  border: .5px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+}
+.vc-input:focus { border-color: #1D9E75; }
+.vc-btn-primary {
+  width: 100%;
+  background: #1D9E75;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 13px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.vc-btn-primary:hover { opacity: .9; }
+.vc-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Pantalla Inicio — calcadas de VICTOR — Dashboard Core.html (vista Personal) */
+.vc-bal { background: #1D9E75; border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+.vc-bal-lbl { font-size: 11px; color: rgba(255,255,255,.75); margin-bottom: 4px; }
+.vc-bal-amt { font-size: 32px; font-weight: 500; color: #fff; letter-spacing: -.5px; }
+.vc-mets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+@media (min-width: 768px) {
+  .vc-mets { gap: 12px; }
+  .vc-mv { font-size: 22px; }
+  .vc-bal-amt { font-size: 36px; }
+}
+.vc-met { background: var(--card); border: .5px solid var(--border); border-radius: 10px; padding: 12px; }
+.vc-ml { font-size: 10px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .3px; }
+.vc-mv { font-size: 18px; font-weight: 500; color: var(--text); }
+.vc-goal { margin-bottom: 8px; }
+.vc-goal:last-child { margin-bottom: 0; }
+.vc-goal-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text); margin-bottom: 3px; }
+.vc-bar { height: 5px; background: var(--border); border-radius: 3px; }
+.vc-bar-fill { height: 5px; border-radius: 3px; background: #1D9E75; }
+.vc-alert { display: flex; gap: 8px; padding: 6px 0; border-bottom: .5px solid var(--border); }
+.vc-alert:last-child { border-bottom: none; }
+.vc-adot { width: 7px; height: 7px; border-radius: 50%; margin-top: 3px; flex-shrink: 0; }
+
+/* Bottom nav — calcada de VICTOR — Dashboard Core.html */
+.vc-bnav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 900px; background: var(--card); border-top: .5px solid var(--border); z-index: 100; padding: 6px 0 14px; }
+@media (min-width: 1024px) {
+  .vc-bnav { max-width: 1100px; }
+}
+.vc-bnav-scroll { display: flex; overflow-x: auto; scrollbar-width: none; padding: 0 8px; gap: 2px; justify-content: center; }
+.vc-nb { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; background: none; border: none; padding: 6px 10px; border-radius: 10px; transition: all .15s; flex-shrink: 0; min-width: 60px; text-decoration: none; }
+.vc-nb:hover { background: rgba(29,158,117,.06); }
+.vc-nb i { font-size: 20px; color: var(--muted); transition: color .15s; }
+.vc-nb i.on { color: #1D9E75; }
+.vc-nl { font-size: 9px; color: var(--muted); white-space: nowrap; }
+.vc-nl.on { color: #1D9E75; font-weight: 500; }

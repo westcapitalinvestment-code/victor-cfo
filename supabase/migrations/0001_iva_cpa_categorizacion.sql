@@ -1,0 +1,10 @@
+-- ============================================================================
+-- OBSOLETO — NO USAR ESTE ARCHIVO.
+--
+-- Este archivo asumía nombres de tabla (business_entities, clients, etc.)
+-- que resultaron NO coincidir con lo que realmente había en Supabase.
+--
+-- Usa en su lugar: 0001_schema_completo.sql (en esta misma carpeta) —
+-- es el schema completo, verificado contra las tablas reales del proyecto
+-- victor-cfo, escrito el 16 de agosto de 2026.
+-- ============================================================================
