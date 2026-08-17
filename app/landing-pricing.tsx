@@ -121,6 +121,8 @@ export default function LandingPricing() {
             <li>Categorización negocio vs personal</li>
             <li>Reportes listos para tu CPA</li>
             <li>Historial financiero ilimitado</li>
+            <li>Invita a tu secretaria o técnicos (addon)</li>
+            <li>Conecta múltiples entidades de negocio (addon)</li>
           </ul>
           <Link href="/registro" className={`${styles.priceCta} ${styles.ctaFilled}`}>
             Comienza ahora
@@ -128,8 +130,13 @@ export default function LandingPricing() {
         </div>
 
         <div className={styles.priceCard}>
-          <div className={styles.priceTier}>PRO+</div>
-          <div className={styles.priceName}>VICTOR Pro+</div>
+          <div className={styles.priceTier}>ENTERPRISE</div>
+          <div className={styles.priceName}>
+            VICTOR Enterprise
+            <div style={{ fontSize: "0.7rem", color: "var(--teal-mid)", fontWeight: 600, marginTop: "0.2rem" }}>
+              Próximamente
+            </div>
+          </div>
           <p className={styles.priceDesc}>Para el negocio que además quiere facturar y cobrar a sus propios clientes.</p>
           <div className={styles.priceAmount}>
             <sup>$</sup>
@@ -144,9 +151,12 @@ export default function LandingPricing() {
             <li>Tracking de facturas pagadas y pendientes</li>
             <li>Alertas automáticas de cobros atrasados</li>
           </ul>
-          <Link href="/registro" className={`${styles.priceCta} ${styles.ctaFilled}`}>
-            Comienza ahora
-          </Link>
+          <span
+            className={styles.priceCta}
+            style={{ background: "var(--border)", color: "var(--muted)", cursor: "default" }}
+          >
+            Próximamente
+          </span>
         </div>
       </div>
 

@@ -150,7 +150,7 @@
 .statLabel { font-size: 0.75rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.4; }
 
 /* SECTIONS */
-.section { padding: 4.5rem 6%; max-width: 1060px; margin: 0 auto; scroll-margin-top: 120px; }
+.section { padding: 4.5rem 6%; max-width: 1240px; margin: 0 auto; scroll-margin-top: 120px; }
 .sectionLabel {
   font-family: 'Courier New', monospace;
   font-size: 0.7rem; color: var(--teal);
@@ -202,6 +202,9 @@
 
 /* PRICING */
 .pricingGrid { display: grid; grid-template-columns: repeat(auto-fit,minmax(270px,1fr)); gap: 1.25rem; margin-top: 2.5rem; }
+@media(min-width:860px){
+  .pricingGrid { grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+}
 .priceCard {
   background: var(--card); border: 1px solid var(--border);
   border-radius: 14px; padding: 1.75rem;
