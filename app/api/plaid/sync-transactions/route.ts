@@ -45,6 +45,12 @@ export async function POST() {
   const errores: string[] = [];
 
   let cuentasNegocioOmitidas = 0;
+  // Contadores de diagnóstico: lo que Plaid mandó de verdad, antes de
+  // cualquier filtro nuestro (negocio/Core) o intento de guardar en la
+  // base de datos — para poder distinguir "Plaid no tiene nada" de
+  // "Plaid sí tiene pero algo falló guardándolo".
+  let totalPlaidAdded = 0;
+  let totalPlaidModified = 0;
 
   for (const item of items) {
     try {
@@ -76,6 +82,9 @@ export async function POST() {
         hasMore = response.data.has_more;
         cursor = response.data.next_cursor;
       }
+
+      totalPlaidAdded += added.length;
+      totalPlaidModified += modified.length;
 
       const esDeNegocioYNoEsPro = (accountId: string) => !esPro && negocioPorCuenta.get(accountId) === true;
 
@@ -133,6 +142,8 @@ export async function POST() {
     ok: errores.length === 0,
     nuevas: totalNuevas,
     modificadas: totalModificadas,
+    totalPlaidAdded,
+    totalPlaidModified,
     cuentasNegocioOmitidas,
     errores,
   });
