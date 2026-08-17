@@ -77,9 +77,8 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   // 3. Conversación activa — la retomamos si viene un id, o creamos una nueva.
-  let conversation:
-    | { id: string; messages_json: ChatMessage[]; tokens_usados: number }
-    | null = null;
+  type ConversationRow = { id: string; messages_json: ChatMessage[]; tokens_usados: number };
+  let conversation: ConversationRow | null = null;
 
   if (conversationId) {
     const { data } = await supabase
@@ -88,7 +87,7 @@ export async function POST(req: NextRequest) {
       .eq("id", conversationId)
       .eq("user_id", user.id)
       .single();
-    if (data) conversation = data as typeof conversation;
+    if (data) conversation = data as ConversationRow;
   }
 
   if (!conversation) {
@@ -100,7 +99,7 @@ export async function POST(req: NextRequest) {
     if (error || !data) {
       return NextResponse.json({ error: "No se pudo crear la conversación." }, { status: 500 });
     }
-    conversation = data as typeof conversation;
+    conversation = data as ConversationRow;
   }
 
   const history: ChatMessage[] = Array.isArray(conversation.messages_json)
