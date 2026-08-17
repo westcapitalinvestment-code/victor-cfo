@@ -123,9 +123,17 @@ export default function CuentasPage() {
       if (!res.ok) throw new Error(data?.error || "No se pudo sincronizar.");
       const omitidas = data.cuentasNegocioOmitidas || 0;
       setMensaje(
-        `${data.nuevas} transacción(es) nueva(s), ${data.modificadas} actualizada(s).` +
+        `${data.nuevas} transacción(es) nueva(s), ${data.modificadas} actualizada(s). ` +
+          `(Plaid mandó ${data.totalPlaidAdded ?? "?"} nuevas / ${data.totalPlaidModified ?? "?"} modificadas en total.)` +
           (omitidas > 0 ? ` (${omitidas} de cuentas de negocio, no incluidas en tu plan Core.)` : "")
       );
+      // Antes, si Plaid sí traía transacciones pero fallaban al guardarse en
+      // Supabase (RLS, constraint, lo que sea), el error quedaba escondido —
+      // esta ruta siempre responde 200 así que el fetch nunca lo detectaba,
+      // y el usuario solo veía "0 nuevas" sin explicación. Ahora sí se ve.
+      if (data.errores && data.errores.length > 0) {
+        setError(`Errores al guardar: ${data.errores.join(" | ")}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo sincronizar.");
     } finally {
