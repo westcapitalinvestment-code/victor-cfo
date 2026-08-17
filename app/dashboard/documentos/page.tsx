@@ -41,9 +41,14 @@ export default async function DocumentosPage() {
                   <p>{d.nombre}</p>
                   <p className="text-xs text-muted">{d.tipo}</p>
                 </div>
-                <span className="text-xs text-muted">
-                  {d.fecha_vencimiento ? `Vence ${d.fecha_vencimiento}` : "Sin vencimiento"}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted">
+                    {d.fecha_vencimiento ? `Vence ${d.fecha_vencimiento}` : "Sin vencimiento"}
+                  </span>
+                  <Link href={`/dashboard/documentos/${d.id}/editar`} className="text-xs font-medium text-teal hover:opacity-80">
+                    Editar
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>

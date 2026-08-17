@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import GastosList from "./gastos-list";
+import { Sensitive } from "@/lib/privacy";
+import { formatMoney } from "@/lib/format";
 
 // Lista de transacciones personales. Vacía hasta que Plaid esté conectado
 // (Cuentas) — es honesto mostrarlo así en vez de simular datos. La
@@ -27,9 +29,49 @@ export default async function GastosPage() {
     supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
+  // Reporte del mes por categoría — mismo cálculo que /dashboard/resumen,
+  // pero aquí mismo en Gastos, que es donde el usuario lo busca primero.
+  const hoy = new Date();
+  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+  const nombrePorCategoria = new Map((categorias ?? []).map((c) => [c.id, c.nombre]));
+
+  const gastoPorCategoria = new Map<string, number>();
+  let gastosDelMes = 0;
+  for (const t of transacciones ?? []) {
+    if (t.fecha < inicioMes || Number(t.amount) <= 0) continue;
+    gastosDelMes += Number(t.amount);
+    const nombre = t.hacienda_category_id ? nombrePorCategoria.get(t.hacienda_category_id) ?? "Sin categorizar" : "Sin categorizar";
+    gastoPorCategoria.set(nombre, (gastoPorCategoria.get(nombre) ?? 0) + Number(t.amount));
+  }
+  const reporteCategoria = Array.from(gastoPorCategoria.entries()).sort((a, b) => b[1] - a[1]);
+
   return (
     <div className="vc-shell">
       <h1 className="mb-4 text-lg font-medium">Gastos</h1>
+
+      {reporteCategoria.length > 0 && (
+        <div className="vc-card mb-3">
+          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">Reporte del mes por categoría</p>
+          <div className="flex flex-col gap-2">
+            {reporteCategoria.map(([nombre, monto]) => {
+              const pct = gastosDelMes > 0 ? Math.round((monto / gastosDelMes) * 100) : 0;
+              return (
+                <div key={nombre}>
+                  <div className="flex justify-between text-sm">
+                    <span className={nombre === "Sin categorizar" ? "text-muted" : ""}>{nombre}</span>
+                    <span className="font-medium">
+                      <Sensitive>{formatMoney(monto)}</Sensitive> <span className="text-xs text-muted">({pct}%)</span>
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 rounded-full bg-border">
+                    <div className="h-1.5 rounded-full bg-teal" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="vc-card">
         {error && <p className="text-xs text-amb">No se pudo leer transactions ({error.message}).</p>}

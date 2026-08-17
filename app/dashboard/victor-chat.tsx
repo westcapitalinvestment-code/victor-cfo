@@ -306,10 +306,15 @@ export default function VictorChat({ autoOpenOnboarding = false }: { autoOpenOnb
             <button
               onClick={() => send()}
               disabled={loading || !input.trim()}
-              className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-white ${
-                listening ? "vc-send-listening" : "disabled:opacity-50"
+              title="Enviar mensaje"
+              className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border ${
+                listening ? "vc-send-listening" : ""
               }`}
-              style={{ background: "#1D9E75" }}
+              style={
+                input.trim()
+                  ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
+                  : { background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }
+              }
             >
               <i className="ti ti-send" style={{ fontSize: 16 }} />
             </button>

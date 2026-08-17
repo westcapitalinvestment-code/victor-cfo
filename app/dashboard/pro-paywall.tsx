@@ -41,9 +41,9 @@ export default function ProPaywall() {
           </div>
 
           <div className="mb-3.5 rounded-lg border border-teal bg-teal/[.06] p-3 text-center">
-            <p className="mb-0.5 text-xs text-muted">Solo</p>
+            <p className="mb-0.5 text-xs text-muted">Solo $35.00 adicional a tu plan actual</p>
             <p className="text-2xl font-semibold text-teal">
-              $49.99<span className="text-sm font-normal">/mes</span>
+              $49.99<span className="text-sm font-normal">/mes en total</span>
             </p>
             <p className="text-xs text-muted">Cancela cuando quieras</p>
           </div>
