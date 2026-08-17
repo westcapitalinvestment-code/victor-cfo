@@ -97,6 +97,24 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "categorizar_transaccion",
+    description:
+      "Asigna (o corrige) la categoría de un gasto/transacción bancaria ya existente — úsalo cuando el " +
+      "usuario diga cosas como 'esa compra en Uber es transporte' o 'lo de Amazon de ayer fue ropa'. Busca la " +
+      "transacción por parte de su descripción (el nombre del comercio suele bastar) y la categoría por su " +
+      "nombre en español. Si hay varias transacciones parecidas, usa el monto si el usuario lo dio para " +
+      "distinguir cuál es; si sigue habiendo ambigüedad, no adivines — pregúntale cuál es.",
+    input_schema: {
+      type: "object",
+      properties: {
+        descripcion_transaccion: { type: "string", description: "Parte del nombre/descripción del comercio, tal como aparece en el gasto (ej. 'Uber', 'Amazon', 'Pueblo')." },
+        monto: { type: "number", description: "Monto exacto de la transacción, si el usuario lo mencionó — ayuda a distinguir cuál transacción es cuando hay varias parecidas." },
+        nombre_categoria: { type: "string", description: "Nombre de la categoría a asignar, en español (ej. 'Transporte y gasolina', 'Supermercado', 'Restaurantes y comida rápida')." },
+      },
+      required: ["descripcion_transaccion", "nombre_categoria"],
+    },
+  },
+  {
     name: "guardar_perfil_onboarding",
     description:
       "Guarda las respuestas del onboarding conversacional de la Capa 2 (apodo, género, edad, situación, " +
@@ -265,6 +283,81 @@ export async function executeVictorTool(
 
       if (error) return { ok: false, message: `No se pudo guardar el documento: ${error.message}` };
       return { ok: true, message: `Documento "${nombre}" guardado en la Bóveda${fechaVencimiento ? `, vence ${fechaVencimiento}` : ""}.` };
+    }
+
+    case "categorizar_transaccion": {
+      const descripcion = String(input.descripcion_transaccion ?? "").trim();
+      const nombreCategoria = String(input.nombre_categoria ?? "").trim();
+      if (!descripcion || !nombreCategoria) {
+        return { ok: false, message: "Faltan datos (descripción de la transacción y nombre de categoría) para categorizar." };
+      }
+      const monto = Number.isFinite(Number(input.monto)) ? Number(input.monto) : null;
+
+      const { data: categorias, error: catError } = await supabase
+        .from("hacienda_categories")
+        .select("id, nombre")
+        .eq("activo", true)
+        .ilike("nombre", `%${nombreCategoria}%`);
+
+      if (catError) return { ok: false, message: `No se pudo buscar la categoría: ${catError.message}` };
+      if (!categorias || categorias.length === 0) {
+        return { ok: false, message: `No encontré ninguna categoría parecida a "${nombreCategoria}". Pregúntale al usuario cuál de las categorías existentes aplica.` };
+      }
+      if (categorias.length > 1) {
+        return {
+          ok: false,
+          message: `Hay varias categorías parecidas a "${nombreCategoria}" (${categorias.map((c) => c.nombre).join(", ")}). Pídele al usuario que aclare cuál.`,
+        };
+      }
+
+      let query = supabase
+        .from("transactions")
+        .select("id, description_raw, amount, fecha, entity_id, matched_pattern_id")
+        .eq("owner_id", ownerId)
+        .ilike("description_raw", `%${descripcion}%`)
+        .order("fecha", { ascending: false })
+        .limit(5);
+      if (monto !== null) query = query.eq("amount", Math.abs(monto));
+
+      const { data: transacciones, error: findError } = await query;
+      if (findError) return { ok: false, message: `No se pudo buscar la transacción: ${findError.message}` };
+      if (!transacciones || transacciones.length === 0) {
+        return { ok: false, message: `No encontré ninguna transacción parecida a "${descripcion}". Pregúntale al usuario el nombre exacto como aparece en su banco.` };
+      }
+      if (transacciones.length > 1) {
+        return {
+          ok: false,
+          message:
+            `Hay ${transacciones.length} transacciones parecidas a "${descripcion}" ` +
+            `(${transacciones.map((t) => `${t.fecha} $${Math.abs(Number(t.amount))}`).join(", ")}). ` +
+            `Pídele al usuario el monto exacto para saber cuál es.`,
+        };
+      }
+
+      const transaccion = transacciones[0];
+      const categoria = categorias[0];
+
+      const { error: updateError } = await supabase
+        .from("transactions")
+        .update({
+          hacienda_category_id: categoria.id,
+          is_personal: transaccion.entity_id === null,
+          category_overridden_by_user: true,
+        })
+        .eq("id", transaccion.id);
+
+      if (updateError) return { ok: false, message: `No se pudo categorizar la transacción: ${updateError.message}` };
+
+      await supabase.rpc("record_user_correction", {
+        p_transaction_id: transaccion.id,
+        p_entity_id: transaccion.entity_id,
+        p_raw_description: transaccion.description_raw,
+        p_confirmed_hacienda_category_id: categoria.id,
+        p_matched_pattern_id: transaccion.matched_pattern_id,
+        p_actor_role: "owner",
+      });
+
+      return { ok: true, message: `"${transaccion.description_raw}" ($${Math.abs(Number(transaccion.amount))}) categorizado como "${categoria.nombre}".` };
     }
 
     case "guardar_perfil_onboarding": {

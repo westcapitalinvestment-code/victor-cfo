@@ -1,10 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Sensitive } from "@/lib/privacy";
-import { formatMoney } from "@/lib/format";
+import GastosList from "./gastos-list";
 
 // Lista de transacciones personales. Vacía hasta que Plaid esté conectado
-// (Cuentas) — es honesto mostrarlo así en vez de simular datos.
+// (Cuentas) — es honesto mostrarlo así en vez de simular datos. La
+// categoría real vive en hacienda_category_id (la llena el motor de
+// categorización de 0001_schema_completo.sql + la siembra de 0011) — la
+// columna "category" de texto nunca se usa, por eso antes siempre salía
+// "sin categorizar". Click en la fecha/categoría para corregirla a mano.
 export default async function GastosPage() {
   const supabase = createClient();
   const {
@@ -13,13 +16,16 @@ export default async function GastosPage() {
 
   if (!user) redirect("/login");
 
-  const { data: transacciones, error } = await supabase
-    .from("transactions")
-    .select("id, description_raw, amount, fecha, category")
-    .eq("owner_id", user.id)
-    .is("entity_id", null)
-    .order("fecha", { ascending: false })
-    .limit(50);
+  const [{ data: transacciones, error }, { data: categorias }] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("id, description_raw, amount, fecha, hacienda_category_id")
+      .eq("owner_id", user.id)
+      .is("entity_id", null)
+      .order("fecha", { ascending: false })
+      .limit(50),
+    supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
+  ]);
 
   return (
     <div className="vc-shell">
@@ -38,19 +44,7 @@ export default async function GastosPage() {
         )}
 
         {transacciones && transacciones.length > 0 && (
-          <ul className="flex flex-col gap-1">
-            {transacciones.map((t) => (
-              <li key={t.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
-                <div>
-                  <p>{t.description_raw}</p>
-                  <p className="text-xs text-muted">{t.fecha} · {t.category ?? "sin categorizar"}</p>
-                </div>
-                <span className={Number(t.amount) > 0 ? "text-red" : "text-grn"}>
-                  <Sensitive>{formatMoney(Math.abs(Number(t.amount)))}</Sensitive>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <GastosList transaccionesIniciales={transacciones} categorias={categorias ?? []} />
         )}
       </div>
     </div>

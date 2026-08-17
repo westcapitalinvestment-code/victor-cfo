@@ -22,12 +22,32 @@ export default async function ResumenPage() {
 
   const { data: transacciones } = await supabase
     .from("transactions")
-    .select("amount")
+    .select("amount, hacienda_category_id")
     .eq("owner_id", user.id)
     .is("entity_id", null)
     .gte("fecha", inicioMes);
 
   const gastosDelMes = (transacciones ?? []).reduce((sum, t) => sum + (t.amount > 0 ? Number(t.amount) : 0), 0);
+
+  // Reporte contable básico: gastos del mes agrupados por categoría. El
+  // agrupado se hace aquí en JS (no en SQL) porque el volumen mensual de un
+  // usuario Core es chico — si esto crece mucho, se puede mover a una vista
+  // o función de Postgres más adelante.
+  const { data: categoriasDisponibles } = await supabase
+    .from("hacienda_categories")
+    .select("id, nombre")
+    .eq("activo", true);
+  const nombrePorCategoria = new Map((categoriasDisponibles ?? []).map((c) => [c.id, c.nombre]));
+
+  const gastoPorCategoria = new Map<string, number>();
+  for (const t of transacciones ?? []) {
+    if (Number(t.amount) <= 0) continue; // solo gastos, no depósitos/ingresos
+    const nombre = t.hacienda_category_id ? nombrePorCategoria.get(t.hacienda_category_id) ?? "Sin categorizar" : "Sin categorizar";
+    gastoPorCategoria.set(nombre, (gastoPorCategoria.get(nombre) ?? 0) + Number(t.amount));
+  }
+  const reporteCategoria = Array.from(gastoPorCategoria.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
 
   const { data: goals } = await supabase
     .from("goals")
@@ -68,6 +88,38 @@ export default async function ResumenPage() {
           <span className="text-muted">Alertas por vencer (30 días)</span>
           <span className="font-medium">{alertasProximas}</span>
         </div>
+      </div>
+
+      <div className="vc-card mb-3">
+        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">Gastos por categoría</p>
+        {reporteCategoria.length === 0 ? (
+          <p className="text-xs text-muted">Sin gastos categorizados este mes todavía.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {reporteCategoria.map(([nombre, monto]) => {
+              const pct = gastosDelMes > 0 ? Math.round((monto / gastosDelMes) * 100) : 0;
+              return (
+                <div key={nombre}>
+                  <div className="flex justify-between text-sm">
+                    <span className={nombre === "Sin categorizar" ? "text-muted" : ""}>{nombre}</span>
+                    <span className="font-medium">
+                      <Sensitive>{formatMoney(monto)}</Sensitive> <span className="text-xs text-muted">({pct}%)</span>
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 rounded-full bg-border">
+                    <div className="h-1.5 rounded-full bg-teal" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {reporteCategoria.some(([nombre]) => nombre === "Sin categorizar") && (
+          <p className="mt-3 text-xs text-muted">
+            Corrige las que digan "Sin categorizar" desde <a href="/dashboard/gastos" className="text-teal">Gastos</a> o
+            dile a VICTOR a qué categoría pertenecen — mientras más corrijas, más precisas salen las próximas.
+          </p>
+        )}
       </div>
 
       <div className="vc-card mb-3">

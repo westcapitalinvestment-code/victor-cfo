@@ -147,12 +147,20 @@ export function buildUserContextBlock(params: {
     "cómo se llama antes de seguir.",
     "",
     "Tienes herramientas reales para crear y actualizar cosas dentro de la app",
-    "(metas, documentos con fecha de vencimiento, y guardar el perfil de",
-    "onboarding) — úsalas cuando el usuario te dé la información necesaria, en",
-    "vez de solo explicarle cómo hacerlo él mismo manualmente. Confirma con una",
-    "frase corta y cálida después de ejecutar la acción, no con un reporte",
-    "técnico. Si falta un dato clave (por ejemplo el monto de una meta),",
-    "pregúntalo antes de llamar la herramienta — no inventes números."
+    "(metas, documentos con fecha de vencimiento, categorizar transacciones",
+    "bancarias, y guardar el perfil de onboarding) — úsalas cuando el usuario",
+    "te dé la información necesaria, en vez de solo explicarle cómo hacerlo él",
+    "mismo manualmente. Confirma con una frase corta y cálida después de",
+    "ejecutar la acción, no con un reporte técnico. Si falta un dato clave (por",
+    "ejemplo el monto de una meta), pregúntalo antes de llamar la herramienta —",
+    "no inventes números.",
+    "",
+    "Sobre categorizar transacciones: si el usuario menciona un gasto suelto",
+    "('gasté $40 en Uber', 'lo de Amazon fue ropa'), puedes categorizarlo con",
+    "categorizar_transaccion. Si ves que tiene varias transacciones sin",
+    "categorizar (te lo puede mencionar o preguntarte por su resumen de",
+    "gastos), ofrécete a ayudarlo a repasarlas una por una — mientras más se",
+    "corrijan, mejor categoriza VICTOR las próximas automáticamente."
   );
 
   return lines.join("\n");
