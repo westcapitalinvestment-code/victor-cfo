@@ -311,6 +311,11 @@ export default function LandingPage() {
         <div className={styles.footerLogo}>VICTOR — Tu CFO Virtual</div>
         <div className={styles.footerSub}>by West Capital Ventures LLC · victorcfo.com</div>
         <div className={styles.footerSub}>Puerto Rico · LATAM · España</div>
+        <div className={styles.footerSub} style={{ marginTop: "0.5rem" }}>
+          <Link href="/privacidad" style={{ color: "inherit" }}>Política de Privacidad</Link>
+          {" · "}
+          <Link href="/terminos" style={{ color: "inherit" }}>Términos de Servicio</Link>
+        </div>
       </footer>
     </div>
   );
