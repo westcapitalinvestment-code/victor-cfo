@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
+import RangoDropdown from "./rango-dropdown";
 
 // Tab "Resumen" — disponible en Core (no solo en Pro). Resumen de lo
 // personal (gastos, metas, alertas) con números reales de Supabase, más
@@ -138,36 +139,7 @@ export default async function ResumenPage({
             {p.label}
           </Link>
         ))}
-        <details key={`${rango}-${inicio}-${fin}`} open={rango === "custom"} className="relative">
-          <summary
-            className="list-none cursor-pointer rounded-pill border px-3 py-1.5 text-xs font-medium"
-            style={
-              rango === "custom"
-                ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
-                : { borderColor: "var(--border)", color: "var(--muted)" }
-            }
-          >
-            Rango →
-          </summary>
-          <form
-            method="GET"
-            action="/dashboard/resumen"
-            className="vc-card absolute right-0 top-9 z-10 flex w-64 flex-col gap-2"
-          >
-            <input type="hidden" name="rango" value="custom" />
-            <div>
-              <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Desde</label>
-              <input className="vc-input" type="date" name="desde" defaultValue={rango === "custom" ? inicio : undefined} required />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Hasta</label>
-              <input className="vc-input" type="date" name="hasta" defaultValue={rango === "custom" ? fin : undefined} required />
-            </div>
-            <button type="submit" className="vc-btn-primary mt-1">
-              Aplicar
-            </button>
-          </form>
-        </details>
+        <RangoDropdown activo={rango === "custom"} inicio={inicio} fin={fin} />
       </div>
 
       <div className="vc-card mb-3">
