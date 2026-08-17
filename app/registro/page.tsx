@@ -17,12 +17,19 @@ export default function RegistroPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revisaCorreo, setRevisaCorreo] = useState(false);
 
   async function handleRegistro(e: React.FormEvent) {
     e.preventDefault();
+
+    if (!aceptaTerminos) {
+      setError("Tienes que aceptar la Política de Privacidad y los Términos de Servicio para continuar.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -101,9 +108,30 @@ export default function RegistroPage() {
             required
           />
 
+          <label className="flex items-start gap-2 text-xs text-muted">
+            <input
+              type="checkbox"
+              checked={aceptaTerminos}
+              onChange={(e) => setAceptaTerminos(e.target.checked)}
+              className="mt-0.5"
+              required
+            />
+            <span>
+              Acepto la{" "}
+              <Link href="/privacidad" target="_blank" className="font-medium text-teal">
+                Política de Privacidad
+              </Link>{" "}
+              y los{" "}
+              <Link href="/terminos" target="_blank" className="font-medium text-teal">
+                Términos de Servicio
+              </Link>
+              , incluyendo el uso de Plaid para conectar mi banco.
+            </span>
+          </label>
+
           {error && <p className="text-xs text-red">{error}</p>}
 
-          <button type="submit" className="vc-btn-primary mt-2" disabled={loading}>
+          <button type="submit" className="vc-btn-primary mt-2" disabled={loading || !aceptaTerminos}>
             {loading ? "Creando cuenta..." : "Crear mi cuenta"}
           </button>
 
