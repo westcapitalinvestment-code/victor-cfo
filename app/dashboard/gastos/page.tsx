@@ -1,8 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import GastosList from "./gastos-list";
+import ReporteRangoDropdown from "./reporte-rango-dropdown";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
+
+function fmt(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
 
 // Lista de transacciones personales. Vacía hasta que Plaid esté conectado
 // (Cuentas) — es honesto mostrarlo así en vez de simular datos. La
@@ -45,13 +50,53 @@ export default async function GastosPage() {
   }
   const reporteCategoria = Array.from(gastoPorCategoria.entries()).sort((a, b) => b[1] - a[1]);
 
+  // Rangos rápidos para el reporte del contable — el CSV (/api/transacciones/
+  // exportar) ya acepta ?desde=&hasta=, esto solo arma los links con las
+  // fechas correctas. "Año pasado" existe específicamente para radicar
+  // planillas (ej. en marzo 2027 necesitas 1 ene – 31 dic 2026).
+  const anioActual = hoy.getFullYear();
+  const rangosReporte: { label: string; desde?: string; hasta?: string }[] = [
+    { label: "Este mes", desde: fmt(new Date(anioActual, hoy.getMonth(), 1)), hasta: fmt(hoy) },
+    {
+      label: "Mes anterior",
+      desde: fmt(new Date(anioActual, hoy.getMonth() - 1, 1)),
+      hasta: fmt(new Date(anioActual, hoy.getMonth(), 0)),
+    },
+    {
+      label: "Trimestre",
+      desde: fmt(new Date(anioActual, Math.floor(hoy.getMonth() / 3) * 3, 1)),
+      hasta: fmt(hoy),
+    },
+    { label: "YTD", desde: fmt(new Date(anioActual, 0, 1)), hasta: fmt(hoy) },
+    { label: `Año ${anioActual - 1} (planillas)`, desde: fmt(new Date(anioActual - 1, 0, 1)), hasta: fmt(new Date(anioActual - 1, 11, 31)) },
+    { label: "Todo", desde: undefined, hasta: undefined },
+  ];
+
   return (
     <div className="vc-shell">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between">
         <h1 className="text-lg font-medium">Gastos</h1>
-        <a href="/api/transacciones/exportar" download className="rounded-pill border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-80" style={{ borderColor: "var(--border)" }}>
-          Descargar reporte para tu contable
-        </a>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs text-muted">Reporte para tu contable:</span>
+        {rangosReporte.map((r) => {
+          const params = new URLSearchParams();
+          if (r.desde) params.set("desde", r.desde);
+          if (r.hasta) params.set("hasta", r.hasta);
+          const qs = params.toString();
+          return (
+            
+              key={r.label}
+              href={`/api/transacciones/exportar${qs ? `?${qs}` : ""}`}
+              className="rounded-pill border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-80"
+              style={{ borderColor: "var(--border)" }}
+            >
+              ↓ {r.label}
+            </a>
+          );
+        })}
+        <ReporteRangoDropdown />
       </div>
 
       {reporteCategoria.length > 0 && (
