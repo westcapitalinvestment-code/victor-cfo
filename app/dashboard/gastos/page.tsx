@@ -47,7 +47,17 @@ export default async function GastosPage() {
 
   return (
     <div className="vc-shell">
-      <h1 className="mb-4 text-lg font-medium">Gastos</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-lg font-medium">Gastos</h1>
+        
+          href="/api/transacciones/exportar"
+          download
+          className="rounded-pill border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-80"
+          style={{ borderColor: "var(--border)" }}
+        >
+          ↓ Reporte para tu contable
+        </a>
+      </div>
 
       {reporteCategoria.length > 0 && (
         <div className="vc-card mb-3">
