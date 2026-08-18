@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
 
@@ -21,6 +22,7 @@ export default function GastosList({
   transaccionesIniciales: Transaccion[];
   categorias: Categoria[];
 }) {
+  const router = useRouter();
   const [transacciones, setTransacciones] = useState(transaccionesIniciales);
   const [editando, setEditando] = useState<string | null>(null);
   const [guardando, setGuardando] = useState<string | null>(null);
@@ -41,6 +43,7 @@ export default function GastosList({
       setTransacciones((prev) =>
         prev.map((t) => (t.id === transactionId ? { ...t, hacienda_category_id: haciendaCategoryId } : t))
       );
+      router.refresh();
     }
   }
 
