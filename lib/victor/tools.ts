@@ -100,16 +100,22 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     name: "categorizar_transaccion",
     description:
       "Asigna (o corrige) la categoría de un gasto/transacción bancaria ya existente — úsalo cuando el " +
-      "usuario diga cosas como 'esa compra en Uber es transporte' o 'lo de Amazon de ayer fue ropa'. Busca la " +
-      "transacción por parte de su descripción (el nombre del comercio suele bastar) y la categoría por su " +
-      "nombre en español. Si hay varias transacciones parecidas, usa el monto si el usuario lo dio para " +
-      "distinguir cuál es; si sigue habiendo ambigüedad, no adivines — pregúntale cuál es.",
+      "usuario diga cosas como 'esa compra en Uber es transporte' o 'lo de Amazon de ayer fue ropa', o cuando " +
+      "tú mismo estés categorizando en lote después de revisar_gastos_sin_categorizar. Busca la transacción " +
+      "por parte de su descripción (el nombre del comercio suele bastar) y la categoría por su nombre en " +
+      "español — usa EXACTAMENTE los nombres que te dio revisar_gastos_sin_categorizar en 'Categorías " +
+      "disponibles', nunca inventes un nombre parecido que no esté en esa lista. Si hay varias transacciones " +
+      "con la misma descripción, usa el monto Y la fecha (si los tienes, por ejemplo porque salieron en la " +
+      "lista de revisar_gastos_sin_categorizar) para distinguir cuál es — esto pasa seguido con gastos " +
+      "recurrentes idénticos (mismo comercio, mismo monto, cada mes). Si aun con monto y fecha sigue habiendo " +
+      "ambigüedad, no adivines — pregúntale cuál es.",
     input_schema: {
       type: "object",
       properties: {
         descripcion_transaccion: { type: "string", description: "Parte del nombre/descripción del comercio, tal como aparece en el gasto (ej. 'Uber', 'Amazon', 'Pueblo')." },
         monto: { type: "number", description: "Monto exacto de la transacción, si el usuario lo mencionó — ayuda a distinguir cuál transacción es cuando hay varias parecidas." },
-        nombre_categoria: { type: "string", description: "Nombre de la categoría a asignar, en español (ej. 'Transporte y gasolina', 'Supermercado', 'Restaurantes y comida rápida')." },
+        fecha: { type: "string", description: "Fecha exacta de la transacción en formato YYYY-MM-DD, si la tienes — imprescindible para distinguir gastos recurrentes idénticos (mismo comercio, mismo monto, distinta fecha)." },
+        nombre_categoria: { type: "string", description: "Nombre de la categoría a asignar, en español — debe ser EXACTAMENTE uno de los nombres reales de la lista de categorías (ej. 'Transporte y gasolina', 'Supermercado', 'Restaurantes y comida rápida', 'Ropa y accesorios'), nunca uno inventado." },
       },
       required: ["descripcion_transaccion", "nombre_categoria"],
     },
@@ -310,6 +316,7 @@ export async function executeVictorTool(
         return { ok: false, message: "Faltan datos (descripción de la transacción y nombre de categoría) para categorizar." };
       }
       const monto = Number.isFinite(Number(input.monto)) ? Number(input.monto) : null;
+      const fecha = typeof input.fecha === "string" && input.fecha.trim() ? input.fecha.trim() : null;
 
       const { data: categorias, error: catError } = await supabase
         .from("hacienda_categories")
@@ -336,19 +343,27 @@ export async function executeVictorTool(
         .order("fecha", { ascending: false })
         .limit(5);
       if (monto !== null) query = query.eq("amount", Math.abs(monto));
+      if (fecha !== null) query = query.eq("fecha", fecha);
 
       const { data: transacciones, error: findError } = await query;
       if (findError) return { ok: false, message: `No se pudo buscar la transacción: ${findError.message}` };
       if (!transacciones || transacciones.length === 0) {
-        return { ok: false, message: `No encontré ninguna transacción parecida a "${descripcion}". Pregúntale al usuario el nombre exacto como aparece en su banco.` };
+        return { ok: false, message: `No encontré ninguna transacción parecida a "${descripcion}"${monto !== null ? ` por $${Math.abs(monto)}` : ""}${fecha !== null ? ` en ${fecha}` : ""}. Pregúntale al usuario el nombre exacto como aparece en su banco.` };
       }
       if (transacciones.length > 1) {
+        // Pasa seguido con gastos recurrentes idénticos (mismo comercio,
+        // mismo monto, cada mes/semana) — el monto solo no basta para
+        // distinguirlas. Si todavía no se mandó fecha, pídela explícitamente
+        // en vez de solo repetir "aclara cuál es".
         return {
           ok: false,
-          message:
-            `Hay ${transacciones.length} transacciones parecidas a "${descripcion}" ` +
-            `(${transacciones.map((t) => `${t.fecha} $${Math.abs(Number(t.amount))}`).join(", ")}). ` +
-            `Pídele al usuario el monto exacto para saber cuál es.`,
+          message: fecha === null
+            ? `Hay ${transacciones.length} transacciones idénticas de "${descripcion}"` +
+              `${monto !== null ? ` por $${Math.abs(monto)}` : ""} en fechas distintas ` +
+              `(${transacciones.map((t) => t.fecha).join(", ")}). Vuelve a llamar esta herramienta mandando el ` +
+              `campo "fecha" exacto de cuál de esas quieres categorizar.`
+            : `Hay ${transacciones.length} transacciones que coinciden con "${descripcion}"` +
+              `${monto !== null ? ` por $${Math.abs(monto)}` : ""} en ${fecha}. Pídele al usuario más detalle para distinguirlas.`,
         };
       }
 
