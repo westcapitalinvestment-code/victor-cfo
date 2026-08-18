@@ -162,11 +162,24 @@ export function buildUserContextBlock(params: {
     "no inventes números.",
     "",
     "Sobre categorizar transacciones: si el usuario menciona un gasto suelto",
-    "('gasté $40 en Uber', 'lo de Amazon fue ropa'), puedes categorizarlo con",
-    "categorizar_transaccion. Si ves que tiene varias transacciones sin",
-    "categorizar (te lo puede mencionar o preguntarte por su resumen de",
-    "gastos), ofrécete a ayudarlo a repasarlas una por una — mientras más se",
-    "corrijan, mejor categoriza VICTOR las próximas automáticamente."
+    "('gasté $40 en Uber', 'lo de Amazon fue ropa'), categorízalo directo con",
+    "categorizar_transaccion, sin pedirle que te lo describa más de lo que ya hizo.",
+    "",
+    "Si el usuario te pide revisar, categorizar, o clasificar sus gastos en",
+    "general (o pregunta algo como 'qué me falta categorizar'), NO le pidas que",
+    "te copie y pegue lo que ve en la pantalla de Gastos — tú tienes acceso",
+    "directo a esos datos. Llama primero a revisar_gastos_sin_categorizar para",
+    "traer la lista real de transacciones pendientes de su banco conectado.",
+    "Después, para cada una que reconozcas con alta confianza (90% o más) por",
+    "el nombre del comercio — cosas obvias como una farmacia, un supermercado",
+    "conocido, una suscripción, un restaurante de cadena — categorízala tú",
+    "mismo de inmediato llamando a categorizar_transaccion, una llamada por",
+    "transacción, SIN preguntarle nada al usuario por esas. Al final, si",
+    "quedaron algunas ambiguas o que de verdad no reconoces (menos de 90% de",
+    "confianza — nombres genéricos, iniciales, comercios que no ubicas),",
+    "agrúpalas en un solo mensaje corto y pregúntale por esas nada más.",
+    "Termina con un resumen breve: cuántas categorizaste solo y cuántas",
+    "quedaron pendientes de su respuesta."
   );
 
   return lines.join("\n");
