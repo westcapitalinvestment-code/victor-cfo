@@ -210,7 +210,14 @@ export async function POST(req: NextRequest) {
 
   let assistantText = "";
   let tokensUsados = conversation.tokens_usados ?? 0;
-  const MAX_TOOL_ITERATIONS = 4;
+  // Antes en 4 — muy poco para categorizar en lote (revisar_gastos_sin_categorizar
+  // + varios categorizar_transaccion + resumen final fácil pasa de 4 llamadas
+  // cuando hay 8-10 gastos pendientes). Con solo 4, el loop se cortaba a
+  // mitad de trabajo y el texto que quedaba en pantalla era el que VICTOR
+  // había escrito ANTES de ver el resultado real de la última herramienta —
+  // por eso podía decir "listo, 10 de 10" sin que fuera cierto todavía.
+  const MAX_TOOL_ITERATIONS = 12;
+  let seQuedoSinIteraciones = false;
 
   try {
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
@@ -266,6 +273,8 @@ export async function POST(req: NextRequest) {
       apiMessages.push({ role: "user", content: toolResults });
       // Sigue el loop — se le vuelve a preguntar a Claude con el resultado
       // de la herramienta ya en el historial, para que confirme al usuario.
+
+      if (i === MAX_TOOL_ITERATIONS - 1) seQuedoSinIteraciones = true;
     }
   } catch (err) {
     console.error("Error llamando a Claude:", err);
@@ -273,6 +282,17 @@ export async function POST(req: NextRequest) {
       { error: "VICTOR no pudo responder ahora mismo. Intenta de nuevo en un momento." },
       { status: 502 }
     );
+  }
+
+  // Si se acabaron las iteraciones y la última respuesta todavía pedía usar
+  // una herramienta, el texto que quedó en assistantText es lo que VICTOR
+  // escribió ANTES de ver ese último resultado — no una confirmación real.
+  // Mejor decir la verdad que mostrar un "listo" que puede ser falso.
+  if (seQuedoSinIteraciones) {
+    assistantText =
+      "Me quedé a mitad de categorizar todo lo que pediste — hay más de lo que puedo confirmar en una " +
+      "sola respuesta. Dime 'sigue' y continúo con lo que falta, o revisa la pantalla de Gastos para ver " +
+      "qué se guardó de verdad hasta ahora.";
   }
 
   const updatedMessages: ChatMessage[] = [
