@@ -144,7 +144,7 @@ export default async function DashboardPage() {
   return (
     <div className="vc-shell">
       <div className="mb-4">
-        <p className="text-xl font-medium">Buenos días, {firstName} 👋</p>
+        <p className="text-xl font-medium">{saludoPorHora(hoy)}, {firstName} 👋</p>
         <p className="mt-0.5 text-xs capitalize text-muted">{fechaLbl} · Personal</p>
       </div>
 
