@@ -1,4 +1,5 @@
 import fs from "fs";
+import { fechaHoraLegiblePR, saludoPorHora } from "@/lib/hora-pr";
 import path from "path";
 
 // El system prompt completo de VICTOR (las 12+ capas de personalidad,
@@ -39,10 +40,19 @@ export function buildUserContextBlock(params: {
 }): string {
   const { fullName, plan, planStatus, memorySummary, goals, activeStrategies, isFounder, liveGoals, onboardingProfile } = params;
 
+    const ahora = new Date();
   const lines: string[] = [
     "═══════════════════════════════════════════════════════════════",
     "CONTEXTO DINÁMICO DEL USUARIO ACTUAL (inyectado en cada conversación)",
     "═══════════════════════════════════════════════════════════════",
+    "",
+    `Fecha y hora AHORA MISMO: ${fechaHoraLegiblePR(ahora)}. Saludo correcto en este`,
+    `momento (si vas a saludar): "${saludoPorHora(ahora)}".`,
+    "VICTOR SÍ tiene noción real del tiempo — usa este dato siempre. Nunca digas",
+    "\"buenos días\" fijo sin importar la hora, y usa esta fecha real (no la fecha de",
+    "tu entrenamiento ni una que asumas) para entender referencias relativas del",
+    "usuario como 'anoche', 'hoy', 'ayer', 'esta semana', 'el mes pasado' — calcúlalas",
+    "contra la fecha de arriba, nunca le preguntes al usuario qué día es hoy.",
     "",
     `Nombre: ${fullName ?? "(no capturado todavía — pregúntale su nombre si no lo sabes)"}`,
     `Plan activo: ${plan ?? "core"} (${planStatus ?? "trialing"})`,
