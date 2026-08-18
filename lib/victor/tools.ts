@@ -342,13 +342,33 @@ export async function executeVictorTool(
         .ilike("description_raw", `%${descripcion}%`)
         .order("fecha", { ascending: false })
         .limit(5);
-      if (monto !== null) query = query.eq("amount", Math.abs(monto));
+      // revisar_gastos_sin_categorizar SIEMPRE manda el monto en positivo
+      // (Math.abs), aunque en la base de datos un ingreso/depósito se
+      // guarda en negativo (convención: positivo = gasto que sale, negativo
+      // = dinero que entra). Si comparábamos solo contra el positivo, una
+      // transacción de ingreso real (ej. INTRST PYMNT) nunca hacía match —
+      // "no encontrada" aunque la herramienta la acabara de listar como
+      // pendiente. Aceptamos cualquiera de los dos signos.
+      if (monto !== null) query = query.or(`amount.eq.${Math.abs(monto)},amount.eq.${-Math.abs(monto)}`);
       if (fecha !== null) query = query.eq("fecha", fecha);
 
       const { data: transacciones, error: findError } = await query;
       if (findError) return { ok: false, message: `No se pudo buscar la transacción: ${findError.message}` };
       if (!transacciones || transacciones.length === 0) {
-        return { ok: false, message: `No encontré ninguna transacción parecida a "${descripcion}"${monto !== null ? ` por $${Math.abs(monto)}` : ""}${fecha !== null ? ` en ${fecha}` : ""}. Pregúntale al usuario el nombre exacto como aparece en su banco.` };
+        // Antes de rendirse, busca solo por descripción (sin monto/fecha)
+        // para que VICTOR vea qué hay de verdad y pueda diagnosticar en vez
+        // de quedarse en un "no encontrada" sin más contexto.
+        const { data: cercanas } = await supabase
+          .from("transactions")
+          .select("description_raw, amount, fecha")
+          .eq("owner_id", ownerId)
+          .ilike("description_raw", `%${descripcion}%`)
+          .order("fecha", { ascending: false })
+          .limit(5);
+        const pista = cercanas && cercanas.length > 0
+          ? ` Lo más parecido que sí existe: ${cercanas.map((c) => `"${c.description_raw}" $${c.amount} ${c.fecha}`).join(", ")}.`
+          : "";
+        return { ok: false, message: `No encontré ninguna transacción parecida a "${descripcion}"${monto !== null ? ` por $${Math.abs(monto)}` : ""}${fecha !== null ? ` en ${fecha}` : ""}.${pista} Pregúntale al usuario el nombre exacto como aparece en su banco.` };
       }
       if (transacciones.length > 1) {
         // Pasa seguido con gastos recurrentes idénticos (mismo comercio,
