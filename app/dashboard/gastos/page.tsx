@@ -86,12 +86,7 @@ export default async function GastosPage() {
           if (r.hasta) params.set("hasta", r.hasta);
           const qs = params.toString();
           return (
-            
-              key={r.label}
-              href={`/api/transacciones/exportar${qs ? `?${qs}` : ""}`}
-              className="rounded-pill border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-80"
-              style={{ borderColor: "var(--border)" }}
-            >
+            <a key={r.label} href={`/api/transacciones/exportar${qs ? `?${qs}` : ""}`} className="rounded-pill border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-80" style={{ borderColor: "var(--border)" }}>
               ↓ {r.label}
             </a>
           );
