@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/format";
 
 type Categoria = { id: number; nombre: string };
@@ -31,6 +32,7 @@ export default function GastosPendientesCard({
   totalPendientes: number;
   categorias: Categoria[];
 }) {
+  const router = useRouter();
   const [pendientes, setPendientes] = useState(pendientesIniciales);
   const [guardando, setGuardando] = useState<string | null>(null);
   const [abierto, setAbierto] = useState(true);
@@ -47,6 +49,12 @@ export default function GastosPendientesCard({
     setGuardando(null);
     if (res.ok) {
       setPendientes((prev) => prev.filter((p) => p.id !== transactionId));
+      // Invalida la caché de navegación de Next.js para esta ruta — sin
+      // esto, si el usuario navega a otra pestaña y vuelve a Inicio poco
+      // después, Next a veces reusa la versión ya cargada en el navegador
+      // (de antes de categorizar) en vez de pedir los datos frescos, y el
+      // gasto que ya se categorizó parece "reaparecer" como pendiente.
+      router.refresh();
     }
   }
 
