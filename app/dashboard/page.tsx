@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Sensitive, PrivacyToggle } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
+import GastosPendientesCard from "./gastos-pendientes-card";
 
 // Pantalla "Inicio" real — vista Personal, calcada de
 // VICTOR — Dashboard Core.html (id="inicio-personal"). Es la base de Core:
@@ -101,6 +102,44 @@ export default async function DashboardPage() {
     return { ...d, dias };
   });
 
+  // Gastos sin categorizar — lo que el motor (trigger_auto_categorize, en
+  // 0001) NO pudo decidir solo al llegar la transacción. Se muestra aquí en
+  // el Inicio, no escondido en Gastos, porque es justo lo que el usuario
+  // tiene que resolver — calcado del mockup original (VICTOR — Dashboard
+  // Core.html), donde esto vivía como alerta pendiente en la primera
+  // pantalla, no en una pestaña aparte.
+  const LIMITE_PENDIENTES = 8;
+  const [{ data: pendientesRaw }, { count: totalPendientes }, { data: categorias }] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("id, description_raw, amount, fecha")
+      .eq("owner_id", user.id)
+      .is("entity_id", null)
+      .is("hacienda_category_id", null)
+      .order("fecha", { ascending: false })
+      .limit(LIMITE_PENDIENTES),
+    supabase
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_id", user.id)
+      .is("entity_id", null)
+      .is("hacienda_category_id", null),
+    supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
+  ]);
+
+  // Para cada pendiente, le pedimos al motor una sugerencia (match_category
+  // sin el filtro de confianza/confirmado que sí aplica el trigger) — así
+  // el usuario ve una categoría ya seleccionada y solo tiene que confirmar
+  // o cambiarla, no elegir desde cero cada vez.
+  const pendientesConSugerencia = await Promise.all(
+    (pendientesRaw ?? []).map(async (t) => {
+      const { data: match } = await supabase
+        .rpc("match_category", { p_raw_description: t.description_raw, p_entity_id: null })
+        .maybeSingle<{ hacienda_category_id: number | null }>();
+      return { ...t, sugeridaId: match?.hacienda_category_id ?? null };
+    })
+  );
+
   return (
     <div className="vc-shell">
       <div className="mb-4">
@@ -136,6 +175,12 @@ export default async function DashboardPage() {
           </p>
         )}
       </div>
+
+      <GastosPendientesCard
+        pendientesIniciales={pendientesConSugerencia}
+        totalPendientes={totalPendientes ?? 0}
+        categorias={categorias ?? []}
+      />
 
       {/* MÉTRICAS */}
       <div className="vc-mets">
