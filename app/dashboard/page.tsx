@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Sensitive, PrivacyToggle } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
+import { saludoPorHora } from "@/lib/hora-pr";
 import GastosPendientesCard from "./gastos-pendientes-card";
 
 // Pantalla "Inicio" real — vista Personal, calcada de
