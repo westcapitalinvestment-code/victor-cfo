@@ -13,6 +13,23 @@ export type ResultadoSincronizacion = {
   errores: string[];
 };
 
+// Códigos de error que Plaid devuelve cuando un Item necesita que el
+// usuario vuelva a autenticarse (contraseña cambiada, MFA vencido, banco
+// bloqueó la sesión, etc.) — cuando el sync se topa con cualquiera de
+// estos, no tiene sentido seguir reintentando solo: hay que marcar el
+// Item para que la UI de Cuentas muestre "Reconectar" (Plaid Update Mode).
+const CODIGOS_REAUTH_REQUERIDA = [
+  "ITEM_LOGIN_REQUIRED",
+  "ITEM_LOCKED",
+  "INVALID_CREDENTIALS",
+  "INVALID_UPDATED_USERNAME",
+];
+
+function codigoErrorPlaid(err: unknown): string | undefined {
+  const conRespuesta = err as { response?: { data?: { error_code?: string } } };
+  return conRespuesta?.response?.data?.error_code;
+}
+
 // La lógica real de sincronizar Plaid para UN usuario — extraída de lo
 // que antes vivía solo dentro de app/api/plaid/sync-transactions/route.ts
 // para que tanto el botón manual ("Sincronizar transacciones" en Cuentas)
@@ -152,7 +169,18 @@ export async function sincronizarPlaidDeUsuario(
       }
     } catch (err) {
       console.error(`Error sincronizando Plaid (owner ${ownerId}, item ${item.id}):`, err);
-      errores.push(err instanceof Error ? err.message : "Error desconocido");
+      const codigo = codigoErrorPlaid(err);
+      if (codigo && CODIGOS_REAUTH_REQUERIDA.includes(codigo)) {
+        // El banco vetó el acceso — no es un error transitorio, hay que
+        // pedirle al usuario que reconecte (Plaid Update Mode). Marcamos
+        // el Item para que /dashboard/cuentas muestre el aviso, y para
+        // que el próximo sync (manual o cron) lo salte de una vez —
+        // ambos filtran por status = 'active'.
+        await supabase.from("plaid_items").update({ status: "reauth_required" }).eq("id", item.id);
+        errores.push(`${item.id}: la conexión con el banco venció, hay que reconectarla (${codigo}).`);
+      } else {
+        errores.push(err instanceof Error ? err.message : "Error desconocido");
+      }
     }
   }
 
