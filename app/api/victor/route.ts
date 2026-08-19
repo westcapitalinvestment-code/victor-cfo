@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { getVictorBasePrompt, buildUserContextBlock } from "@/lib/victor/system-prompt";
 import { VICTOR_TOOLS, executeVictorTool } from "@/lib/victor/tools";
+import { fechaHoyPR } from "@/lib/hora-pr";
 
 // Ruta de servidor — la ANTHROPIC_API_KEY nunca se expone al navegador.
 // El cliente (VictorChat) solo llama a /api/victor con el mensaje del
@@ -26,6 +27,10 @@ const MAX_HISTORY_MESSAGES = 20;
 // Si en el futuro hay más personas de confianza (CPA, socio), esto se
 // puede mover a una columna is_founder/is_admin en la tabla users.
 const FOUNDER_EMAILS = ["dr.jvalentin@gmail.com"];
+
+// Misma señal técnica que manda app/dashboard/victor-chat.tsx cuando abre
+// el chat solo una vez al día — nunca la escribe el usuario a mano.
+const SALUDO_DIARIO_TRIGGER = "[SALUDO_DIARIO]";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -157,6 +162,7 @@ export async function POST(req: NextRequest) {
   const recentHistory = history.slice(-MAX_HISTORY_MESSAGES);
 
   const isFounder = !!user.email && FOUNDER_EMAILS.includes(user.email.toLowerCase());
+  const esSaludoDiario = userMessage === SALUDO_DIARIO_TRIGGER;
 
   // Metas reales en este momento (no la copia guardada en victor_memory) —
   // así VICTOR habla con números actuales y puede resolver a qué meta se
@@ -176,6 +182,7 @@ export async function POST(req: NextRequest) {
     goals: (memory?.goals as unknown[]) ?? null,
     activeStrategies: (memory?.active_strategies as unknown[]) ?? null,
     isFounder,
+    esSaludoDiario,
     liveGoals: liveGoals ?? null,
     onboardingProfile: onboardingProfile
       ? {
@@ -293,6 +300,21 @@ export async function POST(req: NextRequest) {
       "Me quedé a mitad de categorizar todo lo que pediste — hay más de lo que puedo confirmar en una " +
       "sola respuesta. Dime 'sigue' y continúo con lo que falta, o revisa la pantalla de Gastos para ver " +
       "qué se guardó de verdad hasta ahora.";
+  }
+
+  // Marca que VICTOR ya saludó hoy, para que autoOpenSaludoDiario (en el
+  // layout) no se vuelva a disparar aunque el usuario recargue o vuelva a
+  // entrar más tarde el mismo día. No crítico — si falla, en el peor caso
+  // vuelve a saludar, no rompe la respuesta al usuario.
+  if (esSaludoDiario) {
+    try {
+      await supabase
+        .from("user_profiles")
+        .update({ ultimo_saludo_en: fechaHoyPR() })
+        .eq("id", user.id);
+    } catch (err) {
+      console.error("No se pudo marcar ultimo_saludo_en:", err);
+    }
   }
 
   const updatedMessages: ChatMessage[] = [
