@@ -34,6 +34,7 @@ export function buildUserContextBlock(params: {
     balanceLiquido: number;
     ahorrado: number;
     deudaTotal: number;
+    historialDesde: string | null;
     cuentas: { name: string | null; type: string | null; subtype: string | null; balance: number }[];
   } | null;
   onboardingProfile?: {
@@ -163,8 +164,9 @@ export function buildUserContextBlock(params: {
           : "  (sin detalle de cuentas individuales)";
       lines.push(
         "",
-        "SITUACIÓN FINANCIERA REAL AHORA MISMO (datos en vivo de Plaid — el banco",
-        "conectado del usuario, fuente de verdad). Cuando te pregunte por su balance,",
+        "SITUACIÓN FINANCIERA REAL AHORA MISMO (de los bancos/tarjetas conectados por",
+        "Plaid y de las cuentas manuales que el usuario agregó — ej. Apple Card, que no",
+        "tiene integración con Plaid — fuente de verdad). Cuando te pregunte por su balance,",
         "ahorro, deuda, o cuánto tiene en una cuenta específica, CONTÉSTALE DIRECTO",
         "con estos números — nunca lo mandes a revisar la pantalla de Cuentas, tú ya",
         "tienes el dato:",
@@ -175,7 +177,15 @@ export function buildUserContextBlock(params: {
         "  son dos cosas distintas: cuánto tiene disponible hoy vs. cuánto debe a",
         "  mediano/largo plazo. No las mezcles en una sola respuesta sin aclarar cuál es cuál.)",
         "Cuentas individuales:",
-        cuentasTexto
+        cuentasTexto,
+        "",
+        finanzas.historialDesde
+          ? `La transacción más antigua que tenemos guardada de cualquier cuenta es del ${finanzas.historialDesde}. ` +
+            "Si el usuario necesita historial de ANTES de esa fecha (ej. para armar el reporte contable del año " +
+            "completo para las planillas) y esa fecha no es del 1 de enero, dile con calidez que puede subir el " +
+            "estado de cuenta del banco/tarjeta correspondiente (CSV, QuickBooks, o PDF) directo en la pantalla de " +
+            "Cuentas — ver la sección de más abajo sobre cómo guiarlo exactamente."
+          : "Todavía no hay ninguna transacción guardada."
       );
     } else {
       lines.push(
