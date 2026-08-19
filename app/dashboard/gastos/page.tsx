@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import GastosList from "./gastos-list";
 import ReporteRangoDropdown from "./reporte-rango-dropdown";
 import { Sensitive } from "@/lib/privacy";
@@ -9,13 +10,27 @@ function fmt(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+// Antes esto era .limit(50) sin filtro de cuenta — con un solo banco que
+// trae 200+ transacciones en pocas semanas (ej. BPPR), esas 50 más
+// recientes por fecha eran casi todas del mismo banco y las de otras
+// tarjetas (Citibank, PenFed...) quedaban fuera de la vista aunque SÍ
+// estaban guardadas en la base de datos. Subimos el límite bastante y
+// además dejamos filtrar por cuenta específica (ver cuenta más abajo) —
+// las dos cosas juntas resuelven el problema real: "no veo las
+// transacciones de mi otra tarjeta".
+const LIMITE_TRANSACCIONES = 300;
+
 // Lista de transacciones personales. Vacía hasta que Plaid esté conectado
 // (Cuentas) — es honesto mostrarlo así en vez de simular datos. La
 // categoría real vive en hacienda_category_id (la llena el motor de
 // categorización de 0001_schema_completo.sql + la siembra de 0011) — la
 // columna "category" de texto nunca se usa, por eso antes siempre salía
 // "sin categorizar". Click en la fecha/categoría para corregirla a mano.
-export default async function GastosPage() {
+export default async function GastosPage({
+  searchParams,
+}: {
+  searchParams: { cuenta?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
@@ -23,16 +38,46 @@ export default async function GastosPage() {
 
   if (!user) redirect("/login");
 
+  const { data: profile } = await supabase
+    .from("users")
+    .select("plan")
+    .eq("id", user.id)
+    .single();
+  const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
+
+  // Cuentas/tarjetas conectadas — para el filtro de arriba y para poder
+  // mostrar de qué banco/tarjeta vino cada transacción en la lista. Mismo
+  // filtro de negocio que el resto de la app (si es Core, no se cuentan
+  // las que parecen de negocio).
+  let cuentasQuery = supabase
+    .from("plaid_accounts")
+    .select("plaid_account_id, name, mask, type, subtype")
+    .eq("owner_id", user.id)
+    .order("name");
+  if (!esPro) cuentasQuery = cuentasQuery.eq("es_negocio", false);
+  const { data: cuentasPlaid } = await cuentasQuery;
+
+  const cuentaSeleccionada = searchParams.cuenta || null;
+
+  let transaccionesQuery = supabase
+    .from("transactions")
+    .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id")
+    .eq("owner_id", user.id)
+    .is("entity_id", null)
+    .order("fecha", { ascending: false })
+    .limit(LIMITE_TRANSACCIONES);
+  if (cuentaSeleccionada) transaccionesQuery = transaccionesQuery.eq("plaid_account_id", cuentaSeleccionada);
+
   const [{ data: transacciones, error }, { data: categorias }] = await Promise.all([
-    supabase
-      .from("transactions")
-      .select("id, description_raw, amount, fecha, hacienda_category_id")
-      .eq("owner_id", user.id)
-      .is("entity_id", null)
-      .order("fecha", { ascending: false })
-      .limit(50),
+    transaccionesQuery,
     supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
+
+  // Nombre legible por cuenta (ej. "BPPR Visa ···4821") para el filtro y
+  // para la etiqueta en cada fila de la lista.
+  const etiquetaCuenta = (c: { name: string | null; mask: string | null }) =>
+    `${c.name ?? "Cuenta sin nombre"}${c.mask ? ` ···${c.mask}` : ""}`;
+  const nombrePorCuenta = new Map((cuentasPlaid ?? []).map((c) => [c.plaid_account_id, etiquetaCuenta(c)]));
 
   // Reporte del mes por categoría — mismo cálculo que /dashboard/resumen,
   // pero aquí mismo en Gastos, que es donde el usuario lo busca primero.
@@ -94,6 +139,33 @@ export default async function GastosPage() {
         <ReporteRangoDropdown />
       </div>
 
+      {cuentasPlaid && cuentasPlaid.length > 1 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-xs text-muted">Cuenta:</span>
+          <Link
+            href="/dashboard/gastos"
+            className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
+              !cuentaSeleccionada ? "border-teal text-teal" : "text-muted"
+            }`}
+            style={{ borderColor: !cuentaSeleccionada ? undefined : "var(--border)" }}
+          >
+            Todas
+          </Link>
+          {cuentasPlaid.map((c) => (
+            <Link
+              key={c.plaid_account_id}
+              href={`/dashboard/gastos?cuenta=${encodeURIComponent(c.plaid_account_id)}`}
+              className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
+                cuentaSeleccionada === c.plaid_account_id ? "border-teal text-teal" : "text-muted"
+              }`}
+              style={{ borderColor: cuentaSeleccionada === c.plaid_account_id ? undefined : "var(--border)" }}
+            >
+              {etiquetaCuenta(c)}
+            </Link>
+          ))}
+        </div>
+      )}
+
       {reporteCategoria.length > 0 && (
         <div className="vc-card mb-3">
           <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">Reporte del mes por categoría</p>
@@ -131,7 +203,18 @@ export default async function GastosPage() {
         )}
 
         {transacciones && transacciones.length > 0 && (
-          <GastosList transaccionesIniciales={transacciones} categorias={categorias ?? []} />
+          <GastosList
+            transaccionesIniciales={transacciones}
+            categorias={categorias ?? []}
+            nombrePorCuenta={Object.fromEntries(nombrePorCuenta)}
+          />
+        )}
+        {transacciones && transacciones.length === LIMITE_TRANSACCIONES && (
+          <p className="mt-3 text-center text-xs text-muted">
+            Mostrando las {LIMITE_TRANSACCIONES} más recientes
+            {cuentaSeleccionada ? " de esta cuenta" : ""}. Filtra por cuenta arriba o descarga el reporte completo
+            para tu contable si necesitas todo el historial.
+          </p>
         )}
       </div>
     </div>
