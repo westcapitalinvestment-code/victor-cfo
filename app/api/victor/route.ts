@@ -17,6 +17,7 @@ export const runtime = "nodejs";
 // tiene margen de sobra para terminar en vez de morir a mitad de camino
 // sin contestarle nada al usuario.
 export const maxDuration = 300;
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
@@ -180,11 +181,10 @@ export async function POST(req: NextRequest) {
     .eq("status", "activa")
     .is("entity_id", null);
 
-  // 2c. Cuentas bancarias reales (Plaid + manuales) — para que VICTOR pueda
-  // contestar directo preguntas de balance/ahorro/deuda en vez de mandar al
-  // usuario a revisar la pantalla de Cuentas. Mismo filtro de negocio que
-  // el resto de la app: si el plan es Core, las cuentas que parecen de
-  // negocio no cuentan.
+  // 2c. Cuentas bancarias reales (Plaid) — para que VICTOR pueda contestar
+  // directo preguntas de balance/ahorro/deuda en vez de mandar al usuario a
+  // revisar la pantalla de Cuentas. Mismo filtro de negocio que el resto de
+  // la app: si el plan es Core, las cuentas que parecen de negocio no cuentan.
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   let cuentasQuery = supabase
     .from("plaid_accounts")
@@ -262,8 +262,14 @@ export async function POST(req: NextRequest) {
   // Historial en el formato que espera la API (puede traer content como
   // string en turnos normales, o como bloques si en el futuro guardamos
   // tool calls — por ahora siempre string porque solo persistimos texto).
+  // Se filtran turnos con content vacío/en blanco: la API de Anthropic
+  // RECHAZA con error 400 cualquier mensaje con un bloque de texto vacío,
+  // así que si alguna vez quedó guardado un turno de VICTOR en blanco
+  // (ver seguro más abajo), incluirlo aquí tumbaría TODA la conversación
+  // en cada mensaje siguiente — un solo turno corrupto dejaría a VICTOR
+  // sin poder contestar nunca más en ese chat.
   const apiMessages: Anthropic.MessageParam[] = [
-    ...recentHistory.map((m) => ({ role: m.role, content: m.content })),
+    ...recentHistory.filter((m) => m.content && m.content.trim()).map((m) => ({ role: m.role, content: m.content })),
     { role: "user" as const, content: userMessage },
   ];
 
@@ -286,9 +292,14 @@ export async function POST(req: NextRequest) {
         // default — ese pensamiento interno consume del mismo tope de
         // max_tokens que la respuesta visible, y eso fue lo que cortó la
         // respuesta a la mitad de una palabra. "low" es lo que Anthropic
-        // recomienda para chat conversacional (no código/agentes), y
-        // max_tokens con más margen evita que vuelva a pasar.
-        max_tokens: 4096,
+        // recomienda para chat conversacional (no código/agentes). Subido
+        // de 4096 a 8192: con preguntas que requieren comparar/sumar varios
+        // números (ej. "8 pendientes y 188 restantes, ¿están categorizados
+        // o no?") el pensamiento interno se comía TODO el presupuesto de
+        // 4096 sin dejar espacio para la respuesta visible — resultado:
+        // VICTOR contestaba con texto vacío. Con más margen, el pensamiento
+        // tiene espacio de sobra y siempre queda algo para la respuesta.
+        max_tokens: 8192,
         output_config: { effort: "low" },
         system: systemBlocks,
         tools: VICTOR_TOOLS,
@@ -352,6 +363,22 @@ export async function POST(req: NextRequest) {
       "Me quedé a mitad de categorizar todo lo que pediste — hay más de lo que puedo confirmar en una " +
       "sola respuesta. Dime 'sigue' y continúo con lo que falta, o revisa la pantalla de Gastos para ver " +
       "qué se guardó de verdad hasta ahora.";
+  }
+
+  // Seguro contra respuesta en blanco: puede pasar que Claude gaste todo el
+  // presupuesto de max_tokens en "pensamiento" interno (thinking) sin dejar
+  // nada para el texto visible — sobre todo en preguntas que piden comparar
+  // o sumar varios números. Nunca se debe guardar ni devolver un turno
+  // vacío: además de verse roto en el chat, la API de Anthropic RECHAZA
+  // con error 400 cualquier mensaje futuro que incluya un turno con texto
+  // vacío en el historial — eso fue lo que dejó a VICTOR sin poder
+  // contestar NADA en conversaciones siguientes una vez que quedó guardado
+  // un turno en blanco.
+  if (!assistantText || !assistantText.trim()) {
+    console.error("VICTOR devolvió texto vacío. Último userMessage:", userMessage);
+    assistantText =
+      "Se me enredó el pensamiento contestando eso — pasa cuando la pregunta pide comparar varios " +
+      "números a la vez. ¿Me lo repites, o lo partimos en partes más chiquitas?";
   }
 
   // Marca que VICTOR ya saludó hoy, para que autoOpenSaludoDiario (en el
