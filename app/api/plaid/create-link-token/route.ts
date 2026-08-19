@@ -76,6 +76,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ linkToken: response.data.link_token });
   } catch (err) {
     console.error("Error creando link_token de Plaid:", err);
-    return NextResponse.json({ error: "No se pudo iniciar la conexión con Plaid." }, { status: 502 });
+    // Temporal: mostramos el error real de Plaid (código + mensaje) en vez
+    // de uno genérico, para poder diagnosticar el problema de producción
+    // sin tener que ir a los logs de Vercel cada vez. Una vez esté estable
+    // en producción, esto se puede volver a dejar genérico.
+    const conRespuesta = err as { response?: { data?: { error_code?: string; error_message?: string } } };
+    const detalle = conRespuesta?.response?.data;
+    return NextResponse.json(
+      {
+        error: "No se pudo iniciar la conexión con Plaid.",
+        detalle: detalle?.error_message || detalle?.error_code || (err instanceof Error ? err.message : String(err)),
+      },
+      { status: 502 }
+    );
   }
 }
