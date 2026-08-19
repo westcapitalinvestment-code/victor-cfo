@@ -17,6 +17,12 @@ type CuentaPlaid = {
   es_negocio: boolean;
 };
 
+type BancoPlaid = {
+  id: string;
+  institution_name: string | null;
+  status: string;
+};
+
 // Conectar banco de verdad (Plaid). El flujo:
 //   1. Pedimos un link_token a /api/plaid/create-link-token.
 //   2. Abrimos el widget de Plaid (usePlaidLink) con ese token.
@@ -26,11 +32,19 @@ type CuentaPlaid = {
 // Si PLAID_CLIENT_ID/SECRET no están configurados en el servidor, las
 // rutas de arriba devuelven un error honesto y esta pantalla lo muestra
 // en vez de fingir que algo pasó.
+//
+// Además de conectar bancos nuevos, esta pantalla también muestra un
+// aviso por cada banco cuya conexión venció (status = 'reauth_required',
+// detectado automáticamente durante el sync) con un botón "Reconectar"
+// que usa Plaid Update Mode — reautentica el mismo Item sin crear uno
+// duplicado.
 export default function CuentasPage() {
   const supabase = createClient();
 
   const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [reconectandoItemId, setReconectandoItemId] = useState<string | null>(null);
   const [cuentas, setCuentas] = useState<CuentaPlaid[]>([]);
+  const [bancos, setBancos] = useState<BancoPlaid[]>([]);
   const [cuentasNegocioOcultas, setCuentasNegocioOcultas] = useState(0);
   const [loading, setLoading] = useState(true);
   const [conectando, setConectando] = useState(false);
@@ -47,9 +61,6 @@ export default function CuentasPage() {
     const { data: perfil } = await supabase.from("users").select("plan").eq("id", user.id).maybeSingle();
     const pro = perfil?.plan === "pro" || perfil?.plan === "proplus";
 
-    // Plaid trae todas las cuentas bajo el login del usuario — si es Core,
-    // no mostramos las que parecen de negocio (es_negocio), para que no
-    // se pueda ver/usar esa parte gratis con solo conectar el banco.
     const { data } = await supabase
       .from("plaid_accounts")
       .select("id, name, mask, subtype, current_balance, iso_currency_code, es_negocio")
@@ -59,6 +70,14 @@ export default function CuentasPage() {
     const todas = data ?? [];
     setCuentas(pro ? todas : todas.filter((c) => !c.es_negocio));
     setCuentasNegocioOcultas(pro ? 0 : todas.filter((c) => c.es_negocio).length);
+
+    const { data: bancosData } = await supabase
+      .from("plaid_items")
+      .select("id, institution_name, status")
+      .eq("owner_id", user.id)
+      .order("institution_name", { ascending: true });
+    setBancos(bancosData ?? []);
+
     setLoading(false);
   }, [supabase]);
 
@@ -66,10 +85,15 @@ export default function CuentasPage() {
     cargarCuentas();
   }, [cargarCuentas]);
 
-  async function pedirLinkToken() {
+  async function pedirLinkToken(itemId?: string) {
     setError(null);
+    setReconectandoItemId(itemId ?? null);
     try {
-      const res = await fetch("/api/plaid/create-link-token", { method: "POST" });
+      const res = await fetch("/api/plaid/create-link-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(itemId ? { itemId } : {}),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo iniciar la conexión.");
       setLinkToken(data.linkToken);
@@ -84,31 +108,40 @@ export default function CuentasPage() {
       setConectando(true);
       setError(null);
       try {
-        const res = await fetch("/api/plaid/exchange-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            publicToken,
-            institutionId: metadata.institution?.institution_id ?? null,
-            institutionName: metadata.institution?.name ?? null,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "No se pudo completar la conexión.");
-        setMensaje(`Banco conectado — ${data.cuentas} cuenta(s) encontrada(s).`);
+        if (reconectandoItemId) {
+          const res = await fetch("/api/plaid/confirmar-reconexion", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ itemId: reconectandoItemId }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || "No se pudo confirmar la reconexión.");
+          setMensaje("Banco reconectado — VICTOR ya puede volver a traer tus transacciones.");
+        } else {
+          const res = await fetch("/api/plaid/exchange-token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              publicToken,
+              institutionId: metadata.institution?.institution_id ?? null,
+              institutionName: metadata.institution?.name ?? null,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || "No se pudo completar la conexión.");
+          setMensaje(`Banco conectado — ${data.cuentas} cuenta(s) encontrada(s).`);
+        }
         await cargarCuentas();
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo completar la conexión.");
       } finally {
         setConectando(false);
         setLinkToken(null);
+        setReconectandoItemId(null);
       }
     },
   });
 
-  // En cuanto tenemos link_token y el widget está listo, lo abrimos solo —
-  // evita un clic extra ("Conectar" → esperar → "Abrir", en vez de eso
-  // "Conectar" ya abre el widget directamente).
   useEffect(() => {
     if (linkToken && ready) open();
   }, [linkToken, ready, open]);
@@ -127,13 +160,10 @@ export default function CuentasPage() {
           `(Plaid mandó ${data.totalPlaidAdded ?? "?"} nuevas / ${data.totalPlaidModified ?? "?"} modificadas en total.)` +
           (omitidas > 0 ? ` (${omitidas} de cuentas de negocio, no incluidas en tu plan Core.)` : "")
       );
-      // Antes, si Plaid sí traía transacciones pero fallaban al guardarse en
-      // Supabase (RLS, constraint, lo que sea), el error quedaba escondido —
-      // esta ruta siempre responde 200 así que el fetch nunca lo detectaba,
-      // y el usuario solo veía "0 nuevas" sin explicación. Ahora sí se ve.
       if (data.errores && data.errores.length > 0) {
         setError(`Errores al guardar: ${data.errores.join(" | ")}`);
       }
+      await cargarCuentas();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo sincronizar.");
     } finally {
@@ -142,6 +172,7 @@ export default function CuentasPage() {
   }
 
   const totalBalance = cuentas.reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
+  const bancosVencidos = bancos.filter((b) => b.status !== "active");
 
   return (
     <div className="vc-shell">
@@ -152,6 +183,34 @@ export default function CuentasPage() {
       </div>
 
       <h1 className="mb-4 text-lg font-medium">Cuentas</h1>
+
+      {bancosVencidos.length > 0 && (
+        <div className="mb-3 space-y-2">
+          {bancosVencidos.map((b) => (
+            <div
+              key={b.id}
+              className="flex items-center justify-between rounded-lg border border-red bg-red/[.06] px-4 py-3"
+            >
+              <div>
+                <p className="text-sm font-medium text-text">
+                  {b.institution_name || "Un banco"} perdió la conexión
+                </p>
+                <p className="text-xs text-muted">
+                  Puede ser que cambiaste la contraseña o venció el código de verificación. Mientras tanto no
+                  estamos trayendo transacciones nuevas de ahí.
+                </p>
+              </div>
+              <button
+                className="vc-btn-primary shrink-0"
+                disabled={conectando}
+                onClick={() => pedirLinkToken(b.id)}
+              >
+                Reconectar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {error && <p className="mb-3 text-xs text-red">{error}</p>}
       {mensaje && <p className="mb-3 text-xs text-teal">{mensaje}</p>}
@@ -165,7 +224,7 @@ export default function CuentasPage() {
             Conecta BPPR, FirstBank, Oriental o Mercury para ver tu balance real y traer tus
             transacciones automáticamente.
           </p>
-          <button className="vc-btn-primary" disabled={conectando} onClick={pedirLinkToken}>
+          <button className="vc-btn-primary" disabled={conectando} onClick={() => pedirLinkToken()}>
             {conectando ? "Conectando..." : "Conectar banco"}
           </button>
         </div>
@@ -213,7 +272,7 @@ export default function CuentasPage() {
             <button
               className="rounded-lg border border-border px-4 py-3 text-sm text-muted"
               disabled={conectando}
-              onClick={pedirLinkToken}
+              onClick={() => pedirLinkToken()}
             >
               + Otro banco
             </button>
