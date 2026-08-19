@@ -11,11 +11,23 @@ type CuentaPlaid = {
   id: string;
   name: string | null;
   mask: string | null;
+  type: string | null;
   subtype: string | null;
   current_balance: number | null;
   iso_currency_code: string | null;
   es_negocio: boolean;
 };
+
+// Plaid siempre manda current_balance de tarjetas de crédito y préstamos
+// como número POSITIVO (representa "cuánto debes", no un saldo negativo).
+// Si sumamos eso igual que una cuenta de banco, el balance total queda
+// inflado — una deuda de $18,000 se vería como si fuera dinero tuyo. Por
+// eso hay que restar (no sumar) estos tipos, y mostrarlos en rojo con
+// signo negativo en la lista, para que se lea como lo que realmente es:
+// una deuda, no un ingreso.
+function esPasivo(type: string | null): boolean {
+  return type === "credit" || type === "loan";
+}
 
 type BancoPlaid = {
   id: string;
@@ -50,7 +62,7 @@ export default function CuentasPage() {
 
     const { data } = await supabase
       .from("plaid_accounts")
-      .select("id, name, mask, subtype, current_balance, iso_currency_code, es_negocio")
+      .select("id, name, mask, type, subtype, current_balance, iso_currency_code, es_negocio")
       .eq("owner_id", user.id)
       .order("name", { ascending: true });
 
@@ -202,7 +214,10 @@ export default function CuentasPage() {
     }
   }
 
-  const totalBalance = cuentas.reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
+  const totalBalance = cuentas.reduce(
+    (sum, c) => sum + (esPasivo(c.type) ? -Number(c.current_balance || 0) : Number(c.current_balance || 0)),
+    0
+  );
   const bancosVencidos = bancos.filter((b) => b.status !== "active");
 
   return (
@@ -289,8 +304,11 @@ export default function CuentasPage() {
                     {c.subtype} {c.mask && `••${c.mask}`}
                   </p>
                 </div>
-                <p className="text-sm font-medium">
-                  <Sensitive>{formatMoney(Number(c.current_balance || 0))}</Sensitive>
+                <p className={`text-sm font-medium ${esPasivo(c.type) ? "text-red" : ""}`}>
+                  <Sensitive>
+                    {esPasivo(c.type) ? "-" : ""}
+                    {formatMoney(Number(c.current_balance || 0))}
+                  </Sensitive>
                 </p>
               </div>
             ))}
