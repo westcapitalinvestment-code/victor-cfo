@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { plaidClient, plaidConfigurado, pareceCuentaDeNegocio } from "@/lib/plaid";
 import { encryptSecret } from "@/lib/crypto";
+import { fechaHoyPR } from "@/lib/hora-pr";
 
 // Segundo paso: el frontend termina el flujo de Plaid Link con un
 // public_token de un solo uso — aquí lo cambiamos por el access_token real
@@ -25,10 +26,14 @@ export async function POST(req: NextRequest) {
   const publicToken: string | undefined = body?.publicToken;
   const institutionId: string | null = body?.institutionId ?? null;
   const institutionName: string | null = body?.institutionName ?? null;
+  const historialCompleto: boolean = body?.historialCompleto !== false;
 
   if (!publicToken) {
     return NextResponse.json({ error: "Falta el public_token de Plaid." }, { status: 400 });
   }
+
+  const anoActualPR = fechaHoyPR().slice(0, 4);
+  const historialDesde = historialCompleto ? `${anoActualPR}-01-01` : fechaHoyPR();
 
   try {
     const exchange = await plaidClient.itemPublicTokenExchange({ public_token: publicToken });
@@ -39,11 +44,12 @@ export async function POST(req: NextRequest) {
       .from("plaid_items")
       .insert({
         owner_id: user.id,
-        entity_id: null, // conexión personal — igual convención que goals/documents
+        entity_id: null,
         plaid_item_id: plaidItemId,
-        access_token: encryptSecret(accessToken), // nunca se guarda en texto plano
+        access_token: encryptSecret(accessToken),
         institution_id: institutionId,
         institution_name: institutionName,
+        historial_desde: historialDesde,
       })
       .select("id")
       .single();
@@ -52,8 +58,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: itemError?.message || "No se pudo guardar la conexión." }, { status: 500 });
     }
 
-    // Traemos las cuentas (checking, savings, etc.) de este Item de una vez,
-    // así el usuario ve algo real apenas termina de conectar el banco.
     const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken });
 
     const accountRows = accountsResponse.data.accounts.map((acc) => ({
@@ -74,8 +78,6 @@ export async function POST(req: NextRequest) {
     if (accountRows.length > 0) {
       const { error: accountsError } = await supabase.from("plaid_accounts").insert(accountRows);
       if (accountsError) {
-        // La conexión ya quedó guardada — esto no debe tumbar la respuesta,
-        // pero sí avisamos para poder investigarlo.
         console.error("No se pudieron guardar las cuentas de Plaid:", accountsError);
       }
     }
