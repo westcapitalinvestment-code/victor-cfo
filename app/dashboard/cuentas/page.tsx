@@ -23,21 +23,6 @@ type BancoPlaid = {
   status: string;
 };
 
-// Conectar banco de verdad (Plaid). El flujo:
-//   1. Pedimos un link_token a /api/plaid/create-link-token.
-//   2. Abrimos el widget de Plaid (usePlaidLink) con ese token.
-//   3. Cuando el usuario termina, mandamos el public_token a
-//      /api/plaid/exchange-token, que lo guarda y trae las cuentas.
-//   4. Sincronizamos transacciones con /api/plaid/sync-transactions.
-// Si PLAID_CLIENT_ID/SECRET no están configurados en el servidor, las
-// rutas de arriba devuelven un error honesto y esta pantalla lo muestra
-// en vez de fingir que algo pasó.
-//
-// Además de conectar bancos nuevos, esta pantalla también muestra un
-// aviso por cada banco cuya conexión venció (status = 'reauth_required',
-// detectado automáticamente durante el sync) con un botón "Reconectar"
-// que usa Plaid Update Mode — reautentica el mismo Item sin crear uno
-// duplicado.
 export default function CuentasPage() {
   const supabase = createClient();
 
@@ -48,6 +33,7 @@ export default function CuentasPage() {
   const [cuentasNegocioOcultas, setCuentasNegocioOcultas] = useState(0);
   const [loading, setLoading] = useState(true);
   const [conectando, setConectando] = useState(false);
+  const [desconectandoId, setDesconectandoId] = useState<string | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,6 +132,32 @@ export default function CuentasPage() {
     if (linkToken && ready) open();
   }, [linkToken, ready, open]);
 
+  async function desconectarBanco(itemId: string, nombre: string | null) {
+    const ok = window.confirm(
+      `¿Desconectar ${nombre || "este banco"}? Dejarás de ver sus cuentas y VICTOR dejará de traer transacciones nuevas de ahí. El historial que ya se importó no se borra.`
+    );
+    if (!ok) return;
+
+    setDesconectandoId(itemId);
+    setError(null);
+    setMensaje(null);
+    try {
+      const res = await fetch("/api/plaid/desconectar-banco", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "No se pudo desconectar el banco.");
+      setMensaje("Banco desconectado.");
+      await cargarCuentas();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo desconectar el banco.");
+    } finally {
+      setDesconectandoId(null);
+    }
+  }
+
   async function sincronizar() {
     setSincronizando(true);
     setError(null);
@@ -217,7 +229,7 @@ export default function CuentasPage() {
 
       {loading ? (
         <p className="text-sm text-muted">Cargando…</p>
-      ) : cuentas.length === 0 ? (
+      ) : cuentas.length === 0 && bancos.length === 0 ? (
         <div className="vc-card text-center">
           <p className="mb-2 text-sm font-medium">Conectar banco (Plaid)</p>
           <p className="mb-4 text-xs text-muted">
@@ -264,6 +276,27 @@ export default function CuentasPage() {
               </div>
             ))}
           </div>
+
+          {bancos.length > 0 && (
+            <div className="vc-card mb-3 !p-0">
+              <p className="border-b border-border px-4 py-2 text-xs font-medium text-muted">Bancos conectados</p>
+              {bancos.map((b) => (
+                <div key={b.id} className="flex items-center justify-between border-b border-border px-4 py-3 last:border-b-0">
+                  <div>
+                    <p className="text-sm text-text">{b.institution_name || "Banco sin nombre"}</p>
+                    <p className="text-xs text-muted">{b.status === "active" ? "Conectado" : "Necesita reconexión"}</p>
+                  </div>
+                  <button
+                    className="text-xs text-red disabled:opacity-50"
+                    disabled={desconectandoId === b.id}
+                    onClick={() => desconectarBanco(b.id, b.institution_name)}
+                  >
+                    {desconectandoId === b.id ? "Desconectando..." : "Desconectar"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="flex gap-2">
             <button className="vc-btn-primary" disabled={sincronizando} onClick={sincronizar}>
