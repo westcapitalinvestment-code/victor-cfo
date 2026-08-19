@@ -24,6 +24,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
   if (typeof body?.nombre === "string" && body.nombre.trim()) patch.name = body.nombre.trim();
+  if (typeof body?.tipo === "string") {
+    const tiposValidos = ["depository", "credit", "loan", "investment"];
+    if (!tiposValidos.includes(body.tipo)) {
+      return NextResponse.json({ error: "El tipo de cuenta no es válido." }, { status: 400 });
+    }
+    patch.type = body.tipo;
+  }
   if (body?.balance !== undefined) {
     const balance = Number(body.balance);
     if (!Number.isFinite(balance)) {
