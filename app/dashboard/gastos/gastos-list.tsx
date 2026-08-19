@@ -11,6 +11,7 @@ type Transaccion = {
   amount: number;
   fecha: string;
   hacienda_category_id: number | null;
+  plaid_account_id: string | null;
 };
 
 type Categoria = { id: number; nombre: string };
@@ -18,9 +19,15 @@ type Categoria = { id: number; nombre: string };
 export default function GastosList({
   transaccionesIniciales,
   categorias,
+  nombrePorCuenta,
 }: {
   transaccionesIniciales: Transaccion[];
   categorias: Categoria[];
+  // Mapa plaid_account_id → "BPPR Visa ···4821", para identificar de qué
+  // banco/tarjeta vino cada transacción cuando el usuario tiene más de una
+  // cuenta conectada. Vacío/ausente = no mostrar nada (comportamiento de
+  // antes, sin romper nada si algún caller no lo manda).
+  nombrePorCuenta?: Record<string, string>;
 }) {
   const router = useRouter();
   const [transacciones, setTransacciones] = useState(transaccionesIniciales);
@@ -77,6 +84,9 @@ export default function GastosList({
                 onClick={() => setEditando(t.id)}
               >
                 {t.fecha} · {nombreCategoria(t.hacienda_category_id)}
+                {t.plaid_account_id && nombrePorCuenta?.[t.plaid_account_id]
+                  ? ` · ${nombrePorCuenta[t.plaid_account_id]}`
+                  : ""}
               </button>
             )}
           </div>
