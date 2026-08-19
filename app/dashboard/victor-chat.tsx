@@ -12,7 +12,9 @@ import { useEffect, useRef, useState } from "react";
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const STORAGE_KEY = "victor_conversation_id";
+const ONBOARDING_TRIGGER = "[INICIO_AUTOMATICO]";
 const SALUDO_DIARIO_TRIGGER = "[SALUDO_DIARIO]";
+
 const SUGERENCIAS = ["Analizar mis gastos", "Ver mis metas", "Ayúdame con una estrategia"];
 
 // Logo/cara de VICTOR — el mismo PNG del mockup aprobado (VICTOR — Dashboard
@@ -86,7 +88,7 @@ export default function VictorChat({
   // todavía no pasó por el onboarding conversacional (Capa 2), el panel se
   // abre solo y le manda a VICTOR una señal técnica invisible para que
   // arranque él mismo — el usuario nunca ve "[INICIO_AUTOMATICO]" en pantalla.
-     const triggeredRef = useRef(false);
+  const triggeredRef = useRef(false);
   useEffect(() => {
     if (autoOpenOnboarding && !triggeredRef.current) {
       triggeredRef.current = true;
@@ -95,23 +97,6 @@ export default function VictorChat({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpenOnboarding]);
-
-  // Mismo patrón, para el saludo proactivo diario (después de que el
-  // onboarding ya pasó): VICTOR se abre solo la primera vez que el usuario
-  // entra al dashboard cada día y le manda una señal técnica invisible
-  // — el usuario nunca ve "[SALUDO_DIARIO]" en pantalla, solo la respuesta
-  // cálida de VICTOR. Nunca se dispara junto con el onboarding (el server
-  // ya los manda como mutuamente excluyentes), pero el chequeo de
-  // !autoOpenOnboarding es una segunda capa de seguridad por si acaso.
-  const saludoTriggeredRef = useRef(false);
-  useEffect(() => {
-    if (autoOpenSaludoDiario && !autoOpenOnboarding && !saludoTriggeredRef.current) {
-      saludoTriggeredRef.current = true;
-      setOpen(true);
-      send(SALUDO_DIARIO_TRIGGER, { hidden: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoOpenSaludoDiario, autoOpenOnboarding]);
 
   // Mismo patrón, para el saludo proactivo diario (después de que el
   // onboarding ya pasó): VICTOR se abre solo la primera vez que el usuario
