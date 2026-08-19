@@ -42,10 +42,23 @@ function parsearCuentaSeleccionada(valor: string | undefined): { origen: "plaid"
 // categorización de 0001_schema_completo.sql + la siembra de 0011) — la
 // columna "category" de texto nunca se usa, por eso antes siempre salía
 // "sin categorizar". Click en la fecha/categoría para corregirla a mano.
+// Igual que con la cuenta: el id de categoría en la URL puede ser el id
+// numérico real de hacienda_categories, o el texto especial
+// "sin_categorizar" para las transacciones sin hacienda_category_id (no
+// hay ningún id de verdad que represente "sin categoría").
+const SIN_CATEGORIZAR = "sin_categorizar";
+function parsearCategoriaSeleccionada(valor: string | undefined): { tipo: "id"; id: number } | { tipo: "sin_categorizar" } | null {
+  if (!valor) return null;
+  if (valor === SIN_CATEGORIZAR) return { tipo: "sin_categorizar" };
+  const id = Number(valor);
+  if (Number.isFinite(id)) return { tipo: "id", id };
+  return null;
+}
+
 export default async function GastosPage({
   searchParams,
 }: {
-  searchParams: { cuenta?: string };
+  searchParams: { cuenta?: string; categoria?: string };
 }) {
   const supabase = createClient();
   const {
@@ -83,6 +96,7 @@ export default async function GastosPage({
   const [{ data: cuentasPlaid }, { data: cuentasManuales }] = await Promise.all([cuentasQuery, manualesQuery]);
 
   const cuentaSeleccionada = parsearCuentaSeleccionada(searchParams.cuenta);
+  const categoriaSeleccionada = parsearCategoriaSeleccionada(searchParams.categoria);
 
   let transaccionesQuery = supabase
     .from("transactions")
@@ -120,15 +134,56 @@ export default async function GastosPage({
   const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
   const nombrePorCategoria = new Map((categorias ?? []).map((c) => [c.id, c.nombre]));
 
-  const gastoPorCategoria = new Map<string, number>();
+  // catKey identifica cada categoría en la URL (?categoria=) y en el
+  // filtro de la lista de abajo: el id numérico real de hacienda_categories
+  // como texto, o "sin_categorizar" para las que no tienen ninguna — así
+  // el usuario puede tocar cualquier fila del reporte y ver exactamente
+  // qué transacciones cayeron ahí, para confirmar que VICTOR categorizó
+  // bien o corregir la que no.
+  const gastoPorCategoria = new Map<string, { nombre: string; monto: number }>();
   let gastosDelMes = 0;
   for (const t of transacciones ?? []) {
     if (t.fecha < inicioMes || Number(t.amount) <= 0) continue;
     gastosDelMes += Number(t.amount);
+    const catKey = t.hacienda_category_id ? String(t.hacienda_category_id) : SIN_CATEGORIZAR;
     const nombre = t.hacienda_category_id ? nombrePorCategoria.get(t.hacienda_category_id) ?? "Sin categorizar" : "Sin categorizar";
-    gastoPorCategoria.set(nombre, (gastoPorCategoria.get(nombre) ?? 0) + Number(t.amount));
+    const actual = gastoPorCategoria.get(catKey) ?? { nombre, monto: 0 };
+    actual.monto += Number(t.amount);
+    gastoPorCategoria.set(catKey, actual);
   }
-  const reporteCategoria = Array.from(gastoPorCategoria.entries()).sort((a, b) => b[1] - a[1]);
+  const reporteCategoria = Array.from(gastoPorCategoria.entries())
+    .map(([catKey, v]) => ({ catKey, nombre: v.nombre, monto: v.monto }))
+    .sort((a, b) => b.monto - a.monto);
+
+  // La lista de transacciones de abajo: si hay una categoría seleccionada
+  // en el reporte de arriba, se filtra a esa categoría Y al mes en curso
+  // (mismo alcance que el reporte, para que los números cuadren con lo
+  // que el usuario tocó). Sin categoría seleccionada, se ve la lista
+  // completa de siempre (ya filtrada por cuenta si aplica).
+  const transaccionesMostradas = categoriaSeleccionada
+    ? (transacciones ?? []).filter((t) => {
+        if (t.fecha < inicioMes) return false;
+        if (categoriaSeleccionada.tipo === "sin_categorizar") return !t.hacienda_category_id;
+        return t.hacienda_category_id === categoriaSeleccionada.id;
+      })
+    : transacciones ?? [];
+
+  const nombreCategoriaSeleccionada = categoriaSeleccionada
+    ? reporteCategoria.find((r) =>
+        categoriaSeleccionada.tipo === "sin_categorizar" ? r.catKey === SIN_CATEGORIZAR : r.catKey === String(categoriaSeleccionada.id)
+      )?.nombre ?? "Sin categorizar"
+    : null;
+
+  // Conserva el filtro de cuenta activo (si hay) al armar el link de cada
+  // categoría, para que los dos filtros se puedan combinar sin perderse
+  // uno al tocar el otro.
+  function hrefConCategoria(catKey: string | null) {
+    const params = new URLSearchParams();
+    if (searchParams.cuenta) params.set("cuenta", searchParams.cuenta);
+    if (catKey) params.set("categoria", catKey);
+    const qs = params.toString();
+    return `/dashboard/gastos${qs ? `?${qs}` : ""}`;
+  }
 
   // Rangos rápidos para el reporte del contable — el CSV (/api/transacciones/
   // exportar) ya acepta ?desde=&hasta=, esto solo arma los links con las
@@ -219,49 +274,84 @@ export default async function GastosPage({
 
       {reporteCategoria.length > 0 && (
         <div className="vc-card mb-3">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">Reporte del mes por categoría</p>
+          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">
+            Reporte del mes por categoría — toca una para ver sus transacciones
+          </p>
           <div className="flex flex-col gap-2">
-            {reporteCategoria.map(([nombre, monto]) => {
-              const pct = gastosDelMes > 0 ? Math.round((monto / gastosDelMes) * 100) : 0;
+            {reporteCategoria.map((r) => {
+              const pct = gastosDelMes > 0 ? Math.round((r.monto / gastosDelMes) * 100) : 0;
+              const activa = categoriaSeleccionada
+                ? categoriaSeleccionada.tipo === "sin_categorizar"
+                  ? r.catKey === SIN_CATEGORIZAR
+                  : r.catKey === String(categoriaSeleccionada.id)
+                : false;
               return (
-                <div key={nombre}>
+                <Link
+                  key={r.catKey}
+                  href={hrefConCategoria(activa ? null : r.catKey)}
+                  className={`-mx-2 rounded-lg px-2 py-1 text-left hover:opacity-80 ${activa ? "bg-teal/[.08]" : ""}`}
+                >
                   <div className="flex justify-between text-sm">
-                    <span className={nombre === "Sin categorizar" ? "text-muted" : ""}>{nombre}</span>
+                    <span className={r.nombre === "Sin categorizar" ? "text-muted" : activa ? "font-medium text-teal" : ""}>
+                      {r.nombre}
+                    </span>
                     <span className="font-medium">
-                      <Sensitive>{formatMoney(monto)}</Sensitive> <span className="text-xs text-muted">({pct}%)</span>
+                      <Sensitive>{formatMoney(r.monto)}</Sensitive> <span className="text-xs text-muted">({pct}%)</span>
                     </span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-border">
-                    <div className="h-1.5 rounded-full bg-teal" style={{ width: `${pct}%` }} />
+                    <div className={`h-1.5 rounded-full ${activa ? "bg-teal" : "bg-teal/60"}`} style={{ width: `${pct}%` }} />
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
         </div>
       )}
 
+      {categoriaSeleccionada && (
+        <div className="mb-3 flex items-center justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2 text-xs">
+          <span>
+            Mostrando: <span className="font-medium">{nombreCategoriaSeleccionada}</span> · este mes ·{" "}
+            {transaccionesMostradas.length} transacción(es)
+          </span>
+          <Link href={hrefConCategoria(null)} className="font-medium text-teal hover:opacity-80">
+            ✕ Quitar filtro
+          </Link>
+        </div>
+      )}
+
       <div className="vc-card">
         {error && <p className="text-xs text-amb">No se pudo leer transactions ({error.message}).</p>}
 
-        {!error && (!transacciones || transacciones.length === 0) && (
+        {!error && transaccionesMostradas.length === 0 && (
           <div className="py-6 text-center">
-            <p className="text-sm text-muted">Todavía no hay transacciones.</p>
-            <p className="mt-1 text-xs text-muted">
-              Se llenan solas cuando conectes tu banco en la pestaña Cuentas.
+            <p className="text-sm text-muted">
+              {categoriaSeleccionada ? "No hay transacciones en esta categoría este mes." : "Todavía no hay transacciones."}
             </p>
+            {!categoriaSeleccionada && (
+              <p className="mt-1 text-xs text-muted">Se llenan solas cuando conectes tu banco en la pestaña Cuentas.</p>
+            )}
           </div>
         )}
 
-        {transacciones && transacciones.length > 0 && (
+        {transaccionesMostradas.length > 0 && (
           <GastosList
-            key={searchParams.cuenta ?? "todas"}
-            transaccionesIniciales={transacciones}
+            // key fuerza a React a montar una instancia nueva del componente
+            // cuando cambia el filtro de cuenta o de categoría — sin esto,
+            // GastosList es un Client Component con su propio
+            // useState(transaccionesIniciales), y React reusa la instancia
+            // vieja (con las transacciones del filtro anterior) en vez de
+            // tomar las nuevas props, aunque el servidor ya mandó la lista
+            // correcta. Por eso hacía falta refrescar la página a mano para
+            // ver el cambio.
+            key={`${searchParams.cuenta ?? "todas"}-${searchParams.categoria ?? "todas"}`}
+            transaccionesIniciales={transaccionesMostradas}
             categorias={categorias ?? []}
             nombrePorCuenta={Object.fromEntries(nombrePorCuenta)}
           />
         )}
-        {transacciones && transacciones.length === LIMITE_TRANSACCIONES && (
+        {!categoriaSeleccionada && transacciones && transacciones.length === LIMITE_TRANSACCIONES && (
           <p className="mt-3 text-center text-xs text-muted">
             Mostrando las {LIMITE_TRANSACCIONES} más recientes
             {cuentaSeleccionada ? " de esta cuenta" : ""}. Filtra por cuenta arriba o descarga el reporte completo
