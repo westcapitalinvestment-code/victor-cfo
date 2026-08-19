@@ -28,6 +28,7 @@ export default function CuentasPage() {
 
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [reconectandoItemId, setReconectandoItemId] = useState<string | null>(null);
+  const [historialCompleto, setHistorialCompleto] = useState(true);
   const [cuentas, setCuentas] = useState<CuentaPlaid[]>([]);
   const [bancos, setBancos] = useState<BancoPlaid[]>([]);
   const [cuentasNegocioOcultas, setCuentasNegocioOcultas] = useState(0);
@@ -74,6 +75,14 @@ export default function CuentasPage() {
   async function pedirLinkToken(itemId?: string) {
     setError(null);
     setReconectandoItemId(itemId ?? null);
+
+    if (!itemId) {
+      const quiereAnoCompleto = window.confirm(
+        "Recomendado: traer todas las transacciones desde el 1 de enero de este año, así tienes todo listo para las planillas de abril.\n\nAceptar = año completo (recomendado). Cancelar = solo desde hoy en adelante."
+      );
+      setHistorialCompleto(quiereAnoCompleto);
+    }
+
     try {
       const res = await fetch("/api/plaid/create-link-token", {
         method: "POST",
@@ -111,6 +120,7 @@ export default function CuentasPage() {
               publicToken,
               institutionId: metadata.institution?.institution_id ?? null,
               institutionName: metadata.institution?.name ?? null,
+              historialCompleto,
             }),
           });
           const data = await res.json();
