@@ -261,7 +261,7 @@ export default function VictorChat({
               <div className="mb-3 flex justify-start gap-2">
                 <img src={VICTOR_AVATAR} alt="VICTOR" className="h-7 w-7 flex-shrink-0 rounded-full object-cover" />
                 <div className="rounded-[10px] rounded-bl-none border border-border bg-bg p-2.5 text-sm text-muted">
-                  VICTOR está escribiendo…
+                  VICTOR está escribiendo y analizando…
                 </div>
               </div>
             )}
