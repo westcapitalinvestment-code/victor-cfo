@@ -46,6 +46,7 @@ const PALABRAS_NEGOCIO = [
   "inc",
   "merchant",
   "empresa",
+  "dba", // "Doing Business As" — cuenta de un negocio individual/sole proprietor
 ];
 
 export function pareceCuentaDeNegocio(name: string | null | undefined, officialName: string | null | undefined, subtype: string | null | undefined): boolean {
