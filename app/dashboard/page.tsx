@@ -45,24 +45,13 @@ export default async function DashboardPage() {
 
   const bancoConectado = !!cuentasPlaid && cuentasPlaid.length > 0;
 
-  // "Balance personal" = solo dinero líquido de verdad (checking + savings,
-  // type "depository"). No se resta la deuda aquí — una deuda a largo
-  // plazo (préstamo de carro, tarjeta) no afecta cuánto efectivo tienes
-  // disponible HOY mientras esté al día. Mezclar ambas cosas en un solo
-  // número confunde "cuánto tengo" con "cuánto debo" — por eso Ahorrado y
-  // Deuda se calculan y se muestran aparte, abajo.
   const cuentasLiquidas = (cuentasPlaid ?? []).filter((c) => c.type === "depository");
   const balanceTotal = cuentasLiquidas.reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
 
-  // Ahorrado: solo el subtipo "savings" dentro de las líquidas — checking
-  // es dinero de flujo normal, no cuenta como "ahorro".
   const ahorrado = cuentasLiquidas
     .filter((c) => c.subtype === "savings")
     .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
 
-  // Deuda: tarjetas de crédito y préstamos. Plaid siempre manda esto como
-  // número positivo ("cuánto debes"), así que se suma tal cual — nunca se
-  // resta del balance líquido de arriba.
   const deudaTotal = (cuentasPlaid ?? [])
     .filter((c) => c.type === "credit" || c.type === "loan")
     .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
@@ -188,7 +177,7 @@ export default async function DashboardPage() {
         </div>
         <div className="vc-met">
           <p className="vc-ml">Deuda</p>
-          <p className="vc-mv">
+          <p className={`vc-mv ${bancoConectado && deudaTotal > 0 ? "text-red" : ""}`}>
             <Sensitive>{bancoConectado ? formatMoney(deudaTotal) : "—"}</Sensitive>
           </p>
           <p className="mt-0.5 text-[10px] text-muted">{bancoConectado ? "tarjetas y préstamos" : "conecta tu banco"}</p>
