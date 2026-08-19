@@ -17,6 +17,18 @@ const SALUDO_DIARIO_TRIGGER = "[SALUDO_DIARIO]";
 
 const SUGERENCIAS = ["Analizar mis gastos", "Ver mis metas", "Ayúdame con una estrategia"];
 
+// Selector de emojis simple para el input — igual que en WhatsApp, un
+// botón de carita abre una cuadrícula chiquita y cada toque inserta el
+// emoji donde esté el cursor. No usamos ninguna librería nueva (el
+// usuario pega los archivos a mano en GitHub, sin npm install), así que
+// es solo una lista fija de los más comunes en conversaciones de plata.
+const EMOJIS = [
+  "😀", "😂", "😊", "😍", "🤔", "😅", "😢", "😭",
+  "😮", "🙏", "👍", "👎", "💪", "🙌", "👏", "🤝",
+  "❤️", "🔥", "🎉", "✅", "❌", "⚠️", "💰", "💵",
+  "💳", "📈", "📉", "🏦", "🏠", "🚗", "😴", "🤷",
+];
+
 // Logo/cara de VICTOR — el mismo PNG del mockup aprobado (VICTOR — Dashboard
 // Core.html), para que el chat real se vea idéntico, no un ícono genérico.
 const VICTOR_AVATAR =
@@ -41,6 +53,7 @@ export default function VictorChat({
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
+  const [showEmojis, setShowEmojis] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -138,6 +151,23 @@ export default function VictorChat({
     recognitionRef.current = recognition;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Inserta el emoji justo donde esté el cursor (no solo al final) — así
+  // se puede escribir "gracias 🙏 por la ayuda" sin tener que mover el
+  // texto a mano. El picker se queda abierto después de escoger uno,
+  // igual que en WhatsApp, para poder poner varios seguidos.
+  function insertarEmoji(emoji: string) {
+    const el = inputRef.current;
+    const start = el?.selectionStart ?? input.length;
+    const end = el?.selectionEnd ?? input.length;
+    const nuevo = input.slice(0, start) + emoji + input.slice(end);
+    setInput(nuevo);
+    requestAnimationFrame(() => {
+      el?.focus();
+      const pos = start + emoji.length;
+      el?.setSelectionRange(pos, pos);
+    });
+  }
 
   function toggleVoice() {
     if (!recognitionRef.current) return;
@@ -285,7 +315,39 @@ export default function VictorChat({
           </div>
 
           {/* Input */}
-          <div className="flex gap-2 border-t border-border bg-card p-3">
+          <div className="relative flex gap-2 border-t border-border bg-card p-3">
+            {showEmojis && (
+              <>
+                {/* Capa invisible para cerrar el panel al tocar afuera,
+                    igual que el resto de los menús de la app. */}
+                <div className="fixed inset-0 z-[55]" onClick={() => setShowEmojis(false)} />
+                <div
+                  className="absolute bottom-[52px] left-3 z-[60] grid w-[248px] grid-cols-8 gap-1 rounded-xl border border-border bg-card p-2 shadow-2xl"
+                >
+                  {EMOJIS.map((e) => (
+                    <button
+                      key={e}
+                      onClick={() => insertarEmoji(e)}
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-base hover:bg-bg"
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <button
+              onClick={() => setShowEmojis((v) => !v)}
+              title="Insertar emoji"
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border"
+              style={
+                showEmojis
+                  ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
+                  : { background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }
+              }
+            >
+              <i className="ti ti-mood-smile" style={{ fontSize: 16 }} />
+            </button>
             {voiceSupported && (
               <button
                 onClick={toggleVoice}
