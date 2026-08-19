@@ -204,6 +204,14 @@ export default async function GastosPage({
 
         {transacciones && transacciones.length > 0 && (
           <GastosList
+            // key fuerza a React a montar una instancia nueva del componente
+            // cuando cambia el filtro de cuenta — sin esto, GastosList es un
+            // Client Component con su propio useState(transaccionesIniciales),
+            // y React reusa la instancia vieja (con las transacciones de la
+            // cuenta anterior) en vez de tomar las nuevas props, aunque el
+            // servidor ya mandó la lista correcta. Por eso hacía falta
+            // refrescar la página a mano para ver el cambio.
+            key={cuentaSeleccionada ?? "todas"}
             transaccionesIniciales={transacciones}
             categorias={categorias ?? []}
             nombrePorCuenta={Object.fromEntries(nombrePorCuenta)}
