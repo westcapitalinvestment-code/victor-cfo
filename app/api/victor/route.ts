@@ -10,7 +10,6 @@ import { fechaHoyPR } from "@/lib/hora-pr";
 // usuario; todo lo demás (system prompt, historial, memoria) se arma aquí.
 
 export const runtime = "nodejs";
-export const runtime = "nodejs";
 // Sin esto, Vercel corta la función con el límite por defecto de la
 // plataforma. Cuando VICTOR categoriza en lote (varias transacciones
 // pendientes, una llamada a Claude por cada una dentro del loop de
