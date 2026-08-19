@@ -6,8 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
 import CuentasManuales from "./cuentas-manuales";
+import SubirEstado from "./subir-csv";
 type CuentaPlaid = {
   id: string;
+  plaid_account_id: string;
   name: string | null;
   mask: string | null;
   type: string | null;
@@ -38,6 +40,10 @@ export default function CuentasPage() {
   const [sincronizando, setSincronizando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Rellenar el hueco de historial que Plaid no trajo (ej. BPPR solo da
+  // ~45 días) — subir el estado de cuenta directo a una cuenta que YA
+  // está conectada, igual que se puede hacer con una cuenta manual.
+  const [subiendoEstadoId, setSubiendoEstadoId] = useState<string | null>(null);
   const cargarCuentas = useCallback(async () => {
     const {
       data: { user },
@@ -47,7 +53,7 @@ export default function CuentasPage() {
     const pro = perfil?.plan === "pro" || perfil?.plan === "proplus";
     const { data } = await supabase
       .from("plaid_accounts")
-      .select("id, name, mask, type, subtype, current_balance, iso_currency_code, es_negocio")
+      .select("id, plaid_account_id, name, mask, type, subtype, current_balance, iso_currency_code, es_negocio")
       .eq("owner_id", user.id)
       .order("name", { ascending: true });
     const todas = data ?? [];
@@ -263,19 +269,41 @@ export default function CuentasPage() {
           )}
           <div className="vc-card mb-3 !p-0">
             {cuentas.map((c) => (
-              <div key={c.id} className="flex items-center justify-between border-b border-border px-4 py-3 last:border-b-0">
-                <div>
-                  <p className="text-sm text-text">{c.name}</p>
-                  <p className="text-xs capitalize text-muted">
-                    {c.subtype} {c.mask && `••${c.mask}`}
+              <div key={c.id} className="border-b border-border px-4 py-3 last:border-b-0">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-text">{c.name}</p>
+                    <p className="text-xs capitalize text-muted">
+                      {c.subtype} {c.mask && `••${c.mask}`}
+                    </p>
+                  </div>
+                  <p className={`text-sm font-medium ${esPasivo(c.type) ? "!text-red" : ""}`}>
+                    <Sensitive>
+                      {esPasivo(c.type) ? "-" : ""}
+                      {formatMoney(Number(c.current_balance || 0))}
+                    </Sensitive>
                   </p>
                 </div>
-                <p className={`text-sm font-medium ${esPasivo(c.type) ? "!text-red" : ""}`}>
-                  <Sensitive>
-                    {esPasivo(c.type) ? "-" : ""}
-                    {formatMoney(Number(c.current_balance || 0))}
-                  </Sensitive>
-                </p>
+
+                <button
+                  className="mt-1 text-[11px] text-teal hover:opacity-80"
+                  onClick={() => setSubiendoEstadoId(subiendoEstadoId === c.plaid_account_id ? null : c.plaid_account_id)}
+                >
+                  {subiendoEstadoId === c.plaid_account_id
+                    ? "Ocultar"
+                    : "Subir estado de cuenta (rellenar historial)"}
+                </button>
+
+                {subiendoEstadoId === c.plaid_account_id && (
+                  <SubirEstado
+                    origen="plaid"
+                    cuentaId={c.plaid_account_id}
+                    onCerrar={() => {
+                      setSubiendoEstadoId(null);
+                      cargarCuentas();
+                    }}
+                  />
+                )}
               </div>
             ))}
           </div>
