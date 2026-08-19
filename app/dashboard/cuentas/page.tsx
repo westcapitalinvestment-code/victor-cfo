@@ -18,13 +18,6 @@ type CuentaPlaid = {
   es_negocio: boolean;
 };
 
-// Plaid siempre manda current_balance de tarjetas de crédito y préstamos
-// como número POSITIVO (representa "cuánto debes", no un saldo negativo).
-// Si sumamos eso igual que una cuenta de banco, el balance total queda
-// inflado — una deuda de $18,000 se vería como si fuera dinero tuyo. Por
-// eso hay que restar (no sumar) estos tipos, y mostrarlos en rojo con
-// signo negativo en la lista, para que se lea como lo que realmente es:
-// una deuda, no un ingreso.
 function esPasivo(type: string | null): boolean {
   return type === "credit" || type === "loan";
 }
@@ -214,10 +207,9 @@ export default function CuentasPage() {
     }
   }
 
-  const totalBalance = cuentas.reduce(
-    (sum, c) => sum + (esPasivo(c.type) ? -Number(c.current_balance || 0) : Number(c.current_balance || 0)),
-    0
-  );
+  const totalBalance = cuentas
+    .filter((c) => c.type === "depository")
+    .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
   const bancosVencidos = bancos.filter((b) => b.status !== "active");
 
   return (
