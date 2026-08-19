@@ -81,7 +81,7 @@ export default function CuentasPage() {
         body: JSON.stringify(itemId ? { itemId } : {}),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "No se pudo iniciar la conexión.");
+      if (!res.ok) throw new Error(`${data?.error || "No se pudo iniciar la conexión."}${data?.detalle ? ` (${data.detalle})` : ""}`);
       setLinkToken(data.linkToken);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar la conexión con Plaid.");
