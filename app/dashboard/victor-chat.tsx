@@ -12,8 +12,7 @@ import { useEffect, useRef, useState } from "react";
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const STORAGE_KEY = "victor_conversation_id";
-const ONBOARDING_TRIGGER = "[INICIO_AUTOMATICO]";
-
+const SALUDO_DIARIO_TRIGGER = "[SALUDO_DIARIO]";
 const SUGERENCIAS = ["Analizar mis gastos", "Ver mis metas", "Ayúdame con una estrategia"];
 
 // Logo/cara de VICTOR — el mismo PNG del mockup aprobado (VICTOR — Dashboard
@@ -21,7 +20,13 @@ const SUGERENCIAS = ["Analizar mis gastos", "Ver mis metas", "Ayúdame con una e
 const VICTOR_AVATAR =
   "data:image/png;base64,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";
 
-export default function VictorChat({ autoOpenOnboarding = false }: { autoOpenOnboarding?: boolean }) {
+export default function VictorChat({
+  autoOpenOnboarding = false,
+  autoOpenSaludoDiario = false,
+}: {
+  autoOpenOnboarding?: boolean;
+  autoOpenSaludoDiario?: boolean;
+}) {
   // Por defecto abierto — VICTOR debe sentirse presente e invitar a hablar,
   // no escondido detrás de un botón. Si el usuario lo cierra, se queda
   // cerrado mientras navega (el layout no se remonta entre páginas del
@@ -81,7 +86,7 @@ export default function VictorChat({ autoOpenOnboarding = false }: { autoOpenOnb
   // todavía no pasó por el onboarding conversacional (Capa 2), el panel se
   // abre solo y le manda a VICTOR una señal técnica invisible para que
   // arranque él mismo — el usuario nunca ve "[INICIO_AUTOMATICO]" en pantalla.
-  const triggeredRef = useRef(false);
+     const triggeredRef = useRef(false);
   useEffect(() => {
     if (autoOpenOnboarding && !triggeredRef.current) {
       triggeredRef.current = true;
@@ -90,6 +95,40 @@ export default function VictorChat({ autoOpenOnboarding = false }: { autoOpenOnb
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpenOnboarding]);
+
+  // Mismo patrón, para el saludo proactivo diario (después de que el
+  // onboarding ya pasó): VICTOR se abre solo la primera vez que el usuario
+  // entra al dashboard cada día y le manda una señal técnica invisible
+  // — el usuario nunca ve "[SALUDO_DIARIO]" en pantalla, solo la respuesta
+  // cálida de VICTOR. Nunca se dispara junto con el onboarding (el server
+  // ya los manda como mutuamente excluyentes), pero el chequeo de
+  // !autoOpenOnboarding es una segunda capa de seguridad por si acaso.
+  const saludoTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenSaludoDiario && !autoOpenOnboarding && !saludoTriggeredRef.current) {
+      saludoTriggeredRef.current = true;
+      setOpen(true);
+      send(SALUDO_DIARIO_TRIGGER, { hidden: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenSaludoDiario, autoOpenOnboarding]);
+
+  // Mismo patrón, para el saludo proactivo diario (después de que el
+  // onboarding ya pasó): VICTOR se abre solo la primera vez que el usuario
+  // entra al dashboard cada día y le manda una señal técnica invisible
+  // — el usuario nunca ve "[SALUDO_DIARIO]" en pantalla, solo la respuesta
+  // cálida de VICTOR. Nunca se dispara junto con el onboarding (el server
+  // ya los manda como mutuamente excluyentes), pero el chequeo de
+  // !autoOpenOnboarding es una segunda capa de seguridad por si acaso.
+  const saludoTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenSaludoDiario && !autoOpenOnboarding && !saludoTriggeredRef.current) {
+      saludoTriggeredRef.current = true;
+      setOpen(true);
+      send(SALUDO_DIARIO_TRIGGER, { hidden: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenSaludoDiario, autoOpenOnboarding]);
 
   // Dictado por voz — Web Speech API, nativo del navegador (Chrome/Edge).
   // Pensado para cuando el usuario está manejando o simplemente no quiere
