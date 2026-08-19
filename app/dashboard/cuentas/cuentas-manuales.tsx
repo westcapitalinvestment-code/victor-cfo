@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
-import SubirCsv from "./subir-csv";
+import SubirEstado from "./subir-csv";
 
 type CuentaManual = {
   id: string;
@@ -47,6 +47,16 @@ export default function CuentasManuales() {
   const [editandoBalanceId, setEditandoBalanceId] = useState<string | null>(null);
   const [nuevoBalance, setNuevoBalance] = useState("");
   const [subiendoCsvId, setSubiendoCsvId] = useState<string | null>(null);
+
+  // Editar cuenta completa (nombre + tipo + balance) — separado del click
+  // rápido sobre el balance de arriba, que sigue existiendo para el caso
+  // más común (solo actualizar el número cada mes). Este botón es para
+  // cuando también hace falta corregir el nombre o el tipo.
+  const [editandoCuentaId, setEditandoCuentaId] = useState<string | null>(null);
+  const [nombreEditado, setNombreEditado] = useState("");
+  const [tipoEditado, setTipoEditado] = useState("depository");
+  const [balanceEditado, setBalanceEditado] = useState("");
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -114,6 +124,43 @@ export default function CuentasManuales() {
       await cargar();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo actualizar el balance.");
+    }
+  }
+
+  function abrirEdicion(c: CuentaManual) {
+    setEditandoCuentaId(c.id);
+    setNombreEditado(c.name);
+    setTipoEditado(c.type);
+    setBalanceEditado(String(c.current_balance));
+    setError(null);
+  }
+
+  async function guardarEdicion(id: string) {
+    if (!nombreEditado.trim()) {
+      setError("Falta el nombre de la cuenta.");
+      return;
+    }
+    const balance = Number(balanceEditado);
+    if (!Number.isFinite(balance)) {
+      setError("El balance no es válido.");
+      return;
+    }
+    setGuardandoEdicion(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/cuentas-manuales/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombreEditado.trim(), tipo: tipoEditado, balance }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "No se pudo actualizar la cuenta.");
+      setEditandoCuentaId(null);
+      await cargar();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo actualizar la cuenta.");
+    } finally {
+      setGuardandoEdicion(false);
     }
   }
 
@@ -190,7 +237,13 @@ export default function CuentasManuales() {
             className="mt-1 text-[11px] text-teal hover:opacity-80"
             onClick={() => setSubiendoCsvId(subiendoCsvId === c.id ? null : c.id)}
           >
-            {subiendoCsvId === c.id ? "Ocultar" : "Subir CSV de transacciones"}
+            {subiendoCsvId === c.id ? "Ocultar" : "Subir estado de cuenta"}
+          </button>
+          <button
+            className="ml-3 mt-1 text-[11px] text-muted hover:opacity-80"
+            onClick={() => (editandoCuentaId === c.id ? setEditandoCuentaId(null) : abrirEdicion(c))}
+          >
+            {editandoCuentaId === c.id ? "Cancelar" : "Editar"}
           </button>
           <button
             className="ml-3 mt-1 text-[11px] text-red hover:opacity-80"
@@ -199,8 +252,52 @@ export default function CuentasManuales() {
             Eliminar
           </button>
 
+          {editandoCuentaId === c.id && (
+            <div className="mt-2 rounded-lg border border-border p-3">
+              <div className="mb-2">
+                <label className="mb-1 block text-[11px] text-muted">Nombre</label>
+                <input
+                  className="vc-input !py-1.5 !text-xs"
+                  value={nombreEditado}
+                  onChange={(e) => setNombreEditado(e.target.value)}
+                />
+              </div>
+              <div className="mb-2 grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[11px] text-muted">Tipo</label>
+                  <select className="vc-input !py-1.5 !text-xs" value={tipoEditado} onChange={(e) => setTipoEditado(e.target.value)}>
+                    {TIPOS.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] text-muted">
+                    Balance {esPasivo(tipoEditado) ? "que debes" : "actual"}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="vc-input !py-1.5 !text-xs"
+                    value={balanceEditado}
+                    onChange={(e) => setBalanceEditado(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button className="vc-btn-primary" disabled={guardandoEdicion} onClick={() => guardarEdicion(c.id)}>
+                  {guardandoEdicion ? "Guardando…" : "Guardar cambios"}
+                </button>
+                <button className="text-xs text-muted underline" onClick={() => setEditandoCuentaId(null)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
           {subiendoCsvId === c.id && (
-            <SubirCsv
+            <SubirEstado
+              origen="manual"
               cuentaId={c.id}
               onCerrar={() => {
                 setSubiendoCsvId(null);
