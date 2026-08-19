@@ -38,3 +38,17 @@ export function fechaHoraLegiblePR(fecha: Date = new Date()): string {
   });
   return `${fmtFecha.format(fecha)}, ${fmtHora.format(fecha)} (hora de Puerto Rico)`;
 }
+
+// Fecha de HOY en Puerto Rico como YYYY-MM-DD — para comparar contra
+// columnas `date` en Supabase (ej. user_profiles.ultimo_saludo_en) sin
+// que un usuario conectado pasada la medianoche UTC pero todavía de tarde
+// en PR reciba "mañana" de forma incorrecta.
+export function fechaHoyPR(fecha: Date = new Date()): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Puerto_Rico",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return fmt.format(fecha); // en-CA da directo el formato YYYY-MM-DD
+}
