@@ -139,6 +139,44 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "crear_categoria_personal",
+    description:
+      "Crea una categoría de gasto NUEVA, personal del usuario (no la ve nadie más, no toca el catálogo " +
+      "global ni las líneas de Anejo M/Schedule C del reporte al contable — es solo para que este usuario " +
+      "organice y pregunte sus propios gastos). Úsala SOLO cuando ya revisaste las categorías existentes (por " +
+      "ejemplo con revisar_gastos_sin_categorizar o categorizar_transaccion) y de verdad ninguna aplica al " +
+      "gasto que el usuario está describiendo. IMPORTANTE: nunca la llames sin antes preguntarle al usuario y " +
+      "obtener su confirmación explícita — algo como '¿quieres que cree una categoría nueva llamada " +
+      "\"Mascotas - veterinario\"?' — nunca la crees en silencio ni asumas que quiere una nueva sin que te lo diga.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre: { type: "string", description: "Nombre de la categoría nueva, en español, corto y claro (ej. 'Mascotas - veterinario', 'Mesada de los nenes')." },
+      },
+      required: ["nombre"],
+    },
+  },
+  {
+    name: "reporte_gasto_por_categoria",
+    description:
+      "Suma cuánto ha gastado el usuario en UNA categoría específica (global o personal suya) en un rango de " +
+      "fechas — úsala para contestar preguntas como '¿cuánto estoy gastando en restaurantes?' o '¿cuánto gasté " +
+      "en gasolina este mes?'. Si el usuario no menciona un período, se calcula el mes en curso por default. Si " +
+      "menciona 'este año', 'el trimestre', 'todo', etc., calcula tú mismo las fechas desde/hasta con la fecha " +
+      "real de hoy que ya tienes en tu contexto y mándalas. Si la categoría que pide no existe todavía (ni " +
+      "global ni personal suya), dile que no tiene gastos en eso, y si quiere, ofrécele crearla con " +
+      "crear_categoria_personal para el futuro — no la crees tú solo para esta pregunta.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre_categoria: { type: "string", description: "Nombre (o parte del nombre) de la categoría a sumar, ej. 'restaurantes', 'gasolina'." },
+        desde: { type: "string", description: "Fecha de inicio del rango, YYYY-MM-DD. Si no se da, usa el día 1 del mes en curso." },
+        hasta: { type: "string", description: "Fecha de fin del rango, YYYY-MM-DD. Si no se da, usa la fecha de hoy." },
+      },
+      required: ["nombre_categoria"],
+    },
+  },
+  {
     name: "guardar_perfil_onboarding",
     description:
       "Guarda las respuestas del onboarding conversacional de la Capa 2 (apodo, género, edad, situación, " +
@@ -454,6 +492,105 @@ export async function executeVictorTool(
           `Categoriza ahora mismo (llamando a categorizar_transaccion, una vez por transacción) las que ` +
           `reconozcas con alta confianza por el nombre del comercio — no le preguntes al usuario esas. Para las ` +
           `que no estés seguro, agrúpalas en un solo mensaje y pregúntale.`,
+      };
+    }
+
+    case "crear_categoria_personal": {
+      const nombre = String(input.nombre ?? "").trim();
+      if (!nombre) return { ok: false, message: "Falta el nombre de la categoría a crear." };
+
+      // Evita duplicados — RLS ya limita esta lectura al catálogo global +
+      // las categorías personales de este mismo usuario, así que si algo
+      // parecido aparece aquí, es de verdad relevante para él.
+      const { data: existentes, error: buscarError } = await supabase
+        .from("hacienda_categories")
+        .select("id, nombre")
+        .eq("activo", true)
+        .ilike("nombre", `%${nombre}%`);
+
+      if (buscarError) return { ok: false, message: `No se pudo verificar categorías existentes: ${buscarError.message}` };
+      if (existentes && existentes.length > 0) {
+        return {
+          ok: false,
+          message: `Ya existe una categoría parecida: "${existentes.map((c) => c.nombre).join('", "')}". Usa esa en vez de crear una nueva, a menos que el usuario confirme que de verdad quiere una distinta.`,
+        };
+      }
+
+      const { data: nueva, error } = await supabase
+        .from("hacienda_categories")
+        .insert({ nombre, owner_id: ownerId, activo: true })
+        .select("id, nombre")
+        .single();
+
+      if (error) return { ok: false, message: `No se pudo crear la categoría: ${error.message}` };
+      return { ok: true, message: `Categoría personal "${nueva.nombre}" creada — ya la puedes usar con categorizar_transaccion.` };
+    }
+
+    case "reporte_gasto_por_categoria": {
+      const nombreCategoria = String(input.nombre_categoria ?? "").trim();
+      if (!nombreCategoria) return { ok: false, message: "Falta el nombre de la categoría para el reporte." };
+
+      const { data: categorias, error: catError } = await supabase
+        .from("hacienda_categories")
+        .select("id, nombre")
+        .eq("activo", true)
+        .ilike("nombre", `%${nombreCategoria}%`);
+
+      if (catError) return { ok: false, message: `No se pudo buscar la categoría: ${catError.message}` };
+      if (!categorias || categorias.length === 0) {
+        return {
+          ok: true,
+          message: `No existe ninguna categoría (global ni personal) parecida a "${nombreCategoria}", así que no hay gastos que reportar en ella. Si el usuario la usa seguido, ofrécele crearla con crear_categoria_personal para el futuro.`,
+        };
+      }
+      if (categorias.length > 1) {
+        return {
+          ok: false,
+          message: `Hay varias categorías parecidas a "${nombreCategoria}" (${categorias.map((c) => c.nombre).join(", ")}). Pídele al usuario que aclare cuál.`,
+        };
+      }
+
+      const categoria = categorias[0];
+      const hoy = new Date();
+      const desde =
+        typeof input.desde === "string" && input.desde.trim()
+          ? input.desde.trim()
+          : new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+      const hasta =
+        typeof input.hasta === "string" && input.hasta.trim() ? input.hasta.trim() : hoy.toISOString().slice(0, 10);
+
+      const { data: transacciones, error: txError } = await supabase
+        .from("transactions")
+        .select("amount, fecha, description_raw")
+        .eq("owner_id", ownerId)
+        .is("entity_id", null)
+        .eq("hacienda_category_id", categoria.id)
+        .gte("fecha", desde)
+        .lte("fecha", hasta)
+        .order("fecha", { ascending: false });
+
+      if (txError) return { ok: false, message: `No se pudo calcular el reporte: ${txError.message}` };
+
+      // Solo gastos reales (amount positivo) — un ingreso/depósito mal
+      // categorizado en esta categoría no debe inflar el total de gasto.
+      const gastos = (transacciones ?? []).filter((t) => Number(t.amount) > 0);
+      const total = gastos.reduce((sum, t) => sum + Number(t.amount), 0);
+
+      if (gastos.length === 0) {
+        return { ok: true, message: `No hay gastos en la categoría "${categoria.nombre}" entre ${desde} y ${hasta}.` };
+      }
+
+      const detalle = gastos
+        .slice(0, 10)
+        .map((t) => `- ${t.fecha} · ${t.description_raw} · $${Number(t.amount).toFixed(2)}`)
+        .join("\n");
+      const nota = gastos.length > 10 ? `\n(mostrando las 10 más recientes de ${gastos.length} en total)` : "";
+
+      return {
+        ok: true,
+        message:
+          `Gasto total en "${categoria.nombre}" entre ${desde} y ${hasta}: $${total.toFixed(2)} ` +
+          `(${gastos.length} transacción${gastos.length > 1 ? "es" : ""}).\n${detalle}${nota}`,
       };
     }
 
