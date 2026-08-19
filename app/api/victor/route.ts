@@ -174,25 +174,37 @@ export async function POST(req: NextRequest) {
     .eq("status", "activa")
     .is("entity_id", null);
 
-  // 2c. Cuentas bancarias reales (Plaid) — para que VICTOR pueda contestar
-  // directo preguntas de balance/ahorro/deuda en vez de mandar al usuario a
-  // revisar la pantalla de Cuentas. Mismo filtro de negocio que el resto de
-  // la app: si el plan es Core, las cuentas que parecen de negocio no cuentan.
+  // 2c. Cuentas bancarias reales (Plaid + manuales) — para que VICTOR pueda
+  // contestar directo preguntas de balance/ahorro/deuda en vez de mandar al
+  // usuario a revisar la pantalla de Cuentas. Mismo filtro de negocio que
+  // el resto de la app: si el plan es Core, las cuentas que parecen de
+  // negocio no cuentan.
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   let cuentasQuery = supabase
     .from("plaid_accounts")
     .select("name, type, subtype, current_balance, es_negocio")
     .eq("owner_id", user.id);
   if (!esPro) cuentasQuery = cuentasQuery.eq("es_negocio", false);
-  const { data: cuentasPlaid } = await cuentasQuery;
 
-  const bancoConectado = !!cuentasPlaid && cuentasPlaid.length > 0;
-  const cuentasLiquidas = (cuentasPlaid ?? []).filter((c) => c.type === "depository");
+  // Cuentas manuales (sin Plaid — ej. Apple Card) cuentan igual que las de
+  // Plaid para que VICTOR vea el cuadro completo, no solo lo conectado
+  // automáticamente.
+  let manualesQuery = supabase
+    .from("manual_accounts")
+    .select("name, type, subtype, current_balance, es_negocio")
+    .eq("owner_id", user.id);
+  if (!esPro) manualesQuery = manualesQuery.eq("es_negocio", false);
+
+  const [{ data: cuentasPlaid }, { data: cuentasManuales }] = await Promise.all([cuentasQuery, manualesQuery]);
+  const todasLasCuentas = [...(cuentasPlaid ?? []), ...(cuentasManuales ?? [])];
+
+  const bancoConectado = todasLasCuentas.length > 0;
+  const cuentasLiquidas = todasLasCuentas.filter((c) => c.type === "depository");
   const balanceLiquido = cuentasLiquidas.reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
   const ahorrado = cuentasLiquidas
     .filter((c) => c.subtype === "savings")
     .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
-  const deudaTotal = (cuentasPlaid ?? [])
+  const deudaTotal = todasLasCuentas
     .filter((c) => c.type === "credit" || c.type === "loan")
     .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
 
@@ -211,7 +223,7 @@ export async function POST(req: NextRequest) {
       balanceLiquido,
       ahorrado,
       deudaTotal,
-      cuentas: (cuentasPlaid ?? []).map((c) => ({
+      cuentas: todasLasCuentas.map((c) => ({
         name: c.name,
         type: c.type,
         subtype: c.subtype,
