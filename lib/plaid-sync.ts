@@ -13,11 +13,6 @@ export type ResultadoSincronizacion = {
   errores: string[];
 };
 
-// Códigos de error que Plaid devuelve cuando un Item necesita que el
-// usuario vuelva a autenticarse (contraseña cambiada, MFA vencido, banco
-// bloqueó la sesión, etc.) — cuando el sync se topa con cualquiera de
-// estos, no tiene sentido seguir reintentando solo: hay que marcar el
-// Item para que la UI de Cuentas muestre "Reconectar" (Plaid Update Mode).
 const CODIGOS_REAUTH_REQUERIDA = [
   "ITEM_LOGIN_REQUIRED",
   "ITEM_LOCKED",
@@ -30,17 +25,6 @@ function codigoErrorPlaid(err: unknown): string | undefined {
   return conRespuesta?.response?.data?.error_code;
 }
 
-// La lógica real de sincronizar Plaid para UN usuario — extraída de lo
-// que antes vivía solo dentro de app/api/plaid/sync-transactions/route.ts
-// para que tanto el botón manual ("Sincronizar transacciones" en Cuentas)
-// como el cron nocturno (app/api/cron/sync-all-plaid) llamen exactamente
-// el mismo código. Nunca dos implementaciones del mismo sync que se
-// puedan desincronizar entre sí — un fix aquí arregla los dos caminos.
-//
-// El `supabase` que recibe puede ser el cliente normal (con sesión de
-// usuario, sujeto a RLS — usado por el botón manual) o el cliente admin
-// (service_role, sin sesión — usado por el cron, que corre para todos
-// los usuarios a la vez). La función no necesita saber cuál es.
 export async function sincronizarPlaidDeUsuario(
   supabase: SupabaseClient,
   ownerId: string,
@@ -48,7 +32,7 @@ export async function sincronizarPlaidDeUsuario(
 ): Promise<ResultadoSincronizacion> {
   const { data: items, error: itemsError } = await supabase
     .from("plaid_items")
-    .select("id, access_token, cursor")
+    .select("id, access_token, cursor, historial_desde")
     .eq("owner_id", ownerId)
     .eq("status", "active");
 
@@ -113,8 +97,10 @@ export async function sincronizarPlaidDeUsuario(
       let huboErrorEnEsteItem = false;
 
       const esDeNegocioYNoEsPro = (accountId: string) => !esPro && negocioPorCuenta.get(accountId) === true;
+      const pasaHistorial = (t: Transaction) => !item.historial_desde || t.date >= item.historial_desde;
 
       const filasNuevas = added
+        .filter(pasaHistorial)
         .filter((t) => {
           const omitida = esDeNegocioYNoEsPro(t.account_id);
           if (omitida) cuentasNegocioOmitidas++;
@@ -141,6 +127,7 @@ export async function sincronizarPlaidDeUsuario(
       }
 
       const filasModificadas = modified
+        .filter(pasaHistorial)
         .filter((t) => !esDeNegocioYNoEsPro(t.account_id))
         .map((t) => ({
           owner_id: ownerId,
@@ -161,9 +148,6 @@ export async function sincronizarPlaidDeUsuario(
         } else totalModificadas += filasModificadas.length;
       }
 
-      // Solo avanzamos el cursor si de verdad se guardó todo — si no, la
-      // próxima vez Plaid no vuelve a mandar esas transacciones (las da
-      // por "ya vistas") y se pierden para siempre.
       if (!huboErrorEnEsteItem) {
         await supabase.from("plaid_items").update({ cursor, updated_at: new Date().toISOString() }).eq("id", item.id);
       }
@@ -171,11 +155,6 @@ export async function sincronizarPlaidDeUsuario(
       console.error(`Error sincronizando Plaid (owner ${ownerId}, item ${item.id}):`, err);
       const codigo = codigoErrorPlaid(err);
       if (codigo && CODIGOS_REAUTH_REQUERIDA.includes(codigo)) {
-        // El banco vetó el acceso — no es un error transitorio, hay que
-        // pedirle al usuario que reconecte (Plaid Update Mode). Marcamos
-        // el Item para que /dashboard/cuentas muestre el aviso, y para
-        // que el próximo sync (manual o cron) lo salte de una vez —
-        // ambos filtran por status = 'active'.
         await supabase.from("plaid_items").update({ status: "reauth_required" }).eq("id", item.id);
         errores.push(`${item.id}: la conexión con el banco venció, hay que reconectarla (${codigo}).`);
       } else {
