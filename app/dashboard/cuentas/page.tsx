@@ -133,10 +133,12 @@ export default function CuentasPage() {
   }, [linkToken, ready, open]);
 
   async function desconectarBanco(itemId: string, nombre: string | null) {
-    const ok = window.confirm(
-      `¿Desconectar ${nombre || "este banco"}? Dejarás de ver sus cuentas y VICTOR dejará de traer transacciones nuevas de ahí. El historial que ya se importó no se borra.`
-    );
+    const ok = window.confirm(`¿Desconectar ${nombre || "este banco"}? Dejarás de ver sus cuentas y VICTOR dejará de traer transacciones nuevas de ahí.`);
     if (!ok) return;
+
+    const borrarHistorial = window.confirm(
+      `¿También quieres borrar las transacciones que VICTOR ya importó de ${nombre || "este banco"}? Si dices que no, se quedan como historial (útil para referencia o taxes). Esto no se puede deshacer.`
+    );
 
     setDesconectandoId(itemId);
     setError(null);
@@ -145,11 +147,15 @@ export default function CuentasPage() {
       const res = await fetch("/api/plaid/desconectar-banco", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemId }),
+        body: JSON.stringify({ itemId, borrarHistorial }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo desconectar el banco.");
-      setMensaje("Banco desconectado.");
+      setMensaje(
+        borrarHistorial
+          ? `Banco desconectado — ${data.transaccionesBorradas ?? 0} transacción(es) borrada(s).`
+          : "Banco desconectado — el historial de transacciones se mantuvo."
+      );
       await cargarCuentas();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo desconectar el banco.");
