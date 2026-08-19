@@ -61,7 +61,17 @@ export default async function DashboardPage() {
   if (!esPro) cuentasQuery = cuentasQuery.eq("es_negocio", false);
   const { data: cuentasPlaid } = await cuentasQuery;
 
-  const bancoConectado = !!cuentasPlaid && cuentasPlaid.length > 0;
+  // Cuentas manuales (sin Plaid — ej. Apple Card) cuentan igual que las de
+  // Plaid en todos estos totales. Mismo filtro de negocio para Core.
+  let manualesQuery = supabase
+    .from("manual_accounts")
+    .select("current_balance, es_negocio, type, subtype")
+    .eq("owner_id", user.id);
+  if (!esPro) manualesQuery = manualesQuery.eq("es_negocio", false);
+  const { data: cuentasManuales } = await manualesQuery;
+
+  const todasLasCuentas = [...(cuentasPlaid ?? []), ...(cuentasManuales ?? [])];
+  const bancoConectado = todasLasCuentas.length > 0;
 
   // "Balance personal" = solo dinero líquido de verdad (checking + savings,
   // type "depository"). No se resta la deuda aquí — una deuda a largo
@@ -69,7 +79,7 @@ export default async function DashboardPage() {
   // disponible HOY mientras esté al día. Mezclar ambas cosas en un solo
   // número confunde "cuánto tengo" con "cuánto debo" — por eso Ahorrado y
   // Deuda se calculan y se muestran aparte, abajo.
-  const cuentasLiquidas = (cuentasPlaid ?? []).filter((c) => c.type === "depository");
+  const cuentasLiquidas = todasLasCuentas.filter((c) => c.type === "depository");
   const balanceTotal = cuentasLiquidas.reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
 
   // Ahorrado: solo el subtipo "savings" dentro de las líquidas — checking
@@ -80,8 +90,10 @@ export default async function DashboardPage() {
 
   // Deuda: tarjetas de crédito y préstamos. Plaid siempre manda esto como
   // número positivo ("cuánto debes"), así que se suma tal cual — nunca se
-  // resta del balance líquido de arriba.
-  const deudaTotal = (cuentasPlaid ?? [])
+  // resta del balance líquido de arriba. Las cuentas manuales de tipo
+  // credit/loan siguen la misma convención (el usuario entra "cuánto debe"
+  // como número positivo también).
+  const deudaTotal = todasLasCuentas
     .filter((c) => c.type === "credit" || c.type === "loan")
     .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
 
@@ -89,12 +101,19 @@ export default async function DashboardPage() {
   // pero dejamos afuera, para avisarle con honestidad en vez de esconderlo.
   let cuentasNegocioOcultas = 0;
   if (!esPro) {
-    const { count } = await supabase
-      .from("plaid_accounts")
-      .select("id", { count: "exact", head: true })
-      .eq("owner_id", user.id)
-      .eq("es_negocio", true);
-    cuentasNegocioOcultas = count ?? 0;
+    const [{ count: countPlaid }, { count: countManuales }] = await Promise.all([
+      supabase
+        .from("plaid_accounts")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", user.id)
+        .eq("es_negocio", true),
+      supabase
+        .from("manual_accounts")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", user.id)
+        .eq("es_negocio", true),
+    ]);
+    cuentasNegocioOcultas = (countPlaid ?? 0) + (countManuales ?? 0);
   }
 
   // Metas — tabla goals (0007), personales (entity_id null).
