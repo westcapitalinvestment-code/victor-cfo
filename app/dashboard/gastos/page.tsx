@@ -20,6 +20,22 @@ function fmt(d: Date) {
 // transacciones de mi otra tarjeta".
 const LIMITE_TRANSACCIONES = 300;
 
+// El filtro de cuenta (?cuenta=) tiene que distinguir entre una cuenta de
+// Plaid y una manual, porque comparten el mismo "espacio" de la pantalla
+// pero son columnas distintas en transactions (plaid_account_id vs
+// manual_account_id, ninguna es subconjunto de la otra). Usamos un prefijo
+// simple en la URL: "plaid:<id>" o "manual:<id>".
+function idConPrefijo(origen: "plaid" | "manual", id: string) {
+  return `${origen}:${id}`;
+}
+function parsearCuentaSeleccionada(valor: string | undefined): { origen: "plaid" | "manual"; id: string } | null {
+  if (!valor) return null;
+  const [origen, ...resto] = valor.split(":");
+  const id = resto.join(":");
+  if ((origen === "plaid" || origen === "manual") && id) return { origen, id };
+  return null;
+}
+
 // Lista de transacciones personales. Vacía hasta que Plaid esté conectado
 // (Cuentas) — es honesto mostrarlo así en vez de simular datos. La
 // categoría real vive en hacienda_category_id (la llena el motor de
@@ -48,25 +64,38 @@ export default async function GastosPage({
   // Cuentas/tarjetas conectadas — para el filtro de arriba y para poder
   // mostrar de qué banco/tarjeta vino cada transacción en la lista. Mismo
   // filtro de negocio que el resto de la app (si es Core, no se cuentan
-  // las que parecen de negocio).
+  // las que parecen de negocio). Se combinan Plaid + manuales (ej. Apple
+  // Card) en una sola lista de pills.
   let cuentasQuery = supabase
     .from("plaid_accounts")
     .select("plaid_account_id, name, mask, type, subtype")
     .eq("owner_id", user.id)
     .order("name");
   if (!esPro) cuentasQuery = cuentasQuery.eq("es_negocio", false);
-  const { data: cuentasPlaid } = await cuentasQuery;
 
-  const cuentaSeleccionada = searchParams.cuenta || null;
+  let manualesQuery = supabase
+    .from("manual_accounts")
+    .select("id, name, mask, type, subtype")
+    .eq("owner_id", user.id)
+    .order("name");
+  if (!esPro) manualesQuery = manualesQuery.eq("es_negocio", false);
+
+  const [{ data: cuentasPlaid }, { data: cuentasManuales }] = await Promise.all([cuentasQuery, manualesQuery]);
+
+  const cuentaSeleccionada = parsearCuentaSeleccionada(searchParams.cuenta);
 
   let transaccionesQuery = supabase
     .from("transactions")
-    .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id")
+    .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id")
     .eq("owner_id", user.id)
     .is("entity_id", null)
     .order("fecha", { ascending: false })
     .limit(LIMITE_TRANSACCIONES);
-  if (cuentaSeleccionada) transaccionesQuery = transaccionesQuery.eq("plaid_account_id", cuentaSeleccionada);
+  if (cuentaSeleccionada?.origen === "plaid") {
+    transaccionesQuery = transaccionesQuery.eq("plaid_account_id", cuentaSeleccionada.id);
+  } else if (cuentaSeleccionada?.origen === "manual") {
+    transaccionesQuery = transaccionesQuery.eq("manual_account_id", cuentaSeleccionada.id);
+  }
 
   const [{ data: transacciones, error }, { data: categorias }] = await Promise.all([
     transaccionesQuery,
@@ -74,10 +103,16 @@ export default async function GastosPage({
   ]);
 
   // Nombre legible por cuenta (ej. "BPPR Visa ···4821") para el filtro y
-  // para la etiqueta en cada fila de la lista.
+  // para la etiqueta en cada fila de la lista — con el mismo prefijo
+  // plaid:/manual: como llave, así GastosList sabe cuál usar para cada
+  // transacción sin importar de dónde vino.
   const etiquetaCuenta = (c: { name: string | null; mask: string | null }) =>
     `${c.name ?? "Cuenta sin nombre"}${c.mask ? ` ···${c.mask}` : ""}`;
-  const nombrePorCuenta = new Map((cuentasPlaid ?? []).map((c) => [c.plaid_account_id, etiquetaCuenta(c)]));
+  const nombrePorCuenta = new Map<string, string>();
+  for (const c of cuentasPlaid ?? []) nombrePorCuenta.set(idConPrefijo("plaid", c.plaid_account_id), etiquetaCuenta(c));
+  for (const c of cuentasManuales ?? []) nombrePorCuenta.set(idConPrefijo("manual", c.id), etiquetaCuenta(c));
+
+  const totalCuentas = (cuentasPlaid?.length ?? 0) + (cuentasManuales?.length ?? 0);
 
   // Reporte del mes por categoría — mismo cálculo que /dashboard/resumen,
   // pero aquí mismo en Gastos, que es donde el usuario lo busca primero.
@@ -139,7 +174,7 @@ export default async function GastosPage({
         <ReporteRangoDropdown />
       </div>
 
-      {cuentasPlaid && cuentasPlaid.length > 1 && (
+      {totalCuentas > 1 && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="mr-1 text-xs text-muted">Cuenta:</span>
           <Link
@@ -151,18 +186,34 @@ export default async function GastosPage({
           >
             Todas
           </Link>
-          {cuentasPlaid.map((c) => (
-            <Link
-              key={c.plaid_account_id}
-              href={`/dashboard/gastos?cuenta=${encodeURIComponent(c.plaid_account_id)}`}
-              className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
-                cuentaSeleccionada === c.plaid_account_id ? "border-teal text-teal" : "text-muted"
-              }`}
-              style={{ borderColor: cuentaSeleccionada === c.plaid_account_id ? undefined : "var(--border)" }}
-            >
-              {etiquetaCuenta(c)}
-            </Link>
-          ))}
+          {(cuentasPlaid ?? []).map((c) => {
+            const clave = idConPrefijo("plaid", c.plaid_account_id);
+            const activa = cuentaSeleccionada?.origen === "plaid" && cuentaSeleccionada.id === c.plaid_account_id;
+            return (
+              <Link
+                key={clave}
+                href={`/dashboard/gastos?cuenta=${encodeURIComponent(clave)}`}
+                className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${activa ? "border-teal text-teal" : "text-muted"}`}
+                style={{ borderColor: activa ? undefined : "var(--border)" }}
+              >
+                {etiquetaCuenta(c)}
+              </Link>
+            );
+          })}
+          {(cuentasManuales ?? []).map((c) => {
+            const clave = idConPrefijo("manual", c.id);
+            const activa = cuentaSeleccionada?.origen === "manual" && cuentaSeleccionada.id === c.id;
+            return (
+              <Link
+                key={clave}
+                href={`/dashboard/gastos?cuenta=${encodeURIComponent(clave)}`}
+                className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${activa ? "border-teal text-teal" : "text-muted"}`}
+                style={{ borderColor: activa ? undefined : "var(--border)" }}
+              >
+                {etiquetaCuenta(c)}
+              </Link>
+            );
+          })}
         </div>
       )}
 
@@ -204,14 +255,7 @@ export default async function GastosPage({
 
         {transacciones && transacciones.length > 0 && (
           <GastosList
-            // key fuerza a React a montar una instancia nueva del componente
-            // cuando cambia el filtro de cuenta — sin esto, GastosList es un
-            // Client Component con su propio useState(transaccionesIniciales),
-            // y React reusa la instancia vieja (con las transacciones de la
-            // cuenta anterior) en vez de tomar las nuevas props, aunque el
-            // servidor ya mandó la lista correcta. Por eso hacía falta
-            // refrescar la página a mano para ver el cambio.
-            key={cuentaSeleccionada ?? "todas"}
+            key={searchParams.cuenta ?? "todas"}
             transaccionesIniciales={transacciones}
             categorias={categorias ?? []}
             nombrePorCuenta={Object.fromEntries(nombrePorCuenta)}
