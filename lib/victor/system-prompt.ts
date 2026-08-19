@@ -29,6 +29,13 @@ export function buildUserContextBlock(params: {
   isFounder: boolean;
   esSaludoDiario?: boolean;
   liveGoals?: { name: string; target_amount: number; current_amount: number }[] | null;
+  finanzas?: {
+    bancoConectado: boolean;
+    balanceLiquido: number;
+    ahorrado: number;
+    deudaTotal: number;
+    cuentas: { name: string | null; type: string | null; subtype: string | null; balance: number }[];
+  } | null;
   onboardingProfile?: {
     perfilCompleto: boolean;
     apodo: string | null;
@@ -39,7 +46,7 @@ export function buildUserContextBlock(params: {
     hijosDetalle: string | null;
   } | null;
 }): string {
-  const { fullName, plan, planStatus, memorySummary, goals, activeStrategies, isFounder, esSaludoDiario, liveGoals, onboardingProfile } = params;
+  const { fullName, plan, planStatus, memorySummary, goals, activeStrategies, isFounder, esSaludoDiario, liveGoals, finanzas, onboardingProfile } = params;
 
   const ahora = new Date();
   const lines: string[] = [
@@ -141,6 +148,44 @@ export function buildUserContextBlock(params: {
       "actualizar_progreso_meta, no lo que diga el resumen de memoria si hay diferencia):",
       liveGoals.map((g) => `- "${g.name}": $${g.current_amount} de $${g.target_amount}`).join("\n")
     );
+  }
+
+  if (finanzas) {
+    if (finanzas.bancoConectado) {
+      const cuentasTexto =
+        finanzas.cuentas.length > 0
+          ? finanzas.cuentas
+              .map((c) => {
+                const esDeuda = c.type === "credit" || c.type === "loan";
+                return `  - ${c.name ?? "Cuenta sin nombre"} (${c.subtype ?? c.type ?? "?"}): $${c.balance.toFixed(2)}${esDeuda ? " — es deuda" : ""}`;
+              })
+              .join("\n")
+          : "  (sin detalle de cuentas individuales)";
+      lines.push(
+        "",
+        "SITUACIÓN FINANCIERA REAL AHORA MISMO (datos en vivo de Plaid — el banco",
+        "conectado del usuario, fuente de verdad). Cuando te pregunte por su balance,",
+        "ahorro, deuda, o cuánto tiene en una cuenta específica, CONTÉSTALE DIRECTO",
+        "con estos números — nunca lo mandes a revisar la pantalla de Cuentas, tú ya",
+        "tienes el dato:",
+        `- Efectivo líquido disponible ahora mismo (checking + savings): $${finanzas.balanceLiquido.toFixed(2)}`,
+        `- De eso, específicamente en cuentas de AHORRO: $${finanzas.ahorrado.toFixed(2)}`,
+        `- Deuda total (tarjetas de crédito + préstamos): $${finanzas.deudaTotal.toFixed(2)}`,
+        "  (la deuda es informativa, NO está restada del efectivo líquido de arriba —",
+        "  son dos cosas distintas: cuánto tiene disponible hoy vs. cuánto debe a",
+        "  mediano/largo plazo. No las mezcles en una sola respuesta sin aclarar cuál es cuál.)",
+        "Cuentas individuales:",
+        cuentasTexto
+      );
+    } else {
+      lines.push(
+        "",
+        "El usuario todavía NO ha conectado ningún banco por Plaid — no tienes datos",
+        "reales de balance, ahorro, ni deuda. Si te pregunta por alguno de esos temas,",
+        "dile con calidez que conecte su banco desde la pantalla de Cuentas para que",
+        "puedas verlo y ayudarlo de verdad, en vez de inventar un número."
+      );
+    }
   }
 
   if (onboardingProfile) {
