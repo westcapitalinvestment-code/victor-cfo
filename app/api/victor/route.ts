@@ -201,6 +201,21 @@ export async function POST(req: NextRequest) {
     .eq("owner_id", user.id);
   if (!esPro) manualesQuery = manualesQuery.eq("es_negocio", false);
 
+  // Fecha de la transacción más antigua que tenemos guardada (de cualquier
+  // cuenta) — así VICTOR puede detectar que Plaid solo trajo un pedazo del
+  // año (ej. BPPR a veces solo entrega ~45 días) y sugerir proactivamente
+  // que el usuario suba el estado de cuenta (CSV/QuickBooks o PDF) para
+  // rellenar el resto, en vez de que el usuario tenga que darse cuenta y
+  // pedirlo él mismo.
+  const { data: transaccionMasVieja } = await supabase
+    .from("transactions")
+    .select("fecha")
+    .eq("owner_id", user.id)
+    .is("entity_id", null)
+    .order("fecha", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
   const [{ data: cuentasPlaid }, { data: cuentasManuales }] = await Promise.all([cuentasQuery, manualesQuery]);
   const todasLasCuentas = [...(cuentasPlaid ?? []), ...(cuentasManuales ?? [])];
 
@@ -229,6 +244,7 @@ export async function POST(req: NextRequest) {
       balanceLiquido,
       ahorrado,
       deudaTotal,
+      historialDesde: transaccionMasVieja?.fecha ?? null,
       cuentas: todasLasCuentas.map((c) => ({
         name: c.name,
         type: c.type,
