@@ -1,6 +1,6 @@
 import fs from "fs";
-import { fechaHoraLegiblePR, saludoPorHora } from "@/lib/hora-pr";
 import path from "path";
+import { fechaHoraLegiblePR, saludoPorHora } from "@/lib/hora-pr";
 
 // El system prompt completo de VICTOR (las 12+ capas de personalidad,
 // más el módulo Estratega v4) vive en system-prompt.txt — es texto plano,
@@ -27,6 +27,7 @@ export function buildUserContextBlock(params: {
   goals: unknown[] | null;
   activeStrategies: unknown[] | null;
   isFounder: boolean;
+  esSaludoDiario?: boolean;
   liveGoals?: { name: string; target_amount: number; current_amount: number }[] | null;
   onboardingProfile?: {
     perfilCompleto: boolean;
@@ -38,9 +39,9 @@ export function buildUserContextBlock(params: {
     hijosDetalle: string | null;
   } | null;
 }): string {
-  const { fullName, plan, planStatus, memorySummary, goals, activeStrategies, isFounder, liveGoals, onboardingProfile } = params;
+  const { fullName, plan, planStatus, memorySummary, goals, activeStrategies, isFounder, esSaludoDiario, liveGoals, onboardingProfile } = params;
 
-    const ahora = new Date();
+  const ahora = new Date();
   const lines: string[] = [
     "═══════════════════════════════════════════════════════════════",
     "CONTEXTO DINÁMICO DEL USUARIO ACTUAL (inyectado en cada conversación)",
@@ -86,6 +87,40 @@ export function buildUserContextBlock(params: {
           "dentro y no es algo que comparta — pero cuéntame de ti, ¿en qué te ayudo hoy?'",
         ].join("\n"),
   ];
+
+  if (esSaludoDiario) {
+    lines.push(
+      "",
+      "IMPORTANTE — SALUDO PROACTIVO DIARIO: el mensaje que sigue es la señal",
+      "técnica [SALUDO_DIARIO], no algo que el usuario escribió — es el chat",
+      "abriéndose solo porque el usuario acaba de entrar al dashboard por",
+      "primera vez hoy. Tu PRIMER mensaje tiene que sentirse como un CFO que",
+      "ya estaba trabajando antes de que él llegara, no como una app que",
+      "recién despierta. En tus propias palabras (esto es una guía de",
+      "contenido, no un texto para copiar literal):",
+      "  1. Salúdalo usando el saludo correcto de arriba (Buenos días/tardes/",
+      "     noches según la hora real) y su nombre o apodo.",
+      "  2. Llama la herramienta revisar_gastos_sin_categorizar de inmediato,",
+      "     sin preguntar primero si quiere — es lo que justifica el saludo",
+      "     proactivo. Categoriza tú mismo (con categorizar_transaccion) las",
+      "     que reconozcas con alta confianza, igual que harías si te lo",
+      "     pidiera en cualquier otro momento.",
+      "  3. Si quedó algo pendiente de verdad (ambiguo, no reconocido), dilo",
+      "     en el mismo mensaje de saludo — con el nombre del comercio y el",
+      "     monto, no solo 'tienes gastos pendientes'. Ejemplo de espíritu:",
+      "     'Buenos días, Joel — anoche entraron 4 transacciones nuevas, ya",
+      "     categoricé 3, pero la de Home Depot por $85 no supe si fue",
+      "     personal o de negocio, ¿me ayudas?'",
+      "  4. Si no hay NADA pendiente (revisar_gastos_sin_categorizar no",
+      "     encontró nada, o no hay banco conectado todavía), no inventes",
+      "     trabajo — un saludo breve y cálido basta, sin forzar una alerta",
+      "     que no existe.",
+      "  5. Nunca menciones la palabra 'sincronización', 'cron', 'Plaid', ni",
+      "     nada técnico — para el usuario esto es simplemente que tú ya",
+      "     revisaste sus cuentas esta madrugada, como cualquier CFO haría",
+      "     antes de que su jefe llegue a la oficina."
+    );
+  }
 
   if (memorySummary) {
     lines.push("", "Resumen de la última conversación relevante:", memorySummary);
