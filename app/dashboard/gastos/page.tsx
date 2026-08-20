@@ -149,10 +149,19 @@ export default async function GastosPage({
   const gastoPorCategoria = new Map<string, { nombre: string; monto: number }>();
   let gastosDelMes = 0;
   for (const t of transacciones ?? []) {
-    if (t.fecha < inicioMes || t.tipo_flujo !== "gasto") continue;
-    gastosDelMes += Number(t.amount);
-    const catKey = t.hacienda_category_id ? String(t.hacienda_category_id) : SIN_CATEGORIZAR;
-    const nombre = t.hacienda_category_id ? nombrePorCategoria.get(t.hacienda_category_id) ?? "Sin categorizar" : "Sin categorizar";
+    if (t.tipo_flujo !== "gasto") continue;
+    const sinCategoria = !t.hacienda_category_id;
+    // "Sin categorizar" se acumula SIEMPRE, sin importar el mes — es lo que
+    // el usuario todavía tiene que resolver, no un gasto de este mes nada
+    // más (antes esto se limitaba a inicioMes igual que las categorías
+    // reales, y la fila "Sin categorizar" del reporte mostraba un número
+    // mucho menor que el total real de pendientes). Las categorías reales
+    // sí se quedan limitadas al mes en curso, que es lo que promete el
+    // título "Reporte del mes por categoría".
+    if (!sinCategoria && t.fecha < inicioMes) continue;
+    if (t.fecha >= inicioMes) gastosDelMes += Number(t.amount);
+    const catKey = sinCategoria ? SIN_CATEGORIZAR : String(t.hacienda_category_id);
+    const nombre = sinCategoria ? "Sin categorizar" : nombrePorCategoria.get(t.hacienda_category_id!) ?? "Sin categorizar";
     const actual = gastoPorCategoria.get(catKey) ?? { nombre, monto: 0 };
     actual.monto += Number(t.amount);
     gastoPorCategoria.set(catKey, actual);
@@ -161,15 +170,20 @@ export default async function GastosPage({
     .map(([catKey, v]) => ({ catKey, nombre: v.nombre, monto: v.monto }))
     .sort((a, b) => b.monto - a.monto);
 
-  // La lista de transacciones de abajo: si hay una categoría seleccionada
-  // en el reporte de arriba, se filtra a esa categoría Y al mes en curso
-  // (mismo alcance que el reporte, para que los números cuadren con lo
-  // que el usuario tocó). Sin categoría seleccionada, se ve la lista
-  // completa de siempre (ya filtrada por cuenta si aplica).
+  // La lista de transacciones de abajo: si hay una categoría REAL
+  // seleccionada en el reporte de arriba, se filtra a esa categoría Y al
+  // mes en curso (mismo alcance que el reporte, para que los números
+  // cuadren con lo que el usuario tocó). "Sin categorizar" es distinto a
+  // propósito: NO se limita al mes en curso — un gasto de julio sin
+  // categorizar sigue pendiente aunque ya no sea "este mes", y el usuario
+  // necesita verlo para resolverlo, no que desaparezca de la vista. Antes
+  // esto sí limitaba por mes, que era justo el bug: la tarjeta de
+  // "pendientes" en Inicio avisaba de 33 sin categorizar, pero aquí solo
+  // aparecían las de este mes (a veces 3 o 4), como si el resto no existiera.
   const transaccionesMostradas = categoriaSeleccionada
     ? (transacciones ?? []).filter((t) => {
-        if (t.fecha < inicioMes) return false;
         if (categoriaSeleccionada.tipo === "sin_categorizar") return !t.hacienda_category_id;
+        if (t.fecha < inicioMes) return false;
         return t.hacienda_category_id === categoriaSeleccionada.id;
       })
     : transacciones ?? [];
@@ -285,7 +299,14 @@ export default async function GastosPage({
           </p>
           <div className="flex flex-col gap-2">
             {reporteCategoria.map((r) => {
-              const pct = gastosDelMes > 0 ? Math.round((r.monto / gastosDelMes) * 100) : 0;
+              // "Sin categorizar" ahora suma TODO el historial pendiente, no
+              // solo este mes (ver comentario arriba) — así que su monto
+              // puede ser mayor que gastosDelMes (el gasto de este mes) y el
+              // % saldría por encima de 100. Se limita a 100 solo para que
+              // la barra no se salga de su contenedor; el monto en dólares
+              // de al lado sigue siendo el real, sin recortar.
+              const pctReal = gastosDelMes > 0 ? Math.round((r.monto / gastosDelMes) * 100) : 0;
+              const pct = Math.min(pctReal, 100);
               const activa = categoriaSeleccionada
                 ? categoriaSeleccionada.tipo === "sin_categorizar"
                   ? r.catKey === SIN_CATEGORIZAR
@@ -302,7 +323,7 @@ export default async function GastosPage({
                       {r.nombre}
                     </span>
                     <span className="font-medium">
-                      <Sensitive>{formatMoney(r.monto)}</Sensitive> <span className="text-xs text-muted">({pct}%)</span>
+                      <Sensitive>{formatMoney(r.monto)}</Sensitive> <span className="text-xs text-muted">({pctReal}%)</span>
                     </span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-border">
@@ -318,7 +339,8 @@ export default async function GastosPage({
       {categoriaSeleccionada && (
         <div className="mb-3 flex items-center justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2 text-xs">
           <span>
-            Mostrando: <span className="font-medium">{nombreCategoriaSeleccionada}</span> · este mes ·{" "}
+            Mostrando: <span className="font-medium">{nombreCategoriaSeleccionada}</span> ·{" "}
+            {categoriaSeleccionada?.tipo === "sin_categorizar" ? "todo el historial" : "este mes"} ·{" "}
             {transaccionesMostradas.length} transacción(es)
           </span>
           <Link href={hrefConCategoria(null)} className="font-medium text-teal hover:opacity-80">
@@ -343,6 +365,14 @@ export default async function GastosPage({
 
         {transaccionesMostradas.length > 0 && (
           <GastosList
+            // key fuerza a React a montar una instancia nueva del componente
+            // cuando cambia el filtro de cuenta o de categoría — sin esto,
+            // GastosList es un Client Component con su propio
+            // useState(transaccionesIniciales), y React reusa la instancia
+            // vieja (con las transacciones del filtro anterior) en vez de
+            // tomar las nuevas props, aunque el servidor ya mandó la lista
+            // correcta. Por eso hacía falta refrescar la página a mano para
+            // ver el cambio.
             key={`${searchParams.cuenta ?? "todas"}-${searchParams.categoria ?? "todas"}`}
             transaccionesIniciales={transaccionesMostradas}
             categorias={categorias ?? []}
