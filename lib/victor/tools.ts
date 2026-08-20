@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { buscarEstrategia } from "@/lib/victor/estrategias-financieras";
 import { buscarConocimiento } from "@/lib/victor/conocimiento-financiero";
+import { direccionCategoriaValida } from "@/lib/direccion-categoria";
 
 // Las "manos" de VICTOR — acciones reales que puede ejecutar dentro de la
 // app, no solo hablar de ellas. Alcance Core únicamente por ahora (metas,
@@ -415,19 +416,16 @@ async function categorizarUna(
   // que quedaron mal puestas en "... - enviado". Comparamos contra
   // tipo_flujo (no el signo crudo del monto) porque tipo_flujo ya resuelve
   // los casos raros como tarjetas de crédito con signo invertido.
-  const nombreCatLower = categoria.nombre.toLowerCase();
-  const sugiereEnviado = nombreCatLower.includes("enviad"); // enviado/enviada
-  const sugiereRecibido = nombreCatLower.includes("recibid"); // recibido/recibida
-  if (sugiereEnviado && transaccion.tipo_flujo && transaccion.tipo_flujo !== "gasto") {
+  // direccionCategoriaValida (lib/direccion-categoria.ts) es la MISMA regla
+  // que usan el trigger de la base de datos (categoria_direccion_valida en
+  // 0017/0019) y la ruta de categorización manual — cubre no solo
+  // "... - enviado/recibido" sino cualquier nombre con "ingres*" (ej.
+  // "Ingresos y depósitos"), que es justo donde se coló el bug real: una
+  // transferencia SALIENTE categorizada como si fuera dinero que entró.
+  if (!direccionCategoriaValida(categoria.nombre, transaccion.tipo_flujo)) {
     return {
       ok: false,
-      message: `"${transaccion.description_raw}" ($${Math.abs(Number(transaccion.amount))}) parece ser dinero que ENTRÓ (tipo_flujo="${transaccion.tipo_flujo}"), no que salió — no la categoricé como "${categoria.nombre}" para no mezclar direcciones. Si existe la categoría equivalente para lo recibido, usa esa en su lugar; si no, pregúntale al usuario.`,
-    };
-  }
-  if (sugiereRecibido && transaccion.tipo_flujo && transaccion.tipo_flujo !== "ingreso") {
-    return {
-      ok: false,
-      message: `"${transaccion.description_raw}" ($${Math.abs(Number(transaccion.amount))}) parece ser dinero que SALIÓ (tipo_flujo="${transaccion.tipo_flujo}"), no que se recibió — no la categoricé como "${categoria.nombre}" para no mezclar direcciones. Si existe la categoría equivalente para lo enviado, usa esa en su lugar; si no, pregúntale al usuario.`,
+      message: `"${transaccion.description_raw}" ($${Math.abs(Number(transaccion.amount))}) tiene tipo_flujo="${transaccion.tipo_flujo}", que no cuadra con la dirección que implica el nombre "${categoria.nombre}" — no la categoricé para no mezclar direcciones. Busca la categoría equivalente del lado correcto, o pregúntale al usuario.`,
     };
   }
 
