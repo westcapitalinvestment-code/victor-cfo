@@ -3,6 +3,7 @@ import { fechaHoyPR } from "@/lib/hora-pr";
 import BottomNav from "./bottom-nav";
 import VictorChat from "./victor-chat";
 import Topbar from "./topbar";
+import BadgeUpdater from "./badge-updater";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Si el usuario todavía no pasó por el onboarding conversacional de
@@ -47,6 +48,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="pb-24">
       <Topbar fullName={fullName} plan={plan} />
+      <BadgeUpdater />
       {children}
       <VictorChat autoOpenOnboarding={autoOpenOnboarding} autoOpenSaludoDiario={autoOpenSaludoDiario} />
       <BottomNav />
