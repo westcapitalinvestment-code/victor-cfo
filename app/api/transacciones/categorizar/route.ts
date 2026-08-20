@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { direccionCategoriaValida } from "@/lib/direccion-categoria";
 
 // Aplica una categoría a una transacción (a mano, desde la pantalla de
 // Gastos, o desde el tool de VICTOR). Hace dos cosas: (1) actualiza la
@@ -24,15 +25,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Falta transactionId o haciendaCategoryId." }, { status: 400 });
   }
 
-  const { data: transaccion, error: fetchError } = await supabase
-    .from("transactions")
-    .select("id, owner_id, entity_id, description_raw, matched_pattern_id")
-    .eq("id", transactionId)
-    .eq("owner_id", user.id)
-    .single();
+  const [{ data: transaccion, error: fetchError }, { data: categoria, error: catError }] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("id, owner_id, entity_id, description_raw, matched_pattern_id, tipo_flujo")
+      .eq("id", transactionId)
+      .eq("owner_id", user.id)
+      .single(),
+    supabase.from("hacienda_categories").select("nombre").eq("id", haciendaCategoryId).single(),
+  ]);
 
   if (fetchError || !transaccion) {
     return NextResponse.json({ error: "Transacción no encontrada." }, { status: 404 });
+  }
+  if (catError || !categoria) {
+    return NextResponse.json({ error: "Categoría no encontrada." }, { status: 404 });
+  }
+
+  // Mismo guardarraíl de dirección que ya protege al chat de VICTOR y al
+  // motor automático (lib/direccion-categoria.ts) — sin esto, el dropdown
+  // manual era la única de las 3 vías donde una transferencia SALIENTE
+  // podía terminar en una categoría como "Ingresos y depósitos" sin ningún
+  // aviso, tanto por error del usuario como heredado de una categorización
+  // automática vieja.
+  if (!direccionCategoriaValida(categoria.nombre, transaccion.tipo_flujo)) {
+    return NextResponse.json(
+      {
+        error: `"${categoria.nombre}" no cuadra con la dirección real de esta transacción (${transaccion.tipo_flujo === "gasto" ? "salió dinero" : transaccion.tipo_flujo === "ingreso" ? "entró dinero" : "transferencia"}). Elige la categoría del lado correcto.`,
+      },
+      { status: 400 }
+    );
   }
 
   const { error: updateError } = await supabase
