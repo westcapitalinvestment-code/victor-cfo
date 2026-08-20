@@ -100,7 +100,7 @@ export default async function GastosPage({
 
   let transaccionesQuery = supabase
     .from("transactions")
-    .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id")
+    .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo")
     .eq("owner_id", user.id)
     .is("entity_id", null)
     .order("fecha", { ascending: false })
@@ -140,10 +140,16 @@ export default async function GastosPage({
   // el usuario puede tocar cualquier fila del reporte y ver exactamente
   // qué transacciones cayeron ahí, para confirmar que VICTOR categorizó
   // bien o corregir la que no.
+  // Antes filtraba por Number(t.amount) <= 0, que trataba cualquier monto
+  // positivo como gasto real — eso metía en el reporte los pagos de tarjeta
+  // de crédito hechos desde el checking (transferencia entre tus propias
+  // cuentas, no gasto nuevo, porque la compra original ya se contó del
+  // lado de la tarjeta). Ahora filtra por tipo_flujo === "gasto", que ya
+  // viene calculado bien desde la base de datos.
   const gastoPorCategoria = new Map<string, { nombre: string; monto: number }>();
   let gastosDelMes = 0;
   for (const t of transacciones ?? []) {
-    if (t.fecha < inicioMes || Number(t.amount) <= 0) continue;
+    if (t.fecha < inicioMes || t.tipo_flujo !== "gasto") continue;
     gastosDelMes += Number(t.amount);
     const catKey = t.hacienda_category_id ? String(t.hacienda_category_id) : SIN_CATEGORIZAR;
     const nombre = t.hacienda_category_id ? nombrePorCategoria.get(t.hacienda_category_id) ?? "Sin categorizar" : "Sin categorizar";
@@ -337,14 +343,6 @@ export default async function GastosPage({
 
         {transaccionesMostradas.length > 0 && (
           <GastosList
-            // key fuerza a React a montar una instancia nueva del componente
-            // cuando cambia el filtro de cuenta o de categoría — sin esto,
-            // GastosList es un Client Component con su propio
-            // useState(transaccionesIniciales), y React reusa la instancia
-            // vieja (con las transacciones del filtro anterior) en vez de
-            // tomar las nuevas props, aunque el servidor ya mandó la lista
-            // correcta. Por eso hacía falta refrescar la página a mano para
-            // ver el cambio.
             key={`${searchParams.cuenta ?? "todas"}-${searchParams.categoria ?? "todas"}`}
             transaccionesIniciales={transaccionesMostradas}
             categorias={categorias ?? []}
