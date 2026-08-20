@@ -324,13 +324,13 @@ async function categorizarUna(
   // "Ahorro Directo" el mismo día) que por descripción+monto+fecha nunca se
   // pueden distinguir entre sí, porque de verdad son indistinguibles por
   // esos datos. Sin id, seguimos con la búsqueda difusa de siempre.
-  let transacciones: { id: string; description_raw: string; amount: number; fecha: string; entity_id: string | null; matched_pattern_id: string | null }[] | null = null;
+  let transacciones: { id: string; description_raw: string; amount: number; fecha: string; entity_id: string | null; matched_pattern_id: string | null; tipo_flujo: string | null }[] | null = null;
   let findError: { message: string } | null = null;
 
   if (transactionId) {
     const resultado = await supabase
       .from("transactions")
-      .select("id, description_raw, amount, fecha, entity_id, matched_pattern_id")
+      .select("id, description_raw, amount, fecha, entity_id, matched_pattern_id, tipo_flujo")
       .eq("owner_id", ownerId)
       .eq("id", transactionId)
       .limit(1);
@@ -339,7 +339,7 @@ async function categorizarUna(
   } else {
     let query = supabase
       .from("transactions")
-      .select("id, description_raw, amount, fecha, entity_id, matched_pattern_id")
+      .select("id, description_raw, amount, fecha, entity_id, matched_pattern_id, tipo_flujo")
       .eq("owner_id", ownerId)
       .ilike("description_raw", `%${descripcion}%`)
       .order("fecha", { ascending: false })
@@ -404,6 +404,32 @@ async function categorizarUna(
 
   const transaccion = transacciones[0];
   const categoria = categorias[0];
+
+  // Guardrail para categorías con dirección en el nombre (ej. "ATH Móvil -
+  // enviado" / "ATH Móvil - recibido", patrón que el usuario puede pedir
+  // crear para cualquier comercio con flujo en dos sentidos). Sin esto,
+  // como la búsqueda de arriba acepta el monto en cualquiera de los dos
+  // signos (línea de comentario sobre revisar_gastos_sin_categorizar), es
+  // fácil que una transacción RECIBIDA termine archivada como "enviado" o
+  // viceversa — pasó de verdad con 3 transferencias ATH Móvil recibidas
+  // que quedaron mal puestas en "... - enviado". Comparamos contra
+  // tipo_flujo (no el signo crudo del monto) porque tipo_flujo ya resuelve
+  // los casos raros como tarjetas de crédito con signo invertido.
+  const nombreCatLower = categoria.nombre.toLowerCase();
+  const sugiereEnviado = nombreCatLower.includes("enviad"); // enviado/enviada
+  const sugiereRecibido = nombreCatLower.includes("recibid"); // recibido/recibida
+  if (sugiereEnviado && transaccion.tipo_flujo && transaccion.tipo_flujo !== "gasto") {
+    return {
+      ok: false,
+      message: `"${transaccion.description_raw}" ($${Math.abs(Number(transaccion.amount))}) parece ser dinero que ENTRÓ (tipo_flujo="${transaccion.tipo_flujo}"), no que salió — no la categoricé como "${categoria.nombre}" para no mezclar direcciones. Si existe la categoría equivalente para lo recibido, usa esa en su lugar; si no, pregúntale al usuario.`,
+    };
+  }
+  if (sugiereRecibido && transaccion.tipo_flujo && transaccion.tipo_flujo !== "ingreso") {
+    return {
+      ok: false,
+      message: `"${transaccion.description_raw}" ($${Math.abs(Number(transaccion.amount))}) parece ser dinero que SALIÓ (tipo_flujo="${transaccion.tipo_flujo}"), no que se recibió — no la categoricé como "${categoria.nombre}" para no mezclar direcciones. Si existe la categoría equivalente para lo enviado, usa esa en su lugar; si no, pregúntale al usuario.`,
+    };
+  }
 
   const { error: updateError } = await supabase
     .from("transactions")
