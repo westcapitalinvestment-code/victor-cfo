@@ -36,6 +36,8 @@ export default async function DashboardPage() {
   const fechaLbl = hoy.toLocaleDateString("es-PR", { weekday: "long", day: "numeric", month: "long" });
 
   // Gastos del mes — transactions personales (entity_id null) del mes en curso.
+  // Convención: amount positivo = dinero que sale (gasto). Sin Plaid conectado
+  // todavía, esto da 0 filas — resultado real: $0.00, no un número inventado.
   const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
   const { data: transacciones } = await supabase
     .from("transactions")
@@ -48,6 +50,13 @@ export default async function DashboardPage() {
   // desde esta cuenta es "transferencia" (no gasto nuevo), y en cuentas de
   // crédito el signo funciona al revés. Ver migración 0016_tipo_flujo.sql.
   const gastosDelMes = (transacciones ?? []).reduce((sum, t) => sum + (t.tipo_flujo === "gasto" ? Number(t.amount) : 0), 0);
+
+  // Ingresos del mes — mismo criterio (tipo_flujo, no el signo del monto) y
+  // mismo query ya traído arriba. Se muestra en Inicio, antes de Gastos, para
+  // que de un vistazo se vea qué entró vs. qué salió — sin esto, un usuario
+  // con una transacción categorizada como "transferencia" o "ingreso" no
+  // tenía forma de saber por qué no aparecía como gasto.
+  const ingresosDelMes = (transacciones ?? []).reduce((sum, t) => sum + (t.tipo_flujo === "ingreso" ? Number(t.amount) : 0), 0);
 
   // Balance real — si ya conectó al menos un banco por Plaid, sumamos el
   // balance actual de sus cuentas. Si el plan es Core, las cuentas que
@@ -229,6 +238,13 @@ export default async function DashboardPage() {
 
       {/* MÉTRICAS */}
       <div className="vc-mets">
+        <div className="vc-met">
+          <p className="vc-ml">Ingresos</p>
+          <p className={`vc-mv ${bancoConectado && ingresosDelMes > 0 ? "!text-grn" : ""}`}>
+            <Sensitive>{formatMoney(ingresosDelMes)}</Sensitive>
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted">este mes</p>
+        </div>
         <div className="vc-met">
           <p className="vc-ml">Gastos</p>
           <p className="vc-mv">
