@@ -188,19 +188,22 @@ export default async function GastosPage({
     .sort((a, b) => b.monto - a.monto);
 
   // La lista de transacciones de abajo: si hay una categoría REAL
-  // seleccionada en el reporte de arriba, se filtra a esa categoría Y al
-  // mes en curso (mismo alcance que el reporte, para que los números
-  // cuadren con lo que el usuario tocó). "Sin categorizar" es distinto a
-  // propósito: NO se limita al mes en curso — un gasto de julio sin
+  // seleccionada en el reporte de arriba, se filtra a esa categoría y
+  // respeta el MISMO toggle de historial que el reporte de arriba (que ya
+  // se arregló para sumar todo el historial cuando verHistorialCompleto
+  // está prendido) — antes esta lista SIEMPRE recortaba a este mes sin
+  // importar el toggle, así que tocar una categoría desde la vista de
+  // "todo el historial" (ej. "ATH Móvil - enviado" $583 en 9 transacciones)
+  // caía en una lista de solo 1 transacción de este mes — el reporte de
+  // arriba y la lista de abajo volvían a contar historias distintas.
+  // "Sin categorizar" sigue siendo especial a propósito: NUNCA se limita
+  // al mes en curso, con o sin el toggle — un gasto de julio sin
   // categorizar sigue pendiente aunque ya no sea "este mes", y el usuario
-  // necesita verlo para resolverlo, no que desaparezca de la vista. Antes
-  // esto sí limitaba por mes, que era justo el bug: la tarjeta de
-  // "pendientes" en Inicio avisaba de 33 sin categorizar, pero aquí solo
-  // aparecían las de este mes (a veces 3 o 4), como si el resto no existiera.
+  // necesita verlo para resolverlo, no que desaparezca de la vista.
   const transaccionesMostradas = categoriaSeleccionada
     ? (transacciones ?? []).filter((t) => {
         if (categoriaSeleccionada.tipo === "sin_categorizar") return !t.hacienda_category_id;
-        if (t.fecha < inicioMes) return false;
+        if (!verHistorialCompleto && t.fecha < inicioMes) return false;
         return t.hacienda_category_id === categoriaSeleccionada.id;
       })
     : verHistorialCompleto
@@ -223,12 +226,15 @@ export default async function GastosPage({
     return `/dashboard/gastos${qs ? `?${qs}` : ""}`;
   }
 
-  // Conserva el filtro de cuenta activo (si hay) al armar el link de cada
-  // categoría, para que los dos filtros se puedan combinar sin perderse
-  // uno al tocar el otro.
+  // Conserva el filtro de cuenta Y el toggle de historial activos (si los
+  // hay) al armar el link de cada categoría — sin esto, tocar una
+  // categoría mientras se ve "todo el historial" te devolvía a "este mes"
+  // sin avisar, y el reporte (ya en modo historial completo) dejaba de
+  // cuadrar con la lista de transacciones que aparecía debajo.
   function hrefConCategoria(catKey: string | null) {
     const params = new URLSearchParams();
     if (searchParams.cuenta) params.set("cuenta", searchParams.cuenta);
+    if (verHistorialCompleto) params.set("historial", "todo");
     if (catKey) params.set("categoria", catKey);
     const qs = params.toString();
     return `/dashboard/gastos${qs ? `?${qs}` : ""}`;
@@ -370,7 +376,7 @@ export default async function GastosPage({
         <div className="mb-3 flex items-center justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2 text-xs">
           <span>
             Mostrando: <span className="font-medium">{nombreCategoriaSeleccionada}</span> ·{" "}
-            {categoriaSeleccionada?.tipo === "sin_categorizar" ? "todo el historial" : "este mes"} ·{" "}
+            {categoriaSeleccionada?.tipo === "sin_categorizar" || verHistorialCompleto ? "todo el historial" : "este mes"} ·{" "}
             {transaccionesMostradas.length} transacción(es)
           </span>
           <Link href={hrefConCategoria(null)} className="font-medium text-teal hover:opacity-80">
