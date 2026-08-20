@@ -155,9 +155,12 @@ body {
 .vc-bal { background: #1D9E75; border-radius: 14px; padding: 18px; margin-bottom: 14px; }
 .vc-bal-lbl { font-size: 11px; color: rgba(255,255,255,.75); margin-bottom: 4px; }
 .vc-bal-amt { font-size: 32px; font-weight: 500; color: #fff; letter-spacing: -.5px; }
-.vc-mets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+/* 2x2 en móvil (4 tarjetas: Ingresos, Gastos, Ahorrado, Deuda) — a 4 en
+   una sola fila los montos grandes ($1,245.02) quedaban apretados en
+   pantallas angostas. Desde tablet (768px) sí caben las 4 en una fila. */
+.vc-mets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
 @media (min-width: 768px) {
-  .vc-mets { gap: 12px; }
+  .vc-mets { grid-template-columns: repeat(4, 1fr); gap: 12px; }
   .vc-mv { font-size: 22px; }
   .vc-bal-amt { font-size: 36px; }
 }
