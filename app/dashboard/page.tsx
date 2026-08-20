@@ -188,7 +188,7 @@ export default async function DashboardPage() {
   const pendientesConSugerencia = await Promise.all(
     (pendientesRaw ?? []).map(async (t) => {
       const { data: match } = await supabase
-        .rpc("match_category", { p_raw_description: t.description_raw, p_entity_id: null })
+        .rpc("match_category", { p_raw_description: t.description_raw, p_entity_id: null, p_tipo_flujo: t.tipo_flujo ?? null })
         .maybeSingle<{ hacienda_category_id: number | null }>();
       return { ...t, sugeridaId: match?.hacienda_category_id ?? null };
     })
