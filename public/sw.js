@@ -46,3 +46,46 @@ self.addEventListener("fetch", (event) => {
       .catch(() => caches.match(request))
   );
 });
+
+// Notificaciones push de verdad (documentos por vencer, gastos sin
+// categorizar) — las manda el cron diario (app/api/cron/notificaciones-push)
+// vía Web Push/VAPID. Este listener es lo que hace que suene/aparezca la
+// notificación en el celular, incluso con la app cerrada del todo.
+self.addEventListener("push", (event) => {
+  let datos = { title: "VICTOR CFO", body: "Tienes novedades en tu cuenta." };
+  try {
+    if (event.data) datos = { ...datos, ...event.data.json() };
+  } catch {
+    // Si el payload no es JSON válido por lo que sea, se usa el mensaje
+    // genérico de arriba en vez de tumbar el evento.
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(datos.title, {
+      body: datos.body,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      data: { url: datos.url || "/dashboard" },
+    })
+  );
+});
+
+// Al tocar la notificación: si ya hay una pestaña de VICTOR CFO abierta,
+// la enfoca en vez de abrir una nueva (evita duplicar la app instalada);
+// si no hay ninguna, abre una.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data && event.notification.data.url ? event.notification.data.url : "/dashboard";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});
