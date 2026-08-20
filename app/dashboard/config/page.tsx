@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import LogoutButton from "../logout-button";
+import NotificacionesToggle from "../notificaciones-toggle";
 
 export default async function ConfigPage() {
   const supabase = createClient();
@@ -28,6 +29,8 @@ export default async function ConfigPage() {
           Plan {profile?.plan ?? "core"} · {profile?.plan_status ?? "trialing"}
         </p>
       </div>
+
+      <NotificacionesToggle />
 
       <div className="vc-card">
         <LogoutButton />
