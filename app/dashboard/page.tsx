@@ -36,17 +36,18 @@ export default async function DashboardPage() {
   const fechaLbl = hoy.toLocaleDateString("es-PR", { weekday: "long", day: "numeric", month: "long" });
 
   // Gastos del mes — transactions personales (entity_id null) del mes en curso.
-  // Convención: amount positivo = dinero que sale (gasto). Sin Plaid conectado
-  // todavía, esto da 0 filas — resultado real: $0.00, no un número inventado.
   const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
   const { data: transacciones } = await supabase
     .from("transactions")
-    .select("amount")
+    .select("amount, tipo_flujo")
     .eq("owner_id", user.id)
     .is("entity_id", null)
     .gte("fecha", inicioMes);
 
-  const gastosDelMes = (transacciones ?? []).reduce((sum, t) => sum + (t.amount > 0 ? Number(t.amount) : 0), 0);
+  // tipo_flujo === "gasto" en vez de amount > 0 — un pago de tarjeta hecho
+  // desde esta cuenta es "transferencia" (no gasto nuevo), y en cuentas de
+  // crédito el signo funciona al revés. Ver migración 0016_tipo_flujo.sql.
+  const gastosDelMes = (transacciones ?? []).reduce((sum, t) => sum + (t.tipo_flujo === "gasto" ? Number(t.amount) : 0), 0);
 
   // Balance real — si ya conectó al menos un banco por Plaid, sumamos el
   // balance actual de sus cuentas. Si el plan es Core, las cuentas que
@@ -156,7 +157,7 @@ export default async function DashboardPage() {
   const [{ data: pendientesRaw }, { count: totalPendientes }, { data: categorias }] = await Promise.all([
     supabase
       .from("transactions")
-      .select("id, description_raw, amount, fecha")
+      .select("id, description_raw, amount, fecha, tipo_flujo")
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .is("hacienda_category_id", null)
