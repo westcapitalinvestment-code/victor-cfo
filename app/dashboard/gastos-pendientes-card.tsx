@@ -13,6 +13,7 @@ type Pendiente = {
   amount: number;
   fecha: string;
   sugeridaId: number | null;
+  tipo_flujo?: "gasto" | "ingreso" | "transferencia";
 };
 
 // Tarjeta de "gastos sin categorizar" en el Inicio — calcada del mockup
@@ -88,7 +89,22 @@ export default function GastosPendientesCard({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm text-text">{p.description_raw}</p>
                 <p className="mt-0.5 text-[11px] text-muted">
-                  {p.fecha} · <span className={p.amount > 0 ? "text-red" : "text-grn"}>{formatMoney(Math.abs(Number(p.amount)))}</span>
+                  {p.fecha} ·{" "}
+                  <span
+                    className={
+                      p.tipo_flujo === "transferencia"
+                        ? "text-muted"
+                        : p.tipo_flujo === "ingreso"
+                          ? "text-grn"
+                          : p.tipo_flujo === "gasto"
+                            ? "text-red"
+                            : p.amount > 0
+                              ? "text-red"
+                              : "text-grn"
+                    }
+                  >
+                    {formatMoney(Math.abs(Number(p.amount)))}
+                  </span>
                 </p>
               </div>
               <select
