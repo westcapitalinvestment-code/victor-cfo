@@ -403,14 +403,19 @@ export default async function GastosPage({
         {transaccionesMostradas.length > 0 && (
           <GastosList
             // key fuerza a React a montar una instancia nueva del componente
-            // cuando cambia el filtro de cuenta o de categoría — sin esto,
-            // GastosList es un Client Component con su propio
-            // useState(transaccionesIniciales), y React reusa la instancia
-            // vieja (con las transacciones del filtro anterior) en vez de
-            // tomar las nuevas props, aunque el servidor ya mandó la lista
-            // correcta. Por eso hacía falta refrescar la página a mano para
-            // ver el cambio.
-            key={`${searchParams.cuenta ?? "todas"}-${searchParams.categoria ?? "todas"}`}
+            // cuando cambia el filtro de cuenta, de categoría, o de
+            // historial (este mes / todo) — sin esto, GastosList es un
+            // Client Component con su propio useState(transaccionesIniciales),
+            // y React reusa la instancia vieja (con las transacciones del
+            // filtro anterior) en vez de tomar las nuevas props, aunque el
+            // servidor ya mandó la lista correcta. Antes esto pasaba con
+            // cuenta/categoría; el mismo bug apareció de nuevo al agregar
+            // "Ver historial completo →" porque ese link solo cambia
+            // ?historial= y esa pieza faltaba aquí — el contador de arriba
+            // (que sí lee transaccionesMostradas.length del servidor)
+            // decía "15 transacción(es)" correctamente, pero la lista de
+            // abajo se quedaba pegada mostrando solo la 1 vieja.
+            key={`${searchParams.cuenta ?? "todas"}-${searchParams.categoria ?? "todas"}-${searchParams.historial ?? "mes"}`}
             transaccionesIniciales={transaccionesMostradas}
             categorias={categorias ?? []}
             nombrePorCuenta={Object.fromEntries(nombrePorCuenta)}
