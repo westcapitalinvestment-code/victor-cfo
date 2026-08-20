@@ -70,7 +70,7 @@ export default function NotificacionesToggle() {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: base64UrlAUint8Array(publicKey),
+           applicationServerKey: base64UrlAUint8Array(publicKey) as BufferSource,
       });
 
       const json = sub.toJSON();
