@@ -154,20 +154,29 @@ export default async function GastosPage({
   // cuentas, no gasto nuevo, porque la compra original ya se contó del
   // lado de la tarjeta). Ahora filtra por tipo_flujo === "gasto", que ya
   // viene calculado bien desde la base de datos.
+  //
+  // Este reporte tiene que respetar el MISMO toggle de "Ver historial
+  // completo" que ya usa la lista de abajo (verHistorialCompleto) — antes
+  // el reporte se quedaba fijo en "este mes" pasara lo que pasara con el
+  // toggle, así que en una cuenta con un solo gasto categorizado este mes,
+  // el reporte se veía "roto" (1 sola categoría al 100%) mientras la lista
+  // de abajo ya mostraba 15 transacciones de varios meses y categorías —
+  // dos secciones de la misma pantalla contando historias distintas.
   const gastoPorCategoria = new Map<string, { nombre: string; monto: number }>();
-  let gastosDelMes = 0;
+  let gastosBaseParaPct = 0;
   for (const t of transacciones ?? []) {
     if (t.tipo_flujo !== "gasto") continue;
     const sinCategoria = !t.hacienda_category_id;
-    // "Sin categorizar" se acumula SIEMPRE, sin importar el mes — es lo que
-    // el usuario todavía tiene que resolver, no un gasto de este mes nada
-    // más (antes esto se limitaba a inicioMes igual que las categorías
-    // reales, y la fila "Sin categorizar" del reporte mostraba un número
-    // mucho menor que el total real de pendientes). Las categorías reales
-    // sí se quedan limitadas al mes en curso, que es lo que promete el
-    // título "Reporte del mes por categoría".
-    if (!sinCategoria && t.fecha < inicioMes) continue;
-    if (t.fecha >= inicioMes) gastosDelMes += Number(t.amount);
+    const dentroDelMes = t.fecha >= inicioMes;
+    // "Sin categorizar" se acumula SIEMPRE, sin importar el mes ni el
+    // toggle — es lo que el usuario todavía tiene que resolver, no un
+    // gasto de este mes nada más. Las categorías reales solo se limitan al
+    // mes en curso cuando verHistorialCompleto está apagado.
+    if (!sinCategoria && !verHistorialCompleto && !dentroDelMes) continue;
+    // Denominador de los % — mismo alcance que lo que se está sumando
+    // arriba, para que el reporte siempre sume 100% real de lo que se ve
+    // en pantalla, sea "este mes" o "todo el historial".
+    if (verHistorialCompleto || dentroDelMes) gastosBaseParaPct += Number(t.amount);
     const catKey = sinCategoria ? SIN_CATEGORIZAR : String(t.hacienda_category_id);
     const nombre = sinCategoria ? "Sin categorizar" : nombrePorCategoria.get(t.hacienda_category_id!) ?? "Sin categorizar";
     const actual = gastoPorCategoria.get(catKey) ?? { nombre, monto: 0 };
@@ -315,17 +324,18 @@ export default async function GastosPage({
       {reporteCategoria.length > 0 && (
         <div className="vc-card mb-3">
           <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">
-            Reporte del mes por categoría — toca una para ver sus transacciones
+            Reporte {verHistorialCompleto ? "de todo el historial" : "del mes"} por categoría — toca una para ver sus transacciones
           </p>
           <div className="flex flex-col gap-2">
             {reporteCategoria.map((r) => {
-              // "Sin categorizar" ahora suma TODO el historial pendiente, no
-              // solo este mes (ver comentario arriba) — así que su monto
-              // puede ser mayor que gastosDelMes (el gasto de este mes) y el
-              // % saldría por encima de 100. Se limita a 100 solo para que
-              // la barra no se salga de su contenedor; el monto en dólares
-              // de al lado sigue siendo el real, sin recortar.
-              const pctReal = gastosDelMes > 0 ? Math.round((r.monto / gastosDelMes) * 100) : 0;
+              // "Sin categorizar" siempre suma TODO el historial pendiente
+              // (ver comentario arriba), incluso con el toggle en "este
+              // mes" — así que su monto puede ser mayor que
+              // gastosBaseParaPct y el % saldría por encima de 100. Se
+              // limita a 100 solo para que la barra no se salga de su
+              // contenedor; el monto en dólares de al lado sigue siendo el
+              // real, sin recortar.
+              const pctReal = gastosBaseParaPct > 0 ? Math.round((r.monto / gastosBaseParaPct) * 100) : 0;
               const pct = Math.min(pctReal, 100);
               const activa = categoriaSeleccionada
                 ? categoriaSeleccionada.tipo === "sin_categorizar"
