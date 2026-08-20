@@ -125,8 +125,14 @@ export default function GastosPendientesCard({
             </div>
           ))}
 
+          {/* Antes esto mandaba a /dashboard/gastos sin filtro — el usuario
+          caía en la lista completa (todas las transacciones, no solo las
+          pendientes) sin forma fácil de identificar cuáles eran las que
+          faltaban. Con ?categoria=sin_categorizar cae directo en la vista
+          filtrada, que además ahora muestra TODO el historial pendiente, no
+          solo el mes en curso. */}
           {restantes > 0 && (
-            <Link href="/dashboard/gastos" className="block px-4 py-2.5 text-center text-xs font-medium text-teal hover:opacity-80">
+            <Link href="/dashboard/gastos?categoria=sin_categorizar" className="block px-4 py-2.5 text-center text-xs font-medium text-teal hover:opacity-80">
               Ver los {restantes} restantes en Gastos →
             </Link>
           )}
