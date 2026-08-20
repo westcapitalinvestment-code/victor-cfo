@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("transactions")
-    .select("fecha, description_raw, amount, hacienda_category_id")
+    .select("fecha, description_raw, amount, hacienda_category_id, tipo_flujo")
     .eq("owner_id", user.id)
     .is("entity_id", null)
     .order("fecha", { ascending: true });
@@ -54,9 +54,22 @@ export async function GET(req: NextRequest) {
     ["Fecha", "Descripción", "Categoría", "Línea Anejo M / Schedule C", "Tipo", "Monto"].join(","),
   ];
 
+  // Antes esto decidía "Gasto" o "Ingreso" solo mirando el signo del monto
+  // — un pago de tarjeta de crédito hecho desde el checking salía como
+  // "Gasto" aquí Y como "Ingreso" en la fila espejo de la tarjeta, doblando
+  // esa plata en el reporte que ve el contable. Ahora usa tipo_flujo, que
+  // ya viene calculado correctamente desde la base de datos (por tipo de
+  // cuenta, no solo el signo) — "Transferencia" para esos pagos internos,
+  // que no son gasto ni ingreso nuevo.
+  const ETIQUETA_TIPO: Record<string, string> = {
+    gasto: "Gasto",
+    ingreso: "Ingreso",
+    transferencia: "Transferencia",
+  };
+
   for (const t of transacciones ?? []) {
     const categoria = t.hacienda_category_id ? categoriaPorId.get(t.hacienda_category_id) : null;
-    const tipo = Number(t.amount) > 0 ? "Gasto" : "Ingreso";
+    const tipo = ETIQUETA_TIPO[t.tipo_flujo] ?? (Number(t.amount) > 0 ? "Gasto" : "Ingreso");
     const linea = categoria ? categoria.linea_anejo_m || categoria.linea_schedule_c || "" : "";
     filas.push(
       [
