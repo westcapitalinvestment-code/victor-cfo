@@ -58,7 +58,7 @@ function parsearCategoriaSeleccionada(valor: string | undefined): { tipo: "id"; 
 export default async function GastosPage({
   searchParams,
 }: {
-  searchParams: { cuenta?: string; categoria?: string };
+  searchParams: { cuenta?: string; categoria?: string; historial?: string };
 }) {
   const supabase = createClient();
   const {
@@ -97,6 +97,14 @@ export default async function GastosPage({
 
   const cuentaSeleccionada = parsearCuentaSeleccionada(searchParams.cuenta);
   const categoriaSeleccionada = parsearCategoriaSeleccionada(searchParams.categoria);
+  // Cuando NO hay categoría tocada, la lista de abajo antes mostraba TODO
+  // el historial de la cuenta sin límite de mes, mientras que el "Reporte
+  // del mes por categoría" arriba de ella sí es solo de este mes — dos
+  // secciones una encima de la otra con alcances distintos, que es
+  // justo lo que confundía: "el reporte dice 1 en Vivienda pero abajo veo
+  // 3 o 4" (las de más abajo eran de meses anteriores). Ahora por defecto
+  // la lista también es de este mes, y hay un link explícito para ver todo.
+  const verHistorialCompleto = searchParams.historial === "todo";
 
   let transaccionesQuery = supabase
     .from("transactions")
@@ -186,13 +194,25 @@ export default async function GastosPage({
         if (t.fecha < inicioMes) return false;
         return t.hacienda_category_id === categoriaSeleccionada.id;
       })
-    : transacciones ?? [];
+    : verHistorialCompleto
+      ? transacciones ?? []
+      : (transacciones ?? []).filter((t) => t.fecha >= inicioMes);
 
   const nombreCategoriaSeleccionada = categoriaSeleccionada
     ? reporteCategoria.find((r) =>
         categoriaSeleccionada.tipo === "sin_categorizar" ? r.catKey === SIN_CATEGORIZAR : r.catKey === String(categoriaSeleccionada.id)
       )?.nombre ?? "Sin categorizar"
     : null;
+
+  // Link para alternar entre "este mes" y "todo el historial" en la lista
+  // de abajo cuando no hay categoría tocada — conserva el filtro de cuenta.
+  function hrefHistorial(verTodo: boolean) {
+    const params = new URLSearchParams();
+    if (searchParams.cuenta) params.set("cuenta", searchParams.cuenta);
+    if (verTodo) params.set("historial", "todo");
+    const qs = params.toString();
+    return `/dashboard/gastos${qs ? `?${qs}` : ""}`;
+  }
 
   // Conserva el filtro de cuenta activo (si hay) al armar el link de cada
   // categoría, para que los dos filtros se puedan combinar sin perderse
@@ -345,6 +365,23 @@ export default async function GastosPage({
           </span>
           <Link href={hrefConCategoria(null)} className="font-medium text-teal hover:opacity-80">
             ✕ Quitar filtro
+          </Link>
+        </div>
+      )}
+
+      {/* Mismo alcance visible aquí también cuando no hay categoría tocada
+      — antes esta lista mostraba todo el historial sin decirlo, mientras
+      el reporte de arriba era solo de este mes, y esa diferencia de
+      alcance silenciosa era la causa real de "el reporte dice 1 pero
+      abajo veo 3 o 4". */}
+      {!categoriaSeleccionada && (
+        <div className="mb-3 flex items-center justify-between rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
+          <span className="text-muted">
+            Mostrando: <span className="font-medium text-text">{verHistorialCompleto ? "todo el historial" : "este mes"}</span> ·{" "}
+            {transaccionesMostradas.length} transacción(es)
+          </span>
+          <Link href={hrefHistorial(!verHistorialCompleto)} className="font-medium text-teal hover:opacity-80">
+            {verHistorialCompleto ? "Ver solo este mes →" : "Ver historial completo →"}
           </Link>
         </div>
       )}
