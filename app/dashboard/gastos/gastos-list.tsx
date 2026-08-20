@@ -13,6 +13,7 @@ type Transaccion = {
   hacienda_category_id: number | null;
   plaid_account_id: string | null;
   manual_account_id: string | null;
+  tipo_flujo?: "gasto" | "ingreso" | "transferencia";
 };
 
 type Categoria = { id: number; nombre: string };
@@ -85,6 +86,7 @@ export default function GastosList({
                 onClick={() => setEditando(t.id)}
               >
                 {t.fecha} · {nombreCategoria(t.hacienda_category_id)}
+                {t.tipo_flujo === "transferencia" ? " · Transferencia (no cuenta como gasto)" : ""}
                 {(() => {
                   const clave = t.manual_account_id
                     ? `manual:${t.manual_account_id}`
@@ -97,7 +99,19 @@ export default function GastosList({
               </button>
             )}
           </div>
-          <span className={`ml-3 flex-shrink-0 ${Number(t.amount) > 0 ? "text-red" : "text-grn"}`}>
+          <span
+            className={`ml-3 flex-shrink-0 ${
+              t.tipo_flujo === "transferencia"
+                ? "text-muted"
+                : t.tipo_flujo === "ingreso"
+                  ? "text-grn"
+                  : t.tipo_flujo === "gasto"
+                    ? "text-red"
+                    : Number(t.amount) > 0
+                      ? "text-red"
+                      : "text-grn"
+            }`}
+          >
             <Sensitive>{formatMoney(Math.abs(Number(t.amount)))}</Sensitive>
           </span>
         </li>
