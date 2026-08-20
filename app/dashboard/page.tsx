@@ -56,7 +56,12 @@ export default async function DashboardPage() {
   // que de un vistazo se vea qué entró vs. qué salió — sin esto, un usuario
   // con una transacción categorizada como "transferencia" o "ingreso" no
   // tenía forma de saber por qué no aparecía como gasto.
-  const ingresosDelMes = (transacciones ?? []).reduce((sum, t) => sum + (t.tipo_flujo === "ingreso" ? Number(t.amount) : 0), 0);
+  // Math.abs() porque un "ingreso" se guarda con monto NEGATIVO en la base
+  // de datos (positivo = salió, negativo = entró — misma convención que
+  // gastosDelMes de arriba, que no lo necesita porque "gasto" ya es
+  // positivo). Sin esto la tarjeta mostraba el total de ingresos en rojo
+  // y en negativo, como si fuera deuda.
+  const ingresosDelMes = (transacciones ?? []).reduce((sum, t) => sum + (t.tipo_flujo === "ingreso" ? Math.abs(Number(t.amount)) : 0), 0);
 
   // Balance real — si ya conectó al menos un banco por Plaid, sumamos el
   // balance actual de sus cuentas. Si el plan es Core, las cuentas que
