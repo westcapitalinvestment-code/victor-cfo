@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getVictorBasePrompt, buildUserContextBlock } from "@/lib/victor/system-prompt";
 import { VICTOR_TOOLS, executeVictorTool } from "@/lib/victor/tools";
 import { fechaHoyPR } from "@/lib/hora-pr";
+import { costoEnCentavos } from "@/lib/costo-ia";
 
 // Ruta de servidor — la ANTHROPIC_API_KEY nunca se expone al navegador.
 // El cliente (VictorChat) solo llama a /api/victor con el mensaje del
@@ -171,6 +172,48 @@ export async function POST(req: NextRequest) {
   const isFounder = !!user.email && FOUNDER_EMAILS.includes(user.email.toLowerCase());
   const esSaludoDiario = userMessage === SALUDO_DIARIO_TRIGGER;
 
+  // Tope de gasto mensual por plan — red de seguridad ADEMÁS del fix de
+  // caché de arriba (TTL de 1h en vez de 5min), no en vez de él. Protege
+  // contra un bug o un patrón de uso fuera de lo normal que dispare el
+  // costo real sin que nadie se entere hasta la factura. El founder queda
+  // exento porque necesita poder probar la app libremente — su uso sí se
+  // sigue registrando más abajo, solo no lo bloquea.
+  // Cifras de partida (agosto 2026) pensadas con margen sobre el precio
+  // real de Anthropic ($14.99/$49.99/$99.99 de Core/Pro/Pro+) — con el fix
+  // de caché puesto, un usuario activo normal debería quedar bien por
+  // debajo. Si en la práctica algún plan se acerca seguido al tope, hay
+  // que subir el número — no es una talla única para siempre.
+  const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 300, pro: 600, proplus: 1000 };
+  const anioMesActual = fechaHoyPR().slice(0, 7);
+  let limiteAlcanzado = false;
+  if (!isFounder) {
+    const { data: usoMes } = await supabase
+      .from("uso_ia_mensual")
+      .select("costo_centavos")
+      .eq("owner_id", user.id)
+      .eq("anio_mes", anioMesActual)
+      .maybeSingle();
+    const limite = LIMITES_MENSUALES_CENTAVOS[profile?.plan ?? "core"] ?? LIMITES_MENSUALES_CENTAVOS.core;
+    limiteAlcanzado = Number(usoMes?.costo_centavos ?? 0) >= limite;
+  }
+
+  if (limiteAlcanzado) {
+    const mensajeLimite =
+      "Llegaste al límite de uso de este mes para tu plan — es un tope de seguridad para que el costo " +
+      "de VICTOR nunca se dispare sin control. Vuelve a tener acceso completo el día 1 del próximo mes. " +
+      "Si esto te está bloqueando algo urgente, escríbele a soporte.";
+    const updatedMessagesLimite: ChatMessage[] = [
+      ...history,
+      { role: "user", content: userMessage },
+      { role: "assistant", content: mensajeLimite },
+    ];
+    await supabase
+      .from("conversations")
+      .update({ messages_json: updatedMessagesLimite, updated_at: new Date().toISOString() })
+      .eq("id", conversation.id);
+    return NextResponse.json({ conversationId: conversation.id, reply: mensajeLimite });
+  }
+
   // Metas reales en este momento (no la copia guardada en victor_memory) —
   // así VICTOR habla con números actuales y puede resolver a qué meta se
   // refiere el usuario cuando pide actualizar el progreso de una.
@@ -270,8 +313,18 @@ export async function POST(req: NextRequest) {
   const systemBlocks: Anthropic.TextBlockParam[] = [
     // El bloque grande y estático va con cache_control para que Anthropic
     // lo cachee entre llamadas — baja el costo real de tener un system
-    // prompt de ~30K tokens en cada mensaje.
-    { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
+    // prompt de ~20K tokens en cada mensaje.
+    // ttl: "1h" en vez del default de 5 minutos — el patrón real de uso
+    // (alguien probando la app, o un usuario real conversando con VICTOR
+    // a ratos durante el día) casi siempre deja más de 5 minutos entre un
+    // mensaje y el siguiente. Con 5 minutos, cada mensaje pagaba el
+    // prompt completo como escritura de caché cara (1.25x el precio base)
+    // en vez de lectura barata (0.1x) — 12.5x más caro por mensaje, y esto
+    // era el driver real detrás del gasto diario que subía en el dashboard
+    // de Anthropic. La escritura de 1 hora cuesta más (2x en vez de 1.25x)
+    // pero pasa muchas menos veces, así que el neto es mucho más barato
+    // para este patrón de uso disperso. Ver docs.claude.com/prompt-caching.
+    { type: "text", text: systemPrompt, cache_control: { type: "ephemeral", ttl: "1h" } },
     { type: "text", text: contextBlock },
   ];
 
@@ -291,6 +344,12 @@ export async function POST(req: NextRequest) {
 
   let assistantText = "";
   let tokensUsados = conversation.tokens_usados ?? 0;
+  // Costo real (no solo tokens) acumulado en este turno — se registra en
+  // uso_ia_mensual al final, para el tope de gasto de arriba. Independiente
+  // de isFounder: siempre se registra (así Joel también puede ver cuánto
+  // gasta su propia cuenta de prueba), lo único que cambia por ser founder
+  // es que el chequeo de tope de arriba nunca lo bloquea.
+  let costoAcumuladoCentavos = 0;
   // Antes en 4 — muy poco para categorizar en lote (revisar_gastos_sin_categorizar
   // + varios categorizar_transaccion + resumen final fácil pasa de 4 llamadas
   // cuando hay 8-10 gastos pendientes). Con solo 4, el loop se cortaba a
@@ -323,6 +382,7 @@ export async function POST(req: NextRequest) {
       });
 
       tokensUsados += response.usage.input_tokens + response.usage.output_tokens;
+      costoAcumuladoCentavos += costoEnCentavos("claude-sonnet-5", response.usage);
 
       assistantText = response.content
         .filter((block): block is Anthropic.TextBlock => block.type === "text")
@@ -368,6 +428,16 @@ export async function POST(req: NextRequest) {
       { error: "VICTOR no pudo responder ahora mismo. Intenta de nuevo en un momento." },
       { status: 502 }
     );
+  }
+
+  // Registra el costo real de este turno para el tope de gasto mensual de
+  // arriba — en su propio try/catch, igual que el resto de "extras" de esta
+  // ruta (memoria, saludo diario): si falla, no debe tumbar la respuesta
+  // que el usuario ya está esperando.
+  try {
+    await supabase.rpc("registrar_uso_ia", { p_owner_id: user.id, p_costo_centavos: costoAcumuladoCentavos });
+  } catch (err) {
+    console.error("No se pudo registrar uso_ia_mensual:", err);
   }
 
   // Si se acabaron las iteraciones y la última respuesta todavía pedía usar
