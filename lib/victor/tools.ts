@@ -99,16 +99,17 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
   {
     name: "categorizar_transaccion",
     description:
-      "Asigna (o corrige) la categoría de un gasto/transacción bancaria ya existente — úsalo cuando el " +
-      "usuario diga cosas como 'esa compra en Uber es transporte' o 'lo de Amazon de ayer fue ropa', o cuando " +
-      "tú mismo estés categorizando en lote después de revisar_gastos_sin_categorizar. Busca la transacción " +
-      "por parte de su descripción (el nombre del comercio suele bastar) y la categoría por su nombre en " +
-      "español — usa EXACTAMENTE los nombres que te dio revisar_gastos_sin_categorizar en 'Categorías " +
-      "disponibles', nunca inventes un nombre parecido que no esté en esa lista. Si hay varias transacciones " +
-      "con la misma descripción, usa el monto Y la fecha (si los tienes, por ejemplo porque salieron en la " +
-      "lista de revisar_gastos_sin_categorizar) para distinguir cuál es — esto pasa seguido con gastos " +
-      "recurrentes idénticos (mismo comercio, mismo monto, cada mes). Si aun con monto y fecha sigue habiendo " +
-      "ambigüedad, no adivines — pregúntale cuál es.",
+      "Asigna (o corrige) la categoría de UNA sola transacción bancaria ya existente — úsalo solo para " +
+      "correcciones puntuales en la conversación, cuando el usuario diga cosas como 'esa compra en Uber es " +
+      "transporte' o 'lo de Amazon de ayer fue ropa'. Si vas a categorizar VARIAS a la vez (por ejemplo " +
+      "después de revisar_gastos_sin_categorizar), NO llames esta herramienta repetidamente — usa " +
+      "categorizar_transacciones_lote una sola vez con todas juntas, es mucho más eficiente. Busca la " +
+      "transacción por parte de su descripción (el nombre del comercio suele bastar) y la categoría por su " +
+      "nombre en español — usa EXACTAMENTE los nombres que te dio revisar_gastos_sin_categorizar en " +
+      "'Categorías disponibles', nunca inventes un nombre parecido que no esté en esa lista. Si hay varias " +
+      "transacciones con la misma descripción, usa el monto Y la fecha (si los tienes) para distinguir cuál " +
+      "es — esto pasa seguido con gastos recurrentes idénticos (mismo comercio, mismo monto, cada mes). Si " +
+      "aun con monto y fecha sigue habiendo ambigüedad, no adivines — pregúntale cuál es.",
     input_schema: {
       type: "object",
       properties: {
@@ -121,15 +122,47 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "categorizar_transacciones_lote",
+    description:
+      "Igual que categorizar_transaccion, pero para VARIAS transacciones en una sola llamada — úsala siempre " +
+      "que estés categorizando en lote después de revisar_gastos_sin_categorizar, con TODAS las que reconozcas " +
+      "con alta confianza en una sola llamada a esta herramienta, nunca una por una con categorizar_transaccion. " +
+      "Cada elemento de 'items' sigue las mismas reglas que categorizar_transaccion (descripción + categoría " +
+      "exacta de la lista, monto y fecha cuando los tengas para distinguir gastos recurrentes idénticos). El " +
+      "resultado te dice cuáles se categorizaron y cuáles no (con la razón) — las que fallaron por ambigüedad " +
+      "pregúntaselas al usuario agrupadas en un mensaje, no las reintentes adivinando.",
+    input_schema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          description: "Lista de transacciones a categorizar en un solo lote.",
+          items: {
+            type: "object",
+            properties: {
+              descripcion_transaccion: { type: "string", description: "Parte del nombre/descripción del comercio, tal como aparece en el gasto." },
+              monto: { type: "number", description: "Monto exacto de la transacción, si lo tienes." },
+              fecha: { type: "string", description: "Fecha exacta en formato YYYY-MM-DD, si la tienes." },
+              nombre_categoria: { type: "string", description: "Nombre EXACTO de la categoría a asignar, de la lista real de categorías disponibles." },
+            },
+            required: ["descripcion_transaccion", "nombre_categoria"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+  },
+  {
     name: "revisar_gastos_sin_categorizar",
     description:
       "Trae la lista real de transacciones bancarias del usuario que TODAVÍA no tienen categoría — la " +
       "'bandeja pendiente' de verdad, sacada directo de su banco conectado por Plaid. NO le pidas al usuario " +
       "que te copie y pegue lo que ve en pantalla — usa esta herramienta. Úsala cuando te pida revisar, " +
       "categorizar, o clasificar sus gastos, o pregunte qué le falta categorizar. Después de ver la lista, " +
-      "categoriza tú mismo (con categorizar_transaccion, una llamada por transacción) las que reconozcas con " +
-      "alta confianza por el nombre del comercio, sin preguntar. Solo pregúntale al usuario, agrupadas en un " +
-      "mensaje, las que de verdad sean ambiguas.",
+      "categoriza tú mismo, en UNA sola llamada a categorizar_transacciones_lote con todas juntas, las que " +
+      "reconozcas con alta confianza por el nombre del comercio, sin preguntar — nunca uses " +
+      "categorizar_transaccion una por una para esto. Solo pregúntale al usuario, agrupadas en un mensaje, " +
+      "las que de verdad sean ambiguas.",
     input_schema: {
       type: "object",
       properties: {
@@ -200,6 +233,118 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
 ];
 
 type ToolResult = { ok: boolean; message: string };
+
+// Lógica real de "buscar la transacción + asignarle categoría", compartida
+// entre categorizar_transaccion (una sola, para correcciones puntuales del
+// usuario en el chat) y categorizar_transacciones_lote (varias en una sola
+// llamada — la usa VICTOR después de revisar_gastos_sin_categorizar para no
+// tener que hacer una llamada al API por cada transacción, que era el mayor
+// generador de costo: N transacciones pendientes = N round-trips completos,
+// cada uno reenviando toda la conversación acumulada hasta ese punto).
+async function categorizarUna(
+  supabase: ReturnType<typeof createClient>,
+  ownerId: string,
+  item: { descripcion: string; monto: number | null; fecha: string | null; nombreCategoria: string }
+): Promise<ToolResult> {
+  const { descripcion, monto, fecha, nombreCategoria } = item;
+  if (!descripcion || !nombreCategoria) {
+    return { ok: false, message: "Faltan datos (descripción de la transacción y nombre de categoría) para categorizar." };
+  }
+
+  const { data: categorias, error: catError } = await supabase
+    .from("hacienda_categories")
+    .select("id, nombre")
+    .eq("activo", true)
+    .ilike("nombre", `%${nombreCategoria}%`);
+
+  if (catError) return { ok: false, message: `No se pudo buscar la categoría: ${catError.message}` };
+  if (!categorias || categorias.length === 0) {
+    return { ok: false, message: `No encontré ninguna categoría parecida a "${nombreCategoria}". Pregúntale al usuario cuál de las categorías existentes aplica.` };
+  }
+  if (categorias.length > 1) {
+    return {
+      ok: false,
+      message: `Hay varias categorías parecidas a "${nombreCategoria}" (${categorias.map((c) => c.nombre).join(", ")}). Pídele al usuario que aclare cuál.`,
+    };
+  }
+
+  let query = supabase
+    .from("transactions")
+    .select("id, description_raw, amount, fecha, entity_id, matched_pattern_id")
+    .eq("owner_id", ownerId)
+    .ilike("description_raw", `%${descripcion}%`)
+    .order("fecha", { ascending: false })
+    .limit(5);
+  // revisar_gastos_sin_categorizar SIEMPRE manda el monto en positivo
+  // (Math.abs), aunque en la base de datos un ingreso/depósito se
+  // guarda en negativo (convención: positivo = gasto que sale, negativo
+  // = dinero que entra). Si comparábamos solo contra el positivo, una
+  // transacción de ingreso real (ej. INTRST PYMNT) nunca hacía match —
+  // "no encontrada" aunque la herramienta la acabara de listar como
+  // pendiente. Aceptamos cualquiera de los dos signos.
+  if (monto !== null) query = query.or(`amount.eq.${Math.abs(monto)},amount.eq.${-Math.abs(monto)}`);
+  if (fecha !== null) query = query.eq("fecha", fecha);
+
+  const { data: transacciones, error: findError } = await query;
+  if (findError) return { ok: false, message: `No se pudo buscar la transacción: ${findError.message}` };
+  if (!transacciones || transacciones.length === 0) {
+    // Antes de rendirse, busca solo por descripción (sin monto/fecha)
+    // para que VICTOR vea qué hay de verdad y pueda diagnosticar en vez
+    // de quedarse en un "no encontrada" sin más contexto.
+    const { data: cercanas } = await supabase
+      .from("transactions")
+      .select("description_raw, amount, fecha")
+      .eq("owner_id", ownerId)
+      .ilike("description_raw", `%${descripcion}%`)
+      .order("fecha", { ascending: false })
+      .limit(5);
+    const pista = cercanas && cercanas.length > 0
+      ? ` Lo más parecido que sí existe: ${cercanas.map((c) => `"${c.description_raw}" $${c.amount} ${c.fecha}`).join(", ")}.`
+      : "";
+    return { ok: false, message: `No encontré ninguna transacción parecida a "${descripcion}"${monto !== null ? ` por $${Math.abs(monto)}` : ""}${fecha !== null ? ` en ${fecha}` : ""}.${pista} Pregúntale al usuario el nombre exacto como aparece en su banco.` };
+  }
+  if (transacciones.length > 1) {
+    // Pasa seguido con gastos recurrentes idénticos (mismo comercio,
+    // mismo monto, cada mes/semana) — el monto solo no basta para
+    // distinguirlas. Si todavía no se mandó fecha, pídela explícitamente
+    // en vez de solo repetir "aclara cuál es".
+    return {
+      ok: false,
+      message: fecha === null
+        ? `Hay ${transacciones.length} transacciones idénticas de "${descripcion}"` +
+          `${monto !== null ? ` por $${Math.abs(monto)}` : ""} en fechas distintas ` +
+          `(${transacciones.map((t) => t.fecha).join(", ")}). Vuelve a llamar esta herramienta mandando el ` +
+          `campo "fecha" exacto de cuál de esas quieres categorizar.`
+        : `Hay ${transacciones.length} transacciones que coinciden con "${descripcion}"` +
+          `${monto !== null ? ` por $${Math.abs(monto)}` : ""} en ${fecha}. Pídele al usuario más detalle para distinguirlas.`,
+    };
+  }
+
+  const transaccion = transacciones[0];
+  const categoria = categorias[0];
+
+  const { error: updateError } = await supabase
+    .from("transactions")
+    .update({
+      hacienda_category_id: categoria.id,
+      is_personal: transaccion.entity_id === null,
+      category_overridden_by_user: true,
+    })
+    .eq("id", transaccion.id);
+
+  if (updateError) return { ok: false, message: `No se pudo categorizar la transacción: ${updateError.message}` };
+
+  await supabase.rpc("record_user_correction", {
+    p_transaction_id: transaccion.id,
+    p_entity_id: transaccion.entity_id,
+    p_raw_description: transaccion.description_raw,
+    p_confirmed_hacienda_category_id: categoria.id,
+    p_matched_pattern_id: transaccion.matched_pattern_id,
+    p_actor_role: "owner",
+  });
+
+  return { ok: true, message: `"${transaccion.description_raw}" ($${Math.abs(Number(transaccion.amount))}) categorizado como "${categoria.nombre}".` };
+}
 
 export async function executeVictorTool(
   supabase: ReturnType<typeof createClient>,
@@ -350,105 +495,60 @@ export async function executeVictorTool(
     case "categorizar_transaccion": {
       const descripcion = String(input.descripcion_transaccion ?? "").trim();
       const nombreCategoria = String(input.nombre_categoria ?? "").trim();
-      if (!descripcion || !nombreCategoria) {
-        return { ok: false, message: "Faltan datos (descripción de la transacción y nombre de categoría) para categorizar." };
-      }
       const monto = Number.isFinite(Number(input.monto)) ? Number(input.monto) : null;
       const fecha = typeof input.fecha === "string" && input.fecha.trim() ? input.fecha.trim() : null;
+      return categorizarUna(supabase, ownerId, { descripcion, monto, fecha, nombreCategoria });
+    }
 
-      const { data: categorias, error: catError } = await supabase
-        .from("hacienda_categories")
-        .select("id, nombre")
-        .eq("activo", true)
-        .ilike("nombre", `%${nombreCategoria}%`);
-
-      if (catError) return { ok: false, message: `No se pudo buscar la categoría: ${catError.message}` };
-      if (!categorias || categorias.length === 0) {
-        return { ok: false, message: `No encontré ninguna categoría parecida a "${nombreCategoria}". Pregúntale al usuario cuál de las categorías existentes aplica.` };
+    case "categorizar_transacciones_lote": {
+      // Batch real: N transacciones en UNA sola llamada al API, en vez de
+      // una llamada por transacción. Esto es lo que de verdad baja el
+      // costo — antes, categorizar 20 gastos pendientes eran 20 round-trips
+      // a Claude, cada uno reenviando el system prompt (cacheado, pero el
+      // 10% del costo igual se paga cada vez) MÁS toda la conversación
+      // acumulada hasta ese punto (esa parte nunca se cachea). Con el lote,
+      // es 1 sola llamada sin importar cuántas transacciones traiga.
+      const itemsRaw = Array.isArray(input.items) ? input.items : [];
+      if (itemsRaw.length === 0) {
+        return { ok: false, message: "No se recibió ninguna transacción en 'items' para categorizar en lote." };
       }
-      if (categorias.length > 1) {
-        return {
-          ok: false,
-          message: `Hay varias categorías parecidas a "${nombreCategoria}" (${categorias.map((c) => c.nombre).join(", ")}). Pídele al usuario que aclare cuál.`,
-        };
-      }
+      // Tope defensivo — evita que una lista descontrolada (o un límite mal
+      // pasado a revisar_gastos_sin_categorizar) genere 100+ updates/RPCs
+      // seguidos en una sola llamada de tool.
+      const LIMITE_LOTE = 60;
+      const items = itemsRaw.slice(0, LIMITE_LOTE) as Array<Record<string, unknown>>;
 
-      let query = supabase
-        .from("transactions")
-        .select("id, description_raw, amount, fecha, entity_id, matched_pattern_id")
-        .eq("owner_id", ownerId)
-        .ilike("description_raw", `%${descripcion}%`)
-        .order("fecha", { ascending: false })
-        .limit(5);
-      // revisar_gastos_sin_categorizar SIEMPRE manda el monto en positivo
-      // (Math.abs), aunque en la base de datos un ingreso/depósito se
-      // guarda en negativo (convención: positivo = gasto que sale, negativo
-      // = dinero que entra). Si comparábamos solo contra el positivo, una
-      // transacción de ingreso real (ej. INTRST PYMNT) nunca hacía match —
-      // "no encontrada" aunque la herramienta la acabara de listar como
-      // pendiente. Aceptamos cualquiera de los dos signos.
-      if (monto !== null) query = query.or(`amount.eq.${Math.abs(monto)},amount.eq.${-Math.abs(monto)}`);
-      if (fecha !== null) query = query.eq("fecha", fecha);
-
-      const { data: transacciones, error: findError } = await query;
-      if (findError) return { ok: false, message: `No se pudo buscar la transacción: ${findError.message}` };
-      if (!transacciones || transacciones.length === 0) {
-        // Antes de rendirse, busca solo por descripción (sin monto/fecha)
-        // para que VICTOR vea qué hay de verdad y pueda diagnosticar en vez
-        // de quedarse en un "no encontrada" sin más contexto.
-        const { data: cercanas } = await supabase
-          .from("transactions")
-          .select("description_raw, amount, fecha")
-          .eq("owner_id", ownerId)
-          .ilike("description_raw", `%${descripcion}%`)
-          .order("fecha", { ascending: false })
-          .limit(5);
-        const pista = cercanas && cercanas.length > 0
-          ? ` Lo más parecido que sí existe: ${cercanas.map((c) => `"${c.description_raw}" $${c.amount} ${c.fecha}`).join(", ")}.`
-          : "";
-        return { ok: false, message: `No encontré ninguna transacción parecida a "${descripcion}"${monto !== null ? ` por $${Math.abs(monto)}` : ""}${fecha !== null ? ` en ${fecha}` : ""}.${pista} Pregúntale al usuario el nombre exacto como aparece en su banco.` };
-      }
-      if (transacciones.length > 1) {
-        // Pasa seguido con gastos recurrentes idénticos (mismo comercio,
-        // mismo monto, cada mes/semana) — el monto solo no basta para
-        // distinguirlas. Si todavía no se mandó fecha, pídela explícitamente
-        // en vez de solo repetir "aclara cuál es".
-        return {
-          ok: false,
-          message: fecha === null
-            ? `Hay ${transacciones.length} transacciones idénticas de "${descripcion}"` +
-              `${monto !== null ? ` por $${Math.abs(monto)}` : ""} en fechas distintas ` +
-              `(${transacciones.map((t) => t.fecha).join(", ")}). Vuelve a llamar esta herramienta mandando el ` +
-              `campo "fecha" exacto de cuál de esas quieres categorizar.`
-            : `Hay ${transacciones.length} transacciones que coinciden con "${descripcion}"` +
-              `${monto !== null ? ` por $${Math.abs(monto)}` : ""} en ${fecha}. Pídele al usuario más detalle para distinguirlas.`,
-        };
+      const resultados: { descripcion: string; ok: boolean; message: string }[] = [];
+      for (const raw of items) {
+        const descripcion = String(raw.descripcion_transaccion ?? "").trim();
+        const nombreCategoria = String(raw.nombre_categoria ?? "").trim();
+        const monto = Number.isFinite(Number(raw.monto)) ? Number(raw.monto) : null;
+        const fecha = typeof raw.fecha === "string" && raw.fecha.trim() ? raw.fecha.trim() : null;
+        // Secuencial, no Promise.all — cada una hace update + RPC de
+        // aprendizaje (record_user_correction), y el volumen de un usuario
+        // Core (decenas, no miles, por lote) hace innecesario el riesgo de
+        // mandar todo en paralelo contra Supabase.
+        const resultado = await categorizarUna(supabase, ownerId, { descripcion, monto, fecha, nombreCategoria });
+        resultados.push({ descripcion: descripcion || "(sin descripción)", ok: resultado.ok, message: resultado.message });
       }
 
-      const transaccion = transacciones[0];
-      const categoria = categorias[0];
+      const exitosas = resultados.filter((r) => r.ok);
+      const fallidas = resultados.filter((r) => !r.ok);
+      const resumenExitosas = exitosas.length > 0
+        ? `Categorizadas (${exitosas.length}): ${exitosas.map((r) => r.descripcion).join(", ")}.`
+        : "";
+      const resumenFallidas = fallidas.length > 0
+        ? `\n\nNo se pudieron categorizar (${fallidas.length}) — resuélvelas una por una o pregúntale al usuario:\n` +
+          fallidas.map((r) => `- "${r.descripcion}": ${r.message}`).join("\n")
+        : "";
+      const nota = itemsRaw.length > LIMITE_LOTE
+        ? `\n\n(Se procesaron solo las primeras ${LIMITE_LOTE} de ${itemsRaw.length} — vuelve a llamar esta herramienta con el resto.)`
+        : "";
 
-      const { error: updateError } = await supabase
-        .from("transactions")
-        .update({
-          hacienda_category_id: categoria.id,
-          is_personal: transaccion.entity_id === null,
-          category_overridden_by_user: true,
-        })
-        .eq("id", transaccion.id);
-
-      if (updateError) return { ok: false, message: `No se pudo categorizar la transacción: ${updateError.message}` };
-
-      await supabase.rpc("record_user_correction", {
-        p_transaction_id: transaccion.id,
-        p_entity_id: transaccion.entity_id,
-        p_raw_description: transaccion.description_raw,
-        p_confirmed_hacienda_category_id: categoria.id,
-        p_matched_pattern_id: transaccion.matched_pattern_id,
-        p_actor_role: "owner",
-      });
-
-      return { ok: true, message: `"${transaccion.description_raw}" ($${Math.abs(Number(transaccion.amount))}) categorizado como "${categoria.nombre}".` };
+      return {
+        ok: exitosas.length > 0,
+        message: `${resumenExitosas}${resumenFallidas}${nota}`.trim() || "No se pudo categorizar ninguna del lote.",
+      };
     }
 
     case "revisar_gastos_sin_categorizar": {
@@ -518,9 +618,10 @@ export async function executeVictorTool(
         message:
           `${pendientes?.length ?? 0} transacción(es) sin categorizar (de ${totalPendientes} en total):\n${lista}\n\n` +
           `Categorías disponibles: ${listaCategorias}.\n` +
-          `Categoriza ahora mismo (llamando a categorizar_transaccion, una vez por transacción) las que ` +
-          `reconozcas con alta confianza por el nombre del comercio — no le preguntes al usuario esas. Para las ` +
-          `que no estés seguro, agrúpalas en un solo mensaje y pregúntale.${avisoTotal}`,
+          `Categoriza ahora mismo, en UNA sola llamada a categorizar_transacciones_lote con todas juntas (NO ` +
+          `una por una con categorizar_transaccion), las que reconozcas con alta confianza por el nombre del ` +
+          `comercio — no le preguntes al usuario esas. Para las que no estés seguro, agrúpalas en un solo ` +
+          `mensaje y pregúntale.${avisoTotal}`,
       };
     }
 
@@ -590,7 +691,7 @@ export async function executeVictorTool(
 
       const { data: transacciones, error: txError } = await supabase
         .from("transactions")
-        .select("amount, fecha, description_raw")
+        .select("amount, fecha, description_raw, tipo_flujo")
         .eq("owner_id", ownerId)
         .is("entity_id", null)
         .eq("hacienda_category_id", categoria.id)
@@ -600,9 +701,12 @@ export async function executeVictorTool(
 
       if (txError) return { ok: false, message: `No se pudo calcular el reporte: ${txError.message}` };
 
-      // Solo gastos reales (amount positivo) — un ingreso/depósito mal
-      // categorizado en esta categoría no debe inflar el total de gasto.
-      const gastos = (transacciones ?? []).filter((t) => Number(t.amount) > 0);
+      // Solo gastos reales (tipo_flujo === "gasto") — un ingreso/depósito o
+      // una transferencia interna (ej. pago de tarjeta) mal categorizados en
+      // esta categoría no deben inflar el total de gasto. Antes esto miraba
+      // solo el signo de amount, que es justo el bug que mezclaba ingresos
+      // en el reporte de gastos.
+      const gastos = (transacciones ?? []).filter((t) => t.tipo_flujo === "gasto");
       const total = gastos.reduce((sum, t) => sum + Number(t.amount), 0);
 
       if (gastos.length === 0) {
