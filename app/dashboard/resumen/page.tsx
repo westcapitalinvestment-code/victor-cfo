@@ -67,14 +67,19 @@ export default async function ResumenPage({
 
   const { data: transacciones } = await supabase
     .from("transactions")
-    .select("amount, hacienda_category_id")
+    .select("amount, hacienda_category_id, tipo_flujo")
     .eq("owner_id", user.id)
     .is("entity_id", null)
     .gte("fecha", inicio)
     .lte("fecha", fin);
 
-  const gastosDelPeriodo = (transacciones ?? []).reduce((sum, t) => sum + (t.amount > 0 ? Number(t.amount) : 0), 0);
-  const ingresosDelPeriodo = (transacciones ?? []).reduce((sum, t) => sum + (t.amount < 0 ? Math.abs(Number(t.amount)) : 0), 0);
+  // tipo_flujo en vez del signo de amount — esto era el bug real: un pago de
+  // tarjeta hecho desde el checking salía como "gasto" aquí Y el mismo pago
+  // salía como "ingreso" del lado de la tarjeta, así que Ingresos mostraba
+  // dinero que nunca fue un ingreso nuevo. tipo_flujo ya excluye esas
+  // transferencias internas. Ver migración 0016_tipo_flujo.sql.
+  const gastosDelPeriodo = (transacciones ?? []).reduce((sum, t) => sum + (t.tipo_flujo === "gasto" ? Number(t.amount) : 0), 0);
+  const ingresosDelPeriodo = (transacciones ?? []).reduce((sum, t) => sum + (t.tipo_flujo === "ingreso" ? Math.abs(Number(t.amount)) : 0), 0);
 
   // Reporte contable básico: gastos del período agrupados por categoría. El
   // agrupado se hace aquí en JS (no en SQL) porque el volumen de un usuario
@@ -88,7 +93,7 @@ export default async function ResumenPage({
 
   const gastoPorCategoria = new Map<string, number>();
   for (const t of transacciones ?? []) {
-    if (Number(t.amount) <= 0) continue; // solo gastos, no depósitos/ingresos
+    if (t.tipo_flujo !== "gasto") continue; // solo gastos reales, no ingresos ni transferencias internas
     const nombre = t.hacienda_category_id ? nombrePorCategoria.get(t.hacienda_category_id) ?? "Sin categorizar" : "Sin categorizar";
     gastoPorCategoria.set(nombre, (gastoPorCategoria.get(nombre) ?? 0) + Number(t.amount));
   }
