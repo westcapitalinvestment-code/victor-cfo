@@ -456,6 +456,30 @@ export async function executeVictorTool(
         ? Math.min(Number(input.limite), 100)
         : 40;
 
+      // Antes solo se traía este lote (hasta `limite`, tope 100) y el
+      // mensaje reportaba nada más `pendientes.length` — si había 142 sin
+      // categorizar y venían con el default de 40, VICTOR veía "40 sin
+      // categorizar", categorizaba esas, y como el mensaje nunca decía que
+      // había 102 más, terminaba diciéndole al usuario "ya está todo" sin
+      // serlo. Ahora se pide también el TOTAL real (count exact, sin traer
+      // las filas) con el mismo filtro, para que VICTOR sepa siempre cuánto
+      // falta de verdad y nunca declare terminado algo que no lo está.
+      const { count: totalPendientes, error: countError } = await supabase
+        .from("transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", ownerId)
+        .is("entity_id", null)
+        .is("hacienda_category_id", null);
+
+      if (countError) return { ok: false, message: `No se pudo contar las transacciones pendientes: ${countError.message}` };
+
+      if (!totalPendientes || totalPendientes === 0) {
+        return {
+          ok: true,
+          message: "No hay transacciones sin categorizar en este momento — todo lo que ha llegado del banco ya tiene categoría.",
+        };
+      }
+
       const { data: pendientes, error } = await supabase
         .from("transactions")
         .select("id, description_raw, amount, fecha")
@@ -466,12 +490,6 @@ export async function executeVictorTool(
         .limit(limite);
 
       if (error) return { ok: false, message: `No se pudo traer las transacciones pendientes: ${error.message}` };
-      if (!pendientes || pendientes.length === 0) {
-        return {
-          ok: true,
-          message: "No hay transacciones sin categorizar en este momento — todo lo que ha llegado del banco ya tiene categoría.",
-        };
-      }
 
       const { data: categorias } = await supabase
         .from("hacienda_categories")
@@ -480,18 +498,29 @@ export async function executeVictorTool(
         .order("nombre");
       const listaCategorias = (categorias ?? []).map((c) => c.nombre).join(", ");
 
-      const lista = pendientes
+      const lista = (pendientes ?? [])
         .map((t) => `- "${t.description_raw}" · $${Math.abs(Number(t.amount))} · ${t.fecha}`)
         .join("\n");
+
+      const quedanFuera = totalPendientes - (pendientes?.length ?? 0);
+      const avisoTotal =
+        quedanFuera > 0
+          ? `\n\nOJO: en total hay ${totalPendientes} transacciones sin categorizar — esta lista trae solo las ` +
+            `${pendientes?.length ?? 0} más recientes. Después de categorizar estas, vuelve a llamar ` +
+            `revisar_gastos_sin_categorizar para traer las ${quedanFuera} que quedan. NUNCA le digas al usuario ` +
+            `"ya está todo" o "ya no queda nada" mientras el total siga siendo mayor que cero — si no te da ` +
+            `tiempo de terminarlas todas en este turno, dile honestamente cuántas categorizaste y cuántas ` +
+            `quedan pendientes (el número real, no una aproximación).`
+          : "";
 
       return {
         ok: true,
         message:
-          `${pendientes.length} transacción(es) sin categorizar:\n${lista}\n\n` +
+          `${pendientes?.length ?? 0} transacción(es) sin categorizar (de ${totalPendientes} en total):\n${lista}\n\n` +
           `Categorías disponibles: ${listaCategorias}.\n` +
           `Categoriza ahora mismo (llamando a categorizar_transaccion, una vez por transacción) las que ` +
           `reconozcas con alta confianza por el nombre del comercio — no le preguntes al usuario esas. Para las ` +
-          `que no estés seguro, agrúpalas en un solo mensaje y pregúntale.`,
+          `que no estés seguro, agrúpalas en un solo mensaje y pregúntale.${avisoTotal}`,
       };
     }
 
