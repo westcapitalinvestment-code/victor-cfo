@@ -127,13 +127,16 @@ export async function POST(req: NextRequest) {
   // si entra desde otro dispositivo/navegador, donde el conversationId
   // guardado en localStorage no existe — el mismo comportamiento que
   // Gemini/ChatGPT). Solo se crea una nueva si de verdad no tiene ninguna.
-  type ConversationRow = { id: string; messages_json: ChatMessage[]; tokens_usados: number };
+  // updated_at hace falta para el throttle por hora del tope de uso (ver
+  // más abajo) — es el timestamp del último mensaje real de esta
+  // conversación, así sabemos cuándo se puede dejar pasar el próximo.
+  type ConversationRow = { id: string; messages_json: ChatMessage[]; tokens_usados: number; updated_at: string };
   let conversation: ConversationRow | null = null;
 
   if (conversationId) {
     const { data } = await supabase
       .from("conversations")
-      .select("id, messages_json, tokens_usados")
+      .select("id, messages_json, tokens_usados, updated_at")
       .eq("id", conversationId)
       .eq("user_id", user.id)
       .single();
@@ -143,7 +146,7 @@ export async function POST(req: NextRequest) {
   if (!conversation) {
     const { data } = await supabase
       .from("conversations")
-      .select("id, messages_json, tokens_usados")
+      .select("id, messages_json, tokens_usados, updated_at")
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false })
       .limit(1)
@@ -155,7 +158,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
       .from("conversations")
       .insert({ user_id: user.id, messages_json: [], tokens_usados: 0 })
-      .select("id, messages_json, tokens_usados")
+      .select("id, messages_json, tokens_usados, updated_at")
       .single();
     if (error || !data) {
       return NextResponse.json({ error: "No se pudo crear la conversación." }, { status: 500 });
@@ -183,9 +186,36 @@ export async function POST(req: NextRequest) {
   // de caché puesto, un usuario activo normal debería quedar bien por
   // debajo. Si en la práctica algún plan se acerca seguido al tope, hay
   // que subir el número — no es una talla única para siempre.
+  //
+  // En vez de un solo corte binario (nada hasta el día 1), esto escala en
+  // 3 niveles, calcados de cómo se siente usar Claude.ai cuando te acercas
+  // a tu límite — un aviso primero, una pausa corta después, el corte
+  // fuerte solo como último recurso:
+  //   1. aviso            — VICTOR responde normal, pero avisa que vas rápido.
+  //   2. restringido_hora — deja pasar 1 mensaje por hora (no hasta el mes que viene).
+  //   3. tope_mensual      — se acabó de verdad el presupuesto del mes, corte total.
+  //
+  // El umbral de "aviso"/"restringido_hora" no es el límite mensual
+  // completo, sino el límite mensual A RITMO PAREJO hasta hoy (límite ×
+  // día_del_mes / días_del_mes). Esto le da "arrastre" natural: alguien
+  // que casi no habla con VICTOR la primera mitad del mes acumula margen
+  // de sobra para un día pesado más adelante (ej. temporada de planillas),
+  // en vez de perder ese margen cada medianoche como pasaría con un tope
+  // diario fijo sin arrastre.
   const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 300, pro: 600, proplus: 1000 };
+  const SIGUIENTE_PLAN: Record<string, string | null> = { core: "VICTOR Pro", pro: "VICTOR Pro+", proplus: null };
   const anioMesActual = fechaHoyPR().slice(0, 7);
-  let limiteAlcanzado = false;
+  const [anioActualStr, mesActualStr, diaActualStr] = fechaHoyPR().split("-");
+  const diaDelMes = Number(diaActualStr);
+  const diasEnElMes = new Date(Number(anioActualStr), Number(mesActualStr), 0).getDate();
+
+  const planActual = profile?.plan ?? "core";
+  const siguientePlan = SIGUIENTE_PLAN[planActual] ?? null;
+  const notaUpgrade = siguientePlan
+    ? ` Si quieres seguir hablando sin este tope, en Configuración puedes subir a ${siguientePlan}.`
+    : " Si esto te está bloqueando algo urgente, escríbele a soporte.";
+
+  let estadoUso: "normal" | "aviso" | "restringido_hora" | "tope_mensual" = "normal";
   if (!isFounder) {
     const { data: usoMes } = await supabase
       .from("uso_ia_mensual")
@@ -193,25 +223,59 @@ export async function POST(req: NextRequest) {
       .eq("owner_id", user.id)
       .eq("anio_mes", anioMesActual)
       .maybeSingle();
-    const limite = LIMITES_MENSUALES_CENTAVOS[profile?.plan ?? "core"] ?? LIMITES_MENSUALES_CENTAVOS.core;
-    limiteAlcanzado = Number(usoMes?.costo_centavos ?? 0) >= limite;
+    const costoMesHastaAhora = Number(usoMes?.costo_centavos ?? 0);
+    const limiteMensual = LIMITES_MENSUALES_CENTAVOS[planActual] ?? LIMITES_MENSUALES_CENTAVOS.core;
+    const presupuestoHastaHoy = (limiteMensual * diaDelMes) / diasEnElMes;
+
+    if (costoMesHastaAhora >= limiteMensual) {
+      estadoUso = "tope_mensual";
+    } else if (costoMesHastaAhora >= presupuestoHastaHoy) {
+      estadoUso = "restringido_hora";
+    } else if (costoMesHastaAhora >= presupuestoHastaHoy * 0.85) {
+      estadoUso = "aviso";
+    }
   }
 
-  if (limiteAlcanzado) {
-    const mensajeLimite =
-      "Llegaste al límite de uso de este mes para tu plan — es un tope de seguridad para que el costo " +
-      "de VICTOR nunca se dispare sin control. Vuelve a tener acceso completo el día 1 del próximo mes. " +
-      "Si esto te está bloqueando algo urgente, escríbele a soporte.";
-    const updatedMessagesLimite: ChatMessage[] = [
+  // Guarda un mensaje fijo (sin llamar a Claude) y responde — usado por los
+  // niveles 2 y 3 de arriba, que no deben gastar ni un centavo más.
+  async function responderSinLlamarAClaude(mensaje: string) {
+    const updatedMessagesFijo: ChatMessage[] = [
       ...history,
-      { role: "user", content: userMessage },
-      { role: "assistant", content: mensajeLimite },
+      { role: "user", content: userMessage as string },
+      { role: "assistant", content: mensaje },
     ];
     await supabase
       .from("conversations")
-      .update({ messages_json: updatedMessagesLimite, updated_at: new Date().toISOString() })
-      .eq("id", conversation.id);
-    return NextResponse.json({ conversationId: conversation.id, reply: mensajeLimite });
+      .update({ messages_json: updatedMessagesFijo, updated_at: new Date().toISOString() })
+      .eq("id", conversation!.id);
+    return NextResponse.json({ conversationId: conversation!.id, reply: mensaje });
+  }
+
+  if (estadoUso === "tope_mensual") {
+    return responderSinLlamarAClaude(
+      "Llegaste al límite de uso de este mes para tu plan — es un tope de seguridad para que el costo de " +
+        `VICTOR nunca se dispare sin control. Vuelve a tener acceso completo el día 1 del próximo mes.${notaUpgrade}`
+    );
+  }
+
+  if (estadoUso === "restringido_hora") {
+    const ultimoMensajeEn = new Date(conversation.updated_at);
+    const unaHoraDespues = new Date(ultimoMensajeEn.getTime() + 60 * 60 * 1000);
+    const haceMenosDeUnaHora = Date.now() < unaHoraDespues.getTime();
+    if (haceMenosDeUnaHora) {
+      const horaLegible = new Intl.DateTimeFormat("es-PR", {
+        timeZone: "America/Puerto_Rico",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }).format(unaHoraDespues);
+      return responderSinLlamarAClaude(
+        `Vas más rápido de lo normal con VICTOR hoy — para cuidar el uso, te dejo seguir a partir de las ` +
+          `${horaLegible}. Mientras tanto puedes seguir usando el resto de la app sin problema.${notaUpgrade}`
+      );
+    }
+    // Pasó más de una hora desde el último mensaje — se deja pasar este UNO
+    // (sigue el flujo normal de abajo, incluida la llamada real a Claude).
   }
 
   // Metas reales en este momento (no la copia guardada en victor_memory) —
@@ -465,6 +529,14 @@ export async function POST(req: NextRequest) {
     assistantText =
       "Se me enredó el pensamiento contestando eso — pasa cuando la pregunta pide comparar varios " +
       "números a la vez. ¿Me lo repites, o lo partimos en partes más chiquitas?";
+  }
+
+  // Nivel 1 de la escalación de uso (ver arriba) — VICTOR ya contestó
+  // normal, solo se le pega un aviso corto al final. No se manda por
+  // separado ni se le pide a Claude que lo redacte (costaría otra llamada);
+  // es texto fijo, igual que los mensajes de los niveles 2 y 3.
+  if (estadoUso === "aviso") {
+    assistantText += `\n\n_Vas usando bastante a VICTOR hoy — todavía tienes margen, pero hay un tope mensual y te estás acercando.${notaUpgrade}_`;
   }
 
   // Marca que VICTOR ya saludó hoy, para que autoOpenSaludoDiario (en el
