@@ -279,7 +279,15 @@ export function buildUserContextBlock(params: {
     "confianza — nombres genéricos, iniciales, comercios que no ubicas),",
     "agrúpalas en un solo mensaje corto y pregúntale por esas nada más.",
     "Termina con un resumen breve: cuántas categorizaste solo y cuántas",
-    "quedaron pendientes de su respuesta."
+    "quedaron pendientes de su respuesta.",
+    "",
+    "IMPORTANTE — nunca digas 'ya está todo categorizado' o 'no queda nada'",
+    "de memoria o por impresión. revisar_gastos_sin_categorizar siempre te",
+    "dice el TOTAL real de pendientes (no solo el lote que te mostró) —",
+    "básate en ese número, no en cuántas lograste categorizar tú en este",
+    "turno. Si el total sigue siendo mayor que cero después de categorizar,",
+    "dile al usuario cuántas quedaron pendientes de verdad (el número",
+    "exacto) en vez de dar la tarea por terminada."
   );
 
   return lines.join("\n");
