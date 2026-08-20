@@ -1,5 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { buscarEstrategia } from "@/lib/victor/estrategias-financieras";
+import { buscarConocimiento } from "@/lib/victor/conocimiento-financiero";
 
 // Las "manos" de VICTOR — acciones reales que puede ejecutar dentro de la
 // app, no solo hablar de ellas. Alcance Core únicamente por ahora (metas,
@@ -109,13 +111,17 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "'Categorías disponibles', nunca inventes un nombre parecido que no esté en esa lista. Si hay varias " +
       "transacciones con la misma descripción, usa el monto Y la fecha (si los tienes) para distinguir cuál " +
       "es — esto pasa seguido con gastos recurrentes idénticos (mismo comercio, mismo monto, cada mes). Si " +
-      "aun con monto y fecha sigue habiendo ambigüedad, no adivines — pregúntale cuál es.",
+      "aun con monto y fecha sigue habiendo ambigüedad (dos transacciones REALMENTE idénticas el mismo día — " +
+      "ej. dos abonos de 'Ahorro Directo' por el mismo monto el mismo día, que son movimientos distintos y " +
+      "reales, no un duplicado de datos), usa el campo transaction_id si lo tienes de " +
+      "revisar_gastos_sin_categorizar — resuelve sin ambigüedad. Si no lo tienes, no adivines — pregúntale cuál es.",
     input_schema: {
       type: "object",
       properties: {
         descripcion_transaccion: { type: "string", description: "Parte del nombre/descripción del comercio, tal como aparece en el gasto (ej. 'Uber', 'Amazon', 'Pueblo')." },
         monto: { type: "number", description: "Monto exacto de la transacción, si el usuario lo mencionó — ayuda a distinguir cuál transacción es cuando hay varias parecidas." },
         fecha: { type: "string", description: "Fecha exacta de la transacción en formato YYYY-MM-DD, si la tienes — imprescindible para distinguir gastos recurrentes idénticos (mismo comercio, mismo monto, distinta fecha)." },
+        transaction_id: { type: "string", description: "El id exacto de la transacción, SOLO si lo tienes porque salió en el listado de revisar_gastos_sin_categorizar — úsalo para transacciones que son genuinamente idénticas (mismo comercio, monto y fecha, ej. dos transferencias del mismo día) y que por eso no se pueden distinguir de otra forma. Nunca lo muestres al usuario en el chat, es solo para uso interno tuyo." },
         nombre_categoria: { type: "string", description: "Nombre de la categoría a asignar, en español — debe ser EXACTAMENTE uno de los nombres reales de la lista de categorías (ej. 'Transporte y gasolina', 'Supermercado', 'Restaurantes y comida rápida', 'Ropa y accesorios'), nunca uno inventado." },
       },
       required: ["descripcion_transaccion", "nombre_categoria"],
@@ -128,9 +134,11 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "que estés categorizando en lote después de revisar_gastos_sin_categorizar, con TODAS las que reconozcas " +
       "con alta confianza en una sola llamada a esta herramienta, nunca una por una con categorizar_transaccion. " +
       "Cada elemento de 'items' sigue las mismas reglas que categorizar_transaccion (descripción + categoría " +
-      "exacta de la lista, monto y fecha cuando los tengas para distinguir gastos recurrentes idénticos). El " +
-      "resultado te dice cuáles se categorizaron y cuáles no (con la razón) — las que fallaron por ambigüedad " +
-      "pregúntaselas al usuario agrupadas en un mensaje, no las reintentes adivinando.",
+      "exacta de la lista, monto y fecha cuando los tengas, y transaction_id para las que sean genuinamente " +
+      "idénticas entre sí — mismo comercio, monto y fecha, como dos transferencias del mismo día — donde " +
+      "monto/fecha no bastan para distinguirlas). El resultado te dice cuáles se categorizaron y cuáles no " +
+      "(con la razón) — las que fallaron por ambigüedad y no tenías su id, pregúntaselas al usuario agrupadas " +
+      "en un mensaje, no las reintentes adivinando.",
     input_schema: {
       type: "object",
       properties: {
@@ -143,6 +151,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
               descripcion_transaccion: { type: "string", description: "Parte del nombre/descripción del comercio, tal como aparece en el gasto." },
               monto: { type: "number", description: "Monto exacto de la transacción, si lo tienes." },
               fecha: { type: "string", description: "Fecha exacta en formato YYYY-MM-DD, si la tienes." },
+              transaction_id: { type: "string", description: "El id exacto de la transacción, si lo tienes de revisar_gastos_sin_categorizar — imprescindible cuando hay transacciones genuinamente idénticas (mismo comercio, monto y fecha) para categorizar cada una por separado sin ambigüedad. Nunca lo muestres al usuario." },
               nombre_categoria: { type: "string", description: "Nombre EXACTO de la categoría a asignar, de la lista real de categorías disponibles." },
             },
             required: ["descripcion_transaccion", "nombre_categoria"],
@@ -158,11 +167,15 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "Trae la lista real de transacciones bancarias del usuario que TODAVÍA no tienen categoría — la " +
       "'bandeja pendiente' de verdad, sacada directo de su banco conectado por Plaid. NO le pidas al usuario " +
       "que te copie y pegue lo que ve en pantalla — usa esta herramienta. Úsala cuando te pida revisar, " +
-      "categorizar, o clasificar sus gastos, o pregunte qué le falta categorizar. Después de ver la lista, " +
-      "categoriza tú mismo, en UNA sola llamada a categorizar_transacciones_lote con todas juntas, las que " +
-      "reconozcas con alta confianza por el nombre del comercio, sin preguntar — nunca uses " +
-      "categorizar_transaccion una por una para esto. Solo pregúntale al usuario, agrupadas en un mensaje, " +
-      "las que de verdad sean ambiguas.",
+      "categorizar, o clasificar sus gastos, o pregunte qué le falta categorizar. Cada transacción del listado " +
+      "trae su id real entre corchetes al inicio — guárdalo internamente (nunca lo repitas al usuario) y " +
+      "mándalo como transaction_id en categorizar_transacciones_lote para las que sean genuinamente idénticas " +
+      "entre sí (mismo comercio, monto y fecha — ej. dos transferencias del mismo día a la misma cuenta, que " +
+      "son movimientos reales distintos, no un error de datos) — sin el id, esas nunca se pueden distinguir " +
+      "por texto. Después de ver la lista, categoriza tú mismo, en UNA sola llamada a " +
+      "categorizar_transacciones_lote con todas juntas, las que reconozcas con alta confianza por el nombre " +
+      "del comercio, sin preguntar — nunca uses categorizar_transaccion una por una para esto. Solo " +
+      "pregúntale al usuario, agrupadas en un mensaje, las que de verdad sean ambiguas.",
     input_schema: {
       type: "object",
       properties: {
@@ -210,6 +223,43 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "consultar_estrategia_financiera",
+    description:
+      "Trae el desarrollo COMPLETO de una de las 23 estrategias financieras avanzadas del catálogo de " +
+      "VICTOR (crédito, real estate, decreto Ley 60, negocio, ingreso pasivo) — con las 3 preguntas clave, " +
+      "cuándo sí/no aplica, riesgos reales, y el primer paso accionable. El catálogo completo de nombres " +
+      "está en tu system prompt (sección CATÁLOGO DE ESTRATEGIAS) — úsala SIEMPRE que el usuario mencione " +
+      "una de esas estrategias (de un reel, podcast, curso, o de memoria), siguiendo el PROTOCOLO DE " +
+      "ACTIVACIÓN. Nunca desarrolles una estrategia de memoria o inventada — tráela primero con esta " +
+      "herramienta.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tema: { type: "string", description: "El número (ej. '3') o el nombre/parte del nombre de la estrategia, tal como aparece en el catálogo (ej. 'BRRRR', 'house hacking', 'HELOC')." },
+      },
+      required: ["tema"],
+    },
+  },
+  {
+    name: "consultar_conocimiento_financiero",
+    description:
+      "Trae la explicación completa (con ejemplos y números reales) de uno de los 15 conceptos financieros " +
+      "del día a día de VICTOR (presupuesto, tarjetas de crédito, inflación, amortización, etc.), o los " +
+      "principios aplicados de uno de los 3 libros que VICTOR usa en conversación (Págate Primero / El " +
+      "Hombre Más Rico de Babilonia, La Psicología del Dinero de Housel, El Inversor Inteligente de Graham). " +
+      "La lista completa de temas disponibles está en tu system prompt. Úsala cuando la REGLA DE ORO de la " +
+      "Academia de VICTOR aplique — el usuario conecta un producto, hace una pregunta, o detectas un patrón " +
+      "que merece explicarse — o cuando quieras responder desde uno de los libros. Nunca inventes números de " +
+      "ejemplo ni cites un libro de memoria — tráelo primero con esta herramienta.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tema: { type: "string", description: "El nombre del concepto o del libro/autor, tal como aparece en la lista (ej. 'inflación', 'credit score', 'Housel', 'la psicología del dinero')." },
+      },
+      required: ["tema"],
+    },
+  },
+  {
     name: "guardar_perfil_onboarding",
     description:
       "Guarda las respuestas del onboarding conversacional de la Capa 2 (apodo, género, edad, situación, " +
@@ -244,11 +294,11 @@ type ToolResult = { ok: boolean; message: string };
 async function categorizarUna(
   supabase: ReturnType<typeof createClient>,
   ownerId: string,
-  item: { descripcion: string; monto: number | null; fecha: string | null; nombreCategoria: string }
+  item: { descripcion: string; monto: number | null; fecha: string | null; nombreCategoria: string; transactionId?: string | null }
 ): Promise<ToolResult> {
-  const { descripcion, monto, fecha, nombreCategoria } = item;
-  if (!descripcion || !nombreCategoria) {
-    return { ok: false, message: "Faltan datos (descripción de la transacción y nombre de categoría) para categorizar." };
+  const { descripcion, monto, fecha, nombreCategoria, transactionId } = item;
+  if ((!descripcion && !transactionId) || !nombreCategoria) {
+    return { ok: false, message: "Faltan datos (descripción o id de la transacción, y nombre de categoría) para categorizar." };
   }
 
   const { data: categorias, error: catError } = await supabase
@@ -268,26 +318,55 @@ async function categorizarUna(
     };
   }
 
-  let query = supabase
-    .from("transactions")
-    .select("id, description_raw, amount, fecha, entity_id, matched_pattern_id")
-    .eq("owner_id", ownerId)
-    .ilike("description_raw", `%${descripcion}%`)
-    .order("fecha", { ascending: false })
-    .limit(5);
-  // revisar_gastos_sin_categorizar SIEMPRE manda el monto en positivo
-  // (Math.abs), aunque en la base de datos un ingreso/depósito se
-  // guarda en negativo (convención: positivo = gasto que sale, negativo
-  // = dinero que entra). Si comparábamos solo contra el positivo, una
-  // transacción de ingreso real (ej. INTRST PYMNT) nunca hacía match —
-  // "no encontrada" aunque la herramienta la acabara de listar como
-  // pendiente. Aceptamos cualquiera de los dos signos.
-  if (monto !== null) query = query.or(`amount.eq.${Math.abs(monto)},amount.eq.${-Math.abs(monto)}`);
-  if (fecha !== null) query = query.eq("fecha", fecha);
+  // Si VICTOR trae el id exacto (lo dio revisar_gastos_sin_categorizar), lo
+  // usamos directo — resuelve sin ambigüedad el caso de transacciones
+  // idénticas (mismo comercio, mismo monto, mismo día — ej. dos abonos de
+  // "Ahorro Directo" el mismo día) que por descripción+monto+fecha nunca se
+  // pueden distinguir entre sí, porque de verdad son indistinguibles por
+  // esos datos. Sin id, seguimos con la búsqueda difusa de siempre.
+  let transacciones: { id: string; description_raw: string; amount: number; fecha: string; entity_id: string | null; matched_pattern_id: string | null }[] | null = null;
+  let findError: { message: string } | null = null;
 
-  const { data: transacciones, error: findError } = await query;
+  if (transactionId) {
+    const resultado = await supabase
+      .from("transactions")
+      .select("id, description_raw, amount, fecha, entity_id, matched_pattern_id")
+      .eq("owner_id", ownerId)
+      .eq("id", transactionId)
+      .limit(1);
+    transacciones = resultado.data;
+    findError = resultado.error;
+  } else {
+    let query = supabase
+      .from("transactions")
+      .select("id, description_raw, amount, fecha, entity_id, matched_pattern_id")
+      .eq("owner_id", ownerId)
+      .ilike("description_raw", `%${descripcion}%`)
+      .order("fecha", { ascending: false })
+      .limit(5);
+    // revisar_gastos_sin_categorizar SIEMPRE manda el monto en positivo
+    // (Math.abs), aunque en la base de datos un ingreso/depósito se
+    // guarda en negativo (convención: positivo = gasto que sale, negativo
+    // = dinero que entra). Si comparábamos solo contra el positivo, una
+    // transacción de ingreso real (ej. INTRST PYMNT) nunca hacía match —
+    // "no encontrada" aunque la herramienta la acabara de listar como
+    // pendiente. Aceptamos cualquiera de los dos signos.
+    if (monto !== null) query = query.or(`amount.eq.${Math.abs(monto)},amount.eq.${-Math.abs(monto)}`);
+    if (fecha !== null) query = query.eq("fecha", fecha);
+    const resultado = await query;
+    transacciones = resultado.data;
+    findError = resultado.error;
+  }
+
   if (findError) return { ok: false, message: `No se pudo buscar la transacción: ${findError.message}` };
   if (!transacciones || transacciones.length === 0) {
+    if (transactionId) {
+      // El id vino de revisar_gastos_sin_categorizar en algún momento
+      // anterior — si ya no existe (o cambió de dueño), lo más seguro es
+      // que ya se categorizó en otra llamada de este mismo lote o en
+      // paralelo. No hace falta la búsqueda difusa aquí.
+      return { ok: false, message: `No encontré ninguna transacción con id "${transactionId}" — puede que ya se haya categorizado antes. Vuelve a llamar revisar_gastos_sin_categorizar si quieres confirmar qué queda pendiente de verdad.` };
+    }
     // Antes de rendirse, busca solo por descripción (sin monto/fecha)
     // para que VICTOR vea qué hay de verdad y pueda diagnosticar en vez
     // de quedarse en un "no encontrada" sin más contexto.
@@ -316,7 +395,10 @@ async function categorizarUna(
           `(${transacciones.map((t) => t.fecha).join(", ")}). Vuelve a llamar esta herramienta mandando el ` +
           `campo "fecha" exacto de cuál de esas quieres categorizar.`
         : `Hay ${transacciones.length} transacciones que coinciden con "${descripcion}"` +
-          `${monto !== null ? ` por $${Math.abs(monto)}` : ""} en ${fecha}. Pídele al usuario más detalle para distinguirlas.`,
+          `${monto !== null ? ` por $${Math.abs(monto)}` : ""} en ${fecha} — son genuinamente idénticas, no ` +
+          `un error de datos. Si tienes el transaction_id de cada una (de revisar_gastos_sin_categorizar), ` +
+          `vuelve a llamar esta herramienta una vez por cada id para categorizarlas por separado. Si no lo ` +
+          `tienes, pídele al usuario más detalle para distinguirlas.`,
     };
   }
 
@@ -497,7 +579,8 @@ export async function executeVictorTool(
       const nombreCategoria = String(input.nombre_categoria ?? "").trim();
       const monto = Number.isFinite(Number(input.monto)) ? Number(input.monto) : null;
       const fecha = typeof input.fecha === "string" && input.fecha.trim() ? input.fecha.trim() : null;
-      return categorizarUna(supabase, ownerId, { descripcion, monto, fecha, nombreCategoria });
+      const transactionId = typeof input.transaction_id === "string" && input.transaction_id.trim() ? input.transaction_id.trim() : null;
+      return categorizarUna(supabase, ownerId, { descripcion, monto, fecha, nombreCategoria, transactionId });
     }
 
     case "categorizar_transacciones_lote": {
@@ -524,11 +607,12 @@ export async function executeVictorTool(
         const nombreCategoria = String(raw.nombre_categoria ?? "").trim();
         const monto = Number.isFinite(Number(raw.monto)) ? Number(raw.monto) : null;
         const fecha = typeof raw.fecha === "string" && raw.fecha.trim() ? raw.fecha.trim() : null;
+        const transactionId = typeof raw.transaction_id === "string" && raw.transaction_id.trim() ? raw.transaction_id.trim() : null;
         // Secuencial, no Promise.all — cada una hace update + RPC de
         // aprendizaje (record_user_correction), y el volumen de un usuario
         // Core (decenas, no miles, por lote) hace innecesario el riesgo de
         // mandar todo en paralelo contra Supabase.
-        const resultado = await categorizarUna(supabase, ownerId, { descripcion, monto, fecha, nombreCategoria });
+        const resultado = await categorizarUna(supabase, ownerId, { descripcion, monto, fecha, nombreCategoria, transactionId });
         resultados.push({ descripcion: descripcion || "(sin descripción)", ok: resultado.ok, message: resultado.message });
       }
 
@@ -598,8 +682,12 @@ export async function executeVictorTool(
         .order("nombre");
       const listaCategorias = (categorias ?? []).map((c) => c.nombre).join(", ");
 
+      // El [id] al inicio es para uso interno tuyo (transaction_id en
+      // categorizar_transacciones_lote), nunca lo repitas en el chat al
+      // usuario — es lo que te deja categorizar transacciones genuinamente
+      // idénticas (mismo comercio, monto y fecha) sin ambigüedad.
       const lista = (pendientes ?? [])
-        .map((t) => `- "${t.description_raw}" · $${Math.abs(Number(t.amount))} · ${t.fecha}`)
+        .map((t) => `- [${t.id}] "${t.description_raw}" · $${Math.abs(Number(t.amount))} · ${t.fecha}`)
         .join("\n");
 
       const quedanFuera = totalPendientes - (pendientes?.length ?? 0);
@@ -725,6 +813,46 @@ export async function executeVictorTool(
           `Gasto total en "${categoria.nombre}" entre ${desde} y ${hasta}: $${total.toFixed(2)} ` +
           `(${gastos.length} transacción${gastos.length > 1 ? "es" : ""}).\n${detalle}${nota}`,
       };
+    }
+
+    case "consultar_estrategia_financiera": {
+      const tema = String(input.tema ?? "").trim();
+      if (!tema) return { ok: false, message: "Falta el tema/nombre/número de la estrategia a consultar." };
+
+      const resultado = buscarEstrategia(tema);
+      if (resultado === null) {
+        return {
+          ok: false,
+          message: `No encontré ninguna estrategia parecida a "${tema}" en el catálogo. Revisa la lista de nombres en tu system prompt (sección CATÁLOGO DE ESTRATEGIAS) y prueba con el nombre exacto o el número.`,
+        };
+      }
+      if (Array.isArray(resultado)) {
+        return {
+          ok: false,
+          message: `Hay varias estrategias parecidas a "${tema}" (${resultado.map((e) => `${e.numero}. ${e.titulo}`).join(", ")}). Usa el número exacto para traer la que corresponde.`,
+        };
+      }
+      return { ok: true, message: resultado.texto };
+    }
+
+    case "consultar_conocimiento_financiero": {
+      const tema = String(input.tema ?? "").trim();
+      if (!tema) return { ok: false, message: "Falta el tema/concepto/libro a consultar." };
+
+      const resultado = buscarConocimiento(tema);
+      if (resultado === null) {
+        return {
+          ok: false,
+          message: `No encontré ningún concepto o libro parecido a "${tema}". Revisa la lista de temas disponibles en tu system prompt (Academia de VICTOR / Referencias) y prueba con el nombre exacto.`,
+        };
+      }
+      if (Array.isArray(resultado)) {
+        return {
+          ok: false,
+          message: `Hay varios temas parecidos a "${tema}" (${resultado.map((c) => c.titulo).join(", ")}). Usa el nombre exacto para traer el que corresponde.`,
+        };
+      }
+      return { ok: true, message: resultado.texto };
     }
 
     case "guardar_perfil_onboarding": {
