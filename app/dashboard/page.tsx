@@ -3,8 +3,23 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Sensitive, PrivacyToggle } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
-import { saludoPorHora } from "@/lib/hora-pr";
+import { saludoPorHora, fechaHoyPR } from "@/lib/hora-pr";
 import GastosPendientesCard from "./gastos-pendientes-card";
+
+// Primer día del mes SIGUIENTE a "YYYY-MM" — mismo helper que en
+// /dashboard/gastos/page.tsx, copiado aquí para no crear una dependencia
+// cruzada entre las dos páginas por un par de líneas.
+function primerDiaDelMesSiguiente(mesYYYYMM: string): string {
+  const [anio, mes] = mesYYYYMM.split("-").map(Number);
+  return new Date(anio, mes, 1).toISOString().slice(0, 10);
+}
+
+function etiquetaMes(mesYYYYMM: string): string {
+  const [anio, mes] = mesYYYYMM.split("-").map(Number);
+  const fecha = new Date(anio, mes - 1, 1);
+  const texto = new Intl.DateTimeFormat("es-PR", { month: "short", year: "numeric" }).format(fecha);
+  return texto.charAt(0).toUpperCase() + texto.slice(1).replace(".", "");
+}
 
 // Pantalla "Inicio" real — vista Personal, calcada de
 // VICTOR — Dashboard Core.html (id="inicio-personal"). Es la base de Core:
@@ -15,7 +30,7 @@ import GastosPendientesCard from "./gastos-pendientes-card";
 // reales a Supabase. Donde todavía no hay datos (Plaid sin conectar,
 // ninguna meta creada), se muestra un estado vacío honesto en vez de
 // inventar cifras.
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: { mes?: string } }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -35,16 +50,49 @@ export default async function DashboardPage() {
   const hoy = new Date();
   const fechaLbl = hoy.toLocaleDateString("es-PR", { weekday: "long", day: "numeric", month: "long" });
 
-  // Gastos del mes — transactions personales (entity_id null) del mes en curso.
-  // Convención: amount positivo = dinero que sale (gasto). Sin Plaid conectado
-  // todavía, esto da 0 filas — resultado real: $0.00, no un número inventado.
-  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+  // Ingresos/Gastos del mes ahora tienen su propio selector de mes en
+  // pantalla (igual que en /dashboard/gastos) — antes esto era siempre
+  // "el mes en curso" a fuego, sin forma de ver "cuánto gasté en julio"
+  // desde el Inicio sin ir a la pestaña Gastos. Ahorrado/Deuda a propósito
+  // NO tienen este selector: son el balance ACTUAL de la cuenta en Plaid
+  // ("cuánto tienes/debes hoy"), no algo con historial por transacción —
+  // Plaid no manda "cuánto tenías ahorrado en marzo", así que ponerles el
+  // mismo selector mostraría el mismo número de hoy sin importar el mes
+  // elegido, que confunde más de lo que ayuda.
+  const mesActualStr = fechaHoyPR().slice(0, 7);
+  const mesSeleccionado = searchParams.mes ?? mesActualStr;
+  const inicioMesSel = `${mesSeleccionado}-01`;
+  const finMesSel = primerDiaDelMesSiguiente(mesSeleccionado);
+
+  // Gastos/Ingresos del mes seleccionado — transactions personales
+  // (entity_id null) dentro del rango exacto del mes, no solo "desde el
+  // día 1 en adelante" como antes (eso solo servía para "el mes en
+  // curso"; un mes pasado necesita también un límite superior).
+  // Convención: amount positivo = dinero que sale (gasto). Sin Plaid
+  // conectado todavía, esto da 0 filas — resultado real: $0.00, no un
+  // número inventado.
   const { data: transacciones } = await supabase
     .from("transactions")
     .select("amount, tipo_flujo")
     .eq("owner_id", user.id)
     .is("entity_id", null)
-    .gte("fecha", inicioMes);
+    .gte("fecha", inicioMesSel)
+    .lt("fecha", finMesSel);
+
+  // Meses con transacciones reales (más el mes actual, aunque todavía no
+  // tenga ninguna) para pintar como pills — mismo patrón que
+  // mesesDisponibles en /dashboard/gastos. Query aparte y liviana (solo la
+  // columna fecha) porque la de arriba ya viene acotada a un solo mes.
+  const { data: fechasTransacciones } = await supabase
+    .from("transactions")
+    .select("fecha")
+    .eq("owner_id", user.id)
+    .is("entity_id", null)
+    .order("fecha", { ascending: false })
+    .limit(500);
+  const mesesDisponibles = Array.from(new Set([mesActualStr, ...(fechasTransacciones ?? []).map((t) => t.fecha.slice(0, 7))]))
+    .sort()
+    .slice(-12);
 
   // tipo_flujo === "gasto" en vez de amount > 0 — un pago de tarjeta hecho
   // desde esta cuenta es "transferencia" (no gasto nuevo), y en cuentas de
@@ -241,6 +289,24 @@ export default async function DashboardPage() {
         categorias={categorias ?? []}
       />
 
+      {/* Selector de mes — solo afecta Ingresos y Gastos, ver comentario
+      junto a mesActualStr/mesSeleccionado arriba. */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs text-muted">Ingresos y Gastos de:</span>
+        {mesesDisponibles.map((m) => (
+          <Link
+            key={m}
+            href={m === mesActualStr ? "/dashboard" : `/dashboard?mes=${m}`}
+            className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
+              mesSeleccionado === m ? "border-teal text-teal" : "text-muted"
+            }`}
+            style={{ borderColor: mesSeleccionado === m ? undefined : "var(--border)" }}
+          >
+            {etiquetaMes(m)}
+          </Link>
+        ))}
+      </div>
+
       {/* MÉTRICAS */}
       <div className="vc-mets">
         <div className="vc-met">
@@ -248,14 +314,14 @@ export default async function DashboardPage() {
           <p className={`vc-mv ${bancoConectado && ingresosDelMes > 0 ? "!text-grn" : ""}`}>
             <Sensitive>{formatMoney(ingresosDelMes)}</Sensitive>
           </p>
-          <p className="mt-0.5 text-[10px] text-muted">este mes</p>
+          <p className="mt-0.5 text-[10px] text-muted">{mesSeleccionado === mesActualStr ? "este mes" : etiquetaMes(mesSeleccionado)}</p>
         </div>
         <div className="vc-met">
           <p className="vc-ml">Gastos</p>
           <p className="vc-mv">
             <Sensitive>{formatMoney(gastosDelMes)}</Sensitive>
           </p>
-          <p className="mt-0.5 text-[10px] text-muted">este mes</p>
+          <p className="mt-0.5 text-[10px] text-muted">{mesSeleccionado === mesActualStr ? "este mes" : etiquetaMes(mesSeleccionado)}</p>
         </div>
         <div className="vc-met">
           <p className="vc-ml">Ahorrado</p>
