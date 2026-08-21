@@ -4,6 +4,47 @@ import { buscarEstrategia } from "@/lib/victor/estrategias-financieras";
 import { buscarConocimiento } from "@/lib/victor/conocimiento-financiero";
 import { direccionCategoriaValida } from "@/lib/direccion-categoria";
 
+// El texto real del banco (description_raw) casi nunca coincide palabra
+// por palabra con cómo el usuario describe una transacción en el chat —
+// ej. el usuario dice "la ATH Móvil de $100 de Martín Mercado" pero el
+// banco guarda "TRANF ATHM MARTIN MERCADO 8610 ON 08/15/26" (sin la
+// palabra "Móvil", sin acentos, sin "de"). Antes categorizarUna armaba UN
+// solo ILIKE con la frase completa tal cual venía — si el modelo pasaba
+// más de una palabra que no calzara exacto en el texto del banco, la
+// búsqueda entera fallaba con "no encontrada" aunque la transacción
+// correcta sí estuviera ahí. Esta función parte la frase en palabras
+// sueltas, bota conectores/palabras de una letra y tokens que son solo
+// números (el monto ya se compara aparte con `monto`), y esas palabras se
+// usan luego con OR (cualquiera que aparezca) en vez de exigir la frase
+// completa — así "Martín Mercado" sigue encontrando la transacción aunque
+// "ATH Móvil" no aparezca literalmente en el texto del banco.
+const CONECTORES_BUSQUEDA = new Set([
+  "de", "del", "la", "el", "los", "las", "un", "una", "unos", "unas",
+  "con", "por", "para", "en", "y", "o", "a", "al",
+]);
+function palabrasClave(descripcion: string): string[] {
+  return Array.from(
+    new Set(
+      descripcion
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "") // quita acentos: "Móvil" → "Movil"
+        .replace(/[^\p{L}\p{N}\s]/gu, " ") // quita $, comas, etc.
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((p) => p.length >= 3 && !CONECTORES_BUSQUEDA.has(p) && !/^\d+$/.test(p))
+    )
+  );
+}
+// Arma el filtro OR de Supabase/PostgREST a partir de las palabras clave;
+// si no queda ninguna palabra útil (frase muy corta o solo conectores),
+// vuelve al comportamiento anterior (la frase completa tal cual) para no
+// dejar la búsqueda sin ningún filtro.
+function filtroDescripcion(descripcion: string): { or?: string; ilikeCompleta?: string } {
+  const palabras = palabrasClave(descripcion);
+  if (palabras.length === 0) return { ilikeCompleta: descripcion };
+  return { or: palabras.map((p) => `description_raw.ilike.%${p}%`).join(",") };
+}
+
 // Las "manos" de VICTOR — acciones reales que puede ejecutar dentro de la
 // app, no solo hablar de ellas. Alcance Core únicamente por ahora (metas,
 // documentos/alertas). Cuando Pro esté listo, se añaden más tools aquí
@@ -338,13 +379,23 @@ async function categorizarUna(
     transacciones = resultado.data;
     findError = resultado.error;
   } else {
+    // Búsqueda por palabras sueltas con OR (ver filtroDescripcion arriba)
+    // en vez de una sola frase completa — así "ATH Móvil de $100 Martín
+    // Mercado" sigue encontrando "TRANF ATHM MARTIN MERCADO..." por las
+    // palabras "Martín"/"Mercado" aunque "ATH Móvil" no aparezca en el
+    // texto del banco. El filtro de monto/fecha se aplica después, en
+    // JS, para no depender de combinar dos .or() de PostgREST a la vez
+    // (descripción OR-de-palabras + monto OR-de-signos), que es frágil.
+    const filtro = filtroDescripcion(descripcion);
     let query = supabase
       .from("transactions")
       .select("id, description_raw, amount, fecha, entity_id, matched_pattern_id, tipo_flujo")
       .eq("owner_id", ownerId)
-      .ilike("description_raw", `%${descripcion}%`)
       .order("fecha", { ascending: false })
-      .limit(5);
+      .limit(30);
+    query = filtro.or ? query.or(filtro.or) : query.ilike("description_raw", `%${filtro.ilikeCompleta}%`);
+    const resultado = await query;
+    findError = resultado.error;
     // revisar_gastos_sin_categorizar SIEMPRE manda el monto en positivo
     // (Math.abs), aunque en la base de datos un ingreso/depósito se
     // guarda en negativo (convención: positivo = gasto que sale, negativo
@@ -352,11 +403,10 @@ async function categorizarUna(
     // transacción de ingreso real (ej. INTRST PYMNT) nunca hacía match —
     // "no encontrada" aunque la herramienta la acabara de listar como
     // pendiente. Aceptamos cualquiera de los dos signos.
-    if (monto !== null) query = query.or(`amount.eq.${Math.abs(monto)},amount.eq.${-Math.abs(monto)}`);
-    if (fecha !== null) query = query.eq("fecha", fecha);
-    const resultado = await query;
-    transacciones = resultado.data;
-    findError = resultado.error;
+    transacciones = (resultado.data ?? [])
+      .filter((t) => monto === null || Math.abs(Number(t.amount)) === Math.abs(monto))
+      .filter((t) => fecha === null || t.fecha === fecha)
+      .slice(0, 5);
   }
 
   if (findError) return { ok: false, message: `No se pudo buscar la transacción: ${findError.message}` };
@@ -368,16 +418,21 @@ async function categorizarUna(
       // paralelo. No hace falta la búsqueda difusa aquí.
       return { ok: false, message: `No encontré ninguna transacción con id "${transactionId}" — puede que ya se haya categorizado antes. Vuelve a llamar revisar_gastos_sin_categorizar si quieres confirmar qué queda pendiente de verdad.` };
     }
-    // Antes de rendirse, busca solo por descripción (sin monto/fecha)
-    // para que VICTOR vea qué hay de verdad y pueda diagnosticar en vez
-    // de quedarse en un "no encontrada" sin más contexto.
-    const { data: cercanas } = await supabase
+    // Antes de rendirse, busca solo por descripción (sin monto/fecha),
+    // con la misma búsqueda por palabras sueltas de arriba, para que
+    // VICTOR vea qué hay de verdad y pueda diagnosticar en vez de
+    // quedarse en un "no encontrada" sin más contexto.
+    const filtroCercanas = filtroDescripcion(descripcion);
+    let queryCercanas = supabase
       .from("transactions")
       .select("description_raw, amount, fecha")
       .eq("owner_id", ownerId)
-      .ilike("description_raw", `%${descripcion}%`)
       .order("fecha", { ascending: false })
       .limit(5);
+    queryCercanas = filtroCercanas.or
+      ? queryCercanas.or(filtroCercanas.or)
+      : queryCercanas.ilike("description_raw", `%${filtroCercanas.ilikeCompleta}%`);
+    const { data: cercanas } = await queryCercanas;
     const pista = cercanas && cercanas.length > 0
       ? ` Lo más parecido que sí existe: ${cercanas.map((c) => `"${c.description_raw}" $${c.amount} ${c.fecha}`).join(", ")}.`
       : "";
