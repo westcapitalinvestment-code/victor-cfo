@@ -5,6 +5,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/sync-all-plaid",
+      "schedule": "50 12 * * *"
+    },
+    {
       "path": "/api/cron/notificaciones-push",
       "schedule": "0 13 * * *"
     }
