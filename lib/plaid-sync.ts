@@ -13,18 +13,17 @@ export type ResultadoSincronizacion = {
   errores: string[];
 };
 
-const CODIGOS_REAUTH_REQUERIDA = [
-  "ITEM_LOGIN_REQUIRED",
-  "ITEM_LOCKED",
-  "INVALID_CREDENTIALS",
-  "INVALID_UPDATED_USERNAME",
-];
-
-function codigoErrorPlaid(err: unknown): string | undefined {
-  const conRespuesta = err as { response?: { data?: { error_code?: string } } };
-  return conRespuesta?.response?.data?.error_code;
-}
-
+// La lógica real de sincronizar Plaid para UN usuario — extraída de lo
+// que antes vivía solo dentro de app/api/plaid/sync-transactions/route.ts
+// para que tanto el botón manual ("Sincronizar transacciones" en Cuentas)
+// como el cron nocturno (app/api/cron/sync-all-plaid) llamen exactamente
+// el mismo código. Nunca dos implementaciones del mismo sync que se
+// puedan desincronizar entre sí — un fix aquí arregla los dos caminos.
+//
+// El `supabase` que recibe puede ser el cliente normal (con sesión de
+// usuario, sujeto a RLS — usado por el botón manual) o el cliente admin
+// (service_role, sin sesión — usado por el cron, que corre para todos
+// los usuarios a la vez). La función no necesita saber cuál es.
 export async function sincronizarPlaidDeUsuario(
   supabase: SupabaseClient,
   ownerId: string,
@@ -70,6 +69,28 @@ export async function sincronizarPlaidDeUsuario(
     try {
       const accessToken = decryptSecret(item.access_token);
 
+      // transactionsSync (más abajo) solo devuelve lo que Plaid YA TIENE en
+      // su propia caché — no le pide al banco datos nuevos en ese momento.
+      // Plaid refresca esa caché en su propio horario interno, que no
+      // necesariamente coincide con cuándo el banco publica una
+      // transacción — por eso el usuario podía ver algo en la app de su
+      // banco que Victor todavía no mostraba, incluso sincronizando a
+      // mano. transactionsRefresh() sí le pide a Plaid ir al banco ahora
+      // mismo; Plaid lo hace en segundo plano (no es instantáneo — puede
+      // tardar de segundos a ~1 minuto según el banco), así que esta
+      // espera corta es solo un "empujón": si el refresh no termina a
+      // tiempo, igual sirve para la PRÓXIMA sincronización (manual o el
+      // cron de la madrugada), porque ya quedó en marcha del lado de Plaid.
+      // No todos los bancos soportan refresh bajo demanda — si Plaid
+      // responde con error (ej. PRODUCT_NOT_READY), se ignora y se sigue
+      // con transactionsSync normal en vez de tumbar toda la sincronización.
+      try {
+        await plaidClient.transactionsRefresh({ access_token: accessToken });
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+      } catch (refreshErr) {
+        console.warn(`transactionsRefresh no disponible para item ${item.id}:`, refreshErr);
+      }
+
       const { data: cuentasDelItem } = await supabase
         .from("plaid_accounts")
         .select("plaid_account_id, es_negocio")
@@ -97,6 +118,10 @@ export async function sincronizarPlaidDeUsuario(
       let huboErrorEnEsteItem = false;
 
       const esDeNegocioYNoEsPro = (accountId: string) => !esPro && negocioPorCuenta.get(accountId) === true;
+      // Respeta lo que el usuario eligió al conectar este banco: año
+      // natural completo, o solo desde el día que lo conectó. Si el Item
+      // es de antes de que existiera esta opción (historial_desde null),
+      // no filtramos nada — se comporta como siempre.
       const pasaHistorial = (t: Transaction) => !item.historial_desde || t.date >= item.historial_desde;
 
       const filasNuevas = added
@@ -148,18 +173,15 @@ export async function sincronizarPlaidDeUsuario(
         } else totalModificadas += filasModificadas.length;
       }
 
+      // Solo avanzamos el cursor si de verdad se guardó todo — si no, la
+      // próxima vez Plaid no vuelve a mandar esas transacciones (las da
+      // por "ya vistas") y se pierden para siempre.
       if (!huboErrorEnEsteItem) {
         await supabase.from("plaid_items").update({ cursor, updated_at: new Date().toISOString() }).eq("id", item.id);
       }
     } catch (err) {
       console.error(`Error sincronizando Plaid (owner ${ownerId}, item ${item.id}):`, err);
-      const codigo = codigoErrorPlaid(err);
-      if (codigo && CODIGOS_REAUTH_REQUERIDA.includes(codigo)) {
-        await supabase.from("plaid_items").update({ status: "reauth_required" }).eq("id", item.id);
-        errores.push(`${item.id}: la conexión con el banco venció, hay que reconectarla (${codigo}).`);
-      } else {
-        errores.push(err instanceof Error ? err.message : "Error desconocido");
-      }
+      errores.push(err instanceof Error ? err.message : "Error desconocido");
     }
   }
 
