@@ -401,8 +401,43 @@ export async function POST(req: NextRequest) {
   // (ver seguro más abajo), incluirlo aquí tumbaría TODA la conversación
   // en cada mensaje siguiente — un solo turno corrupto dejaría a VICTOR
   // sin poder contestar nunca más en ese chat.
+  // Segundo punto de caché, además del system prompt de arriba — este es
+  // el que de verdad mueve la aguja del costo diario real. Antes el
+  // historial (hasta 20 turnos) se mandaba como INPUT FRESCO en cada
+  // llamada — y "cada llamada" no es solo cada mensaje del usuario: el
+  // loop de herramientas de abajo (categorización en lote, revisar
+  // pendientes, etc.) vuelve a llamar a Claude hasta 12 veces DENTRO de un
+  // mismo turno, cada vez reenviando el array completo que va creciendo.
+  // Sin caché, una sola pregunta que dispare 5 iteraciones pagaba el
+  // historial completo como input fresco 5 veces seguidas — eso, no el
+  // system prompt (que ya estaba cacheado), era el verdadero multiplicador
+  // detrás de "esto se come el presupuesto diario en 4-5 preguntas".
+  //
+  // El breakpoint va en el ÚLTIMO turno YA GUARDADO del historial (lo que
+  // NO cambia dentro de este turno) — el mensaje nuevo del usuario se deja
+  // sin cachear a propósito porque es distinto cada vez, cachearlo no
+  // ahorraría nada. Con esto: la 1ra llamada de la conversación paga el
+  // historial como escritura de caché (más cara que input normal, pero
+  // pasa una sola vez); las siguientes iteraciones del MISMO turno, y el
+  // próximo mensaje del usuario si llega dentro de la hora, lo leen barato
+  // (20 centavos/MTok en vez de 200). Mismo ttl:"1h" que el system prompt,
+  // por la misma razón: el patrón real de uso deja más de 5 minutos entre
+  // mensajes casi siempre.
+  const historialFormateado: Anthropic.MessageParam[] = recentHistory
+    .filter((m) => m.content && m.content.trim())
+    .map((m) => ({ role: m.role, content: m.content }));
+  if (historialFormateado.length > 0) {
+    const ultimoTurno = historialFormateado[historialFormateado.length - 1];
+    historialFormateado[historialFormateado.length - 1] = {
+      ...ultimoTurno,
+      content: [
+        { type: "text", text: ultimoTurno.content as string, cache_control: { type: "ephemeral", ttl: "1h" } },
+      ],
+    };
+  }
+
   const apiMessages: Anthropic.MessageParam[] = [
-    ...recentHistory.filter((m) => m.content && m.content.trim()).map((m) => ({ role: m.role, content: m.content })),
+    ...historialFormateado,
     { role: "user" as const, content: userMessage },
   ];
 
