@@ -187,22 +187,28 @@ export async function POST(req: NextRequest) {
   // debajo. Si en la práctica algún plan se acerca seguido al tope, hay
   // que subir el número — no es una talla única para siempre.
   //
-  // En vez de un solo corte binario (nada hasta el día 1), esto escala en
-  // 3 niveles, calcados de cómo se siente usar Claude.ai cuando te acercas
-  // a tu límite — un aviso primero, una pausa corta después, el corte
-  // fuerte solo como último recurso:
+  // SOLO 2 niveles, NUNCA un bloqueo total — Joel fue explícito: cortarle
+  // el acceso del todo a un usuario real es lo que hace que cancele, así
+  // que no existe un tercer nivel "tope_mensual" que lo deje sin poder usar
+  // VICTOR. En su lugar:
   //   1. aviso            — VICTOR responde normal, pero avisa que vas rápido.
-  //   2. restringido_hora — deja pasar 1 mensaje por hora (no hasta el mes que viene).
-  //   3. tope_mensual      — se acabó de verdad el presupuesto del mes, corte total.
+  //   2. restringido_hora — deja pasar 1 mensaje por hora, el resto del mes
+  //                          si hace falta. Nunca escala a "nada hasta el
+  //                          día 1" — el límite mensual completo solo es un
+  //                          número de referencia, no un muro.
   //
-  // El umbral de "aviso"/"restringido_hora" no es el límite mensual
-  // completo, sino el límite mensual A RITMO PAREJO hasta hoy (límite ×
-  // día_del_mes / días_del_mes). Esto le da "arrastre" natural: alguien
-  // que casi no habla con VICTOR la primera mitad del mes acumula margen
-  // de sobra para un día pesado más adelante (ej. temporada de planillas),
-  // en vez de perder ese margen cada medianoche como pasaría con un tope
-  // diario fijo sin arrastre.
-  const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 300, pro: 600, proplus: 1000 };
+  // El umbral de ambos niveles no es el límite mensual completo, sino el
+  // límite mensual A RITMO PAREJO hasta hoy (límite × día_del_mes /
+  // días_del_mes). Esto le da "arrastre" natural: alguien que casi no habla
+  // con VICTOR la primera mitad del mes acumula margen de sobra para un día
+  // pesado más adelante (ej. temporada de planillas), en vez de perder ese
+  // margen cada medianoche como pasaría con un tope diario fijo sin
+  // arrastre. Y como el presupuesto-hasta-hoy crece cada día que pasa, un
+  // usuario que quede "restringido_hora" un día puede volver solo a
+  // "aviso" o "normal" más adelante sin que nadie tenga que intervenir —
+  // por diseño, no debería ser posible llegar al límite mensual completo
+  // a mitad de mes precisamente porque este ritmo diario ya lo frena antes.
+  const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 310, pro: 620, proplus: 1033 };
   const SIGUIENTE_PLAN: Record<string, string | null> = { core: "VICTOR Pro", pro: "VICTOR Pro+", proplus: null };
   const anioMesActual = fechaHoyPR().slice(0, 7);
   const [anioActualStr, mesActualStr, diaActualStr] = fechaHoyPR().split("-");
@@ -215,7 +221,7 @@ export async function POST(req: NextRequest) {
     ? ` Si quieres seguir hablando sin este tope, en Configuración puedes subir a ${siguientePlan}.`
     : " Si esto te está bloqueando algo urgente, escríbele a soporte.";
 
-  let estadoUso: "normal" | "aviso" | "restringido_hora" | "tope_mensual" = "normal";
+  let estadoUso: "normal" | "aviso" | "restringido_hora" = "normal";
   if (!isFounder) {
     const { data: usoMes } = await supabase
       .from("uso_ia_mensual")
@@ -227,9 +233,10 @@ export async function POST(req: NextRequest) {
     const limiteMensual = LIMITES_MENSUALES_CENTAVOS[planActual] ?? LIMITES_MENSUALES_CENTAVOS.core;
     const presupuestoHastaHoy = (limiteMensual * diaDelMes) / diasEnElMes;
 
-    if (costoMesHastaAhora >= limiteMensual) {
-      estadoUso = "tope_mensual";
-    } else if (costoMesHastaAhora >= presupuestoHastaHoy) {
+    // Ya no hay un tercer nivel de bloqueo total — si costoMesHastaAhora
+    // llega o pasa el límite mensual completo, sigue cayendo en
+    // "restringido_hora" (1 mensaje/hora), nunca en un corte sin acceso.
+    if (costoMesHastaAhora >= presupuestoHastaHoy) {
       estadoUso = "restringido_hora";
     } else if (costoMesHastaAhora >= presupuestoHastaHoy * 0.85) {
       estadoUso = "aviso";
@@ -249,13 +256,6 @@ export async function POST(req: NextRequest) {
       .update({ messages_json: updatedMessagesFijo, updated_at: new Date().toISOString() })
       .eq("id", conversation!.id);
     return NextResponse.json({ conversationId: conversation!.id, reply: mensaje });
-  }
-
-  if (estadoUso === "tope_mensual") {
-    return responderSinLlamarAClaude(
-      "Llegaste al límite de uso de este mes para tu plan — es un tope de seguridad para que el costo de " +
-        `VICTOR nunca se dispare sin control. Vuelve a tener acceso completo el día 1 del próximo mes.${notaUpgrade}`
-    );
   }
 
   if (estadoUso === "restringido_hora") {
