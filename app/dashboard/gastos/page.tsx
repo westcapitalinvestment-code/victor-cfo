@@ -182,12 +182,12 @@ export default async function GastosPage({
 
   // Meses con transacciones reales (más el mes actual, aunque todavía no
   // tenga ninguna) para pintar como pills — igual que los tabs de mes del
-  // reporte del BPPR. Se limita a los últimos 12 para no desbordar la
-  // pantalla en cuentas con años de historial; "Todo" cubre el resto.
+  // reporte del BPPR. Orden ascendente (enero → agosto, el más viejo
+  // primero) porque así se lee un calendario; slice(-12) se queda con los
+  // 12 más RECIENTES pero sin voltear el orden — "Todo" cubre el resto.
   const mesesDisponibles = Array.from(new Set([mesActualStr, ...(transacciones ?? []).map((t) => t.fecha.slice(0, 7))]))
     .sort()
-    .reverse()
-    .slice(0, 12);
+    .slice(-12);
 
   // Nombre legible por cuenta (ej. "BPPR Visa ···4821") para el filtro y
   // para la etiqueta en cada fila de la lista — con el mismo prefijo
@@ -339,7 +339,15 @@ export default async function GastosPage({
         {totalCuentas > 1 && (
           <CuentaDropdown
             opciones={Array.from(nombrePorCuenta.entries()).map(([clave, nombre]) => ({ clave, nombre }))}
-            seleccionadas={cuentasSeleccionadas.map((c) => idConPrefijo(c.origen, c.id))}
+            // Sin filtro activo (?cuentas= ausente) se pasan TODAS las
+            // claves como "seleccionadas" — así el dropdown abre con todo
+            // marcado, que es lo que se espera de un "Included Accounts"
+            // antes de que el usuario desmarque alguna.
+            seleccionadas={
+              cuentasSeleccionadas.length > 0
+                ? cuentasSeleccionadas.map((c) => idConPrefijo(c.origen, c.id))
+                : Array.from(nombrePorCuenta.keys())
+            }
           />
         )}
       </div>
