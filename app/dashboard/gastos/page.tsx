@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import GastosList from "./gastos-list";
-import ReporteRangoDropdown from "./reporte-rango-dropdown";
+import CuentaDropdown from "./cuenta-dropdown";
+import ReporteContableDropdown from "./reporte-contable-dropdown";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
 import { fechaHoyPR } from "@/lib/hora-pr";
@@ -56,6 +57,19 @@ function parsearCuentaSeleccionada(valor: string | undefined): { origen: "plaid"
   return null;
 }
 
+// ?cuentas= ahora es multi-select (checkboxes en CuentaDropdown), así que
+// viene como una lista separada por comas de los mismos tokens
+// "plaid:<id>" | "manual:<id>" de arriba — se reutiliza el parser de uno
+// solo por cada token. Vacío o ausente = todas las cuentas (sin filtro),
+// igual que antes con el caso null de cuentaSeleccionada.
+function parsearCuentasSeleccionadas(valor: string | undefined): { origen: "plaid" | "manual"; id: string }[] {
+  if (!valor) return [];
+  return valor
+    .split(",")
+    .map((v) => parsearCuentaSeleccionada(v))
+    .filter((c): c is { origen: "plaid" | "manual"; id: string } => c !== null);
+}
+
 // Lista de transacciones personales. Vacía hasta que Plaid esté conectado
 // (Cuentas) — es honesto mostrarlo así en vez de simular datos. La
 // categoría real vive en hacienda_category_id (la llena el motor de
@@ -78,7 +92,7 @@ function parsearCategoriaSeleccionada(valor: string | undefined): { tipo: "id"; 
 export default async function GastosPage({
   searchParams,
 }: {
-  searchParams: { cuenta?: string; categoria?: string; tipo?: string; mes?: string };
+  searchParams: { cuentas?: string; categoria?: string; tipo?: string; mes?: string };
 }) {
   const supabase = createClient();
   const {
@@ -115,7 +129,7 @@ export default async function GastosPage({
 
   const [{ data: cuentasPlaid }, { data: cuentasManuales }] = await Promise.all([cuentasQuery, manualesQuery]);
 
-  const cuentaSeleccionada = parsearCuentaSeleccionada(searchParams.cuenta);
+  const cuentasSeleccionadas = parsearCuentasSeleccionadas(searchParams.cuentas);
   const categoriaSeleccionada = parsearCategoriaSeleccionada(searchParams.categoria);
   // tipoReporte separa el reporte/lista entre dinero que SALIÓ (gasto) y
   // dinero que ENTRÓ (ingreso) — antes el reporte de categorías solo
@@ -148,10 +162,17 @@ export default async function GastosPage({
     .is("entity_id", null)
     .order("fecha", { ascending: false })
     .limit(LIMITE_TRANSACCIONES);
-  if (cuentaSeleccionada?.origen === "plaid") {
-    transaccionesQuery = transaccionesQuery.eq("plaid_account_id", cuentaSeleccionada.id);
-  } else if (cuentaSeleccionada?.origen === "manual") {
-    transaccionesQuery = transaccionesQuery.eq("manual_account_id", cuentaSeleccionada.id);
+  // Multi-select: si hay más de una cuenta marcada, hace falta un OR real
+  // (plaid_account_id.in.(...) O manual_account_id.in.(...)) porque
+  // encadenar .eq()/.in() normalmente sería AND, y una transacción nunca
+  // tiene las dos columnas llenas a la vez.
+  if (cuentasSeleccionadas.length > 0) {
+    const plaidIds = cuentasSeleccionadas.filter((c) => c.origen === "plaid").map((c) => c.id);
+    const manualIds = cuentasSeleccionadas.filter((c) => c.origen === "manual").map((c) => c.id);
+    const condiciones: string[] = [];
+    if (plaidIds.length > 0) condiciones.push(`plaid_account_id.in.(${plaidIds.join(",")})`);
+    if (manualIds.length > 0) condiciones.push(`manual_account_id.in.(${manualIds.join(",")})`);
+    if (condiciones.length > 0) transaccionesQuery = transaccionesQuery.or(condiciones.join(","));
   }
 
   const [{ data: transacciones, error }, { data: categorias }] = await Promise.all([
@@ -269,7 +290,7 @@ export default async function GastosPage({
   // conserva todo lo demás tal cual está.
   function hrefFiltros(opts: { mes?: string; tipo?: "gasto" | "ingreso"; categoria?: string | null } = {}) {
     const params = new URLSearchParams();
-    if (searchParams.cuenta) params.set("cuenta", searchParams.cuenta);
+    if (searchParams.cuentas) params.set("cuentas", searchParams.cuentas);
 
     const tipoNuevo = opts.tipo ?? tipoReporte;
     if (tipoNuevo === "ingreso") params.set("tipo", "ingreso");
@@ -281,20 +302,6 @@ export default async function GastosPage({
     const categoriaNueva = cambiaTipo ? null : opts.categoria !== undefined ? opts.categoria : (searchParams.categoria ?? null);
     if (categoriaNueva) params.set("categoria", categoriaNueva);
 
-    const qs = params.toString();
-    return `/dashboard/gastos${qs ? `?${qs}` : ""}`;
-  }
-
-  // Igual que hrefFiltros pero solo para las pills de cuenta — conserva
-  // tipo/mes activos (antes, cambiar de cuenta te botaba siempre a "este
-  // mes" de gastos sin importar dónde estabas parado) pero deliberadamente
-  // suelta la categoría, porque una categoría elegida en una cuenta puede
-  // no existir/tener sentido en otra.
-  function hrefCuenta(clave: string | null) {
-    const params = new URLSearchParams();
-    if (clave) params.set("cuenta", clave);
-    if (tipoReporte === "ingreso") params.set("tipo", "ingreso");
-    if (mesSeleccionado !== mesActualStr) params.set("mes", mesSeleccionado);
     const qs = params.toString();
     return `/dashboard/gastos${qs ? `?${qs}` : ""}`;
   }
@@ -328,63 +335,14 @@ export default async function GastosPage({
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-xs text-muted">Reporte para tu contable:</span>
-        {rangosReporte.map((r) => {
-          const params = new URLSearchParams();
-          if (r.desde) params.set("desde", r.desde);
-          if (r.hasta) params.set("hasta", r.hasta);
-          const qs = params.toString();
-          return (
-            <a key={r.label} href={`/api/transacciones/exportar${qs ? `?${qs}` : ""}`} className="rounded-pill border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-80" style={{ borderColor: "var(--border)" }}>
-              ↓ {r.label}
-            </a>
-          );
-        })}
-        <ReporteRangoDropdown />
+        <ReporteContableDropdown rangos={rangosReporte} />
+        {totalCuentas > 1 && (
+          <CuentaDropdown
+            opciones={Array.from(nombrePorCuenta.entries()).map(([clave, nombre]) => ({ clave, nombre }))}
+            seleccionadas={cuentasSeleccionadas.map((c) => idConPrefijo(c.origen, c.id))}
+          />
+        )}
       </div>
-
-      {totalCuentas > 1 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-xs text-muted">Cuenta:</span>
-          <Link
-            href={hrefCuenta(null)}
-            className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
-              !cuentaSeleccionada ? "border-teal text-teal" : "text-muted"
-            }`}
-            style={{ borderColor: !cuentaSeleccionada ? undefined : "var(--border)" }}
-          >
-            Todas
-          </Link>
-          {(cuentasPlaid ?? []).map((c) => {
-            const clave = idConPrefijo("plaid", c.plaid_account_id);
-            const activa = cuentaSeleccionada?.origen === "plaid" && cuentaSeleccionada.id === c.plaid_account_id;
-            return (
-              <Link
-                key={clave}
-                href={hrefCuenta(clave)}
-                className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${activa ? "border-teal text-teal" : "text-muted"}`}
-                style={{ borderColor: activa ? undefined : "var(--border)" }}
-              >
-                {etiquetaCuenta(c)}
-              </Link>
-            );
-          })}
-          {(cuentasManuales ?? []).map((c) => {
-            const clave = idConPrefijo("manual", c.id);
-            const activa = cuentaSeleccionada?.origen === "manual" && cuentaSeleccionada.id === c.id;
-            return (
-              <Link
-                key={clave}
-                href={hrefCuenta(clave)}
-                className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${activa ? "border-teal text-teal" : "text-muted"}`}
-                style={{ borderColor: activa ? undefined : "var(--border)" }}
-              >
-                {etiquetaCuenta(c)}
-              </Link>
-            );
-          })}
-        </div>
-      )}
 
       {/* Toggle Gastos/Ingresos — mismo rol que "Debits"/"Credits" en el
       reporte del BPPR. Cambia tipoReporte, que a su vez filtra tanto el
@@ -542,7 +500,7 @@ export default async function GastosPage({
             // parámetro que no estaba en el key — ahora el key incluye
             // tipo y mes explícitamente, que son los dos filtros nuevos de
             // esta pantalla, además de cuenta y categoría de siempre.
-            key={`${searchParams.cuenta ?? "todas"}-${searchParams.categoria ?? "todas"}-${tipoReporte}-${mesSeleccionado}`}
+            key={`${searchParams.cuentas ?? "todas"}-${searchParams.categoria ?? "todas"}-${tipoReporte}-${mesSeleccionado}`}
             transaccionesIniciales={transaccionesMostradas}
             categorias={categorias ?? []}
             nombrePorCuenta={Object.fromEntries(nombrePorCuenta)}
@@ -551,7 +509,8 @@ export default async function GastosPage({
         {!categoriaSeleccionada && transacciones && transacciones.length === LIMITE_TRANSACCIONES && (
           <p className="mt-3 text-center text-xs text-muted">
             Mostrando las {LIMITE_TRANSACCIONES} más recientes
-            {cuentaSeleccionada ? " de esta cuenta" : ""}. Filtra por cuenta arriba o descarga el reporte completo
+            {cuentasSeleccionadas.length === 1 ? " de esta cuenta" : cuentasSeleccionadas.length > 1 ? " de estas cuentas" : ""}. Filtra por
+            cuenta arriba o descarga el reporte completo
             para tu contable si necesitas todo el historial.
           </p>
         )}
