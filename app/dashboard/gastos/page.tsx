@@ -339,15 +339,11 @@ export default async function GastosPage({
         {totalCuentas > 1 && (
           <CuentaDropdown
             opciones={Array.from(nombrePorCuenta.entries()).map(([clave, nombre]) => ({ clave, nombre }))}
-            // Sin filtro activo (?cuentas= ausente) se pasan TODAS las
-            // claves como "seleccionadas" — así el dropdown abre con todo
-            // marcado, que es lo que se espera de un "Included Accounts"
-            // antes de que el usuario desmarque alguna.
-            seleccionadas={
-              cuentasSeleccionadas.length > 0
-                ? cuentasSeleccionadas.map((c) => idConPrefijo(c.origen, c.id))
-                : Array.from(nombrePorCuenta.keys())
-            }
+            // Por defecto (sin ?cuentas= en la URL) los checkboxes arrancan
+            // desmarcados — CuentaDropdown ya trae su propio botón "Todas
+            // las cuentas" para marcarlas todas de un tiro cuando el
+            // usuario lo pida.
+            seleccionadas={cuentasSeleccionadas.map((c) => idConPrefijo(c.origen, c.id))}
           />
         )}
       </div>
