@@ -257,6 +257,32 @@ export default async function GastosPage({
     .map(([catKey, v]) => ({ catKey, nombre: v.nombre, monto: v.monto }))
     .sort((a, b) => b.monto - a.monto);
 
+  // Resumen de los 3 totales del mes — independiente del toggle
+  // Gastos/Ingresos de arriba, para que se vea de un vistazo cuánto entró,
+  // cuánto salió de verdad como gasto, y cuánto fue a ahorro/inversión,
+  // sin tener que sumar el reporte de categorías a mano ni cambiar el
+  // toggle para verlo. "Ahorro e inversión" se cuenta aparte de "gastos
+  // reales": aunque hoy vive como una categoría más de tipo_flujo "gasto"
+  // en la base de datos, mover dinero a ahorro/inversión no es lo mismo
+  // que gastarlo, y Joel pidió específicamente poder ver esa suma sin
+  // mezclar. "Sin categorizar" sí cuenta como gasto real (es dinero que
+  // salió, solo falta clasificar en qué).
+  const NOMBRE_CATEGORIA_INVERSION = "Ahorro e inversión";
+  let totalIngresosMes = 0;
+  let totalGastosRealesMes = 0;
+  let totalAhorroInversionMes = 0;
+  for (const t of transacciones ?? []) {
+    if (!dentroDelRango(t.fecha)) continue;
+    const montoAbs = Math.abs(Number(t.amount));
+    if (t.tipo_flujo === "ingreso") {
+      totalIngresosMes += montoAbs;
+    } else if (t.tipo_flujo === "gasto") {
+      const nombreCat = t.hacienda_category_id ? nombrePorCategoria.get(t.hacienda_category_id) : null;
+      if (nombreCat === NOMBRE_CATEGORIA_INVERSION) totalAhorroInversionMes += montoAbs;
+      else totalGastosRealesMes += montoAbs;
+    }
+  }
+
   // La lista de transacciones de abajo: siempre respeta tipoReporte (para
   // que nunca se mezclen gastos e ingresos en la misma vista) y, si hay
   // una categoría REAL seleccionada, respeta también el mes elegido
@@ -424,6 +450,32 @@ export default async function GastosPage({
         >
           Todo
         </Link>
+      </div>
+
+      {/* Los 3 totales del mes de un vistazo — ver comentario junto a
+      totalIngresosMes/totalGastosRealesMes/totalAhorroInversionMes arriba.
+      Siempre visible sin importar el toggle Gastos/Ingresos, porque es
+      justamente la vista que junta las dos cosas (más ahorro/inversión
+      aparte) en un solo lugar. */}
+      <div className="vc-card mb-3 grid grid-cols-3 gap-2 text-center">
+        <div>
+          <p className="text-xs text-muted">Ingresos</p>
+          <p className="text-sm font-medium text-grn">
+            <Sensitive>{formatMoney(totalIngresosMes)}</Sensitive>
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted">Gastos</p>
+          <p className="text-sm font-medium text-red">
+            <Sensitive>{formatMoney(totalGastosRealesMes)}</Sensitive>
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted">Ahorro e inversión</p>
+          <p className="text-sm font-medium text-teal">
+            <Sensitive>{formatMoney(totalAhorroInversionMes)}</Sensitive>
+          </p>
+        </div>
       </div>
 
       {reporteCategoria.length > 0 && (
