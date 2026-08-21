@@ -179,7 +179,12 @@ export default function CuentasPage() {
       setMensaje(
         `${data.nuevas} transacción(es) nueva(s), ${data.modificadas} actualizada(s). ` +
           `(Plaid mandó ${data.totalPlaidAdded ?? "?"} nuevas / ${data.totalPlaidModified ?? "?"} modificadas en total.)` +
-          (omitidas > 0 ? ` (${omitidas} de cuentas de negocio, no incluidas en tu plan Core.)` : "")
+          (omitidas > 0 ? ` (${omitidas} de cuentas de negocio, no incluidas en tu plan Core.)` : "") +
+          // Diagnóstico del refresh a Plaid — si el banco no soporta pedirle
+          // datos frescos ahora mismo, esto lo dice explícito en vez de
+          // dejar la pantalla en silencio sin explicar por qué "Plaid
+          // mandó 0 nuevas" aunque el usuario vea algo distinto en su banco.
+          (data.refreshInfo && data.refreshInfo.length > 0 ? ` — ${data.refreshInfo.join(" | ")}` : "")
       );
       if (data.errores && data.errores.length > 0) {
         setError(`Errores al guardar: ${data.errores.join(" | ")}`);
