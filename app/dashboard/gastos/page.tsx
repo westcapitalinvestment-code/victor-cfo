@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import GastosList from "./gastos-list";
 import CuentaDropdown from "./cuenta-dropdown";
+import CategoriaDropdown from "./categoria-dropdown";
 import ReporteContableDropdown from "./reporte-contable-dropdown";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
@@ -306,6 +307,29 @@ export default async function GastosPage({
     return `/dashboard/gastos${qs ? `?${qs}` : ""}`;
   }
 
+  // Opciones del dropdown de categoría (Todas / Sin categorizar / cada
+  // categoría real, global o personal) — lista completa de
+  // hacienda_categories, independiente de si tiene o no transacciones en
+  // el mes/tipo actual (a diferencia de reporteCategoria, que solo trae
+  // las que sí tienen movimiento en el alcance de pantalla). Así el
+  // usuario puede saltar directo a cualquier categoría, incluso una que
+  // acaba de crear y todavía no tiene ninguna transacción.
+  const opcionesCategoria = [
+    { catKey: null, nombre: "Todas", href: hrefFiltros({ categoria: null }), activa: !categoriaSeleccionada },
+    {
+      catKey: SIN_CATEGORIZAR,
+      nombre: "Sin categorizar",
+      href: hrefFiltros({ categoria: SIN_CATEGORIZAR }),
+      activa: categoriaSeleccionada?.tipo === "sin_categorizar",
+    },
+    ...(categorias ?? []).map((c) => ({
+      catKey: String(c.id),
+      nombre: c.nombre,
+      href: hrefFiltros({ categoria: String(c.id) }),
+      activa: categoriaSeleccionada?.tipo === "id" && categoriaSeleccionada.id === c.id,
+    })),
+  ];
+
   // Rangos rápidos para el reporte del contable — el CSV (/api/transacciones/
   // exportar) ya acepta ?desde=&hasta=, esto solo arma los links con las
   // fechas correctas. "Año pasado" existe específicamente para radicar
@@ -346,6 +370,7 @@ export default async function GastosPage({
             seleccionadas={cuentasSeleccionadas.map((c) => idConPrefijo(c.origen, c.id))}
           />
         )}
+        <CategoriaDropdown opciones={opcionesCategoria} />
       </div>
 
       {/* Toggle Gastos/Ingresos — mismo rol que "Debits"/"Credits" en el
