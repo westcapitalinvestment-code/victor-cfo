@@ -14,12 +14,14 @@ type Opcion = { clave: string; nombre: string };
 // soltando la categoría — una categoría elegida en una cuenta puede no
 // existir/tener sentido en otra combinación de cuentas.
 //
-// page.tsx pasa `seleccionadas` = TODAS las claves cuando no hay filtro
-// activo (?cuentas= ausente) — así "sin filtro" y "todas marcadas" son la
-// misma cosa visualmente, que es lo que un usuario espera de un selector
-// de "Included Accounts": al abrir, todo aparece marcado, y desmarcar una
-// la excluye. Antes "sin filtro" se representaba con CERO checkboxes
-// marcados, lo que parecía "no elegí nada" en vez de "están todas".
+// page.tsx pasa `seleccionadas` tal cual viene de la URL — sin filtro
+// (?cuentas= ausente) los checkboxes arrancan DESMARCADOS (Joel lo pidió
+// así explícitamente: por defecto no hay nada seleccionado, y desde ahí
+// se puede marcar una por una, o de un tiro con "Todas las cuentas").
+// "Todas las cuentas" ahora es un toggle real de seleccionar/deseleccionar
+// TODO: si ya están todas marcadas, lo desmarca todo; si no, las marca
+// todas — antes ese botón solo borraba el filtro (?cuentas= fuera) sin
+// tocar los checkboxes, así que parecía que "no hacía nada" visualmente.
 export default function CuentaDropdown({ opciones, seleccionadas }: { opciones: Opcion[]; seleccionadas: string[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -34,17 +36,15 @@ export default function CuentaDropdown({ opciones, seleccionadas }: { opciones: 
     return () => document.removeEventListener("mousedown", onClickFuera);
   }, []);
 
-  // Si quedan marcadas TODAS (o ninguna, ej. si alguien desmarca la última
-  // a mano) se guarda como "sin filtro" quitando el parámetro por completo
-  // — evita URLs largas con todos los ids listados y evita el caso raro de
-  // "0 cuentas marcadas = no se ve nada".
+  // Vacío = sin filtro (se quita el parámetro de la URL); cualquier otra
+  // lista, incluyendo TODAS explícitamente, se guarda tal cual para que
+  // los checkboxes se vean marcados al recargar — a propósito NO se
+  // colapsa "todas marcadas" a "sin parámetro", porque eso es justo lo
+  // que hacía que "Todas las cuentas" pareciera no seleccionar nada.
   function aplicar(nuevasClaves: string[]) {
     const params = new URLSearchParams(searchParams.toString());
-    if (nuevasClaves.length > 0 && nuevasClaves.length < opciones.length) {
-      params.set("cuentas", nuevasClaves.join(","));
-    } else {
-      params.delete("cuentas");
-    }
+    if (nuevasClaves.length > 0) params.set("cuentas", nuevasClaves.join(","));
+    else params.delete("cuentas");
     params.delete("categoria");
     const qs = params.toString();
     router.push(`/dashboard/gastos${qs ? `?${qs}` : ""}`);
@@ -55,12 +55,19 @@ export default function CuentaDropdown({ opciones, seleccionadas }: { opciones: 
     aplicar(nuevas);
   }
 
-  const todasMarcadas = seleccionadas.length === 0 || seleccionadas.length === opciones.length;
-  const etiqueta = todasMarcadas
-    ? "Todas las cuentas"
-    : seleccionadas.length === 1
-      ? (opciones.find((o) => o.clave === seleccionadas[0])?.nombre ?? "1 cuenta")
-      : `${seleccionadas.length} cuentas`;
+  const todasMarcadas = opciones.length > 0 && seleccionadas.length === opciones.length;
+  // Un filtro "activo" de verdad (para resaltar el botón) es cualquier
+  // selección parcial — ni vacío (todo, por defecto) ni todas marcadas
+  // (todo, explícito) cambian lo que se ve en la lista de transacciones.
+  const filtroActivo = seleccionadas.length > 0 && !todasMarcadas;
+  const etiqueta =
+    seleccionadas.length === 0
+      ? "Todas las cuentas"
+      : todasMarcadas
+        ? "Todas las cuentas"
+        : seleccionadas.length === 1
+          ? (opciones.find((o) => o.clave === seleccionadas[0])?.nombre ?? "1 cuenta")
+          : `${seleccionadas.length} cuentas`;
 
   return (
     <div ref={ref} className="relative">
@@ -68,9 +75,9 @@ export default function CuentaDropdown({ opciones, seleccionadas }: { opciones: 
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
-          !todasMarcadas ? "border-teal text-teal" : "text-muted"
+          filtroActivo ? "border-teal text-teal" : "text-muted"
         }`}
-        style={{ borderColor: !todasMarcadas ? undefined : "var(--border)" }}
+        style={{ borderColor: filtroActivo ? undefined : "var(--border)" }}
       >
         Cuenta: {etiqueta} ▾
       </button>
@@ -78,12 +85,12 @@ export default function CuentaDropdown({ opciones, seleccionadas }: { opciones: 
         <div className="vc-card absolute left-0 top-9 z-10 flex w-64 flex-col gap-1">
           <button
             type="button"
-            onClick={() => aplicar([])}
+            onClick={() => aplicar(todasMarcadas ? [] : opciones.map((o) => o.clave))}
             className={`rounded-lg px-2 py-1.5 text-left text-xs hover:opacity-80 ${
               todasMarcadas ? "bg-teal/[.08] font-medium text-teal" : ""
             }`}
           >
-            Todas las cuentas
+            {todasMarcadas ? "✓ " : ""}Todas las cuentas
           </button>
           <div className="my-1 h-px bg-border" />
           {opciones.map((o) => (
