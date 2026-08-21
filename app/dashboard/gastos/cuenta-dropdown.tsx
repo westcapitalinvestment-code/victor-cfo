@@ -83,15 +83,18 @@ export default function CuentaDropdown({ opciones, seleccionadas }: { opciones: 
       </button>
       {open && (
         <div className="vc-card absolute left-0 top-9 z-10 flex w-64 flex-col gap-1">
-          <button
-            type="button"
-            onClick={() => aplicar(todasMarcadas ? [] : opciones.map((o) => o.clave))}
-            className={`rounded-lg px-2 py-1.5 text-left text-xs hover:opacity-80 ${
-              todasMarcadas ? "bg-teal/[.08] font-medium text-teal" : ""
+          <label
+            className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium hover:opacity-80 ${
+              todasMarcadas ? "bg-teal/[.08] text-teal" : ""
             }`}
           >
-            {todasMarcadas ? "✓ " : ""}Todas las cuentas
-          </button>
+            <input
+              type="checkbox"
+              checked={todasMarcadas}
+              onChange={() => aplicar(todasMarcadas ? [] : opciones.map((o) => o.clave))}
+            />
+            Todas las cuentas
+          </label>
           <div className="my-1 h-px bg-border" />
           {opciones.map((o) => (
             <label
