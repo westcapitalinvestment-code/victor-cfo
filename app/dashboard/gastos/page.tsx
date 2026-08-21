@@ -5,9 +5,29 @@ import GastosList from "./gastos-list";
 import ReporteRangoDropdown from "./reporte-rango-dropdown";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
+import { fechaHoyPR } from "@/lib/hora-pr";
 
 function fmt(d: Date) {
   return d.toISOString().slice(0, 10);
+}
+
+// Primer día del mes SIGUIENTE a "YYYY-MM" — límite superior (exclusivo)
+// para filtrar un mes específico del historial (no solo "desde tal fecha
+// en adelante", que es lo único que hacía falta cuando el único mes
+// posible era el actual). new Date() usa meses 0-based (0=enero), pero
+// "mes" aquí viene 1-based del string — pasarlo TAL CUAL (sin -1) ya cae
+// en el mes siguiente, es la forma más simple de "sumar un mes" sin
+// desbordar diciembre a mano.
+function primerDiaDelMesSiguiente(mesYYYYMM: string): string {
+  const [anio, mes] = mesYYYYMM.split("-").map(Number);
+  return new Date(anio, mes, 1).toISOString().slice(0, 10);
+}
+
+function etiquetaMes(mesYYYYMM: string): string {
+  const [anio, mes] = mesYYYYMM.split("-").map(Number);
+  const fecha = new Date(anio, mes - 1, 1);
+  const texto = new Intl.DateTimeFormat("es-PR", { month: "short", year: "numeric" }).format(fecha);
+  return texto.charAt(0).toUpperCase() + texto.slice(1).replace(".", "");
 }
 
 // Antes esto era .limit(50) sin filtro de cuenta — con un solo banco que
@@ -58,7 +78,7 @@ function parsearCategoriaSeleccionada(valor: string | undefined): { tipo: "id"; 
 export default async function GastosPage({
   searchParams,
 }: {
-  searchParams: { cuenta?: string; categoria?: string; historial?: string };
+  searchParams: { cuenta?: string; categoria?: string; tipo?: string; mes?: string };
 }) {
   const supabase = createClient();
   const {
@@ -97,14 +117,29 @@ export default async function GastosPage({
 
   const cuentaSeleccionada = parsearCuentaSeleccionada(searchParams.cuenta);
   const categoriaSeleccionada = parsearCategoriaSeleccionada(searchParams.categoria);
-  // Cuando NO hay categoría tocada, la lista de abajo antes mostraba TODO
-  // el historial de la cuenta sin límite de mes, mientras que el "Reporte
-  // del mes por categoría" arriba de ella sí es solo de este mes — dos
-  // secciones una encima de la otra con alcances distintos, que es
-  // justo lo que confundía: "el reporte dice 1 en Vivienda pero abajo veo
-  // 3 o 4" (las de más abajo eran de meses anteriores). Ahora por defecto
-  // la lista también es de este mes, y hay un link explícito para ver todo.
-  const verHistorialCompleto = searchParams.historial === "todo";
+  // tipoReporte separa el reporte/lista entre dinero que SALIÓ (gasto) y
+  // dinero que ENTRÓ (ingreso) — antes el reporte de categorías solo
+  // contaba tipo_flujo === "gasto" a fuego, así que ninguna categoría de
+  // ingreso podía aparecer ahí sin importar cuántas transacciones tuviera
+  // bien categorizadas (aunque el guardado sí funcionaba). Con esto,
+  // "Gastos"/"Ingresos" es un toggle real que cambia tanto el reporte de
+  // arriba como la lista de abajo, como el Debits/Credits del BPPR.
+  const tipoReporte: "gasto" | "ingreso" = searchParams.tipo === "ingreso" ? "ingreso" : "gasto";
+
+  // Selector de mes en pantalla — reemplaza el viejo toggle binario
+  // "este mes" / "todo el historial" (?historial=todo) por un selector de
+  // CUALQUIER mes con transacciones, más una opción "Todo". Antes no había
+  // forma de ver, por ejemplo, "cuánto envié el mes pasado" sin descargar
+  // el CSV del contable.
+  const mesActualStr = fechaHoyPR().slice(0, 7);
+  const mesSeleccionado = searchParams.mes ?? mesActualStr;
+  const esTodo = mesSeleccionado === "todo";
+  const inicioMesSel = esTodo ? null : `${mesSeleccionado}-01`;
+  const finMesSel = esTodo ? null : primerDiaDelMesSiguiente(mesSeleccionado);
+  function dentroDelRango(fecha: string): boolean {
+    if (esTodo) return true;
+    return fecha >= inicioMesSel! && fecha < finMesSel!;
+  }
 
   let transaccionesQuery = supabase
     .from("transactions")
@@ -124,6 +159,15 @@ export default async function GastosPage({
     supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
+  // Meses con transacciones reales (más el mes actual, aunque todavía no
+  // tenga ninguna) para pintar como pills — igual que los tabs de mes del
+  // reporte del BPPR. Se limita a los últimos 12 para no desbordar la
+  // pantalla en cuentas con años de historial; "Todo" cubre el resto.
+  const mesesDisponibles = Array.from(new Set([mesActualStr, ...(transacciones ?? []).map((t) => t.fecha.slice(0, 7))]))
+    .sort()
+    .reverse()
+    .slice(0, 12);
+
   // Nombre legible por cuenta (ej. "BPPR Visa ···4821") para el filtro y
   // para la etiqueta en cada fila de la lista — con el mismo prefijo
   // plaid:/manual: como llave, así GastosList sabe cuál usar para cada
@@ -138,8 +182,12 @@ export default async function GastosPage({
 
   // Reporte del mes por categoría — mismo cálculo que /dashboard/resumen,
   // pero aquí mismo en Gastos, que es donde el usuario lo busca primero.
+  // "hoy" se conserva (no confundir con mesSeleccionado/mesActualStr de
+  // arriba) porque el bloque de rangosReporte del CSV para el contable,
+  // más abajo, sigue usando hoy.getFullYear()/getMonth() para sus propios
+  // rangos (Este mes, Trimestre, YTD...), que son independientes del
+  // selector de mes de este reporte.
   const hoy = new Date();
-  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
   const nombrePorCategoria = new Map((categorias ?? []).map((c) => [c.id, c.nombre]));
 
   // catKey identifica cada categoría en la URL (?categoria=) y en el
@@ -148,67 +196,60 @@ export default async function GastosPage({
   // el usuario puede tocar cualquier fila del reporte y ver exactamente
   // qué transacciones cayeron ahí, para confirmar que VICTOR categorizó
   // bien o corregir la que no.
-  // Antes filtraba por Number(t.amount) <= 0, que trataba cualquier monto
-  // positivo como gasto real — eso metía en el reporte los pagos de tarjeta
-  // de crédito hechos desde el checking (transferencia entre tus propias
-  // cuentas, no gasto nuevo, porque la compra original ya se contó del
-  // lado de la tarjeta). Ahora filtra por tipo_flujo === "gasto", que ya
-  // viene calculado bien desde la base de datos.
+  // Antes este reporte solo contaba tipo_flujo === "gasto" a fuego, así
+  // que ninguna categoría de ingreso podía aparecer aquí sin importar
+  // cuántas transacciones tuviera bien categorizadas ("categoricé varias
+  // en 'Ingresos por servicios' y nunca se añade como categoría nueva
+  // ahí"). Ahora filtra por tipoReporte, que cambia con el toggle
+  // Gastos/Ingresos de arriba.
   //
-  // Este reporte tiene que respetar el MISMO toggle de "Ver historial
-  // completo" que ya usa la lista de abajo (verHistorialCompleto) — antes
-  // el reporte se quedaba fijo en "este mes" pasara lo que pasara con el
-  // toggle, así que en una cuenta con un solo gasto categorizado este mes,
-  // el reporte se veía "roto" (1 sola categoría al 100%) mientras la lista
-  // de abajo ya mostraba 15 transacciones de varios meses y categorías —
-  // dos secciones de la misma pantalla contando historias distintas.
+  // También respeta el mes seleccionado (mesSeleccionado/dentroDelRango,
+  // arriba) en vez del viejo binario "este mes"/"todo el historial" —
+  // ahora se puede ver, por ejemplo, julio 2026 específicamente.
   const gastoPorCategoria = new Map<string, { nombre: string; monto: number }>();
   let gastosBaseParaPct = 0;
   for (const t of transacciones ?? []) {
-    if (t.tipo_flujo !== "gasto") continue;
+    if (t.tipo_flujo !== tipoReporte) continue;
     const sinCategoria = !t.hacienda_category_id;
-    const dentroDelMes = t.fecha >= inicioMes;
-    // "Sin categorizar" se acumula SIEMPRE, sin importar el mes ni el
-    // toggle — es lo que el usuario todavía tiene que resolver, no un
-    // gasto de este mes nada más. Las categorías reales solo se limitan al
-    // mes en curso cuando verHistorialCompleto está apagado.
-    if (!sinCategoria && !verHistorialCompleto && !dentroDelMes) continue;
+    const dentroDelMes = dentroDelRango(t.fecha);
+    // "Sin categorizar" se acumula SIEMPRE, sin importar el mes elegido —
+    // es lo que el usuario todavía tiene que resolver, no un gasto/ingreso
+    // de un mes puntual nada más. Las categorías reales sí se limitan al
+    // mes seleccionado.
+    if (!sinCategoria && !dentroDelMes) continue;
     // Denominador de los % — mismo alcance que lo que se está sumando
     // arriba, para que el reporte siempre sume 100% real de lo que se ve
-    // en pantalla, sea "este mes" o "todo el historial".
-    if (verHistorialCompleto || dentroDelMes) gastosBaseParaPct += Number(t.amount);
+    // en pantalla. Los montos de ingreso se guardan en negativo en la
+    // base de datos (convención de tipo_flujo), así que se usa Math.abs
+    // para que el reporte de Ingresos no muestre números negativos —
+    // mismo ajuste que ya se hizo en la tarjeta de Ingresos del Home.
+    const montoAbs = Math.abs(Number(t.amount));
+    if (dentroDelMes) gastosBaseParaPct += montoAbs;
     const catKey = sinCategoria ? SIN_CATEGORIZAR : String(t.hacienda_category_id);
     const nombre = sinCategoria ? "Sin categorizar" : nombrePorCategoria.get(t.hacienda_category_id!) ?? "Sin categorizar";
     const actual = gastoPorCategoria.get(catKey) ?? { nombre, monto: 0 };
-    actual.monto += Number(t.amount);
+    actual.monto += montoAbs;
     gastoPorCategoria.set(catKey, actual);
   }
   const reporteCategoria = Array.from(gastoPorCategoria.entries())
     .map(([catKey, v]) => ({ catKey, nombre: v.nombre, monto: v.monto }))
     .sort((a, b) => b.monto - a.monto);
 
-  // La lista de transacciones de abajo: si hay una categoría REAL
-  // seleccionada en el reporte de arriba, se filtra a esa categoría y
-  // respeta el MISMO toggle de historial que el reporte de arriba (que ya
-  // se arregló para sumar todo el historial cuando verHistorialCompleto
-  // está prendido) — antes esta lista SIEMPRE recortaba a este mes sin
-  // importar el toggle, así que tocar una categoría desde la vista de
-  // "todo el historial" (ej. "ATH Móvil - enviado" $583 en 9 transacciones)
-  // caía en una lista de solo 1 transacción de este mes — el reporte de
-  // arriba y la lista de abajo volvían a contar historias distintas.
-  // "Sin categorizar" sigue siendo especial a propósito: NUNCA se limita
-  // al mes en curso, con o sin el toggle — un gasto de julio sin
-  // categorizar sigue pendiente aunque ya no sea "este mes", y el usuario
-  // necesita verlo para resolverlo, no que desaparezca de la vista.
+  // La lista de transacciones de abajo: siempre respeta tipoReporte (para
+  // que nunca se mezclen gastos e ingresos en la misma vista) y, si hay
+  // una categoría REAL seleccionada, respeta también el mes elegido
+  // arriba. "Sin categorizar" sigue siendo especial a propósito: NUNCA se
+  // limita al mes seleccionado — un gasto de julio sin categorizar sigue
+  // pendiente aunque ya no sea "este mes", y el usuario necesita verlo
+  // para resolverlo, no que desaparezca de la vista.
   const transaccionesMostradas = categoriaSeleccionada
     ? (transacciones ?? []).filter((t) => {
+        if (t.tipo_flujo !== tipoReporte) return false;
         if (categoriaSeleccionada.tipo === "sin_categorizar") return !t.hacienda_category_id;
-        if (!verHistorialCompleto && t.fecha < inicioMes) return false;
+        if (!dentroDelRango(t.fecha)) return false;
         return t.hacienda_category_id === categoriaSeleccionada.id;
       })
-    : verHistorialCompleto
-      ? transacciones ?? []
-      : (transacciones ?? []).filter((t) => t.fecha >= inicioMes);
+    : (transacciones ?? []).filter((t) => t.tipo_flujo === tipoReporte && dentroDelRango(t.fecha));
 
   const nombreCategoriaSeleccionada = categoriaSeleccionada
     ? reporteCategoria.find((r) =>
@@ -216,26 +257,44 @@ export default async function GastosPage({
       )?.nombre ?? "Sin categorizar"
     : null;
 
-  // Link para alternar entre "este mes" y "todo el historial" en la lista
-  // de abajo cuando no hay categoría tocada — conserva el filtro de cuenta.
-  function hrefHistorial(verTodo: boolean) {
+  // Constructor único de links para los 4 filtros de esta pantalla (cuenta,
+  // tipo, mes, categoría) — reemplaza los antiguos hrefHistorial/
+  // hrefConCategoria, que cada uno conservaba manualmente un subconjunto
+  // distinto de parámetros y por eso se desincronizaban entre sí (ej.
+  // tocar una categoría en modo "todo el historial" te devolvía a "este
+  // mes" sin avisar, porque hrefConCategoria no sabía de ?historial=).
+  // Reglas: cuenta siempre se conserva; cambiar de tipo (gasto↔ingreso)
+  // resetea la categoría, porque una categoría de un lado no existe en el
+  // reporte del otro; cambiar solo de mes, o abrir/cerrar una categoría,
+  // conserva todo lo demás tal cual está.
+  function hrefFiltros(opts: { mes?: string; tipo?: "gasto" | "ingreso"; categoria?: string | null } = {}) {
     const params = new URLSearchParams();
     if (searchParams.cuenta) params.set("cuenta", searchParams.cuenta);
-    if (verTodo) params.set("historial", "todo");
+
+    const tipoNuevo = opts.tipo ?? tipoReporte;
+    if (tipoNuevo === "ingreso") params.set("tipo", "ingreso");
+
+    const mesNuevo = opts.mes ?? mesSeleccionado;
+    if (mesNuevo !== mesActualStr) params.set("mes", mesNuevo);
+
+    const cambiaTipo = opts.tipo !== undefined && opts.tipo !== tipoReporte;
+    const categoriaNueva = cambiaTipo ? null : opts.categoria !== undefined ? opts.categoria : (searchParams.categoria ?? null);
+    if (categoriaNueva) params.set("categoria", categoriaNueva);
+
     const qs = params.toString();
     return `/dashboard/gastos${qs ? `?${qs}` : ""}`;
   }
 
-  // Conserva el filtro de cuenta Y el toggle de historial activos (si los
-  // hay) al armar el link de cada categoría — sin esto, tocar una
-  // categoría mientras se ve "todo el historial" te devolvía a "este mes"
-  // sin avisar, y el reporte (ya en modo historial completo) dejaba de
-  // cuadrar con la lista de transacciones que aparecía debajo.
-  function hrefConCategoria(catKey: string | null) {
+  // Igual que hrefFiltros pero solo para las pills de cuenta — conserva
+  // tipo/mes activos (antes, cambiar de cuenta te botaba siempre a "este
+  // mes" de gastos sin importar dónde estabas parado) pero deliberadamente
+  // suelta la categoría, porque una categoría elegida en una cuenta puede
+  // no existir/tener sentido en otra.
+  function hrefCuenta(clave: string | null) {
     const params = new URLSearchParams();
-    if (searchParams.cuenta) params.set("cuenta", searchParams.cuenta);
-    if (verHistorialCompleto) params.set("historial", "todo");
-    if (catKey) params.set("categoria", catKey);
+    if (clave) params.set("cuenta", clave);
+    if (tipoReporte === "ingreso") params.set("tipo", "ingreso");
+    if (mesSeleccionado !== mesActualStr) params.set("mes", mesSeleccionado);
     const qs = params.toString();
     return `/dashboard/gastos${qs ? `?${qs}` : ""}`;
   }
@@ -288,7 +347,7 @@ export default async function GastosPage({
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="mr-1 text-xs text-muted">Cuenta:</span>
           <Link
-            href="/dashboard/gastos"
+            href={hrefCuenta(null)}
             className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
               !cuentaSeleccionada ? "border-teal text-teal" : "text-muted"
             }`}
@@ -302,7 +361,7 @@ export default async function GastosPage({
             return (
               <Link
                 key={clave}
-                href={`/dashboard/gastos?cuenta=${encodeURIComponent(clave)}`}
+                href={hrefCuenta(clave)}
                 className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${activa ? "border-teal text-teal" : "text-muted"}`}
                 style={{ borderColor: activa ? undefined : "var(--border)" }}
               >
@@ -316,7 +375,7 @@ export default async function GastosPage({
             return (
               <Link
                 key={clave}
-                href={`/dashboard/gastos?cuenta=${encodeURIComponent(clave)}`}
+                href={hrefCuenta(clave)}
                 className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${activa ? "border-teal text-teal" : "text-muted"}`}
                 style={{ borderColor: activa ? undefined : "var(--border)" }}
               >
@@ -327,10 +386,64 @@ export default async function GastosPage({
         </div>
       )}
 
+      {/* Toggle Gastos/Ingresos — mismo rol que "Debits"/"Credits" en el
+      reporte del BPPR. Cambia tipoReporte, que a su vez filtra tanto el
+      reporte de categorías como la lista de transacciones de abajo. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs text-muted">Ver:</span>
+        <Link
+          href={hrefFiltros({ tipo: "gasto" })}
+          className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
+            tipoReporte === "gasto" ? "border-red text-red" : "text-muted"
+          }`}
+          style={{ borderColor: tipoReporte === "gasto" ? undefined : "var(--border)" }}
+        >
+          Gastos
+        </Link>
+        <Link
+          href={hrefFiltros({ tipo: "ingreso" })}
+          className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
+            tipoReporte === "ingreso" ? "border-grn text-grn" : "text-muted"
+          }`}
+          style={{ borderColor: tipoReporte === "ingreso" ? undefined : "var(--border)" }}
+        >
+          Ingresos
+        </Link>
+      </div>
+
+      {/* Selector de mes en pantalla — reemplaza el viejo link único "Ver
+      historial completo →" por pills de cada mes con transacciones más
+      "Todo", igual que los tabs de mes del reporte del BPPR. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs text-muted">Mes:</span>
+        {mesesDisponibles.map((m) => (
+          <Link
+            key={m}
+            href={hrefFiltros({ mes: m })}
+            className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
+              !esTodo && mesSeleccionado === m ? "border-teal text-teal" : "text-muted"
+            }`}
+            style={{ borderColor: !esTodo && mesSeleccionado === m ? undefined : "var(--border)" }}
+          >
+            {etiquetaMes(m)}
+          </Link>
+        ))}
+        <Link
+          href={hrefFiltros({ mes: "todo" })}
+          className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
+            esTodo ? "border-teal text-teal" : "text-muted"
+          }`}
+          style={{ borderColor: esTodo ? undefined : "var(--border)" }}
+        >
+          Todo
+        </Link>
+      </div>
+
       {reporteCategoria.length > 0 && (
         <div className="vc-card mb-3">
           <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">
-            Reporte {verHistorialCompleto ? "de todo el historial" : "del mes"} por categoría — toca una para ver sus transacciones
+            Reporte {tipoReporte === "ingreso" ? "de ingresos" : "de gastos"} {esTodo ? "de todo el historial" : `de ${etiquetaMes(mesSeleccionado)}`} — toca
+            una para ver sus transacciones
           </p>
           <div className="flex flex-col gap-2">
             {reporteCategoria.map((r) => {
@@ -351,7 +464,7 @@ export default async function GastosPage({
               return (
                 <Link
                   key={r.catKey}
-                  href={hrefConCategoria(activa ? null : r.catKey)}
+                  href={hrefFiltros({ categoria: activa ? null : r.catKey })}
                   className={`-mx-2 rounded-lg px-2 py-1 text-left hover:opacity-80 ${activa ? "bg-teal/[.08]" : ""}`}
                 >
                   <div className="flex justify-between text-sm">
@@ -376,29 +489,26 @@ export default async function GastosPage({
         <div className="mb-3 flex items-center justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2 text-xs">
           <span>
             Mostrando: <span className="font-medium">{nombreCategoriaSeleccionada}</span> ·{" "}
-            {categoriaSeleccionada?.tipo === "sin_categorizar" || verHistorialCompleto ? "todo el historial" : "este mes"} ·{" "}
+            {categoriaSeleccionada?.tipo === "sin_categorizar" || esTodo ? "todo el historial" : etiquetaMes(mesSeleccionado)} ·{" "}
             {transaccionesMostradas.length} transacción(es)
           </span>
-          <Link href={hrefConCategoria(null)} className="font-medium text-teal hover:opacity-80">
+          <Link href={hrefFiltros({ categoria: null })} className="font-medium text-teal hover:opacity-80">
             ✕ Quitar filtro
           </Link>
         </div>
       )}
 
       {/* Mismo alcance visible aquí también cuando no hay categoría tocada
-      — antes esta lista mostraba todo el historial sin decirlo, mientras
-      el reporte de arriba era solo de este mes, y esa diferencia de
-      alcance silenciosa era la causa real de "el reporte dice 1 pero
-      abajo veo 3 o 4". */}
+      — antes esta lista podía mostrar un alcance distinto al del reporte
+      de arriba sin avisar, que era la causa real de "el reporte dice 1
+      pero abajo veo 3 o 4". El selector de mes/tipo de arriba ya cubre el
+      cambio de vista, así que aquí solo queda el estado actual. */}
       {!categoriaSeleccionada && (
-        <div className="mb-3 flex items-center justify-between rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
+        <div className="mb-3 flex items-center rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
           <span className="text-muted">
-            Mostrando: <span className="font-medium text-text">{verHistorialCompleto ? "todo el historial" : "este mes"}</span> ·{" "}
+            Mostrando: <span className="font-medium text-text">{esTodo ? "todo el historial" : etiquetaMes(mesSeleccionado)}</span> ·{" "}
             {transaccionesMostradas.length} transacción(es)
           </span>
-          <Link href={hrefHistorial(!verHistorialCompleto)} className="font-medium text-teal hover:opacity-80">
-            {verHistorialCompleto ? "Ver solo este mes →" : "Ver historial completo →"}
-          </Link>
         </div>
       )}
 
@@ -408,7 +518,9 @@ export default async function GastosPage({
         {!error && transaccionesMostradas.length === 0 && (
           <div className="py-6 text-center">
             <p className="text-sm text-muted">
-              {categoriaSeleccionada ? "No hay transacciones en esta categoría este mes." : "Todavía no hay transacciones."}
+              {categoriaSeleccionada
+                ? `No hay transacciones en esta categoría ${esTodo ? "en el historial" : `en ${etiquetaMes(mesSeleccionado)}`}.`
+                : "Todavía no hay transacciones."}
             </p>
             {!categoriaSeleccionada && (
               <p className="mt-1 text-xs text-muted">Se llenan solas cuando conectes tu banco en la pestaña Cuentas.</p>
@@ -426,12 +538,11 @@ export default async function GastosPage({
             // filtro anterior) en vez de tomar las nuevas props, aunque el
             // servidor ya mandó la lista correcta. Antes esto pasaba con
             // cuenta/categoría; el mismo bug apareció de nuevo al agregar
-            // "Ver historial completo →" porque ese link solo cambia
-            // ?historial= y esa pieza faltaba aquí — el contador de arriba
-            // (que sí lee transaccionesMostradas.length del servidor)
-            // decía "15 transacción(es)" correctamente, pero la lista de
-            // abajo se quedaba pegada mostrando solo la 1 vieja.
-            key={`${searchParams.cuenta ?? "todas"}-${searchParams.categoria ?? "todas"}-${searchParams.historial ?? "mes"}`}
+            // "Ver historial completo →" porque ese link solo cambiaba un
+            // parámetro que no estaba en el key — ahora el key incluye
+            // tipo y mes explícitamente, que son los dos filtros nuevos de
+            // esta pantalla, además de cuenta y categoría de siempre.
+            key={`${searchParams.cuenta ?? "todas"}-${searchParams.categoria ?? "todas"}-${tipoReporte}-${mesSeleccionado}`}
             transaccionesIniciales={transaccionesMostradas}
             categorias={categorias ?? []}
             nombrePorCuenta={Object.fromEntries(nombrePorCuenta)}
