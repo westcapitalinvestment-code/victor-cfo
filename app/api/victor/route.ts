@@ -449,6 +449,18 @@ export async function POST(req: NextRequest) {
   // gasta su propia cuenta de prueba), lo único que cambia por ser founder
   // es que el chequeo de tope de arriba nunca lo bloquea.
   let costoAcumuladoCentavos = 0;
+  // Desglose por turno para el log de diagnóstico (uso_ia_log, migración
+  // 0020) — no afecta el tope de gasto (eso sigue siendo solo
+  // costoAcumuladoCentavos), es solo para poder ver DESPUÉS qué fue caro y
+  // por qué, en vez de adivinar. iteracionesTurno cuenta cuántas llamadas
+  // reales a Claude hizo falta para este único mensaje del usuario —
+  // categorizar en lote o revisar pendientes normalmente pasa de 1.
+  let iteracionesTurno = 0;
+  let inputTokensTurno = 0;
+  let outputTokensTurno = 0;
+  let cacheReadTokensTurno = 0;
+  let cacheCreationTokensTurno = 0;
+  const herramientasUsadasTurno = new Set<string>();
   // Antes en 4 — muy poco para categorizar en lote (revisar_gastos_sin_categorizar
   // + varios categorizar_transaccion + resumen final fácil pasa de 4 llamadas
   // cuando hay 8-10 gastos pendientes). Con solo 4, el loop se cortaba a
@@ -483,6 +495,16 @@ export async function POST(req: NextRequest) {
       tokensUsados += response.usage.input_tokens + response.usage.output_tokens;
       costoAcumuladoCentavos += costoEnCentavos("claude-sonnet-5", response.usage);
 
+      iteracionesTurno++;
+      inputTokensTurno += response.usage.input_tokens ?? 0;
+      outputTokensTurno += response.usage.output_tokens ?? 0;
+      cacheReadTokensTurno += response.usage.cache_read_input_tokens ?? 0;
+      cacheCreationTokensTurno +=
+        response.usage.cache_creation != null
+          ? (response.usage.cache_creation.ephemeral_5m_input_tokens ?? 0) +
+            (response.usage.cache_creation.ephemeral_1h_input_tokens ?? 0)
+          : response.usage.cache_creation_input_tokens ?? 0;
+
       assistantText = response.content
         .filter((block): block is Anthropic.TextBlock => block.type === "text")
         .map((block) => block.text)
@@ -501,6 +523,7 @@ export async function POST(req: NextRequest) {
 
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const toolUse of toolUseBlocks) {
+        herramientasUsadasTurno.add(toolUse.name);
         const result = await executeVictorTool(
           supabase,
           user.id,
@@ -537,6 +560,27 @@ export async function POST(req: NextRequest) {
     await supabase.rpc("registrar_uso_ia", { p_owner_id: user.id, p_costo_centavos: costoAcumuladoCentavos });
   } catch (err) {
     console.error("No se pudo registrar uso_ia_mensual:", err);
+  }
+
+  // Log de diagnóstico por mensaje (uso_ia_log, migración 0020) — para
+  // poder ver DESPUÉS qué mensaje costó qué y por qué (cuántas iteraciones,
+  // cuánto fue caché vs. fresco, qué herramientas se usaron), en vez de
+  // adivinar sumando el total del día a ojo. Propio try/catch, mismo
+  // motivo que el de arriba: nunca debe tumbar la respuesta al usuario.
+  try {
+    await supabase.rpc("registrar_uso_ia_detalle", {
+      p_owner_id: user.id,
+      p_costo_centavos: costoAcumuladoCentavos,
+      p_iteraciones: iteracionesTurno,
+      p_input_tokens: inputTokensTurno,
+      p_output_tokens: outputTokensTurno,
+      p_cache_read_tokens: cacheReadTokensTurno,
+      p_cache_creation_tokens: cacheCreationTokensTurno,
+      p_herramientas_usadas: herramientasUsadasTurno.size > 0 ? Array.from(herramientasUsadasTurno).join(", ") : null,
+      p_mensaje_usuario: userMessage,
+    });
+  } catch (err) {
+    console.error("No se pudo registrar uso_ia_log:", err);
   }
 
   // Si se acabaron las iteraciones y la última respuesta todavía pedía usar
