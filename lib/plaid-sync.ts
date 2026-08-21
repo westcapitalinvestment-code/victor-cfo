@@ -11,6 +11,12 @@ export type ResultadoSincronizacion = {
   totalPlaidModified: number;
   cuentasNegocioOmitidas: number;
   errores: string[];
+  // Diagnóstico de transactionsRefresh por cada banco conectado — sin
+  // esto, si Plaid rechaza el refresh (ej. el banco no lo soporta, o la
+  // cuenta todavía no está en el ambiente de producción de Plaid) no hay
+  // forma de saberlo desde la pantalla: el botón "Sincronizar" simplemente
+  // se ve como si no hubiera pasado nada, sin decir por qué.
+  refreshInfo: string[];
 };
 
 // La lógica real de sincronizar Plaid para UN usuario — extraída de lo
@@ -44,6 +50,7 @@ export async function sincronizarPlaidDeUsuario(
       totalPlaidModified: 0,
       cuentasNegocioOmitidas: 0,
       errores: [itemsError.message],
+      refreshInfo: [],
     };
   }
   if (!items || items.length === 0) {
@@ -55,6 +62,7 @@ export async function sincronizarPlaidDeUsuario(
       totalPlaidModified: 0,
       cuentasNegocioOmitidas: 0,
       errores: [],
+      refreshInfo: [],
     };
   }
 
@@ -64,6 +72,7 @@ export async function sincronizarPlaidDeUsuario(
   let totalPlaidAdded = 0;
   let totalPlaidModified = 0;
   const errores: string[] = [];
+  const refreshInfo: string[] = [];
 
   for (const item of items) {
     try {
@@ -86,8 +95,18 @@ export async function sincronizarPlaidDeUsuario(
       // con transactionsSync normal en vez de tumbar toda la sincronización.
       try {
         await plaidClient.transactionsRefresh({ access_token: accessToken });
+        refreshInfo.push(`${item.id}: refresh solicitado a Plaid ok`);
         await new Promise((resolve) => setTimeout(resolve, 4000));
       } catch (refreshErr) {
+        // Plaid manda el motivo real (ej. PRODUCT_NOT_READY,
+        // ITEM_LOGIN_REQUIRED) en el body de la respuesta del error, no en
+        // err.message — sin leer response.data, el mensaje que le llega a
+        // Joel en la pantalla sería un genérico "Request failed with
+        // status code 400" sin decir nada útil sobre POR QUÉ falló.
+        const detalle =
+          (refreshErr as { response?: { data?: { error_code?: string; error_message?: string } } })?.response?.data;
+        const motivo = detalle?.error_code ? `${detalle.error_code} — ${detalle.error_message}` : (refreshErr instanceof Error ? refreshErr.message : "error desconocido");
+        refreshInfo.push(`${item.id}: refresh falló (${motivo}) — usando lo que Plaid ya tenía en caché`);
         console.warn(`transactionsRefresh no disponible para item ${item.id}:`, refreshErr);
       }
 
@@ -193,5 +212,6 @@ export async function sincronizarPlaidDeUsuario(
     totalPlaidModified,
     cuentasNegocioOmitidas,
     errores,
+    refreshInfo,
   };
 }
