@@ -15,7 +15,7 @@ export default function InvitarContablePage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<{ emailSent: boolean } | null>(null);
+  const [resultado, setResultado] = useState<{ emailSent: boolean; emailReason?: string } | null>(null);
 
   const [cpaName, setCpaName] = useState("");
   const [cpaEmail, setCpaEmail] = useState("");
@@ -35,7 +35,7 @@ export default function InvitarContablePage() {
 
       if (!res.ok) throw new Error(data?.error || "No se pudo enviar la invitación.");
 
-      setResultado({ emailSent: !!data.emailSent });
+      setResultado({ emailSent: !!data.emailSent, emailReason: data.emailReason });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Algo salió mal.");
     } finally {
@@ -54,7 +54,11 @@ export default function InvitarContablePage() {
           <p className="mb-4 text-xs text-muted">
             {resultado.emailSent
               ? `Le mandamos un correo a ${cpaEmail} avisándole que lo invitaste a VICTOR.`
-              : `Guardamos la invitación para ${cpaEmail}, pero el envío automático del correo todavía no está conectado — mientras tanto, avísale tú mismo que ya lo invitaste.`}
+              : resultado.emailReason?.includes("RESEND_API_KEY")
+                ? `Guardamos la invitación para ${cpaEmail}, pero el envío automático del correo todavía no está conectado — mientras tanto, avísale tú mismo que ya lo invitaste.`
+                : `Guardamos la invitación para ${cpaEmail}, pero el correo no se pudo mandar (mientras el dominio de envío no esté verificado en Resend, solo entrega a la bandeja del dueño de la cuenta). Avísale tú mismo que ya lo invitaste mientras tanto.${
+                    resultado.emailReason ? ` Detalle técnico: ${resultado.emailReason}` : ""
+                  }`}
           </p>
           <button className="vc-btn-primary" onClick={() => router.push("/dashboard")}>
             Volver a Inicio
