@@ -466,8 +466,24 @@ export async function POST(req: NextRequest) {
   // pedir ninguna herramienta), esa respuesta se queda tal cual — cubre
   // saludos, charla simple, y también preguntas de puro razonamiento que
   // Haiku conteste bien sin tocar ninguna herramienta.
-  let modeloTurno: "claude-haiku-4-5" | "claude-sonnet-5" = "claude-haiku-4-5";
-  let yaEscalado = false;
+  //
+  // EXCEPCIÓN — inicio de sesión (caché frío): Haiku y Sonnet NO comparten
+  // caché entre sí (son cachés separados, confirmado con datos reales del
+  // 21 agosto: un mensaje que abrió sesión Y necesitó herramienta pagó
+  // 70,451 tokens de escritura de caché — el doble de lo normal — porque
+  // Haiku escribió SU caché, se descartó, y Sonnet tuvo que escribir el
+  // suyo de cero también, en vez de leer el de Haiku). Si probamos Haiku
+  // primero en el mensaje que abre una sesión nueva y termina necesitando
+  // herramienta, pagamos la reescritura cara DOS VECES en vez de una. Para
+  // evitar ese peor caso, el primer mensaje de una sesión (más de ~55min
+  // desde el último, con margen bajo el ttl de 1h) va directo a Sonnet —
+  // ahí de todas formas hay que pagar una reescritura sí o sí, así que
+  // mejor que sea una sola vez con el modelo que puede manejar cualquier
+  // cosa, no dos.
+  const minutosDesdeUltimoMensaje = (Date.now() - new Date(conversation.updated_at).getTime()) / 60000;
+  const esInicioDeSesion = minutosDesdeUltimoMensaje > 55;
+  let modeloTurno: "claude-haiku-4-5" | "claude-sonnet-5" = esInicioDeSesion ? "claude-sonnet-5" : "claude-haiku-4-5";
+  let yaEscalado = esInicioDeSesion;
   // Antes en 4 — muy poco para categorizar en lote (revisar_gastos_sin_categorizar
   // + varios categorizar_transaccion + resumen final fácil pasa de 4 llamadas
   // cuando hay 8-10 gastos pendientes). Con solo 4, el loop se cortaba a
