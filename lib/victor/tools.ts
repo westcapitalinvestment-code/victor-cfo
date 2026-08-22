@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { buscarEstrategia } from "@/lib/victor/estrategias-financieras";
 import { buscarConocimiento } from "@/lib/victor/conocimiento-financiero";
+import { buscarIdentidadCultural } from "@/lib/victor/identidad-cultural";
 import { direccionCategoriaValida } from "@/lib/direccion-categoria";
 
 // El texto real del banco (description_raw) casi nunca coincide palabra
@@ -299,6 +300,22 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
         tema: { type: "string", description: "El nombre del concepto o del libro/autor, tal como aparece en la lista (ej. 'inflación', 'credit score', 'Housel', 'la psicología del dinero')." },
       },
       required: ["tema"],
+    },
+  },
+  {
+    name: "consultar_identidad_cultural",
+    description:
+      "Trae el vocabulario natural, dichos/refranes, y contexto cultural completo de un país (Puerto Rico, " +
+      "México, Colombia, España) o del modo mixto/Spanglish — para que VICTOR hable como un pana/cuate/parcero " +
+      "de ese país, no en español genérico. Úsala UNA VEZ que sepas el país del usuario (por el onboarding o " +
+      "porque lo mencionó) y antes de empezar a usar modismos/jerga locales en la conversación — no inventes " +
+      "ni recuerdes de memoria el vocabulario o los dichos, tráelos primero con esta herramienta.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pais: { type: "string", description: "País o territorio del usuario, o 'modo mixto'/'spanglish' (ej. 'Puerto Rico', 'México', 'Colombia', 'España')." },
+      },
+      required: ["pais"],
     },
   },
   {
@@ -929,6 +946,26 @@ export async function executeVictorTool(
         return {
           ok: false,
           message: `Hay varios temas parecidos a "${tema}" (${resultado.map((c) => c.titulo).join(", ")}). Usa el nombre exacto para traer el que corresponde.`,
+        };
+      }
+      return { ok: true, message: resultado.texto };
+    }
+
+    case "consultar_identidad_cultural": {
+      const pais = String(input.pais ?? "").trim();
+      if (!pais) return { ok: false, message: "Falta el país a consultar." };
+
+      const resultado = buscarIdentidadCultural(pais);
+      if (resultado === null) {
+        return {
+          ok: false,
+          message: `No tengo vocabulario cultural específico para "${pais}" — usa español latinoamericano neutral, sin modismos de ningún país en particular.`,
+        };
+      }
+      if (Array.isArray(resultado)) {
+        return {
+          ok: false,
+          message: `Hay varias coincidencias para "${pais}" (${resultado.map((c) => c.titulo).join(", ")}). Usa el nombre exacto para traer la que corresponde.`,
         };
       }
       return { ok: true, message: resultado.texto };
