@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       cpa_email: cpaEmail,
       custom_message: customMessage,
     })
-    .select("id")
+    .select("id, invitation_token")
     .single();
 
   if (insertError || !invitation) {
@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     cpaName,
     ownerName: profile?.full_name ?? null,
     customMessage,
+    invitationToken: invitation.invitation_token,
   });
 
   return NextResponse.json({ invitationId: invitation.id, emailSent: emailResult.sent, emailReason: emailResult.reason });
