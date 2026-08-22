@@ -360,14 +360,46 @@ async function categorizarUna(
     return { ok: false, message: "Faltan datos (descripción o id de la transacción, y nombre de categoría) para categorizar." };
   }
 
-  const { data: categorias, error: catError } = await supabase
+  // Búsqueda de categoría en dos pasos. Primero ilike exacto (rápido, cubre
+  // el caso normal donde VICTOR usa el nombre casi literal). Si eso no
+  // encuentra nada, cae a un match por palabras clave (mismo criterio que
+  // filtroDescripcion/palabrasClave para transacciones) contra TODAS las
+  // categorías activas — hace falta cuando VICTOR parafrasea el nombre real
+  // (ej. dice "pago de tarjeta" pero el catálogo tiene "Pagos de deudas y
+  // tarjetas": ilike falla porque "pago de tarjeta" no es una subcadena
+  // literal de eso, aunque para cualquier persona es obviamente la misma
+  // categoría). Sin este fallback, categorizarUna devolvía ok:false por "no
+  // encontrada" en silencio, y en el saludo proactivo VICTOR igual le decía
+  // al usuario que ya había categorizado — bug real reportado por Joel el
+  // 22 de agosto 2026 (quedaba "1 gasto sin categorizar" en Home a pesar de
+  // que el chat decía que ya estaba resuelto).
+  const { data: categoriasExactas, error: catError } = await supabase
     .from("hacienda_categories")
     .select("id, nombre")
     .eq("activo", true)
     .ilike("nombre", `%${nombreCategoria}%`);
 
   if (catError) return { ok: false, message: `No se pudo buscar la categoría: ${catError.message}` };
-  if (!categorias || categorias.length === 0) {
+
+  let categorias = categoriasExactas ?? [];
+
+  if (categorias.length === 0) {
+    const { data: todasActivas, error: catError2 } = await supabase
+      .from("hacienda_categories")
+      .select("id, nombre")
+      .eq("activo", true);
+    if (catError2) return { ok: false, message: `No se pudo buscar la categoría: ${catError2.message}` };
+
+    const palabrasBuscadas = palabrasClave(nombreCategoria);
+    if (palabrasBuscadas.length > 0) {
+      categorias = (todasActivas ?? []).filter((c) => {
+        const nombreNormalizado = palabrasClave(c.nombre).join(" ");
+        return palabrasBuscadas.every((p) => nombreNormalizado.includes(p));
+      });
+    }
+  }
+
+  if (categorias.length === 0) {
     return { ok: false, message: `No encontré ninguna categoría parecida a "${nombreCategoria}". Pregúntale al usuario cuál de las categorías existentes aplica.` };
   }
   if (categorias.length > 1) {
