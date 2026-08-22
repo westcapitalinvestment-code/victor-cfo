@@ -402,44 +402,37 @@ export async function POST(req: NextRequest) {
   // en cada mensaje siguiente — un solo turno corrupto dejaría a VICTOR
   // sin poder contestar nunca más en ese chat.
   // Segundo punto de caché, además del system prompt de arriba — este es
-  // el que de verdad mueve la aguja del costo diario real. Antes el
-  // historial (hasta 20 turnos) se mandaba como INPUT FRESCO en cada
-  // llamada — y "cada llamada" no es solo cada mensaje del usuario: el
-  // loop de herramientas de abajo (categorización en lote, revisar
-  // pendientes, etc.) vuelve a llamar a Claude hasta 12 veces DENTRO de un
-  // mismo turno, cada vez reenviando el array completo que va creciendo.
-  // Sin caché, una sola pregunta que dispare 5 iteraciones pagaba el
-  // historial completo como input fresco 5 veces seguidas — eso, no el
-  // system prompt (que ya estaba cacheado), era el verdadero multiplicador
-  // detrás de "esto se come el presupuesto diario en 4-5 preguntas".
+  // el que de verdad mueve la aguja del costo diario real EN TURNOS con
+  // loop de herramientas — pero NO en una conversación normal de ida y
+  // vuelta sin herramientas, que es el caso más común.
   //
-  // El breakpoint va en el ÚLTIMO turno YA GUARDADO del historial (lo que
-  // NO cambia dentro de este turno) — el mensaje nuevo del usuario se deja
-  // sin cachear a propósito porque es distinto cada vez, cachearlo no
-  // ahorraría nada. Con esto: la 1ra llamada de la conversación paga el
-  // historial como escritura de caché (más cara que input normal, pero
-  // pasa una sola vez); las siguientes iteraciones del MISMO turno, y el
-  // próximo mensaje del usuario si llega dentro de la hora, lo leen barato
-  // (20 centavos/MTok en vez de 200). Mismo ttl:"1h" que el system prompt,
-  // por la misma razón: el patrón real de uso deja más de 5 minutos entre
-  // mensajes casi siempre.
-  const historialFormateado: Anthropic.MessageParam[] = recentHistory
-    .filter((m) => m.content && m.content.trim())
-    .map((m) => ({ role: m.role, content: m.content }));
-  if (historialFormateado.length > 0) {
-    const ultimoTurno = historialFormateado[historialFormateado.length - 1];
-    historialFormateado[historialFormateado.length - 1] = {
-      ...ultimoTurno,
-      content: [
-        { type: "text", text: ultimoTurno.content as string, cache_control: { type: "ephemeral", ttl: "1h" } },
-      ],
-    };
-  }
-
+  // INTENTO 1 (revertido): cachear el historial en TODOS los mensajes,
+  // sin importar si había loop o no. Con datos reales de hoy se confirmó
+  // que esto era un ERROR — un simple "wepa llegué" (1 sola llamada, sin
+  // herramientas) costó 19.28¢ en vez de los ~3.7¢ normales, porque
+  // escribir caché cuesta EL DOBLE que mandar el mismo texto sin cachear
+  // (400 vs 200 centavos/MTok), y si nunca se llega a LEER ese caché
+  // (porque el turno termina en 1 sola llamada), esa escritura cara nunca
+  // se recupera — es puro costo extra. Ver uso_ia_log del 21 de agosto:
+  // cache_creation_tokens ~5,700-6,150 en CADA mensaje (reescritura
+  // completa), cache_read_tokens en 0 para el primer mensaje de la sesión.
+  //
+  // INTENTO 2 (este): el historial se manda SIN cachear en la 1ra llamada
+  // de cada turno — igual que antes de cualquier fix, así una conversación
+  // normal de 1 sola llamada nunca paga la prima de escritura de caché sin
+  // necesidad. El cache_control se agrega recién ANTES de la 2da llamada
+  // del MISMO turno (ver más abajo, dentro del loop, "if (i === 1)") — o
+  // sea, solo cuando ya sabemos de verdad que hace falta un loop real
+  // (categorización en lote, revisar pendientes, etc.), que es exactamente
+  // donde SÍ hay lecturas de sobra para recuperar esa escritura cara.
   const apiMessages: Anthropic.MessageParam[] = [
-    ...historialFormateado,
+    ...recentHistory.filter((m) => m.content && m.content.trim()).map((m) => ({ role: m.role, content: m.content })),
     { role: "user" as const, content: userMessage },
   ];
+  // Posición del último mensaje ANTES de que el loop de herramientas
+  // empiece a agregarle más (assistant tool_use / user tool_result) — es
+  // el punto donde ponemos el cache_control si hace falta, más abajo.
+  const indiceUltimoMensajeInicial = apiMessages.length - 1;
 
   let assistantText = "";
   let tokensUsados = conversation.tokens_usados ?? 0;
@@ -472,6 +465,23 @@ export async function POST(req: NextRequest) {
 
   try {
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+      // Recién en la 2da llamada de este turno (i === 1) sabemos de verdad
+      // que hace falta un loop real de herramientas — ahí, y solo ahí,
+      // marcamos el historial+mensaje del usuario con cache_control. La
+      // 1ra llamada (i === 0) siempre se manda sin cachear: la mayoría de
+      // los mensajes terminan ahí mismo (sin herramientas), y cachear algo
+      // que nunca se vuelve a leer es pagar de más sin ninguna razón (ver
+      // comentario junto a indiceUltimoMensajeInicial, arriba).
+      if (i === 1) {
+        const mensajeBase = apiMessages[indiceUltimoMensajeInicial];
+        if (typeof mensajeBase.content === "string") {
+          apiMessages[indiceUltimoMensajeInicial] = {
+            ...mensajeBase,
+            content: [{ type: "text", text: mensajeBase.content, cache_control: { type: "ephemeral", ttl: "1h" } }],
+          };
+        }
+      }
+
       const response = await anthropic.messages.create({
         model: "claude-sonnet-5",
         // Sonnet 5 corre con "pensamiento adaptativo" a effort "high" por
