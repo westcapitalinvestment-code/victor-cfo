@@ -14,14 +14,18 @@ type Transaccion = {
   plaid_account_id: string | null;
   manual_account_id: string | null;
   tipo_flujo?: "gasto" | "ingreso" | "transferencia";
+  pending?: boolean;
 };
 
 type Categoria = { id: number; nombre: string };
+
+type CambioTransaccion = { descripcionAnterior: string | null; montoAnterior: number | null; fecha: string };
 
 export default function GastosList({
   transaccionesIniciales,
   categorias,
   nombrePorCuenta,
+  cambioPorTransaccion,
 }: {
   transaccionesIniciales: Transaccion[];
   categorias: Categoria[];
@@ -30,6 +34,11 @@ export default function GastosList({
   // usuario tiene más de una cuenta conectada (Plaid o manual). Vacío/
   // ausente = no mostrar nada.
   nombrePorCuenta?: Record<string, string>;
+  // Mapa transaction_id → última corrección que Plaid mandó sobre ella
+  // (transaction_sync_log, migración 0022) — típicamente porque pasó de
+  // pendiente/estimada a liquidada/real. Se muestra como una notita con
+  // "antes decía..." para que el cambio quede visible en vez de silencioso.
+  cambioPorTransaccion?: Record<string, CambioTransaccion>;
 }) {
   const router = useRouter();
   const [transacciones, setTransacciones] = useState(transaccionesIniciales);
@@ -125,6 +134,23 @@ export default function GastosList({
                   return nombreCuenta ? ` · ${nombreCuenta}` : "";
                 })()}
               </button>
+            )}
+            {/* Pendiente: el banco todavía no liquida esto — descripción y
+                monto son un estimado que Plaid puede corregir más adelante
+                (sin avisar de otra forma que reemplazando esta misma fila). */}
+            {t.pending && (
+              <p className="mt-0.5 text-[11px] text-amb">⏳ Pendiente — el banco puede corregir esto cuando liquide</p>
+            )}
+            {/* Corregida: ya pasó lo de arriba — esta fila decía otra cosa
+                antes y Plaid la actualizó. Se deja visible qué decía, para
+                que nunca se sienta como que "desapareció" una transacción. */}
+            {cambioPorTransaccion?.[t.id] && (
+              <p className="mt-0.5 text-[11px] text-muted">
+                🔄 El banco corregió esto — antes decía &quot;{cambioPorTransaccion[t.id].descripcionAnterior}&quot;
+                {cambioPorTransaccion[t.id].montoAnterior !== null
+                  ? ` por $${Math.abs(Number(cambioPorTransaccion[t.id].montoAnterior)).toFixed(2)}`
+                  : ""}
+              </p>
             )}
           </div>
           <span
