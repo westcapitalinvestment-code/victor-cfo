@@ -45,7 +45,7 @@ export default function LandingPage() {
 
         <div className={styles.heroActions}>
           <a href="#precios" className={styles.btnPrimary}>
-            Prueba 30 días gratis
+            Comienza ahora
           </a>
           <a href="#como-funciona" className={styles.btnGhost}>
             Ver cómo funciona →
@@ -117,7 +117,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className={styles.stat}>
-            <div className={styles.statNum}>$14.99</div>
+            <div className={styles.statNum}>$19.99</div>
             <div className={styles.statLabel}>
               al mes — menos que
               <br />
@@ -297,7 +297,7 @@ export default function LandingPage() {
         <h2>
           ¿Cuánto te está costando <em>no tenerlo</em>?
         </h2>
-        <p>30 días gratis. Sin tarjeta de crédito. Sin compromisos. Solo conecta tu banco y deja que VICTOR haga el trabajo.</p>
+        <p>Sin compromisos largos. Cancela cuando quieras. Solo conecta tu banco y deja que VICTOR haga el trabajo.</p>
         <Link href="/registro" className={styles.btnPrimary} style={{ fontSize: "1rem", padding: "0.9rem 2.25rem" }}>
           Comienza ahora →
         </Link>
