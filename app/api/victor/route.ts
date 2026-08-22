@@ -40,6 +40,19 @@ const FOUNDER_EMAILS = ["dr.jvalentin@gmail.com"];
 // el chat solo una vez al día — nunca la escribe el usuario a mano.
 const SALUDO_DIARIO_TRIGGER = "[SALUDO_DIARIO]";
 
+// Igual que arriba, pero para el arranque del onboarding conversacional
+// (Capa 2). Ninguna de las dos se supone que el usuario las vea nunca en
+// pantalla — victor-chat.tsx las manda con { hidden: true } para que no
+// se agreguen al historial visible EN ESE MOMENTO, pero sí se guardan tal
+// cual en messages_json (hacen falta ahí para que Claude tenga contexto
+// real de que esto ya pasó). El problema: si alguien recarga la página
+// varias veces antes de terminar el onboarding (ej. reintentando login),
+// cada carga vuelve a disparar el trigger, y GET /api/victor devolvía el
+// historial completo — triggers incluidos — así que sí se veían como
+// burbujas "[INICIO_AUTOMATICO]" repetidas al restaurar la conversación.
+// Se filtran abajo en el GET, después de leerlos de la base de datos.
+const ONBOARDING_TRIGGER = "[INICIO_AUTOMATICO]";
+
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 // GET — trae la conversación más reciente del usuario (mensajes + id) para
@@ -69,9 +82,14 @@ export async function GET() {
     return NextResponse.json({ conversationId: null, messages: [] });
   }
 
+  const mensajesCrudos: ChatMessage[] = Array.isArray(data.messages_json) ? data.messages_json : [];
+  const mensajesVisibles = mensajesCrudos.filter(
+    (m) => m.content !== ONBOARDING_TRIGGER && m.content !== SALUDO_DIARIO_TRIGGER
+  );
+
   return NextResponse.json({
     conversationId: data.id,
-    messages: Array.isArray(data.messages_json) ? data.messages_json : [],
+    messages: mensajesVisibles,
   });
 }
 
