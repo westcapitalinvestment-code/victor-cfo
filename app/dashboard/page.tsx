@@ -229,7 +229,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const [{ data: pendientesRaw }, { count: totalPendientes }, { data: categorias }] = await Promise.all([
     supabase
       .from("transactions")
-      .select("id, description_raw, amount, fecha, tipo_flujo")
+      .select("id, description_raw, amount, fecha, tipo_flujo, pending")
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .is("hacienda_category_id", null)
