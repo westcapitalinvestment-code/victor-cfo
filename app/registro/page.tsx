@@ -36,7 +36,20 @@ export default function RegistroPage() {
     setLoading(true);
     setError(null);
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    // emailRedirectTo: antes no se mandaba, así que Supabase usaba el "Site
+    // URL" configurado en el dashboard del proyecto — que quedó apuntando a
+    // localhost (de cuando esto se armó la primera vez), por eso el link del
+    // correo de confirmación llevaba a localhost y daba "no se pudo
+    // conectar" en el celular/computadora de quien se registra. Con esto se
+    // manda explícito el dominio real. OJO: además hay que agregar
+    // "https://www.victorcfo.com/**" a la lista de Redirect URLs permitidas
+    // en Supabase (Authentication → URL Configuration) — si no está ahí,
+    // Supabase ignora este parámetro y vuelve a usar el Site URL viejo.
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: `${window.location.origin}/login` },
+    });
 
     setLoading(false);
 
