@@ -69,7 +69,7 @@ export default function OnboardingForm({ initialFullName }: { initialFullName: s
         <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Nombre completo</label>
         <input
           className="vc-input"
-          placeholder="Joel A. Valentín De Jesús"
+          placeholder="Nombre y apellidos"
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
           required
