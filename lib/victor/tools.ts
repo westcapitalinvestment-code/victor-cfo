@@ -794,7 +794,7 @@ export async function executeVictorTool(
 
       const { data: pendientes, error } = await supabase
         .from("transactions")
-        .select("id, description_raw, amount, fecha")
+        .select("id, description_raw, amount, fecha, pending")
         .eq("owner_id", ownerId)
         .is("entity_id", null)
         .is("hacienda_category_id", null)
@@ -814,8 +814,21 @@ export async function executeVictorTool(
       // categorizar_transacciones_lote), nunca lo repitas en el chat al
       // usuario — es lo que te deja categorizar transacciones genuinamente
       // idénticas (mismo comercio, monto y fecha) sin ambigüedad.
+      //
+      // (PENDIENTE) al final marca las que el banco todavía no liquida —
+      // Plaid puede corregir su descripción/monto más adelante sin avisar
+      // de otra forma que reemplazando la misma fila (bug real, 22 agosto
+      // 2026: VICTOR categorizó un cargo pendiente por su nombre genérico,
+      // el banco lo liquidó con un nombre y monto totalmente distintos, y
+      // pareció que la transacción "desapareció"). Puedes categorizarlas
+      // igual si reconoces el comercio con confianza, pero avísale al
+      // usuario que es un estimado y que podría cambiar cuando el banco lo
+      // liquide — nunca lo presentes como un dato ya cerrado.
       const lista = (pendientes ?? [])
-        .map((t) => `- [${t.id}] "${t.description_raw}" · $${Math.abs(Number(t.amount))} · ${t.fecha}`)
+        .map(
+          (t) =>
+            `- [${t.id}] "${t.description_raw}" · $${Math.abs(Number(t.amount))} · ${t.fecha}${t.pending ? " (PENDIENTE)" : ""}`
+        )
         .join("\n");
 
       const quedanFuera = totalPendientes - (pendientes?.length ?? 0);
