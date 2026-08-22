@@ -85,7 +85,7 @@ export default function InvitarContablePage() {
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Nombre (opcional)</label>
-          <input className="vc-input" placeholder="Laura Rivera, CPA" value={cpaName} onChange={(e) => setCpaName(e.target.value)} />
+          <input className="vc-input" placeholder="Nombre y apellidos" value={cpaName} onChange={(e) => setCpaName(e.target.value)} />
         </div>
 
         <div>
@@ -93,7 +93,7 @@ export default function InvitarContablePage() {
           <input
             className="vc-input"
             type="email"
-            placeholder="laura@contabilidad.com"
+            placeholder="correo@contabilidad.com"
             value={cpaEmail}
             onChange={(e) => setCpaEmail(e.target.value)}
           />
