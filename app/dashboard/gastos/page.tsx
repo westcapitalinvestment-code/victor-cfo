@@ -158,7 +158,7 @@ export default async function GastosPage({
 
   let transaccionesQuery = supabase
     .from("transactions")
-    .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo")
+    .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo, pending")
     .eq("owner_id", user.id)
     .is("entity_id", null)
     .order("fecha", { ascending: false })
@@ -180,6 +180,39 @@ export default async function GastosPage({
     transaccionesQuery,
     supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
+
+  // Historial de "esto cambió después de guardarse" (transaction_sync_log,
+  // migración 0022) — para las transacciones visibles en esta pantalla,
+  // trae la corrección más reciente que Plaid haya mandado sobre ellas
+  // (típicamente: pasó de pendiente/estimada a liquidada/real). Se muestra
+  // como una notita en GastosList para que nunca vuelva a pasar lo que le
+  // pasó a Joel el 22 de agosto: una transacción "desaparece" sin que
+  // quede claro por qué.
+  const idsTransacciones = (transacciones ?? []).map((t) => t.id);
+  const { data: cambiosRecientes } =
+    idsTransacciones.length > 0
+      ? await supabase
+          .from("transaction_sync_log")
+          .select("transaction_id, descripcion_anterior, descripcion_nueva, monto_anterior, monto_nuevo, pending_anterior, pending_nuevo, creado_en")
+          .eq("owner_id", user.id)
+          .in("transaction_id", idsTransacciones)
+          .order("creado_en", { ascending: false })
+      : { data: [] as { transaction_id: string; descripcion_anterior: string | null; descripcion_nueva: string | null; monto_anterior: number | null; monto_nuevo: number | null; pending_anterior: boolean | null; pending_nuevo: boolean | null; creado_en: string }[] };
+
+  // Solo el cambio más reciente por transacción — con .order() descendente
+  // arriba, el primer .set() de cada id ya es el más nuevo.
+  const cambioPorTransaccion: Record<
+    string,
+    { descripcionAnterior: string | null; montoAnterior: number | null; fecha: string }
+  > = {};
+  for (const c of cambiosRecientes ?? []) {
+    if (cambioPorTransaccion[c.transaction_id]) continue;
+    cambioPorTransaccion[c.transaction_id] = {
+      descripcionAnterior: c.descripcion_anterior,
+      montoAnterior: c.monto_anterior,
+      fecha: c.creado_en,
+    };
+  }
 
   // Meses con transacciones reales (más el mes actual, aunque todavía no
   // tenga ninguna) para pintar como pills — igual que los tabs de mes del
@@ -585,6 +618,7 @@ export default async function GastosPage({
             transaccionesIniciales={transaccionesMostradas}
             categorias={categorias ?? []}
             nombrePorCuenta={Object.fromEntries(nombrePorCuenta)}
+            cambioPorTransaccion={cambioPorTransaccion}
           />
         )}
         {!categoriaSeleccionada && transacciones && transacciones.length === LIMITE_TRANSACCIONES && (
