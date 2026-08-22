@@ -455,35 +455,24 @@ export async function POST(req: NextRequest) {
   let cacheCreationTokensTurno = 0;
   const herramientasUsadasTurno = new Set<string>();
   const modelosUsadosTurno = new Set<string>();
-  // Enrutamiento Sonnet/Haiku ("balanceado", decisión de Joel 21 agosto):
-  // CADA turno se intenta primero con Haiku (4x más barato que Sonnet).
-  // Si Haiku decide que necesita usar una herramienta (categorizar, crear
-  // meta, consultar datos reales) — eso significa que el mensaje toca
-  // dinero/datos de verdad — esa respuesta de Haiku se DESCARTA por
-  // completo (nunca se ejecuta ninguna herramienta con lo que Haiku
-  // decidió) y se repite la MISMA llamada con Sonnet, que maneja el resto
-  // del turno de ahí en adelante. Si Haiku responde con texto plano (sin
-  // pedir ninguna herramienta), esa respuesta se queda tal cual — cubre
-  // saludos, charla simple, y también preguntas de puro razonamiento que
-  // Haiku conteste bien sin tocar ninguna herramienta.
-  //
-  // EXCEPCIÓN — inicio de sesión (caché frío): Haiku y Sonnet NO comparten
-  // caché entre sí (son cachés separados, confirmado con datos reales del
-  // 21 agosto: un mensaje que abrió sesión Y necesitó herramienta pagó
-  // 70,451 tokens de escritura de caché — el doble de lo normal — porque
-  // Haiku escribió SU caché, se descartó, y Sonnet tuvo que escribir el
-  // suyo de cero también, en vez de leer el de Haiku). Si probamos Haiku
-  // primero en el mensaje que abre una sesión nueva y termina necesitando
-  // herramienta, pagamos la reescritura cara DOS VECES en vez de una. Para
-  // evitar ese peor caso, el primer mensaje de una sesión (más de ~55min
-  // desde el último, con margen bajo el ttl de 1h) va directo a Sonnet —
-  // ahí de todas formas hay que pagar una reescritura sí o sí, así que
-  // mejor que sea una sola vez con el modelo que puede manejar cualquier
-  // cosa, no dos.
-  const minutosDesdeUltimoMensaje = (Date.now() - new Date(conversation.updated_at).getTime()) / 60000;
-  const esInicioDeSesion = minutosDesdeUltimoMensaje > 55;
-  let modeloTurno: "claude-haiku-4-5" | "claude-sonnet-5" = esInicioDeSesion ? "claude-sonnet-5" : "claude-haiku-4-5";
-  let yaEscalado = esInicioDeSesion;
+  // EXPERIMENTO (22 agosto 2026, decisión de Joel): todo en Haiku, siempre
+  // — incluso el saludo diario y turnos que usan herramientas (categorizar,
+  // crear meta, consultar balance). Antes existía un enrutamiento
+  // "balanceado" (Haiku para texto plano, escalaba a Sonnet en cuanto pedía
+  // una herramienta) que resolvía calidad, pero tenía un problema real: el
+  // saludo diario (cold start, además con herramientas) terminaba pagando
+  // la escritura de caché DOS VECES — una para el intento de Haiku
+  // descartado, otra para Sonnet, porque Haiku y Sonnet no comparten caché
+  // entre sí — y por diseño el saludo SIEMPRE usa herramientas
+  // (revisar_gastos_sin_categorizar + categorizar_transacciones_lote), así
+  // que pagaba ese peor caso todos los días. Quitar la escalación completa
+  // elimina ese problema de raíz y baja el costo a una cuarta parte en
+  // cualquier turno con herramientas — el riesgo a vigilar es si la calidad
+  // de categorización/razonamiento de Haiku aguanta sin la red de
+  // seguridad de Sonnet. Si no aguanta, revertir es sencillo: este bloque
+  // reemplaza por completo la lógica de enrutamiento anterior, que queda
+  // documentada en el historial de git de este archivo.
+  const modeloTurno: "claude-haiku-4-5" = "claude-haiku-4-5";
   // Antes en 4 — muy poco para categorizar en lote (revisar_gastos_sin_categorizar
   // + varios categorizar_transaccion + resumen final fácil pasa de 4 llamadas
   // cuando hay 8-10 gastos pendientes). Con solo 4, el loop se cortaba a
@@ -526,45 +515,16 @@ export async function POST(req: NextRequest) {
         // VICTOR contestaba con texto vacío. Con más margen, el pensamiento
         // tiene espacio de sobra y siempre queda algo para la respuesta.
         max_tokens: 8192,
-        // "output_config: effort" es un parámetro de pensamiento adaptativo
-        // específico de Sonnet 5 — Haiku no tiene ese modo, así que solo se
-        // manda cuando el modelo de este intento es Sonnet, para no
-        // arriesgarnos a que la API rechace la llamada a Haiku por un
-        // parámetro que ese modelo no reconoce.
-        ...(modeloTurno === "claude-sonnet-5" ? { output_config: { effort: "low" as const } } : {}),
+        // output_config/effort era solo para Sonnet 5 (pensamiento
+        // adaptativo) — Haiku no tiene ese parámetro, así que no se manda
+        // nada aquí mientras el experimento de "todo en Haiku" siga activo
+        // (ver nota grande junto a modeloTurno, arriba).
         system: systemBlocks,
         tools: VICTOR_TOOLS,
         messages: apiMessages,
       });
 
-      // El intento con Haiku pidió usar una herramienta — se descarta
-      // (no se ejecuta nada de lo que decidió) y se repite ESTA MISMA
-      // llamada con Sonnet. i-- + continue hace que el for vuelva a
-      // pasar por el mismo valor de i (el i++ del for lo compensa),
-      // así que esto NO gasta una iteración real del loop de
-      // herramientas — el costo del intento descartado SÍ se registra
-      // más abajo, porque fue una llamada real y con costo real.
-      if (modeloTurno === "claude-haiku-4-5" && response.stop_reason === "tool_use" && !yaEscalado) {
-        tokensUsados += response.usage.input_tokens + response.usage.output_tokens;
-        costoAcumuladoCentavos += costoEnCentavos("claude-haiku-4-5", response.usage);
-        iteracionesTurno++;
-        inputTokensTurno += response.usage.input_tokens ?? 0;
-        outputTokensTurno += response.usage.output_tokens ?? 0;
-        cacheReadTokensTurno += response.usage.cache_read_input_tokens ?? 0;
-        cacheCreationTokensTurno +=
-          response.usage.cache_creation != null
-            ? (response.usage.cache_creation.ephemeral_5m_input_tokens ?? 0) +
-              (response.usage.cache_creation.ephemeral_1h_input_tokens ?? 0)
-            : response.usage.cache_creation_input_tokens ?? 0;
-        modelosUsadosTurno.add("haiku(descartado)");
-
-        modeloTurno = "claude-sonnet-5";
-        yaEscalado = true;
-        i--;
-        continue;
-      }
-
-      modelosUsadosTurno.add(modeloTurno === "claude-haiku-4-5" ? "haiku" : "sonnet");
+      modelosUsadosTurno.add("haiku");
       tokensUsados += response.usage.input_tokens + response.usage.output_tokens;
       costoAcumuladoCentavos += costoEnCentavos(modeloTurno, response.usage);
 
