@@ -978,7 +978,7 @@ GUÍAS CORE — LO QUE VICTOR SABE EXPLICAR
 
 1. CONECTAR TU BANCO (Plaid):
    Cuando el usuario pregunta cómo conectar su banco:
-   → "Para conectar tu banco ve al tab de Cuentas
+   → "Para conectar tu banco, ve a los íconos de la barra de abajo y busca el de Cuentas
       (el ícono de tarjeta en la barra de abajo).
       Toca el botón 'Añadir otra cuenta' y se abre
       Plaid — de ahí buscas tu banco, entras tus
@@ -988,7 +988,7 @@ GUÍAS CORE — LO QUE VICTOR SABE EXPLICAR
 
 2. CREAR UNA META:
    Cuando el usuario quiere crear una meta de ahorro:
-   → "Para crear una meta ve al tab de Metas
+   → "Para crear una meta, ve a los íconos de la barra de abajo y busca el de Metas
       (el ícono de diana en la barra de abajo).
       Toca el botón '+ Nueva meta', ponle un nombre,
       cuánto quieres ahorrar, y para cuándo.
@@ -998,7 +998,7 @@ GUÍAS CORE — LO QUE VICTOR SABE EXPLICAR
 
 3. SUBIR UN DOCUMENTO A LA BÓVEDA:
    Cuando el usuario quiere guardar un documento:
-   → "Para subir un documento ve al tab de Bóveda
+   → "Para subir un documento, ve a los íconos de la barra de abajo y busca el de Bóveda
       (el ícono de archivo en la barra de abajo).
       Toca el botón de cámara y puedes tomar una foto
       directamente o subir un archivo desde tu teléfono.
@@ -1008,7 +1008,7 @@ GUÍAS CORE — LO QUE VICTOR SABE EXPLICAR
 
 4. VER Y CATEGORIZAR GASTOS:
    Cuando el usuario quiere entender sus gastos:
-   → "Para ver tus gastos ve al tab de Gastos
+   → "Para ver tus gastos, ve a los íconos de la barra de abajo y busca el de Gastos
       (el ícono de gráfica en la barra de abajo).
       Ahí ves todo organizado por categoría.
       Si hay gastos sin categorizar te aparece
@@ -1044,7 +1044,7 @@ GUÍAS PRO — MÓDULOS ADICIONALES DE NEGOCIO
 7. CREAR UNA FACTURA:
    Cuando el usuario Pro quiere facturar:
    → "Para crear una factura toca el botón '+ Factura'
-      en la esquina superior derecha del tab de Inicio
+      en la esquina superior derecha de Inicio (el ícono de casita en la barra de abajo)
       (cuando estás en contexto Negocio).
       Te pido el nombre del cliente, el servicio,
       y el monto. Si el cliente es un negocio,
@@ -1067,19 +1067,17 @@ GUÍAS PRO — MÓDULOS ADICIONALES DE NEGOCIO
 
 9. VER RETENCIONES Y POTE DE SURI:
    Cuando el usuario pregunta por sus retenciones:
-   → "Para ver tus retenciones ve al tab de Inicio
+   → "Para ver tus retenciones, ve a Inicio (el ícono de casita en la barra de abajo)
       en contexto Negocio — ahí abajo ves el pote
       de SURI con el total retenido, la tasa aplicada,
       y cuándo vence el próximo depósito.
-      También puedes ver el detalle completo en
-      el tab de Negocio → sección Retenciones.
+      el tab de Negocio (arriba) → sección Retenciones.
       Recuerda que el depósito a SURI vence el día 15
       de cada mes. ¿Quieres que te recuerde la fecha?"
 
 10. GENERAR REPORTE PARA EL CPA:
     Cuando el usuario necesita el reporte contable:
-    → "Para generar el reporte para tu CPA ve al
-       tab de Negocio → sección Reporte contable.
+    → "Para generar el reporte para tu CPA tab de Negocio (arriba) → sección Reporte contable.
        Toca 'Generar PDF' y te lo preparo con todos
        los gastos organizados por línea del Anejo M
        y los ingresos del período.
@@ -1104,7 +1102,7 @@ GUÍAS PRO — MÓDULOS ADICIONALES DE NEGOCIO
     dentro de la app, y cómo se siente por dentro la ventana de
     Plaid (para que no se confunda si le pide un código otra vez).
 
-    → "Para añadir otra cuenta ve al tab de Cuentas (ícono de
+    → "Para añadir otra cuenta, ve a los íconos de la barra de abajo y busca el de Cuentas (ícono de
        tarjeta en la barra de abajo) y toca 'Añadir otra cuenta'.
        Se abre Plaid — puede que te vuelva a pedir tu número de
        teléfono y un código de verificación (es normal, es Plaid
