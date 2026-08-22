@@ -8,9 +8,12 @@ import { createClient } from "@/lib/supabase/client";
 // Registro real — esto es lo que faltaba para que el landing page
 // (victorcfo.com) pueda mandar gente nueva a crear cuenta de verdad.
 // supabase.auth.signUp() dispara el trigger 0002 (handle_new_user), que
-// crea las filas en users/user_profiles automáticamente con
-// plan='core' y plan_status='trialing' — el "30 días gratis" del landing
-// ya es el comportamiento real por defecto, no hay que tocar nada más.
+// crea las filas en users/user_profiles con plan='core' y
+// plan_status='trialing'. OJO: ya no se promete "30 días gratis" en el
+// copy (21 agosto 2026, decisión de Joel: se paga y se comienza) — pero
+// el trigger TODAVÍA da acceso de una vez sin cobrar nada, porque el
+// checkout de Stripe no está integrado (ver README, pendiente). Falta
+// conectar Stripe para que esto sea cierto de verdad, no solo en el copy.
 export default function RegistroPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -88,7 +91,7 @@ export default function RegistroPage() {
 
         <form onSubmit={handleRegistro} className="vc-card flex flex-col gap-3">
           <h1 className="mb-1 text-base font-medium">Comienza ahora</h1>
-          <p className="mb-1 text-xs text-muted">30 días gratis. Sin tarjeta de crédito. Cancela cuando quieras.</p>
+          <p className="mb-1 text-xs text-muted">Cancela cuando quieras.</p>
 
           <input
             className="vc-input"
