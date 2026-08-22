@@ -454,6 +454,20 @@ export async function POST(req: NextRequest) {
   let cacheReadTokensTurno = 0;
   let cacheCreationTokensTurno = 0;
   const herramientasUsadasTurno = new Set<string>();
+  const modelosUsadosTurno = new Set<string>();
+  // Enrutamiento Sonnet/Haiku ("balanceado", decisión de Joel 21 agosto):
+  // CADA turno se intenta primero con Haiku (4x más barato que Sonnet).
+  // Si Haiku decide que necesita usar una herramienta (categorizar, crear
+  // meta, consultar datos reales) — eso significa que el mensaje toca
+  // dinero/datos de verdad — esa respuesta de Haiku se DESCARTA por
+  // completo (nunca se ejecuta ninguna herramienta con lo que Haiku
+  // decidió) y se repite la MISMA llamada con Sonnet, que maneja el resto
+  // del turno de ahí en adelante. Si Haiku responde con texto plano (sin
+  // pedir ninguna herramienta), esa respuesta se queda tal cual — cubre
+  // saludos, charla simple, y también preguntas de puro razonamiento que
+  // Haiku conteste bien sin tocar ninguna herramienta.
+  let modeloTurno: "claude-haiku-4-5" | "claude-sonnet-5" = "claude-haiku-4-5";
+  let yaEscalado = false;
   // Antes en 4 — muy poco para categorizar en lote (revisar_gastos_sin_categorizar
   // + varios categorizar_transaccion + resumen final fácil pasa de 4 llamadas
   // cuando hay 8-10 gastos pendientes). Con solo 4, el loop se cortaba a
@@ -483,7 +497,7 @@ export async function POST(req: NextRequest) {
       }
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-5",
+        model: modeloTurno,
         // Sonnet 5 corre con "pensamiento adaptativo" a effort "high" por
         // default — ese pensamiento interno consume del mismo tope de
         // max_tokens que la respuesta visible, y eso fue lo que cortó la
@@ -496,14 +510,47 @@ export async function POST(req: NextRequest) {
         // VICTOR contestaba con texto vacío. Con más margen, el pensamiento
         // tiene espacio de sobra y siempre queda algo para la respuesta.
         max_tokens: 8192,
-        output_config: { effort: "low" },
+        // "output_config: effort" es un parámetro de pensamiento adaptativo
+        // específico de Sonnet 5 — Haiku no tiene ese modo, así que solo se
+        // manda cuando el modelo de este intento es Sonnet, para no
+        // arriesgarnos a que la API rechace la llamada a Haiku por un
+        // parámetro que ese modelo no reconoce.
+        ...(modeloTurno === "claude-sonnet-5" ? { output_config: { effort: "low" as const } } : {}),
         system: systemBlocks,
         tools: VICTOR_TOOLS,
         messages: apiMessages,
       });
 
+      // El intento con Haiku pidió usar una herramienta — se descarta
+      // (no se ejecuta nada de lo que decidió) y se repite ESTA MISMA
+      // llamada con Sonnet. i-- + continue hace que el for vuelva a
+      // pasar por el mismo valor de i (el i++ del for lo compensa),
+      // así que esto NO gasta una iteración real del loop de
+      // herramientas — el costo del intento descartado SÍ se registra
+      // más abajo, porque fue una llamada real y con costo real.
+      if (modeloTurno === "claude-haiku-4-5" && response.stop_reason === "tool_use" && !yaEscalado) {
+        tokensUsados += response.usage.input_tokens + response.usage.output_tokens;
+        costoAcumuladoCentavos += costoEnCentavos("claude-haiku-4-5", response.usage);
+        iteracionesTurno++;
+        inputTokensTurno += response.usage.input_tokens ?? 0;
+        outputTokensTurno += response.usage.output_tokens ?? 0;
+        cacheReadTokensTurno += response.usage.cache_read_input_tokens ?? 0;
+        cacheCreationTokensTurno +=
+          response.usage.cache_creation != null
+            ? (response.usage.cache_creation.ephemeral_5m_input_tokens ?? 0) +
+              (response.usage.cache_creation.ephemeral_1h_input_tokens ?? 0)
+            : response.usage.cache_creation_input_tokens ?? 0;
+        modelosUsadosTurno.add("haiku(descartado)");
+
+        modeloTurno = "claude-sonnet-5";
+        yaEscalado = true;
+        i--;
+        continue;
+      }
+
+      modelosUsadosTurno.add(modeloTurno === "claude-haiku-4-5" ? "haiku" : "sonnet");
       tokensUsados += response.usage.input_tokens + response.usage.output_tokens;
-      costoAcumuladoCentavos += costoEnCentavos("claude-sonnet-5", response.usage);
+      costoAcumuladoCentavos += costoEnCentavos(modeloTurno, response.usage);
 
       iteracionesTurno++;
       inputTokensTurno += response.usage.input_tokens ?? 0;
@@ -588,6 +635,7 @@ export async function POST(req: NextRequest) {
       p_cache_creation_tokens: cacheCreationTokensTurno,
       p_herramientas_usadas: herramientasUsadasTurno.size > 0 ? Array.from(herramientasUsadasTurno).join(", ") : null,
       p_mensaje_usuario: userMessage,
+      p_modelos_usados: modelosUsadosTurno.size > 0 ? Array.from(modelosUsadosTurno).join(", ") : null,
     });
   } catch (err) {
     console.error("No se pudo registrar uso_ia_log:", err);
