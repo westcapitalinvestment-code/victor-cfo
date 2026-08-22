@@ -41,6 +41,7 @@ export default function AceptarInvitacionCpaPage() {
   const [error, setError] = useState<string | null>(null);
   const [revisaCorreo, setRevisaCorreo] = useState(false);
   const [conectando, setConectando] = useState(false);
+  const [resetEnviado, setResetEnviado] = useState(false);
 
   // Evita llamar /accept dos veces si onAuthStateChange dispara más de una
   // vez (pasa normalmente: una vez al montar si ya hay sesión, y otra vez
@@ -137,6 +138,22 @@ export default function AceptarInvitacionCpaPage() {
       return;
     }
     // onAuthStateChange se encarga de llamar /accept y redirigir.
+  }
+
+  async function handleOlvidoContrasena() {
+    if (!invite) return;
+    setError(null);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(invite.cpaEmail, {
+      redirectTo: `${window.location.origin}/restablecer-contrasena`,
+    });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setResetEnviado(true);
   }
 
   if (cargando) {
@@ -274,6 +291,21 @@ export default function AceptarInvitacionCpaPage() {
                     : "Entrar"}
             </button>
           </form>
+
+          {modo === "entrar" &&
+            (resetEnviado ? (
+              <p className="text-center text-xs text-muted">
+                Te mandamos un link a {invite.cpaEmail} para crear una contraseña nueva.
+              </p>
+            ) : (
+              <button
+                type="button"
+                className="text-center text-xs text-muted hover:text-teal"
+                onClick={handleOlvidoContrasena}
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            ))}
         </div>
       </div>
     </div>
