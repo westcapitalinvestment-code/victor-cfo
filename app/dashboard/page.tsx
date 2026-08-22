@@ -48,7 +48,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   const firstName = (profile.full_name || user.email || "").split(" ")[0];
   const hoy = new Date();
-  const fechaLbl = hoy.toLocaleDateString("es-PR", { weekday: "long", day: "numeric", month: "long" });
+  // timeZone explícito — sin esto, toLocaleDateString usa la hora del
+  // servidor (UTC en Vercel), y pasada cierta hora de la noche en PR
+  // (UTC-4) ya es el día SIGUIENTE en UTC, mostrando la fecha equivocada
+  // aunque el saludo de arriba (saludoPorHora, que sí especifica la zona)
+  // estuviera correcto. Mismo patrón que el resto de lib/hora-pr.ts.
+  const fechaLbl = hoy.toLocaleDateString("es-PR", {
+    timeZone: "America/Puerto_Rico",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 
   // Ingresos/Gastos del mes ahora tienen su propio selector de mes en
   // pantalla (igual que en /dashboard/gastos) — antes esto era siempre
