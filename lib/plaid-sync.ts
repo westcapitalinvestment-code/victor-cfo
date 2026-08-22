@@ -158,6 +158,12 @@ export async function sincronizarPlaidDeUsuario(
           description_raw: t.merchant_name || t.name || "Transacción sin descripción",
           amount: t.amount,
           fecha: t.date,
+          // Plaid manda esto en cada transacción — mientras es true, el
+          // banco todavía puede corregir descripción/monto/fecha más
+          // adelante (llega otra vez, pero dentro de "modified", nunca
+          // como una fila nueva). Ver nota grande más abajo sobre por qué
+          // esto importa.
+          pending: t.pending ?? false,
         }));
 
       if (filasNuevas.length > 0) {
@@ -170,17 +176,76 @@ export async function sincronizarPlaidDeUsuario(
         } else totalNuevas += filasNuevas.length;
       }
 
-      const filasModificadas = modified
+      const modificadasFiltradas = modified
         .filter(pasaHistorial)
-        .filter((t) => !esDeNegocioYNoEsPro(t.account_id))
-        .map((t) => ({
-          owner_id: ownerId,
-          plaid_transaction_id: t.transaction_id,
-          plaid_account_id: t.account_id,
-          description_raw: t.merchant_name || t.name || "Transacción sin descripción",
-          amount: t.amount,
-          fecha: t.date,
-        }));
+        .filter((t) => !esDeNegocioYNoEsPro(t.account_id));
+
+      // AUDITORÍA (bug real, 22 agosto 2026): un "modified" de Plaid casi
+      // siempre significa que un cargo PENDIENTE (descripción/monto
+      // estimados, ej. "AUTOMATIC PAYMENT - THANK YOU" $179) se acaba de
+      // liquidar con su descripción/monto reales (ej. "MOHELA" $26.07) —
+      // mismo transaction_id, contenido distinto. Antes esto se sobreescribía
+      // en la misma fila sin dejar rastro: si VICTOR o el usuario ya habían
+      // visto/categorizado la versión vieja, desaparecía sin explicación.
+      // Ahora, antes de sobrescribir, se compara contra lo que había ANTES
+      // en la base de datos y, si algo visible cambió de verdad, se guarda
+      // el "antes vs. después" en transaction_sync_log — así queda un
+      // historial real en vez de una mutación silenciosa. No bloquea el
+      // upsert si este paso falla (el log es para auditar, no para decidir
+      // si la transacción se guarda).
+      if (modificadasFiltradas.length > 0) {
+        const idsPlaid = modificadasFiltradas.map((t) => t.transaction_id);
+        const { data: existentes } = await supabase
+          .from("transactions")
+          .select("id, plaid_transaction_id, description_raw, amount, fecha, pending")
+          .eq("owner_id", ownerId)
+          .in("plaid_transaction_id", idsPlaid);
+
+        const existentesPorId = new Map((existentes ?? []).map((e) => [e.plaid_transaction_id, e]));
+
+        const logsDeCambio = modificadasFiltradas
+          .map((t) => {
+            const anterior = existentesPorId.get(t.transaction_id);
+            if (!anterior) return null; // no estaba antes — no hay "antes" que auditar
+            const descripcionNueva = t.merchant_name || t.name || "Transacción sin descripción";
+            const pendingNuevo = t.pending ?? false;
+            const cambioAlgo =
+              anterior.description_raw !== descripcionNueva ||
+              Number(anterior.amount) !== t.amount ||
+              anterior.fecha !== t.date ||
+              anterior.pending !== pendingNuevo;
+            if (!cambioAlgo) return null;
+            return {
+              owner_id: ownerId,
+              transaction_id: anterior.id,
+              plaid_transaction_id: t.transaction_id,
+              descripcion_anterior: anterior.description_raw,
+              descripcion_nueva: descripcionNueva,
+              monto_anterior: anterior.amount,
+              monto_nuevo: t.amount,
+              fecha_anterior: anterior.fecha,
+              fecha_nueva: t.date,
+              pending_anterior: anterior.pending,
+              pending_nuevo: pendingNuevo,
+            };
+          })
+          .filter((log): log is NonNullable<typeof log> => log !== null);
+
+        if (logsDeCambio.length > 0) {
+          const { error: logError } = await supabase.from("transaction_sync_log").insert(logsDeCambio);
+          if (logError) console.warn(`No se pudo guardar el historial de cambios (item ${item.id}):`, logError.message);
+        }
+      }
+
+      const filasModificadas = modificadasFiltradas.map((t) => ({
+        owner_id: ownerId,
+        plaid_transaction_id: t.transaction_id,
+        plaid_account_id: t.account_id,
+        description_raw: t.merchant_name || t.name || "Transacción sin descripción",
+        amount: t.amount,
+        fecha: t.date,
+        pending: t.pending ?? false,
+      }));
 
       if (filasModificadas.length > 0) {
         const { error: modError } = await supabase
