@@ -26,7 +26,21 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    // Un CPA invitado entra por el mismo /login (un solo login para todo
+    // VICTOR — ver nota en account_members, migración 0001), así que hay
+    // que revisar si este correo es un CPA para mandarlo a /cpa en vez de
+    // /dashboard. Simplificación consciente: si alguien es dueño Y CPA de
+    // otros a la vez (caso raro), esto lo manda al portal CPA primero.
+    const { data: membresiaCpa } = await supabase
+      .from("account_members")
+      .select("id")
+      .eq("member_email", email)
+      .eq("role", "cpa")
+      .eq("active", true)
+      .limit(1)
+      .maybeSingle();
+
+    router.push(membresiaCpa ? "/cpa" : "/dashboard");
     router.refresh();
   }
 
