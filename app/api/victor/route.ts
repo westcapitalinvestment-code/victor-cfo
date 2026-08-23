@@ -199,11 +199,16 @@ export async function POST(req: NextRequest) {
   // costo real sin que nadie se entere hasta la factura. El founder queda
   // exento porque necesita poder probar la app libremente — su uso sí se
   // sigue registrando más abajo, solo no lo bloquea.
-  // Cifras de partida (agosto 2026) pensadas con margen sobre el precio
-  // real de Anthropic ($14.99/$49.99/$99.99 de Core/Pro/Pro+) — con el fix
-  // de caché puesto, un usuario activo normal debería quedar bien por
-  // debajo. Si en la práctica algún plan se acerca seguido al tope, hay
-  // que subir el número — no es una talla única para siempre.
+   // Cifras actualizadas (23 agosto 2026) tras subir Core a $19.99/mes y
+  // conectar Stripe de verdad. Cálculo de margen para Core: $19.99 ingreso
+  // − $7.50 tope de IA − $2.00 Plaid − ~$0.88 fees de Stripe (2.9%+$0.30)
+  // = $9.61 de ganancia ≈ 48% de margen, en el peor caso (usuario que pega
+  // justo en el tope todos los meses). Con el fix de caché puesto, un
+  // usuario activo normal debería quedar bien por debajo del tope. Pro y
+  // Pro+ se quedan con sus números viejos por ahora — no son comprables
+  // todavía (PRO_DISPONIBLE = false), así que no urge recalcularlos. Si en
+  // la práctica Core se acerca seguido al tope, hay que subir el número —
+  // no es una talla única para siempre.
   //
   // SOLO 2 niveles, NUNCA un bloqueo total — Joel fue explícito: cortarle
   // el acceso del todo a un usuario real es lo que hace que cancele, así
@@ -226,7 +231,7 @@ export async function POST(req: NextRequest) {
   // "aviso" o "normal" más adelante sin que nadie tenga que intervenir —
   // por diseño, no debería ser posible llegar al límite mensual completo
   // a mitad de mes precisamente porque este ritmo diario ya lo frena antes.
-  const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 310, pro: 620, proplus: 1033 };
+   const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 750, pro: 620, proplus: 1033 };
   const SIGUIENTE_PLAN: Record<string, string | null> = { core: "VICTOR Pro", pro: "VICTOR Pro+", proplus: null };
   const anioMesActual = fechaHoyPR().slice(0, 7);
   const [anioActualStr, mesActualStr, diaActualStr] = fechaHoyPR().split("-");
