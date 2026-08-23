@@ -7,6 +7,7 @@ export type ResultadoSincronizacion = {
   ok: boolean;
   nuevas: number;
   modificadas: number;
+  eliminadas: number;
   totalPlaidAdded: number;
   totalPlaidModified: number;
   cuentasNegocioOmitidas: number;
@@ -46,6 +47,7 @@ export async function sincronizarPlaidDeUsuario(
       ok: false,
       nuevas: 0,
       modificadas: 0,
+      eliminadas: 0,
       totalPlaidAdded: 0,
       totalPlaidModified: 0,
       cuentasNegocioOmitidas: 0,
@@ -58,6 +60,7 @@ export async function sincronizarPlaidDeUsuario(
       ok: true,
       nuevas: 0,
       modificadas: 0,
+      eliminadas: 0,
       totalPlaidAdded: 0,
       totalPlaidModified: 0,
       cuentasNegocioOmitidas: 0,
@@ -68,6 +71,7 @@ export async function sincronizarPlaidDeUsuario(
 
   let totalNuevas = 0;
   let totalModificadas = 0;
+  let totalEliminadas = 0;
   let cuentasNegocioOmitidas = 0;
   let totalPlaidAdded = 0;
   let totalPlaidModified = 0;
@@ -120,6 +124,7 @@ export async function sincronizarPlaidDeUsuario(
       let hasMore = true;
       const added: Transaction[] = [];
       const modified: Transaction[] = [];
+      const removed: { transaction_id: string }[] = [];
 
       while (hasMore) {
         const response = await plaidClient.transactionsSync({
@@ -128,6 +133,7 @@ export async function sincronizarPlaidDeUsuario(
         });
         added.push(...response.data.added);
         modified.push(...response.data.modified);
+        removed.push(...response.data.removed);
         hasMore = response.data.has_more;
         cursor = response.data.next_cursor;
       }
@@ -257,6 +263,35 @@ export async function sincronizarPlaidDeUsuario(
         } else totalModificadas += filasModificadas.length;
       }
 
+      // BUG REAL (23 agosto 2026, reportado por Joel): transactionsSync manda
+      // un tercer array además de added/modified — `removed` — que nunca se
+      // procesaba. Cuando un cargo pendiente se liquida, muchos bancos (vía
+      // Plaid) no lo actualizan in-place: BORRAN el transaction_id pendiente
+      // y AÑADEN uno nuevo para la versión ya posteada, con descripción/monto
+      // ligeramente distintos ("Ahorro Directo" pendiente → "AHORRO DIRECTO
+      // DE 084293853" posteado). Sin leer `removed`, la fila vieja se quedaba
+      // huérfana en `transactions` (ya categorizada, invisible pero todavía
+      // sumando en reportes) mientras la fila nueva aparecía en "sin
+      // categorizar" como si fuera una transacción distinta — el usuario veía
+      // algo "ya categorizado" pidiendo categorizarse otra vez. Esto no tiene
+      // nada que ver con transactionsRefresh (que solo le pide a Plaid ir a
+      // buscar datos nuevos al banco) — es un bug de no vaciar lo que Plaid
+      // ya nos había dicho que boráramos.
+      if (removed.length > 0) {
+        const idsEliminados = removed.map((r) => r.transaction_id);
+        const { error: deleteError, count } = await supabase
+          .from("transactions")
+          .delete({ count: "exact" })
+          .eq("owner_id", ownerId)
+          .in("plaid_transaction_id", idsEliminados);
+        if (deleteError) {
+          errores.push(`${item.id}: ${deleteError.message}`);
+          huboErrorEnEsteItem = true;
+        } else {
+          totalEliminadas += count ?? idsEliminados.length;
+        }
+      }
+
       // Solo avanzamos el cursor si de verdad se guardó todo — si no, la
       // próxima vez Plaid no vuelve a mandar esas transacciones (las da
       // por "ya vistas") y se pierden para siempre.
@@ -273,6 +308,7 @@ export async function sincronizarPlaidDeUsuario(
     ok: errores.length === 0,
     nuevas: totalNuevas,
     modificadas: totalModificadas,
+    eliminadas: totalEliminadas,
     totalPlaidAdded,
     totalPlaidModified,
     cuentasNegocioOmitidas,
