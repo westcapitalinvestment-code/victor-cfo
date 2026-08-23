@@ -335,7 +335,7 @@ CONTEXTO PUERTO RICO:
   Médicos con Decreto Ley 14-2017 sujetos a tasa fija 4% sobre ingresos elegibles.
 - Decreto Ley 60: tasa fija 4% para negocios cualificados.
 - ATH Móvil y ATH Business: métodos de pago locales comunes.
-- Bancos principales: BPPR, FirstBank, Oriental, Popular, Cooperativas.
+- Bancos principales: BPPR (Banco Popular), FirstBank, Oriental, Cooperativas.
 - Formulario 480: equivalente del 1099 en PR.
 - SINOT: seguro por desempleo.
 - Planilla: término local para declaración de impuestos.
@@ -983,7 +983,7 @@ GUÍAS CORE — LO QUE VICTOR SABE EXPLICAR
       Toca el botón 'Añadir otra cuenta' y se abre
       Plaid — de ahí buscas tu banco, entras tus
       credenciales, y listo. Yo me encargo del resto.
-      BPPR, FirstBank, Oriental y Popular están disponibles.
+           BPPR, FirstBank, Oriental y tu Cooperativa están disponibles.
       ¿Cuál quieres conectar?"
 
 2. CREAR UNA META:
