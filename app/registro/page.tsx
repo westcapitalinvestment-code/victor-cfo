@@ -1,22 +1,35 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { esPlanValido, esCicloValido, type PlanId, type Ciclo } from "@/lib/stripe";
 
 // Registro real — esto es lo que faltaba para que el landing page
 // (victorcfo.com) pueda mandar gente nueva a crear cuenta de verdad.
 // supabase.auth.signUp() dispara el trigger 0002 (handle_new_user), que
-// crea las filas en users/user_profiles con plan='core' y
-// plan_status='trialing'. OJO: ya no se promete "30 días gratis" en el
-// copy (21 agosto 2026, decisión de Joel: se paga y se comienza) — pero
-// el trigger TODAVÍA da acceso de una vez sin cobrar nada, porque el
-// checkout de Stripe no está integrado (ver README, pendiente). Falta
-// conectar Stripe para que esto sea cierto de verdad, no solo en el copy.
-export default function RegistroPage() {
+// crea las filas en users/user_profiles con plan='core' y, desde la
+// migración 0025, plan_status='incomplete' (antes 'trialing' — daba acceso
+// gratis de una vez, sin cobrar nada, porque el checkout no existía).
+//
+// Con Stripe ya conectado (23 agosto 2026): si el signUp deja sesión
+// activa de una vez (confirmación de email desactivada), se manda al
+// usuario DIRECTO a pagar en Stripe Checkout — /onboarding queda para
+// DESPUÉS de pagar (es el success_url del checkout). Si el proyecto tiene
+// confirmación de email activada, no hay sesión todavía; en ese caso no se
+// puede llamar al checkout (necesita sesión), así que el usuario confirma
+// su correo, entra, y el middleware lo manda a /registro/completar-pago
+// (donde puede elegir plan otra vez) la primera vez que toque /dashboard.
+function RegistroForm() {
   const router = useRouter();
   const supabase = createClient();
+  const searchParams = useSearchParams();
+
+  const planQuery = searchParams.get("plan");
+  const cicloQuery = searchParams.get("ciclo");
+  const plan: PlanId = esPlanValido(planQuery) ? planQuery : "core";
+  const ciclo: Ciclo = esCicloValido(cicloQuery) ? cicloQuery : "mensual";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,21 +64,36 @@ export default function RegistroPage() {
       options: { emailRedirectTo: `${window.location.origin}/login` },
     });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       setError(error.message);
       return;
     }
 
     // Si el proyecto de Supabase tiene confirmación de email activada, no
     // hay sesión todavía — el usuario tiene que confirmar desde su correo
-    // antes de poder entrar. Si está desactivada, ya queda logueado y
-    // vamos directo al onboarding.
+    // antes de poder entrar. Si está desactivada, ya queda logueado, y en
+    // vez de mandarlo directo al dashboard lo mandamos a pagar.
     if (data.session) {
-      router.push("/onboarding");
-      router.refresh();
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan, ciclo, returnTo: "/onboarding", cancelTo: "/registro/completar-pago" }),
+      });
+      const json = await res.json().catch(() => null);
+      setLoading(false);
+
+      if (res.ok && json?.url) {
+        window.location.href = json.url;
+      } else {
+        // Si el checkout falla por lo que sea (ej. Price ID mal
+        // configurado), no dejamos a la persona varada en un error — la
+        // cuenta ya existe, así que la mandamos a la página de completar
+        // pago, donde puede intentar de nuevo.
+        router.push("/registro/completar-pago");
+      }
     } else {
+      setLoading(false);
       setRevisaCorreo(true);
     }
   }
@@ -84,7 +112,8 @@ export default function RegistroPage() {
             <p className="mb-2 text-sm font-medium">Revisa tu correo</p>
             <p className="text-xs text-muted">
               Te mandamos un link de confirmación a {email}. Entra ahí para activar tu cuenta y
-              empezar.
+              empezar. Luego de confirmar, te vamos a pedir que completes el pago para activar tu
+              plan.
             </p>
           </div>
         </div>
@@ -160,5 +189,13 @@ export default function RegistroPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function RegistroPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegistroForm />
+    </Suspense>
   );
 }
