@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { stripe, esPlanValido } from "@/lib/stripe";
+import { getStripe, esPlanValido } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Stripe llama a esta ruta directamente (no el navegador del usuario), así
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(rawBody, signature, secret);
+    event = getStripe().webhooks.constructEvent(rawBody, signature, secret);
   } catch (err) {
     return NextResponse.json(
       { error: `Firma inválida: ${err instanceof Error ? err.message : "desconocido"}` },
