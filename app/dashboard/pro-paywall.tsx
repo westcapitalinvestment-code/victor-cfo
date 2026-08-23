@@ -1,13 +1,22 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 // Calcado del modal #m-upgrade-pro de VICTOR — Dashboard Core.html.
 // Se muestra en vez del contenido real cuando un usuario Core entra a una
-// sección de negocio (Cobros, Facturas, Equipo, Admin, Técnico). El botón
-// "Activar VICTOR Pro" hace lo mismo que en el mockup: te manda a Config
-// (ahí es donde vivirá el checkout de Stripe cuando se conecte — todavía
-// no está integrado).
+// sección de negocio (Cobros, Facturas, Equipo, Admin, Técnico).
+//
+// El botón "Activar VICTOR Pro" ya llama a Stripe Checkout de verdad (23
+// agosto 2026) — el código está completo y listo. PERO solo el Price de
+// Core existe hoy en Stripe (decisión de Joel: activar Pro y Enterprise
+// "en lo que los creamos"), así que PRO_DISPONIBLE queda en false y el
+// botón se muestra deshabilitado con "Próximamente". Cuando Joel cree el
+// Price de Pro en Stripe y ponga los STRIPE_PRICE_PRO_* en Vercel, basta
+// con cambiar esta constante a true para activar el cobro real — no hace
+// falta tocar nada más de este archivo.
+const PRO_DISPONIBLE = false;
+
 const FEATURES = [
   "Facturar clientes y cobrar en línea",
   "Cotizaciones con depósito + balance",
@@ -19,6 +28,29 @@ const FEATURES = [
 
 export default function ProPaywall() {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function activarPro() {
+    setLoading(true);
+    setError(null);
+
+    const returnTo = typeof window !== "undefined" ? window.location.pathname : "/dashboard";
+    const res = await fetch("/api/stripe/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan: "pro", ciclo: "mensual", returnTo, cancelTo: returnTo }),
+    });
+    const json = await res.json().catch(() => null);
+
+    if (res.ok && json?.url) {
+      window.location.href = json.url;
+      return;
+    }
+
+    setLoading(false);
+    setError(json?.error || "No se pudo iniciar el pago. Intenta de nuevo en un momento.");
+  }
 
   return (
     <div className="mx-auto max-w-md px-6 py-8">
@@ -48,12 +80,17 @@ export default function ProPaywall() {
             <p className="text-xs text-muted">Cancela cuando quieras</p>
           </div>
 
-          <button
-            onClick={() => router.push("/dashboard/config")}
-            className="vc-btn-primary mb-2"
-          >
-            <i className="ti ti-rocket" /> Activar VICTOR Pro
-          </button>
+          {error && <p className="mb-2 text-center text-xs text-red">{error}</p>}
+
+          {PRO_DISPONIBLE ? (
+            <button onClick={activarPro} className="vc-btn-primary mb-2" disabled={loading}>
+              <i className="ti ti-rocket" /> {loading ? "Conectando con Stripe..." : "Activar VICTOR Pro"}
+            </button>
+          ) : (
+            <button className="vc-btn-primary mb-2 opacity-60" disabled>
+              Próximamente
+            </button>
+          )}
           <button
             onClick={() => router.push("/dashboard")}
             className="w-full rounded-lg border border-border bg-transparent p-3 text-sm text-muted"
