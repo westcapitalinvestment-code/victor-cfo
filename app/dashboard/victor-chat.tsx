@@ -56,7 +56,7 @@ export default function VictorChat({
   const [showEmojis, setShowEmojis] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Continuidad real entre dispositivos: al montar, trae la conversación
   // más reciente del usuario desde el servidor (no solo lo que haya en
