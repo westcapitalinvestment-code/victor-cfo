@@ -35,6 +35,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Gate de pago (23 agosto 2026): un usuario autenticado pero que todavía
+  // no completó el checkout de Stripe tiene plan_status = 'incomplete'
+  // (default desde la migración 0025). Antes de esto, cualquiera que se
+  // registrara entraba gratis al dashboard para siempre, porque nada
+  // revisaba el pago. Solo se aplica a /dashboard — /onboarding se deja
+  // pasar porque el flujo de registro puede necesitar terminarlo antes de
+  // mandar al usuario a pagar.
+  if (user && request.nextUrl.pathname.startsWith("/dashboard")) {
+    const { data: perfil } = await supabase
+      .from("users")
+      .select("plan_status")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (perfil?.plan_status === "incomplete" || perfil?.plan_status === "cancelled") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/registro/completar-pago";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return response;
 }
 
