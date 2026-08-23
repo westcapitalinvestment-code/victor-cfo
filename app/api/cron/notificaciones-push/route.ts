@@ -50,7 +50,9 @@ export async function GET(req: NextRequest) {
           .select("id", { count: "exact", head: true })
           .eq("owner_id", ownerId)
           .is("entity_id", null)
-          .is("hacienda_category_id", null),
+          .is("hacienda_category_id", null)
+          // No contar pendientes — pueden reemplazarse por otro ID al postear.
+          .eq("pending", false),
         supabase
           .from("documents")
           .select("nombre, fecha_vencimiento")
