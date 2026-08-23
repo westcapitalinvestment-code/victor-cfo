@@ -11,6 +11,7 @@ type CuentaPlaid = {
   id: string;
   plaid_account_id: string;
   name: string | null;
+  nickname: string | null;
   mask: string | null;
   type: string | null;
   subtype: string | null;
@@ -43,7 +44,10 @@ export default function CuentasPage() {
   // Rellenar el hueco de historial que Plaid no trajo (ej. BPPR solo da
   // ~45 días) — subir el estado de cuenta directo a una cuenta que YA
   // está conectada, igual que se puede hacer con una cuenta manual.
-  const [subiendoEstadoId, setSubiendoEstadoId] = useState<string | null>(null);
+   const [subiendoEstadoId, setSubiendoEstadoId] = useState<string | null>(null);
+  const [renombrandoId, setRenombrandoId] = useState<string | null>(null);
+  const [nuevoNombre, setNuevoNombre] = useState("");
+  const [guardandoNombre, setGuardandoNombre] = useState(false);
   const cargarCuentas = useCallback(async () => {
     const {
       data: { user },
@@ -53,7 +57,7 @@ export default function CuentasPage() {
     const pro = perfil?.plan === "pro" || perfil?.plan === "proplus";
     const { data } = await supabase
       .from("plaid_accounts")
-      .select("id, plaid_account_id, name, mask, type, subtype, current_balance, iso_currency_code, es_negocio")
+           .select("id, plaid_account_id, name, nickname, mask, type, subtype, current_balance, iso_currency_code, es_negocio")
       .eq("owner_id", user.id)
       .order("name", { ascending: true });
     const todas = data ?? [];
@@ -197,6 +201,26 @@ export default function CuentasPage() {
       setSincronizando(false);
     }
   }
+   async function guardarNickname(accountId: string) {
+    setGuardandoNombre(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/plaid/renombrar-cuenta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId, nickname: nuevoNombre.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "No se pudo renombrar la cuenta.");
+      setRenombrandoId(null);
+      await cargarCuentas();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo renombrar la cuenta.");
+    } finally {
+      setGuardandoNombre(false);
+    }
+  }
+
   const totalBalance = cuentas
     .filter((c) => c.type === "depository")
     .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
@@ -276,11 +300,12 @@ export default function CuentasPage() {
           <div className="vc-card mb-3 !p-0">
             {cuentas.map((c) => (
               <div key={c.id} className="border-b border-border px-4 py-3 last:border-b-0">
-                <div className="flex items-center justify-between">
+                               <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-text">{c.name}</p>
+                    <p className="text-sm text-text">{c.nickname || c.name}</p>
                     <p className="text-xs capitalize text-muted">
                       {c.subtype} {c.mask && `••${c.mask}`}
+                      {c.nickname && c.name ? ` · ${c.name}` : ""}
                     </p>
                   </div>
                   <p className={`text-sm font-medium ${esPasivo(c.type) ? "!text-red" : ""}`}>
@@ -299,6 +324,41 @@ export default function CuentasPage() {
                     ? "Ocultar"
                     : "Subir estado de cuenta (rellenar historial)"}
                 </button>
+                <button
+                  className="ml-3 mt-1 text-[11px] text-muted hover:opacity-80"
+                  onClick={() => {
+                    if (renombrandoId === c.id) {
+                      setRenombrandoId(null);
+                    } else {
+                      setRenombrandoId(c.id);
+                      setNuevoNombre(c.nickname || "");
+                    }
+                  }}
+                >
+                  {renombrandoId === c.id ? "Cancelar" : "Renombrar"}
+                </button>
+
+                {renombrandoId === c.id && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      autoFocus
+                      className="vc-input !py-1.5 !text-xs"
+                      placeholder={c.name || "Nombre de la cuenta"}
+                      value={nuevoNombre}
+                      onChange={(e) => setNuevoNombre(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") guardarNickname(c.id);
+                      }}
+                    />
+                    <button
+                      className="text-xs text-teal disabled:opacity-50"
+                      disabled={guardandoNombre}
+                      onClick={() => guardarNickname(c.id)}
+                    >
+                      ✓
+                    </button>
+                  </div>
+                )}
 
                 {subiendoEstadoId === c.plaid_account_id && (
                   <SubirEstado
