@@ -24,7 +24,10 @@ export async function GET() {
       .select("id", { count: "exact", head: true })
       .eq("owner_id", user.id)
       .is("entity_id", null)
-      .is("hacienda_category_id", null),
+      .is("hacienda_category_id", null)
+      // No contar pendientes — el banco puede reemplazarlas por una versión
+      // posteada con otro ID antes de que el usuario llegue a categorizarlas.
+      .eq("pending", false),
     supabase
       .from("documents")
       .select("id", { count: "exact", head: true })
