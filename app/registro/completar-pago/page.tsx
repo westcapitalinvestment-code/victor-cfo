@@ -15,10 +15,14 @@ import { esPlanValido, esCicloValido, type PlanId, type Ciclo } from "@/lib/stri
 // A diferencia de /registro, aquí el usuario YA tiene sesión de Supabase
 // (si no la tuviera, el middleware ya lo hubiera mandado a /login antes de
 // llegar a /dashboard) — así que el botón puede llamar al checkout directo.
-const PLANES: { id: PlanId; nombre: string; precioMensual: string; precioAnual: string }[] = [
-  { id: "core", nombre: "VICTOR Core", precioMensual: "$19.99/mes", precioAnual: "$219/año" },
-  { id: "pro", nombre: "VICTOR Pro", precioMensual: "$49.99/mes", precioAnual: "$549/año" },
-  { id: "proplus", nombre: "VICTOR Enterprise", precioMensual: "$99.99/mes", precioAnual: "$1,099/año" },
+// disponible: false → Pro y Enterprise todavía no tienen Price en Stripe
+// (mismo criterio que app/landing-pricing.tsx y app/dashboard/pro-paywall.tsx
+// — "Los 3 planes" ya están en el código, pero solo Core cobra de verdad
+// hasta que Joel cree los otros dos Price en Stripe Dashboard).
+const PLANES: { id: PlanId; nombre: string; precioMensual: string; precioAnual: string; disponible: boolean }[] = [
+  { id: "core", nombre: "VICTOR Core", precioMensual: "$19.99/mes", precioAnual: "$219/año", disponible: true },
+  { id: "pro", nombre: "VICTOR Pro", precioMensual: "$49.99/mes", precioAnual: "$549/año", disponible: false },
+  { id: "proplus", nombre: "VICTOR Enterprise", precioMensual: "$99.99/mes", precioAnual: "$1,099/año", disponible: false },
 ];
 
 function CompletarPagoForm() {
@@ -28,7 +32,11 @@ function CompletarPagoForm() {
   const planQuery = searchParams.get("plan");
   const cicloQuery = searchParams.get("ciclo");
 
-  const [plan, setPlan] = useState<PlanId>(esPlanValido(planQuery) ? planQuery : "core");
+  // Si alguien llega con ?plan=pro (ej. un link viejo), lo forzamos a Core
+  // porque Pro todavía no es comprable — no tiene sentido dejarlo
+  // "seleccionado" en un plan que el botón de pagar no puede procesar.
+  const planInicial = esPlanValido(planQuery) && PLANES.find((p) => p.id === planQuery)?.disponible ? planQuery : "core";
+  const [plan, setPlan] = useState<PlanId>(planInicial);
   const [ciclo, setCiclo] = useState<Ciclo>(esCicloValido(cicloQuery) ? cicloQuery : "mensual");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,12 +86,19 @@ function CompletarPagoForm() {
               <button
                 key={p.id}
                 type="button"
-                onClick={() => setPlan(p.id)}
+                onClick={() => p.disponible && setPlan(p.id)}
+                disabled={!p.disponible}
                 className={`rounded-lg border p-3 text-left text-sm ${
-                  plan === p.id ? "border-teal bg-teal/[.06]" : "border-border"
+                  !p.disponible
+                    ? "cursor-not-allowed border-border opacity-50"
+                    : plan === p.id
+                      ? "border-teal bg-teal/[.06]"
+                      : "border-border"
                 }`}
               >
-                <p className="font-medium text-text">{p.nombre}</p>
+                <p className="font-medium text-text">
+                  {p.nombre} {!p.disponible && <span className="text-xs text-muted">(Próximamente)</span>}
+                </p>
                 <p className="text-xs text-muted">{ciclo === "mensual" ? p.precioMensual : p.precioAnual}</p>
               </button>
             ))}
