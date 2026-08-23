@@ -15,6 +15,7 @@ type Pendiente = {
   sugeridaId: number | null;
   tipo_flujo?: "gasto" | "ingreso" | "transferencia";
   pending?: boolean;
+  cuentaLabel?: string | null;
 };
 
 // Tarjeta de "gastos sin categorizar" en el Inicio — calcada del mockup
@@ -94,8 +95,9 @@ export default function GastosPendientesCard({
                     ⏳ Pendiente — el banco todavía puede corregir el monto o el nombre
                   </p>
                 )}
-                <p className="mt-0.5 text-[11px] text-muted">
-                  {p.fecha} ·{" "}
+                              <p className="mt-0.5 text-[11px] text-muted">
+                  {p.fecha}
+                  {p.cuentaLabel ? ` · ${p.cuentaLabel}` : ""} ·{" "}
                   <span
                     className={
                       p.tipo_flujo === "transferencia"
