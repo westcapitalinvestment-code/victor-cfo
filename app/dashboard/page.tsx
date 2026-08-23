@@ -229,7 +229,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const [{ data: pendientesRaw }, { count: totalPendientes }, { data: categorias }] = await Promise.all([
         supabase
       .from("transactions")
-      .select("id, description_raw, amount, fecha, tipo_flujo, pending")
+            .select("id, description_raw, amount, fecha, tipo_flujo, pending, plaid_account_id, manual_account_id")
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .is("hacienda_category_id", null)
@@ -246,6 +246,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
+    const [{ data: cuentasPlaidParaLabel }, { data: cuentasManualesParaLabel }] = await Promise.all([
+    supabase.from("plaid_accounts").select("plaid_account_id, name, nickname, mask").eq("owner_id", user.id),
+    supabase.from("manual_accounts").select("id, name, mask").eq("owner_id", user.id),
+  ]);
+  const nombrePorCuenta = new Map<string, string>();
+  for (const c of cuentasPlaidParaLabel ?? []) {
+    nombrePorCuenta.set(`plaid:${c.plaid_account_id}`, `${c.nickname || c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`);
+  }
+  for (const c of cuentasManualesParaLabel ?? []) {
+    nombrePorCuenta.set(`manual:${c.id}`, `${c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`);
+  }
+  const etiquetaDeTransaccion = (t: { plaid_account_id: string | null; manual_account_id: string | null }) =>
+    (t.plaid_account_id && nombrePorCuenta.get(`plaid:${t.plaid_account_id}`)) ||
+    (t.manual_account_id && nombrePorCuenta.get(`manual:${t.manual_account_id}`)) ||
+    null;
+
   // Para cada pendiente, le pedimos al motor una sugerencia (match_category
   // sin el filtro de confianza/confirmado que sí aplica el trigger) — así
   // el usuario ve una categoría ya seleccionada y solo tiene que confirmar
@@ -255,7 +271,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       const { data: match } = await supabase
         .rpc("match_category", { p_raw_description: t.description_raw, p_entity_id: null, p_tipo_flujo: t.tipo_flujo ?? null })
         .maybeSingle<{ hacienda_category_id: number | null }>();
-      return { ...t, sugeridaId: match?.hacienda_category_id ?? null };
+      return { ...t, sugeridaId: match?.hacienda_category_id ?? null, cuentaLabel: etiquetaDeTransaccion(t) };
     })
   );
 
