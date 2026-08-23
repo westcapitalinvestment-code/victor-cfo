@@ -28,7 +28,7 @@ function RegistroForm() {
 
   const planQuery = searchParams.get("plan");
   const cicloQuery = searchParams.get("ciclo");
-  const plan: PlanId = esPlanValido(planQuery) ? planQuery : "core";
+  const plan: PlanId = esPlanValido(planQuery) && planQuery === "core" ? planQuery : "core"
   const ciclo: Ciclo = esCicloValido(cicloQuery) ? cicloQuery : "mensual";
 
   const [email, setEmail] = useState("");
