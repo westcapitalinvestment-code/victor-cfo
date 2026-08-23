@@ -118,10 +118,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Falta el mensaje." }, { status: 400 });
   }
 
-  // 1. Perfil del usuario (nombre, plan) para el bloque de contexto.
+   // 1. Perfil del usuario (nombre, plan) para el bloque de contexto.
+  // ciclo_inicio/ciclo_fin (migración 0026) son las fechas del ciclo de
+  // facturación REAL de Stripe (ej. 23 ago → 23 sept), que el webhook
+  // guarda aquí en cada activación/renovación — el tope de gasto de abajo
+  // los usa para no depender del mes calendario, que no coincide con
+  // cuándo Stripe realmente cobra.
   const { data: profile } = await supabase
     .from("users")
-    .select("full_name, plan, plan_status")
+    .select("full_name, plan, plan_status, ciclo_inicio, ciclo_fin")
     .eq("id", user.id)
     .single();
 
@@ -231,12 +236,52 @@ export async function POST(req: NextRequest) {
   // "aviso" o "normal" más adelante sin que nadie tenga que intervenir —
   // por diseño, no debería ser posible llegar al límite mensual completo
   // a mitad de mes precisamente porque este ritmo diario ya lo frena antes.
-   const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 750, pro: 620, proplus: 1033 };
+     const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 750, pro: 620, proplus: 1033 };
+  // Piso mínimo de presupuesto para los primeros días de CUALQUIER ciclo
+  // (protege la conversación de onboarding, la más pesada de toda la
+  // relación) — deja de importar apenas el ritmo-parejo lo supere solo
+  // (día ~5 de un ciclo de 31 días con el tope de Core).
+  const PRESUPUESTO_MINIMO_CENTAVOS = 100;
   const SIGUIENTE_PLAN: Record<string, string | null> = { core: "VICTOR Pro", pro: "VICTOR Pro+", proplus: null };
-  const anioMesActual = fechaHoyPR().slice(0, 7);
-  const [anioActualStr, mesActualStr, diaActualStr] = fechaHoyPR().split("-");
-  const diaDelMes = Number(diaActualStr);
-  const diasEnElMes = new Date(Number(anioActualStr), Number(mesActualStr), 0).getDate();
+
+  // El ritmo-parejo se ancla al CICLO DE FACTURACIÓN REAL de Stripe
+  // (ciclo_inicio/ciclo_fin, guardados por el webhook en cada activación o
+  // renovación — ej. 23 ago → 23 sept), no al mes calendario. Antes de este
+  // cambio (23 agosto 2026, detectado por Joel probando esto mismo) el
+  // contador reseteaba el día 1 de cada mes sin importar cuándo la persona
+  // pagó — alguien que se registrara el 31 de agosto tenía casi nada de
+  // presupuesto ese día, pero el 1 de septiembre el contador volvía a dar
+  // casi un mes completo de golpe, TODAVÍA DENTRO del mismo ciclo que ya
+  // había pagado una vez (su próximo cobro real era el 30 de septiembre) —
+  // podía terminar gastando casi el doble del tope pensado por ciclo.
+  // Cuentas sin ciclo de Stripe (ej. las "trialing" de antes de conectar
+  // Stripe, sin stripe_customer_id) caen al mes calendario como respaldo,
+  // igual que se comportaba todo esto antes.
+  const tieneCicloStripe = !!profile?.ciclo_inicio && !!profile?.ciclo_fin;
+  const hoyPR = fechaHoyPR();
+  const [anioActualStr, mesActualStr, diaActualStr] = hoyPR.split("-");
+  const diasEnElMesCalendario = new Date(Number(anioActualStr), Number(mesActualStr), 0).getDate();
+
+  let claveCicloUso: string;
+  let diaDelPeriodo: number;
+  let diasEnElPeriodo: number;
+
+  if (tieneCicloStripe) {
+    const inicio = new Date(`${profile!.ciclo_inicio}T00:00:00Z`);
+    const fin = new Date(`${profile!.ciclo_fin}T00:00:00Z`);
+    const hoy = new Date(`${hoyPR}T00:00:00Z`);
+    const MS_POR_DIA = 24 * 60 * 60 * 1000;
+    diasEnElPeriodo = Math.max(1, Math.round((fin.getTime() - inicio.getTime()) / MS_POR_DIA));
+    diaDelPeriodo = Math.min(
+      diasEnElPeriodo,
+      Math.max(1, Math.round((hoy.getTime() - inicio.getTime()) / MS_POR_DIA) + 1)
+    );
+    claveCicloUso = profile!.ciclo_inicio as string; // ej. '2026-08-23' — único por ciclo real
+  } else {
+    diaDelPeriodo = Number(diaActualStr);
+    diasEnElPeriodo = diasEnElMesCalendario;
+    claveCicloUso = hoyPR.slice(0, 7); // 'YYYY-MM' — respaldo para cuentas sin Stripe
+  }
 
   const planActual = profile?.plan ?? "core";
   const siguientePlan = SIGUIENTE_PLAN[planActual] ?? null;
@@ -246,26 +291,28 @@ export async function POST(req: NextRequest) {
 
   let estadoUso: "normal" | "aviso" | "restringido_hora" = "normal";
   if (!isFounder) {
-    const { data: usoMes } = await supabase
+    const { data: usoCiclo } = await supabase
       .from("uso_ia_mensual")
       .select("costo_centavos")
       .eq("owner_id", user.id)
-      .eq("anio_mes", anioMesActual)
+      .eq("ciclo_clave", claveCicloUso)
       .maybeSingle();
-    const costoMesHastaAhora = Number(usoMes?.costo_centavos ?? 0);
+    const costoCicloHastaAhora = Number(usoCiclo?.costo_centavos ?? 0);
     const limiteMensual = LIMITES_MENSUALES_CENTAVOS[planActual] ?? LIMITES_MENSUALES_CENTAVOS.core;
-    const presupuestoHastaHoy = (limiteMensual * diaDelMes) / diasEnElMes;
+    const presupuestoHastaHoy = Math.max(
+      (limiteMensual * diaDelPeriodo) / diasEnElPeriodo,
+      PRESUPUESTO_MINIMO_CENTAVOS
+    );
 
-    // Ya no hay un tercer nivel de bloqueo total — si costoMesHastaAhora
-    // llega o pasa el límite mensual completo, sigue cayendo en
+    // Ya no hay un tercer nivel de bloqueo total — si costoCicloHastaAhora
+    // llega o pasa el límite del ciclo completo, sigue cayendo en
     // "restringido_hora" (1 mensaje/hora), nunca en un corte sin acceso.
-    if (costoMesHastaAhora >= presupuestoHastaHoy) {
+    if (costoCicloHastaAhora >= presupuestoHastaHoy) {
       estadoUso = "restringido_hora";
-    } else if (costoMesHastaAhora >= presupuestoHastaHoy * 0.85) {
+    } else if (costoCicloHastaAhora >= presupuestoHastaHoy * 0.85) {
       estadoUso = "aviso";
     }
   }
-
   // Guarda un mensaje fijo (sin llamar a Claude) y responde — usado por los
   // niveles 2 y 3 de arriba, que no deben gastar ni un centavo más.
   async function responderSinLlamarAClaude(mensaje: string) {
@@ -612,8 +659,12 @@ export async function POST(req: NextRequest) {
   // arriba — en su propio try/catch, igual que el resto de "extras" de esta
   // ruta (memoria, saludo diario): si falla, no debe tumbar la respuesta
   // que el usuario ya está esperando.
-  try {
-    await supabase.rpc("registrar_uso_ia", { p_owner_id: user.id, p_costo_centavos: costoAcumuladoCentavos });
+   try {
+    await supabase.rpc("registrar_uso_ia", {
+      p_owner_id: user.id,
+      p_costo_centavos: costoAcumuladoCentavos,
+      p_ciclo_clave: claveCicloUso,
+    });
   } catch (err) {
     console.error("No se pudo registrar uso_ia_mensual:", err);
   }
