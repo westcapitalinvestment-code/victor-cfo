@@ -227,12 +227,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // pantalla, no en una pestaña aparte.
   const LIMITE_PENDIENTES = 8;
   const [{ data: pendientesRaw }, { count: totalPendientes }, { data: categorias }] = await Promise.all([
-    supabase
+        supabase
       .from("transactions")
       .select("id, description_raw, amount, fecha, tipo_flujo, pending")
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .is("hacienda_category_id", null)
+      .eq("pending", false)
       .order("fecha", { ascending: false })
       .limit(LIMITE_PENDIENTES),
     supabase
@@ -240,7 +241,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       .select("id", { count: "exact", head: true })
       .eq("owner_id", user.id)
       .is("entity_id", null)
-      .is("hacienda_category_id", null),
+      .is("hacienda_category_id", null)
+      .eq("pending", false),
     supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
