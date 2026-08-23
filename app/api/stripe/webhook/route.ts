@@ -1,0 +1,113 @@
+import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
+import { stripe, esPlanValido } from "@/lib/stripe";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+// Stripe llama a esta ruta directamente (no el navegador del usuario), así
+// que no hay sesión de Supabase que usar — de ahí el cliente admin. La
+// verificación de firma (constructEvent) es lo único que nos garantiza que
+// el POST viene realmente de Stripe y no de cualquiera que adivine esta
+// URL y mande un "pago exitoso" falso.
+export async function POST(req: NextRequest) {
+  const signature = req.headers.get("stripe-signature");
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!signature || !secret) {
+    return NextResponse.json({ error: "Falta la firma o el webhook secret." }, { status: 400 });
+  }
+
+  const rawBody = await req.text();
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, signature, secret);
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Firma inválida: ${err instanceof Error ? err.message : "desconocido"}` },
+      { status: 400 }
+    );
+  }
+
+  const supabase = createAdminClient();
+
+  try {
+    switch (event.type) {
+      // Se dispara justo cuando el usuario termina de pagar en Checkout.
+      // Aquí es donde de verdad "activamos" la cuenta: guardamos el
+      // customer/subscription de Stripe y marcamos el plan elegido.
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const userId = session.client_reference_id || session.metadata?.supabase_user_id;
+        const plan = session.metadata?.plan;
+
+        if (!userId) break;
+
+        const datosActualizar: Record<string, unknown> = {
+          stripe_customer_id: typeof session.customer === "string" ? session.customer : session.customer?.id,
+          stripe_subscription_id:
+            typeof session.subscription === "string" ? session.subscription : session.subscription?.id,
+          plan_status: "active",
+        };
+        if (esPlanValido(plan)) datosActualizar.plan = plan;
+
+        await supabase.from("users").update(datosActualizar).eq("id", userId);
+        break;
+      }
+
+      // Renovaciones, cambios de plan, o cuando un pago falla y Stripe pone
+      // la suscripción en past_due/unpaid — reflejamos el estado real para
+      // que el gate del middleware reaccione (ej. bloquear si past_due).
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const userId = subscription.metadata?.supabase_user_id;
+        if (!userId) break;
+
+        const estado = subscription.status; // active | past_due | unpaid | canceled | trialing | ...
+        const plan = subscription.metadata?.plan;
+
+        // Mapeamos los estados de Stripe a los 3 valores que ya usa el
+        // resto de la app (active | incomplete | cancelled) en vez de
+        // guardar el string crudo de Stripe — así el middleware solo
+        // necesita conocer esos 3 valores, nunca los nombres de Stripe.
+        let plan_status: "active" | "incomplete" | "cancelled" = "incomplete";
+        if (estado === "active" || estado === "trialing") plan_status = "active";
+        else if (estado === "canceled") plan_status = "cancelled";
+
+        const datosActualizar: Record<string, unknown> = {
+          stripe_subscription_id: subscription.id,
+          plan_status,
+        };
+        if (esPlanValido(plan)) datosActualizar.plan = plan;
+
+        await supabase.from("users").update(datosActualizar).eq("id", userId);
+        break;
+      }
+
+      // El usuario canceló (o se venció definitivamente) — lo regresamos a
+      // 'incomplete' para que el middleware lo mande de vuelta a pagar, en
+      // vez de dejarlo con acceso gratis para siempre.
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const userId = subscription.metadata?.supabase_user_id;
+        if (!userId) break;
+
+        await supabase.from("users").update({ plan_status: "cancelled" }).eq("id", userId);
+        break;
+      }
+
+      default:
+        break;
+    }
+  } catch (err) {
+    // No relanzamos el error como 500 hacia Stripe salvo que de verdad algo
+    // haya fallado — si Stripe ve 500 reintenta el mismo evento varias
+    // veces, lo cual está bien, pero preferimos loguear y devolver 200 para
+    // eventos que simplemente no aplican (ej. userId ausente por diseño).
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Error procesando el webhook." },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ received: true });
+}
