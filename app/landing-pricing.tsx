@@ -101,7 +101,7 @@ export default function LandingPricing() {
           <button className={styles.moreBtn} onClick={() => setCoreExpandido((v) => !v)}>
             {coreExpandido ? "Ver menos ↑" : "Ver más ↓"}
           </button>
-          <Link href="/registro" className={`${styles.priceCta} ${styles.ctaFilled}`}>
+          <Link href={`/registro?plan=core&ciclo=${anual ? "anual" : "mensual"}`} className={`${styles.priceCta} ${styles.ctaFilled}`}>
             Comienza ahora
           </Link>
         </div>
@@ -127,19 +127,14 @@ export default function LandingPricing() {
             <li>Invita a tu secretaria o técnicos (addon)</li>
             <li>Conecta múltiples entidades de negocio (addon)</li>
           </ul>
-          <Link href="/registro" className={`${styles.priceCta} ${styles.ctaFilled}`}>
+          <Link href={`/registro?plan=pro&ciclo=${anual ? "anual" : "mensual"}`} className={`${styles.priceCta} ${styles.ctaFilled}`}>
             Comienza ahora
           </Link>
         </div>
 
         <div className={styles.priceCard}>
           <div className={styles.priceTier}>ENTERPRISE</div>
-          <div className={styles.priceName}>
-            VICTOR Enterprise
-            <div style={{ fontSize: "0.7rem", color: "var(--teal-mid)", fontWeight: 600, marginTop: "0.2rem" }}>
-              Próximamente
-            </div>
-          </div>
+          <div className={styles.priceName}>VICTOR Enterprise</div>
           <p className={styles.priceDesc}>Para el negocio que además quiere facturar y cobrar a sus propios clientes.</p>
           <div className={styles.priceAmount}>
             <sup>$</sup>
@@ -154,12 +149,9 @@ export default function LandingPricing() {
             <li>Tracking de facturas pagadas y pendientes</li>
             <li>Alertas automáticas de cobros atrasados</li>
           </ul>
-          <span
-            className={styles.priceCta}
-            style={{ background: "var(--border)", color: "var(--muted)", cursor: "default" }}
-          >
-            Próximamente
-          </span>
+          <Link href={`/registro?plan=proplus&ciclo=${anual ? "anual" : "mensual"}`} className={`${styles.priceCta} ${styles.ctaFilled}`}>
+            Comienza ahora
+          </Link>
         </div>
       </div>
 
