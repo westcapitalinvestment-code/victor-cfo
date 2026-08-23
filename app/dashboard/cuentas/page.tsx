@@ -176,9 +176,10 @@ export default function CuentasPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo sincronizar.");
       const omitidas = data.cuentasNegocioOmitidas || 0;
-      setMensaje(
-        `${data.nuevas} transacción(es) nueva(s), ${data.modificadas} actualizada(s). ` +
-          `(Plaid mandó ${data.totalPlaidAdded ?? "?"} nuevas / ${data.totalPlaidModified ?? "?"} modificadas en total.)` +
+           setMensaje(
+        `${data.nuevas} transacción(es) nueva(s), ${data.modificadas} actualizada(s)` +
+          (data.eliminadas > 0 ? `, ${data.eliminadas} reemplazada(s) por el banco` : "") +
+          `. (Plaid mandó ${data.totalPlaidAdded ?? "?"} nuevas / ${data.totalPlaidModified ?? "?"} modificadas en total.)` +
           (omitidas > 0 ? ` (${omitidas} de cuentas de negocio, no incluidas en tu plan Core.)` : "") +
           // Diagnóstico del refresh a Plaid — si el banco no soporta pedirle
           // datos frescos ahora mismo, esto lo dice explícito en vez de
