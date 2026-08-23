@@ -3,6 +3,26 @@ import Stripe from "stripe";
 import { getStripe, esPlanValido } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+// Saca las fechas de inicio/fin del ciclo de facturación actual de una
+// suscripción — las usa el tope de gasto de IA (app/api/victor/route.ts,
+// migración 0026) para no depender del mes calendario, que no coincide
+// con cuándo Stripe realmente cobra. OJO: en esta versión del SDK de
+// Stripe (22.x), current_period_start/end viven en el SUBSCRIPTION ITEM
+// (subscription.items.data[0]), no en la suscripción misma — Stripe movió
+// el campo ahí para soportar suscripciones con varios items en fechas
+// distintas. Revisamos también el nivel viejo (subscription as any) por si
+// alguna cuenta todavía lo reporta ahí.
+function periodoDeSuscripcion(subscription: Stripe.Subscription): { inicio: string; fin: string } | null {
+  const item = subscription.items?.data?.[0];
+  const inicioUnix: number | undefined = item?.current_period_start ?? (subscription as any).current_period_start;
+  const finUnix: number | undefined = item?.current_period_end ?? (subscription as any).current_period_end;
+  if (!inicioUnix || !finUnix) return null;
+  return {
+    inicio: new Date(inicioUnix * 1000).toISOString().slice(0, 10),
+    fin: new Date(finUnix * 1000).toISOString().slice(0, 10),
+  };
+}
+
 // Stripe llama a esta ruta directamente (no el navegador del usuario), así
 // que no hay sesión de Supabase que usar — de ahí el cliente admin. La
 // verificación de firma (constructEvent) es lo único que nos garantiza que
@@ -42,13 +62,34 @@ export async function POST(req: NextRequest) {
 
         if (!userId) break;
 
+        const subscriptionId =
+          typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+
         const datosActualizar: Record<string, unknown> = {
           stripe_customer_id: typeof session.customer === "string" ? session.customer : session.customer?.id,
-          stripe_subscription_id:
-            typeof session.subscription === "string" ? session.subscription : session.subscription?.id,
+          stripe_subscription_id: subscriptionId,
           plan_status: "active",
         };
         if (esPlanValido(plan)) datosActualizar.plan = plan;
+
+        // session.subscription normalmente solo trae el ID, no el objeto
+        // completo — hace falta buscarlo aparte para sacar las fechas del
+        // ciclo (ver periodoDeSuscripcion arriba). Si esto falla por lo que
+        // sea, no bloqueamos la activación de la cuenta — el tope de gasto
+        // simplemente cae al respaldo de mes calendario hasta que
+        // customer.subscription.updated lo corrija en la próxima renovación.
+        if (subscriptionId) {
+          try {
+            const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+            const ciclo = periodoDeSuscripcion(subscription);
+            if (ciclo) {
+              datosActualizar.ciclo_inicio = ciclo.inicio;
+              datosActualizar.ciclo_fin = ciclo.fin;
+            }
+          } catch (err) {
+            console.error("No se pudo obtener el ciclo de la suscripción:", err);
+          }
+        }
 
         await supabase.from("users").update(datosActualizar).eq("id", userId);
         break;
@@ -78,6 +119,16 @@ export async function POST(req: NextRequest) {
           plan_status,
         };
         if (esPlanValido(plan)) datosActualizar.plan = plan;
+
+        // Aquí SÍ tenemos el objeto completo de la suscripción en el propio
+        // evento — no hace falta una llamada aparte. Esto es lo que
+        // mantiene ciclo_inicio/ciclo_fin correctos en cada renovación
+        // mensual (Stripe manda este evento en cada ciclo nuevo).
+        const ciclo = periodoDeSuscripcion(subscription);
+        if (ciclo) {
+          datosActualizar.ciclo_inicio = ciclo.inicio;
+          datosActualizar.ciclo_fin = ciclo.fin;
+        }
 
         await supabase.from("users").update(datosActualizar).eq("id", userId);
         break;
