@@ -89,9 +89,16 @@ export default function VictorChat({
   // Devuelve el cursor a la caja de texto en cuanto VICTOR termina de
   // responder (o al abrir el panel) — sin esto, el usuario tenía que
   // hacer clic de nuevo cada vez para seguir escribiendo.
-  useEffect(() => {
+    useEffect(() => {
     if (!loading && open) inputRef.current?.focus();
   }, [loading, open]);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [input]);
 
   // VICTOR se queda abierto sin importar dónde toque el usuario en el
   // dashboard (antes se cerraba solo al hacer clic afuera — quitado a
@@ -362,9 +369,10 @@ export default function VictorChat({
                 <i className={`ti ${listening ? "ti-player-stop-filled" : "ti-microphone"}`} style={{ fontSize: 16 }} />
               </button>
             )}
-            <div className="relative flex-1">
-              <input
+                       <div className="relative flex-1">
+              <textarea
                 ref={inputRef}
+                rows={1}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -374,11 +382,12 @@ export default function VictorChat({
                   }
                 }}
                 placeholder={listening ? "Escuchando…" : "Pregúntale a VICTOR..."}
-                className="vc-input w-full rounded-pill"
+                className="vc-input w-full resize-none rounded-2xl leading-snug"
+                style={{ maxHeight: 120, overflowY: "auto" }}
                 disabled={loading}
               />
               {listening && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-pill bg-bg">
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-bg">
                   <div className="vc-wave">
                     <span className="vc-wave-bar" />
                     <span className="vc-wave-bar" />
