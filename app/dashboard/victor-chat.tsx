@@ -56,7 +56,7 @@ export default function VictorChat({
   const [showEmojis, setShowEmojis] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-    const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Continuidad real entre dispositivos: al montar, trae la conversación
   // más reciente del usuario desde el servidor (no solo lo que haya en
@@ -89,10 +89,17 @@ export default function VictorChat({
   // Devuelve el cursor a la caja de texto en cuanto VICTOR termina de
   // responder (o al abrir el panel) — sin esto, el usuario tenía que
   // hacer clic de nuevo cada vez para seguir escribiendo.
-    useEffect(() => {
+  useEffect(() => {
     if (!loading && open) inputRef.current?.focus();
   }, [loading, open]);
 
+  // Bug real (23 agosto 2026, reportado por Joel): la caja de escribir era
+  // un <input> de una sola línea — un mensaje largo se corría hacia la
+  // derecha en vez de bajar de línea, así que para editarlo había que
+  // moverse con las flechas a ciegas. Ahora es un <textarea> que crece
+  // solo (hasta un tope, luego hace scroll adentro) cada vez que cambia el
+  // contenido — cubre escribir, pegar, dictado por voz, y borrar todo a la
+  // vez sin tener que tocar cada punto donde se llama setInput().
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -369,7 +376,7 @@ export default function VictorChat({
                 <i className={`ti ${listening ? "ti-player-stop-filled" : "ti-microphone"}`} style={{ fontSize: 16 }} />
               </button>
             )}
-                       <div className="relative flex-1">
+            <div className="relative flex-1">
               <textarea
                 ref={inputRef}
                 rows={1}
