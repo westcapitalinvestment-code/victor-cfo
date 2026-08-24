@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { esFounder } from "@/lib/founder";
 import { saludoPorHora, fechaHoraLegiblePR, fechaHoyPR } from "@/lib/hora-pr";
+import { PRECIOS } from "@/lib/costo-ia";
 
 // Dashboard de Operaciones — reemplaza el placeholder de /dashboard/admin.
 // Basado en el mockup estático que Joel ya había diseñado
@@ -34,20 +35,25 @@ export default async function AdminPage() {
 
   const admin = createAdminClient();
 
-  const [{ data: usuarios, error: errorUsuarios }, { data: usoIa, error: errorUso }] = await Promise.all([
-    admin
-      .from("users")
-      .select("id, full_name, email, plan, plan_status, created_at, cancelled_at")
-      .order("created_at", { ascending: false }),
-    admin.from("uso_ia_mensual").select("owner_id, costo_centavos"),
-  ]);
-
   // ---- Ventana de "este mes" en hora de Puerto Rico ----
   // PR no tiene horario de verano (siempre AST, UTC-4 todo el año), así
   // que este offset fijo es seguro sin librería de zonas horarias.
   const hoyPR = fechaHoyPR();
   const [anioPR, mesPR] = hoyPR.split("-");
   const inicioMesPR = new Date(`${anioPR}-${mesPR}-01T00:00:00-04:00`);
+
+  const [{ data: usuarios, error: errorUsuarios }, { data: usoIa, error: errorUso }, { data: logIa, error: errorLog }] =
+    await Promise.all([
+      admin
+        .from("users")
+        .select("id, full_name, email, plan, plan_status, created_at, cancelled_at")
+        .order("created_at", { ascending: false }),
+      admin.from("uso_ia_mensual").select("owner_id, costo_centavos"),
+      admin
+        .from("uso_ia_log")
+        .select("input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens")
+        .gte("creado_en", inicioMesPR.toISOString()),
+    ]);
 
   const todos = usuarios ?? [];
   const activos = todos.filter((u) => u.plan_status === "active");
@@ -76,6 +82,35 @@ export default async function AdminPage() {
     if (u.plan_status === "active") activosPorPlan.set(plan, (activosPorPlan.get(plan) ?? 0) + 1);
   }
   const costoIaTotal = Array.from(costoIaPorUsuarioCentavos.values()).reduce((a, b) => a + b, 0) / 100;
+
+  // ---- Desglose real de tokens/costo, este mes (uso_ia_log) ----
+  // Esto es para responder la duda de Joel sobre el Anthropic Console: ahí
+  // se ve "tokens in" ~80x más grande que "tokens out" y parece carísimo,
+  // pero la mayoría de ese "in" es cache_read (system prompt reciclado de
+  // una llamada a otra), que Anthropic cobra a $0.10/millón — 10x más
+  // barato que input normal y 50x más barato que output. Aquí se traduce
+  // cada categoría a dólares reales para que se vea la proporción de COSTO,
+  // no de cantidad de tokens. Todo el chat usa un solo modelo
+  // (claude-haiku-4-5, ver app/api/victor/route.ts) y cachea siempre con
+  // TTL de 1 hora, así que cache_creation_tokens usa esa tarifa.
+  const preciosHaiku = PRECIOS["claude-haiku-4-5"];
+  const tokensLog = (logIa ?? []).reduce(
+    (acc, fila) => ({
+      input: acc.input + (fila.input_tokens ?? 0),
+      output: acc.output + (fila.output_tokens ?? 0),
+      cacheRead: acc.cacheRead + (fila.cache_read_tokens ?? 0),
+      cacheWrite: acc.cacheWrite + (fila.cache_creation_tokens ?? 0),
+    }),
+    { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  );
+  const costoDesglose = {
+    input: (tokensLog.input * preciosHaiku.inputCentavosPorMillon) / 1_000_000 / 100,
+    output: (tokensLog.output * preciosHaiku.outputCentavosPorMillon) / 1_000_000 / 100,
+    cacheRead: (tokensLog.cacheRead * preciosHaiku.cacheReadCentavosPorMillon) / 1_000_000 / 100,
+    cacheWrite: (tokensLog.cacheWrite * preciosHaiku.cacheWrite1hCentavosPorMillon) / 1_000_000 / 100,
+  };
+  const costoDesgloseTotal = costoDesglose.input + costoDesglose.output + costoDesglose.cacheRead + costoDesglose.cacheWrite;
+  const tokensLogTotalIn = tokensLog.input + tokensLog.cacheRead + tokensLog.cacheWrite;
 
   // ---- MRR (estimado — ver nota sobre Pro/Pro+ y mensual vs anual) ----
   // Solo Core es vendible hoy (Pro/Pro+ muestran "Próximamente"), así que
@@ -128,10 +163,10 @@ export default async function AdminPage() {
       </div>
       <p className="mb-4 text-xs text-muted">{fechaHoraLegiblePR()}</p>
 
-      {(errorUsuarios || errorUso) && (
+      {(errorUsuarios || errorUso || errorLog) && (
         <div className="vc-card mb-3 border-red">
           <p className="text-xs text-red">
-            {errorUsuarios?.message ?? errorUso?.message ?? "Error leyendo datos."}
+            {errorUsuarios?.message ?? errorUso?.message ?? errorLog?.message ?? "Error leyendo datos."}
           </p>
         </div>
       )}
@@ -267,6 +302,39 @@ export default async function AdminPage() {
               <span>Total estimado</span>
               <span>{fmt(costoTotalEstimado)}</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Desglose de tokens/costo real — de dónde sale el $ de Claude */}
+      <div className="vc-card mb-3">
+        <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted">
+          Desglose de costo de Claude — este mes
+        </p>
+        <p className="mb-3 text-[11px] text-muted">
+          {tokensLogTotalIn.toLocaleString("en-US")} tokens de entrada vs. {tokensLog.output.toLocaleString("en-US")} de salida —
+          se ve desproporcionado en tokens, pero la mayoría de la entrada es caché reciclado (10x-50x más barato). Aquí está el $ real por categoría.
+        </p>
+        <div className="flex flex-col gap-1 text-sm">
+          <div className="flex items-center justify-between border-b border-border py-1.5">
+            <span className="text-muted">Input normal ({tokensLog.input.toLocaleString("en-US")} tok)</span>
+            <span className="font-medium">{fmt(costoDesglose.input)}</span>
+          </div>
+          <div className="flex items-center justify-between border-b border-border py-1.5">
+            <span className="text-muted">Escritura de caché, 1h ({tokensLog.cacheWrite.toLocaleString("en-US")} tok)</span>
+            <span className="font-medium">{fmt(costoDesglose.cacheWrite)}</span>
+          </div>
+          <div className="flex items-center justify-between border-b border-border py-1.5">
+            <span className="text-muted">Lectura de caché ({tokensLog.cacheRead.toLocaleString("en-US")} tok)</span>
+            <span className="font-medium">{fmt(costoDesglose.cacheRead)}</span>
+          </div>
+          <div className="flex items-center justify-between border-b border-border py-1.5">
+            <span className="text-muted">Output ({tokensLog.output.toLocaleString("en-US")} tok)</span>
+            <span className="font-medium">{fmt(costoDesglose.output)}</span>
+          </div>
+          <div className="flex items-center justify-between pt-2 text-sm font-medium">
+            <span>Total (debe ≈ Gasto IA total de arriba)</span>
+            <span>{fmt(costoDesgloseTotal)}</span>
           </div>
         </div>
       </div>
