@@ -142,7 +142,13 @@ export async function POST(req: NextRequest) {
         const userId = subscription.metadata?.supabase_user_id;
         if (!userId) break;
 
-        await supabase.from("users").update({ plan_status: "cancelled" }).eq("id", userId);
+        // cancelled_at (migración 0028) es lo que usa el Dashboard de
+        // Operaciones para calcular cancelaciones-del-mes y churn rate —
+        // sin esta fecha solo se sabe el estado actual, no cuándo pasó.
+        await supabase
+          .from("users")
+          .update({ plan_status: "cancelled", cancelled_at: new Date().toISOString() })
+          .eq("id", userId);
         break;
       }
 
