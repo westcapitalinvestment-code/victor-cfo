@@ -4,11 +4,14 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+type ArchivoPendiente = { localId: string; file: File; etiqueta: string };
+
 // Bóveda Inteligente — guarda la metadata (nombre, tipo, fecha de
-// vencimiento) y, si el usuario lo sube, el archivo real (foto o PDF) en
-// Cloudflare R2. El archivo es opcional: sin él, el documento igual sirve
-// para la alerta de vencimiento — pero si se sube, queda accesible desde
-// "Ver archivo" en la Bóveda y en Editar.
+// vencimiento) y, si el usuario los sube, los archivos reales (fotos o
+// PDFs) en Cloudflare R2. Los archivos son opcionales y pueden ser
+// VARIOS por documento (ej. frente/atrás de una licencia, o varias
+// páginas de un contrato) — cada uno con una etiqueta opcional para
+// distinguirlos, ya que el nombre que pone la cámara no sirve para eso.
 export default function NuevoDocumentoPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -22,11 +25,24 @@ export default function NuevoDocumentoPage() {
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("Otro");
   const [fechaVencimiento, setFechaVencimiento] = useState("");
-  const [archivo, setArchivo] = useState<File | null>(null);
+  const [archivos, setArchivos] = useState<ArchivoPendiente[]>([]);
 
-  function elegirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    setArchivo(file ?? null);
+  function agregarArchivos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setArchivos((prev) => [
+      ...prev,
+      ...files.map((file) => ({ localId: `${Date.now()}-${Math.random()}`, file, etiqueta: "" })),
+    ]);
+    e.target.value = ""; // permite volver a elegir el mismo archivo si lo quita y lo agrega de nuevo
+  }
+
+  function actualizarEtiqueta(localId: string, etiqueta: string) {
+    setArchivos((prev) => prev.map((a) => (a.localId === localId ? { ...a, etiqueta } : a)));
+  }
+
+  function quitarArchivo(localId: string) {
+    setArchivos((prev) => prev.filter((a) => a.localId !== localId));
   }
 
   async function crearDocumento() {
@@ -62,13 +78,14 @@ export default function NuevoDocumentoPage() {
       return;
     }
 
-    // El archivo se sube DESPUÉS de crear la fila — si esto falla, el
-    // documento igual queda guardado (con r2_key null), así que no se
-    // pierde la fecha de vencimiento por un problema de subida.
-    if (archivo) {
+    // Los archivos se suben DESPUÉS de crear la fila, uno por uno — si
+    // alguno falla, el documento igual queda guardado (con los que sí
+    // subieron), así que no se pierde nada por un problema de subida.
+    for (const archivo of archivos) {
       const formData = new FormData();
-      formData.append("file", archivo);
+      formData.append("file", archivo.file);
       formData.append("documentId", nuevo.id);
+      formData.append("etiqueta", archivo.etiqueta);
 
       const res = await fetch("/api/documentos/upload", { method: "POST", body: formData });
       if (!res.ok) {
@@ -76,7 +93,7 @@ export default function NuevoDocumentoPage() {
         setLoading(false);
         setError(
           data.error ??
-            "El documento se guardó, pero el archivo no se pudo subir. Puedes intentar de nuevo desde Editar."
+            "El documento se guardó, pero algún archivo no se pudo subir. Puedes intentar de nuevo desde Editar."
         );
         return;
       }
@@ -131,7 +148,7 @@ export default function NuevoDocumentoPage() {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Archivo (opcional)</label>
+          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Archivos (opcional)</label>
 
           {/* capture="environment" abre la cámara trasera directo en el
               celular. En la computadora ese atributo simplemente se
@@ -144,14 +161,15 @@ export default function NuevoDocumentoPage() {
             accept="image/*"
             capture="environment"
             className="hidden"
-            onChange={elegirArchivo}
+            onChange={agregarArchivos}
           />
           <input
             ref={inputArchivoRef}
             type="file"
             accept="image/*,.pdf"
+            multiple
             className="hidden"
-            onChange={elegirArchivo}
+            onChange={agregarArchivos}
           />
 
           <div className="flex gap-2">
@@ -167,17 +185,33 @@ export default function NuevoDocumentoPage() {
               className="flex-1 rounded-pill border border-border py-2 text-sm font-medium hover:opacity-80"
               onClick={() => inputArchivoRef.current?.click()}
             >
-              📁 Elegir archivo
+              📁 Elegir archivo(s)
             </button>
           </div>
 
-          {archivo && (
-            <p className="mt-2 text-xs text-muted">
-              Seleccionado: {archivo.name} ·{" "}
-              <button type="button" className="text-teal underline" onClick={() => setArchivo(null)}>
-                quitar
-              </button>
-            </p>
+          {archivos.length > 0 && (
+            <ul className="mt-3 flex flex-col gap-2">
+              {archivos.map((a) => (
+                <li key={a.localId} className="flex items-center gap-2 rounded-lg border border-border p-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs text-muted">{a.file.name}</p>
+                    <input
+                      className="vc-input mt-1"
+                      placeholder="Etiqueta (opcional) — ej. Frente, Página 2"
+                      value={a.etiqueta}
+                      onChange={(e) => actualizarEtiqueta(a.localId, e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 text-xs text-red underline"
+                    onClick={() => quitarArchivo(a.localId)}
+                  >
+                    quitar
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
