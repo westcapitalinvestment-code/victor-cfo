@@ -221,7 +221,7 @@ export default function EditarDocumentoPage() {
                 <li key={a.id} className="flex items-center justify-between rounded-lg border border-border p-2 text-sm">
                   <span>{a.etiqueta || `Archivo ${i + 1}`}</span>
                   <span className="flex items-center gap-3 text-xs">
-                    
+                    <a
                       href={`/api/documentos/archivo/${a.id}/ver`}
                       target="_blank"
                       rel="noopener noreferrer"
