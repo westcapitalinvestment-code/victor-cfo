@@ -16,7 +16,7 @@ type PrecioModelo = {
   outputCentavosPorMillon: number;
 };
 
-const PRECIOS: Record<string, PrecioModelo> = {
+export const PRECIOS: Record<string, PrecioModelo> = {
   "claude-sonnet-5": {
     inputCentavosPorMillon: 200,
     cacheWrite5mCentavosPorMillon: 250,
