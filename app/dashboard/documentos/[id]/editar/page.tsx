@@ -172,7 +172,7 @@ export default function EditarDocumentoPage() {
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Archivo</label>
 
           {tieneArchivo && !archivo && (
-            
+            <a
               href={`/api/documentos/${params.id}/ver`}
               target="_blank"
               rel="noopener noreferrer"
