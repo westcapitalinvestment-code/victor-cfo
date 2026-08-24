@@ -4,9 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+type ArchivoGuardado = { id: string; etiqueta: string | null };
+type ArchivoPendiente = { localId: string; file: File; etiqueta: string };
+
 // Editar/eliminar un documento existente — mismo patrón que
-// metas/[id]/editar/page.tsx. Además permite adjuntar o reemplazar el
-// archivo (Cloudflare R2) y ver el que ya está guardado.
+// metas/[id]/editar/page.tsx. Además permite ver, agregar y eliminar
+// archivos (Cloudflare R2) individualmente — un documento puede tener
+// varios (ej. frente/atrás de una licencia), cada uno con su etiqueta.
 export default function EditarDocumentoPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -24,8 +28,9 @@ export default function EditarDocumentoPage() {
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("Otro");
   const [fechaVencimiento, setFechaVencimiento] = useState("");
-  const [tieneArchivo, setTieneArchivo] = useState(false);
-  const [archivo, setArchivo] = useState<File | null>(null);
+  const [archivosGuardados, setArchivosGuardados] = useState<ArchivoGuardado[]>([]);
+  const [borrandoArchivoId, setBorrandoArchivoId] = useState<string | null>(null);
+  const [archivosPendientes, setArchivosPendientes] = useState<ArchivoPendiente[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -39,31 +44,69 @@ export default function EditarDocumentoPage() {
         return;
       }
 
-      const { data, error: fetchError } = await supabase
-        .from("documents")
-        .select("id, nombre, tipo, fecha_vencimiento, r2_key")
-        .eq("id", params.id)
-        .eq("owner_id", user.id)
-        .single();
+      const [{ data: doc, error: fetchError }, { data: archivos, error: archivosError }] = await Promise.all([
+        supabase
+          .from("documents")
+          .select("id, nombre, tipo, fecha_vencimiento")
+          .eq("id", params.id)
+          .eq("owner_id", user.id)
+          .single(),
+        supabase
+          .from("document_files")
+          .select("id, etiqueta")
+          .eq("document_id", params.id)
+          .eq("owner_id", user.id)
+          .order("created_at", { ascending: true }),
+      ]);
 
-      if (fetchError || !data) {
+      if (fetchError || !doc) {
         setError(fetchError?.message ?? "No se encontró ese documento.");
         setFetching(false);
         return;
       }
 
-      setNombre(data.nombre);
-      setTipo(data.tipo ?? "Otro");
-      setFechaVencimiento(data.fecha_vencimiento ?? "");
-      setTieneArchivo(!!data.r2_key);
+      setNombre(doc.nombre);
+      setTipo(doc.tipo ?? "Otro");
+      setFechaVencimiento(doc.fecha_vencimiento ?? "");
+      if (!archivosError && archivos) setArchivosGuardados(archivos);
       setFetching(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
-  function elegirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    setArchivo(file ?? null);
+  function agregarArchivos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setArchivosPendientes((prev) => [
+      ...prev,
+      ...files.map((file) => ({ localId: `${Date.now()}-${Math.random()}`, file, etiqueta: "" })),
+    ]);
+    e.target.value = "";
+  }
+
+  function actualizarEtiquetaPendiente(localId: string, etiqueta: string) {
+    setArchivosPendientes((prev) => prev.map((a) => (a.localId === localId ? { ...a, etiqueta } : a)));
+  }
+
+  function quitarPendiente(localId: string) {
+    setArchivosPendientes((prev) => prev.filter((a) => a.localId !== localId));
+  }
+
+  async function eliminarArchivoGuardado(fileId: string) {
+    setBorrandoArchivoId(fileId);
+    setError(null);
+
+    const res = await fetch(`/api/documentos/archivo/${fileId}`, { method: "DELETE" });
+
+    setBorrandoArchivoId(null);
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "No se pudo eliminar el archivo.");
+      return;
+    }
+
+    setArchivosGuardados((prev) => prev.filter((a) => a.id !== fileId));
   }
 
   async function guardarCambios() {
@@ -81,16 +124,17 @@ export default function EditarDocumentoPage() {
       return;
     }
 
-    if (archivo) {
+    for (const archivo of archivosPendientes) {
       const formData = new FormData();
-      formData.append("file", archivo);
+      formData.append("file", archivo.file);
       formData.append("documentId", params.id);
+      formData.append("etiqueta", archivo.etiqueta);
 
       const res = await fetch("/api/documentos/upload", { method: "POST", body: formData });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setLoading(false);
-        setError(data.error ?? "Los datos se guardaron, pero el archivo no se pudo subir. Intenta de nuevo.");
+        setError(data.error ?? "Los datos se guardaron, pero algún archivo no se pudo subir. Intenta de nuevo.");
         return;
       }
     }
@@ -169,17 +213,34 @@ export default function EditarDocumentoPage() {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Archivo</label>
+          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Archivos</label>
 
-          {tieneArchivo && !archivo && (
-            <a
-              href={`/api/documentos/${params.id}/ver`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mb-2 inline-block text-xs font-medium text-teal underline"
-            >
-              Ver archivo actual
-            </a>
+          {archivosGuardados.length > 0 && (
+            <ul className="mb-2 flex flex-col gap-1">
+              {archivosGuardados.map((a, i) => (
+                <li key={a.id} className="flex items-center justify-between rounded-lg border border-border p-2 text-sm">
+                  <span>{a.etiqueta || `Archivo ${i + 1}`}</span>
+                  <span className="flex items-center gap-3 text-xs">
+                    
+                      href={`/api/documentos/archivo/${a.id}/ver`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-teal underline"
+                    >
+                      Ver
+                    </a>
+                    <button
+                      type="button"
+                      className="font-medium text-red underline disabled:opacity-50"
+                      disabled={borrandoArchivoId === a.id}
+                      onClick={() => eliminarArchivoGuardado(a.id)}
+                    >
+                      {borrandoArchivoId === a.id ? "..." : "Eliminar"}
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
 
           <input
@@ -188,14 +249,15 @@ export default function EditarDocumentoPage() {
             accept="image/*"
             capture="environment"
             className="hidden"
-            onChange={elegirArchivo}
+            onChange={agregarArchivos}
           />
           <input
             ref={inputArchivoRef}
             type="file"
             accept="image/*,.pdf"
+            multiple
             className="hidden"
-            onChange={elegirArchivo}
+            onChange={agregarArchivos}
           />
 
           <div className="flex gap-2">
@@ -211,17 +273,33 @@ export default function EditarDocumentoPage() {
               className="flex-1 rounded-pill border border-border py-2 text-sm font-medium hover:opacity-80"
               onClick={() => inputArchivoRef.current?.click()}
             >
-              📁 {tieneArchivo ? "Reemplazar" : "Elegir archivo"}
+              📁 Agregar archivo(s)
             </button>
           </div>
 
-          {archivo && (
-            <p className="mt-2 text-xs text-muted">
-              Seleccionado: {archivo.name} ·{" "}
-              <button type="button" className="text-teal underline" onClick={() => setArchivo(null)}>
-                quitar
-              </button>
-            </p>
+          {archivosPendientes.length > 0 && (
+            <ul className="mt-3 flex flex-col gap-2">
+              {archivosPendientes.map((a) => (
+                <li key={a.localId} className="flex items-center gap-2 rounded-lg border border-border p-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs text-muted">{a.file.name}</p>
+                    <input
+                      className="vc-input mt-1"
+                      placeholder="Etiqueta (opcional) — ej. Frente, Página 2"
+                      value={a.etiqueta}
+                      onChange={(e) => actualizarEtiquetaPendiente(a.localId, e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 text-xs text-red underline"
+                    onClick={() => quitarPendiente(a.localId)}
+                  >
+                    quitar
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
