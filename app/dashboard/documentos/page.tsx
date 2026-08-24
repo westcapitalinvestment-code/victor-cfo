@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 
 // "Bóveda" del mockup — lista de documentos con su fecha de vencimiento.
+// Cada documento puede tener varios archivos adjuntos (document_files) —
+// aquí solo mostramos cuántos tiene, sin ambigüedad de "cuál ver"; para
+// ver/agregar/borrar archivos individuales se entra a Editar.
 export default async function DocumentosPage() {
   const supabase = createClient();
   const {
@@ -11,11 +14,19 @@ export default async function DocumentosPage() {
 
   if (!user) redirect("/login");
 
-  const { data: documentos, error } = await supabase
-    .from("documents")
-    .select("id, nombre, tipo, fecha_vencimiento, estado, r2_key")
-    .eq("owner_id", user.id)
-    .order("fecha_vencimiento", { ascending: true, nullsFirst: false });
+  const [{ data: documentos, error }, { data: archivos }] = await Promise.all([
+    supabase
+      .from("documents")
+      .select("id, nombre, tipo, fecha_vencimiento, estado")
+      .eq("owner_id", user.id)
+      .order("fecha_vencimiento", { ascending: true, nullsFirst: false }),
+    supabase.from("document_files").select("document_id").eq("owner_id", user.id),
+  ]);
+
+  const conteoPorDocumento = new Map<string, number>();
+  for (const a of archivos ?? []) {
+    conteoPorDocumento.set(a.document_id, (conteoPorDocumento.get(a.document_id) ?? 0) + 1);
+  }
 
   return (
     <div className="vc-shell">
@@ -35,32 +46,28 @@ export default async function DocumentosPage() {
 
         {documentos && documentos.length > 0 && (
           <ul className="flex flex-col gap-1">
-            {documentos.map((d) => (
-              <li key={d.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
-                <div>
-                  <p>{d.nombre}</p>
-                  <p className="text-xs text-muted">{d.tipo}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted">
-                    {d.fecha_vencimiento ? `Vence ${d.fecha_vencimiento}` : "Sin vencimiento"}
-                  </span>
-                  {d.r2_key && (
-                    <a
-                      href={`/api/documentos/${d.id}/ver`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-medium text-teal hover:opacity-80"
-                    >
-                      Ver
-                    </a>
-                  )}
-                  <Link href={`/dashboard/documentos/${d.id}/editar`} className="text-xs font-medium text-teal hover:opacity-80">
-                    Editar
-                  </Link>
-                </div>
-              </li>
-            ))}
+            {documentos.map((d) => {
+              const cantidadArchivos = conteoPorDocumento.get(d.id) ?? 0;
+              return (
+                <li key={d.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
+                  <div>
+                    <p>{d.nombre}</p>
+                    <p className="text-xs text-muted">
+                      {d.tipo}
+                      {cantidadArchivos > 0 && ` · 📎 ${cantidadArchivos}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted">
+                      {d.fecha_vencimiento ? `Vence ${d.fecha_vencimiento}` : "Sin vencimiento"}
+                    </span>
+                    <Link href={`/dashboard/documentos/${d.id}/editar`} className="text-xs font-medium text-teal hover:opacity-80">
+                      Editar
+                    </Link>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
