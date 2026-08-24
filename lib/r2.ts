@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Cloudflare R2 es compatible con la API de S3 — por eso usamos el SDK de
@@ -48,4 +48,11 @@ export async function subirArchivoR2(key: string, buffer: Buffer, contentType: s
 // nueva, así que no hay problema en que expire rápido.
 export async function urlDescargaR2(key: string): Promise<string> {
   return getSignedUrl(getR2(), new GetObjectCommand({ Bucket: bucket(), Key: key }), { expiresIn: 300 });
+}
+
+// Borra un archivo de R2 cuando el usuario elimina esa foto/PDF específico
+// de un documento (o el documento entero). Si el archivo ya no existe en
+// R2 por lo que sea, R2 simplemente no hace nada — no lanza error.
+export async function borrarArchivoR2(key: string): Promise<void> {
+  await getR2().send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
 }
