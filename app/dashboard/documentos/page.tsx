@@ -13,7 +13,7 @@ export default async function DocumentosPage() {
 
   const { data: documentos, error } = await supabase
     .from("documents")
-    .select("id, nombre, tipo, fecha_vencimiento, estado")
+    .select("id, nombre, tipo, fecha_vencimiento, estado, r2_key")
     .eq("owner_id", user.id)
     .order("fecha_vencimiento", { ascending: true, nullsFirst: false });
 
@@ -45,6 +45,16 @@ export default async function DocumentosPage() {
                   <span className="text-xs text-muted">
                     {d.fecha_vencimiento ? `Vence ${d.fecha_vencimiento}` : "Sin vencimiento"}
                   </span>
+                  {d.r2_key && (
+                    <a
+                      href={`/api/documentos/${d.id}/ver`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-teal hover:opacity-80"
+                    >
+                      Ver
+                    </a>
+                  )}
                   <Link href={`/dashboard/documentos/${d.id}/editar`} className="text-xs font-medium text-teal hover:opacity-80">
                     Editar
                   </Link>
