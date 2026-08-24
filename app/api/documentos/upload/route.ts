@@ -3,14 +3,15 @@ import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { subirArchivoR2 } from "@/lib/r2";
 
-// Sube el archivo de un documento de la Bóveda a Cloudflare R2 y guarda su
-// r2_key en la fila de `documents` correspondiente. Se llama DESPUÉS de
-// crear (o al editar) el documento — el formulario ya tiene el id.
+// Sube UN archivo de la Bóveda a Cloudflare R2 y crea su fila en
+// document_files (owner_id, document_id, r2_key, etiqueta opcional). Se
+// llama una vez por cada foto/PDF que el usuario adjunte — un documento
+// puede tener 0, 1 o varios archivos (ej. frente/atrás de una licencia,
+// varias páginas de un contrato), cada uno con su propia etiqueta para
+// distinguirlos.
 //
 // Límite defensivo de 15MB — de sobra para una foto de cámara o un PDF de
-// pocas páginas. (Vercel de por sí limita el body de una función serverless
-// a unos MB según el plan; este chequeo solo da un mensaje claro en vez de
-// un 413 crudo si alguien intenta subir algo enorme.)
+// pocas páginas.
 const TAMANO_MAX_BYTES = 15 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
@@ -26,6 +27,8 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const file = formData.get("file");
   const documentId = formData.get("documentId");
+  const etiquetaRaw = formData.get("etiqueta");
+  const etiqueta = typeof etiquetaRaw === "string" && etiquetaRaw.trim() ? etiquetaRaw.trim() : null;
 
   if (!(file instanceof File) || typeof documentId !== "string" || !documentId) {
     return NextResponse.json({ error: "Falta el archivo o el id del documento." }, { status: 400 });
@@ -63,11 +66,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { error: updateError } = await supabase.from("documents").update({ r2_key: key }).eq("id", documentId);
+  const { data: nuevoArchivo, error: insertError } = await supabase
+    .from("document_files")
+    .insert({ document_id: documentId, owner_id: user.id, r2_key: key, etiqueta })
+    .select("id")
+    .single();
 
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (insertError || !nuevoArchivo) {
+    return NextResponse.json({ error: insertError?.message ?? "No se pudo guardar el archivo." }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, key });
+  return NextResponse.json({ ok: true, id: nuevoArchivo.id });
 }
