@@ -4,11 +4,18 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-// Cierra la sesión DE VERDAD (supabase.auth.signOut(), no solo el PIN —
-// ver pin-gate.tsx) después de X minutos sin actividad. Configurable en
-// Configuración (session-timeout-config.tsx), 15 min por defecto. Esta es
-// la capa de seguridad más fuerte: el PIN es una traba rápida de pantalla
-// que no toca la sesión; esto sí obliga a volver a entrar con contraseña.
+// Reacciona a X minutos sin actividad. Configurable en Configuración
+// (session-timeout-config.tsx), 15 min por defecto.
+//
+// Comportamiento (24 agosto 2026, ajustado a pedido de Joel): si el
+// usuario tiene PIN activo (pin-gate.tsx), esto SOLO re-bloquea la
+// pantalla con el PIN — no cierra la sesión de Supabase. Un
+// supabase.auth.signOut() real no protege nada en la práctica cuando el
+// navegador/PWA tiene el email y password guardados con autocompletar:
+// cualquiera que agarre el celular puede tocar "Entrar" con los campos ya
+// llenos y pasar sin escribir nada. El PIN si obliga a escribir algo. Solo
+// si el usuario NO tiene PIN activo, esto cae al signOut real como único
+// mecanismo de protección disponible.
 //
 // Por qué localStorage y no un simple setTimeout: en el celular, el
 // navegador puede congelar el JavaScript de la pestaña/PWA en segundo
@@ -21,9 +28,14 @@ const CLAVE_ULTIMA_ACTIVIDAD = "victor_ultima_actividad";
 const EVENTOS_ACTIVIDAD = ["mousedown", "keydown", "touchstart", "scroll"];
 const INTERVALO_CHEQUEO_MS = 60 * 1000; // revisa cada minuto mientras está abierta y visible
 
+// pin-gate.tsx escucha este evento para re-bloquear la pantalla sin tocar
+// la sesión de Supabase.
+export const EVENTO_BLOQUEAR_POR_INACTIVIDAD = "victor:bloquear-por-inactividad";
+
 export default function SessionTimeoutGate() {
   const router = useRouter();
   const minutosRef = useRef<number | null>(null); // null = "Nunca" (o todavía no se sabe)
+  const pinActivoRef = useRef(false);
 
   function marcarActividad() {
     try {
@@ -39,6 +51,18 @@ export default function SessionTimeoutGate() {
     await supabase.auth.signOut();
     router.push("/login?motivo=inactividad");
     router.refresh();
+  }
+
+  function reaccionarAInactividad() {
+    if (pinActivoRef.current) {
+      // Con PIN activo, solo re-bloqueamos la pantalla — la sesión sigue
+      // viva. Reiniciamos la marca de actividad para no disparar esto de
+      // nuevo en cada chequeo mientras la pantalla de PIN está mostrada.
+      marcarActividad();
+      window.dispatchEvent(new Event(EVENTO_BLOQUEAR_POR_INACTIVIDAD));
+    } else {
+      cerrarSesionPorInactividad();
+    }
   }
 
   function verificarInactividad() {
@@ -57,19 +81,23 @@ export default function SessionTimeoutGate() {
     }
 
     if (Date.now() - ultima >= minutos * 60 * 1000) {
-      cerrarSesionPorInactividad();
+      reaccionarAInactividad();
     }
   }
 
-  // Carga la preferencia guardada y revisa de una vez (por si la app
-  // estuvo cerrada/congelada más tiempo del permitido).
+  // Carga la preferencia de tiempo Y si hay PIN activo, y revisa de una vez
+  // (por si la app estuvo cerrada/congelada más tiempo del permitido).
   useEffect(() => {
     let cancelado = false;
-    fetch("/api/session-timeout")
-      .then((r) => r.json())
-      .then((data) => {
+    Promise.all([
+      fetch("/api/session-timeout").then((r) => r.json()),
+      fetch("/api/pin").then((r) => r.json()),
+    ])
+      .then(([datosTimeout, datosPin]) => {
         if (cancelado) return;
-        minutosRef.current = typeof data?.minutos === "number" && data.minutos > 0 ? data.minutos : null;
+        minutosRef.current =
+          typeof datosTimeout?.minutos === "number" && datosTimeout.minutos > 0 ? datosTimeout.minutos : null;
+        pinActivoRef.current = !!datosPin?.configurado;
         verificarInactividad();
       })
       .catch(() => {});
