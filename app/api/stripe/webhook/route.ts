@@ -145,9 +145,24 @@ export async function POST(req: NextRequest) {
         // cancelled_at (migración 0028) es lo que usa el Dashboard de
         // Operaciones para calcular cancelaciones-del-mes y churn rate —
         // sin esta fecha solo se sabe el estado actual, no cuándo pasó.
+        //
+        // cancellation_details (migración 0029) es la razón que Stripe le
+        // pregunta al usuario en su Cancellation Flow del portal — si no
+        // usó ese flow (ej. lo cancelamos nosotros a mano desde Stripe)
+        // este campo viene null, así que no siempre va a haber razón.
+        const cancelacion = (subscription as any).cancellation_details as
+          | { reason?: string | null; comment?: string | null }
+          | null
+          | undefined;
+
         await supabase
           .from("users")
-          .update({ plan_status: "cancelled", cancelled_at: new Date().toISOString() })
+          .update({
+            plan_status: "cancelled",
+            cancelled_at: new Date().toISOString(),
+            cancellation_reason: cancelacion?.reason ?? null,
+            cancellation_comment: cancelacion?.comment ?? null,
+          })
           .eq("id", userId);
         break;
       }
