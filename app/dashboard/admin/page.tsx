@@ -122,12 +122,25 @@ export default async function AdminPage() {
   const PRECIO_MENSUAL_ESTIMADO: Record<string, number> = { core: 19.99, pro: 0, proplus: 0 };
   const mrr = activos.reduce((sum, u) => sum + (PRECIO_MENSUAL_ESTIMADO[u.plan ?? "core"] ?? 0), 0);
 
-  // ---- Costos estimados por usuario (misma fórmula que el margen de
-  // app/api/victor/route.ts) — no se guardan en Supabase por usuario, así
-  // que se calculan aquí igual que ahí. ----
-  const PLAID_POR_USUARIO = 2.0;
-  const STRIPE_FEE_POR_USUARIO = 0.88; // 2.9% + $0.30 sobre $19.99
-  const plaidEstimado = activos.length * PLAID_POR_USUARIO;
+  // ---- Costos estimados por usuario ----
+  // Plaid: contrato real (confirmado por Joel, 24 agosto 2026) — $1,000/mes
+  // FIJO durante los primeros 12 meses, cubre hasta 200 usuarios
+  // conectados. Pasado ese número, cada usuario adicional cuesta $2/mes
+  // aparte. NO es un costo plano de $2/usuario desde el usuario #1 — con
+  // pocos usuarios, Plaid es carísimo por usuario (ej. a 50 activos son
+  // $20/usuario, casi todo el precio de Core) y se abarata según creces,
+  // hasta que pasas los 200 y ahí cada usuario nuevo sí es marginal barato.
+  // OJO: app/api/victor/route.ts todavía usa el viejo estimado de $2 plano
+  // en su comentario de margen para el tope de gasto de IA — no es el mismo
+  // cálculo (ese tope es solo sobre costo de IA, no sobre Plaid), pero si
+  // se revisa ese número también hay que actualizar la nota ahí.
+  const PLAID_BASE_MENSUAL = 1000;
+  const PLAID_USUARIOS_INCLUIDOS = 200;
+  const PLAID_POR_USUARIO_ADICIONAL = 2.0;
+  const plaidEstimado =
+    PLAID_BASE_MENSUAL + Math.max(0, activos.length - PLAID_USUARIOS_INCLUIDOS) * PLAID_POR_USUARIO_ADICIONAL;
+
+  const STRIPE_FEE_POR_USUARIO = 0.88; // 2.9% + $0.30 sobre $19.99 — esto sí es genuinamente por-usuario (fee de Stripe por transacción)
   const stripeFeesEstimado = activos.length * STRIPE_FEE_POR_USUARIO;
 
   // Costos fijos de plataforma — NO son por usuario, ajústalos a mano si
@@ -294,7 +307,7 @@ export default async function AdminPage() {
                     <p className="mt-0.5 text-[11px] text-muted">Sin razón capturada (canceló fuera del portal de Stripe).</p>
                   )}
                 </div>
-                <a
+                
                   href={`mailto:${u.email}?subject=${encodeURIComponent("¿Qué te hizo cancelar VICTOR CFO?")}`}
                   className="shrink-0 rounded-pill border border-teal px-3 py-1.5 text-[11px] font-medium text-teal"
                 >
@@ -341,7 +354,13 @@ export default async function AdminPage() {
               <span className="font-medium">{fmt(costoIaTotal)}</span>
             </div>
             <div className="flex items-center justify-between border-b border-border py-1.5">
-              <span className="text-muted">Plaid (est. ${PLAID_POR_USUARIO.toFixed(2)}/usuario)</span>
+              <span className="text-muted">
+                Plaid (${PLAID_BASE_MENSUAL} fijo hasta {PLAID_USUARIOS_INCLUIDOS} usuarios
+                {activos.length > PLAID_USUARIOS_INCLUIDOS
+                  ? ` + $${PLAID_POR_USUARIO_ADICIONAL.toFixed(2)} x ${activos.length - PLAID_USUARIOS_INCLUIDOS} extra`
+                  : ""}
+                )
+              </span>
               <span className="font-medium text-amb">{fmt(plaidEstimado)}</span>
             </div>
             <div className="flex items-center justify-between border-b border-border py-1.5">
