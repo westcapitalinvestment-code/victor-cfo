@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import LogoutButton from "../logout-button";
 import NotificacionesToggle from "../notificaciones-toggle";
 import GestionarPlan from "../gestionar-plan";
+import PinConfig from "../pin-config";
 
 export default async function ConfigPage() {
   const supabase = createClient();
@@ -32,6 +33,8 @@ export default async function ConfigPage() {
       </div>
 
       <NotificacionesToggle />
+
+      <PinConfig />
 
       <GestionarPlan />
 
