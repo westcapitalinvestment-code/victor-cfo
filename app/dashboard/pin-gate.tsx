@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { EVENTO_BLOQUEAR_POR_INACTIVIDAD } from "./session-timeout-gate";
 
 // Bloqueo rápido de la app con PIN de 4 dígitos — envuelve TODO el
 // contenido del dashboard (ver app/dashboard/layout.tsx). Si el usuario no
@@ -48,6 +49,20 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
     }
     document.addEventListener("visibilitychange", alCambiarVisibilidad);
     return () => document.removeEventListener("visibilitychange", alCambiarVisibilidad);
+  }, [estado]);
+
+  // session-timeout-gate.tsx manda este evento tras X minutos sin
+  // actividad — re-bloquea la pantalla sin tocar la sesión de Supabase
+  // (un logout real no sirve de nada si el navegador tiene el
+  // email/password guardados con autocompletar).
+  useEffect(() => {
+    if (estado === "sin_pin" || estado === "cargando") return;
+    function alBloquearPorInactividad() {
+      setEstado((actual) => (actual === "desbloqueado" ? "bloqueado" : actual));
+      setDigitos("");
+    }
+    window.addEventListener(EVENTO_BLOQUEAR_POR_INACTIVIDAD, alBloquearPorInactividad);
+    return () => window.removeEventListener(EVENTO_BLOQUEAR_POR_INACTIVIDAD, alBloquearPorInactividad);
   }, [estado]);
 
   async function intentarDesbloquear(pinCompleto: string) {
