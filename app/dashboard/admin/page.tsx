@@ -294,7 +294,7 @@ export default async function AdminPage() {
                     <p className="mt-0.5 text-[11px] text-muted">Sin razón capturada (canceló fuera del portal de Stripe).</p>
                   )}
                 </div>
-                
+                <a
                   href={`mailto:${u.email}?subject=${encodeURIComponent("¿Qué te hizo cancelar VICTOR CFO?")}`}
                   className="shrink-0 rounded-pill border border-teal px-3 py-1.5 text-[11px] font-medium text-teal"
                 >
