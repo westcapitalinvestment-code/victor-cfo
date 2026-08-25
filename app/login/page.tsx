@@ -1,13 +1,23 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
-export default function LoginPage() {
+// useSearchParams() (para detectar ?motivo=inactividad, ver más abajo)
+// obliga a Next.js a que el componente que lo usa esté envuelto en
+// <Suspense> — si no, el build falla al pre-renderizar esta página. Por
+// eso el export default de abajo es un wrapper con Suspense y el
+// formulario real vive en este componente interno.
+function LoginForm() {
   const router = useRouter();
   const supabase = createClient();
+  // Cuando session-timeout-gate.tsx cierra la sesión por inactividad,
+  // manda para acá con ?motivo=inactividad — así el usuario entiende por
+  // qué lo sacó en vez de pensar que la app falló.
+  const searchParams = useSearchParams();
+  const cerradaPorInactividad = searchParams.get("motivo") === "inactividad";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -151,6 +161,12 @@ export default function LoginPage() {
         <form onSubmit={handleLogin} className="vc-card flex flex-col gap-3">
           <h1 className="mb-2 text-base font-medium">Entrar a tu cuenta</h1>
 
+          {cerradaPorInactividad && (
+            <p className="rounded bg-amb/10 px-3 py-2 text-xs text-amb">
+              Cerramos tu sesión por inactividad. Entra de nuevo para seguir.
+            </p>
+          )}
+
           <input
             className="vc-input"
             type="email"
@@ -194,5 +210,13 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }
