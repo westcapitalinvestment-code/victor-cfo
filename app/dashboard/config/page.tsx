@@ -4,6 +4,7 @@ import LogoutButton from "../logout-button";
 import NotificacionesToggle from "../notificaciones-toggle";
 import GestionarPlan from "../gestionar-plan";
 import PinConfig from "../pin-config";
+import SessionTimeoutConfig from "../session-timeout-config";
 
 export default async function ConfigPage() {
   const supabase = createClient();
@@ -35,6 +36,8 @@ export default async function ConfigPage() {
       <NotificacionesToggle />
 
       <PinConfig />
+
+      <SessionTimeoutConfig />
 
       <GestionarPlan />
 
