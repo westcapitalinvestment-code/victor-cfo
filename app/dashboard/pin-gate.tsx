@@ -94,6 +94,23 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
     setDigitos((d) => d.slice(0, -1));
   }
 
+  // Teclado físico (desktop) — antes solo se podía tocar los botones con
+  // el mouse/touch. Escucha dígitos 0-9 y Backspace mientras la pantalla
+  // de bloqueo está activa.
+  useEffect(() => {
+    if (estado !== "bloqueado") return;
+    function alPresionarTecla(e: KeyboardEvent) {
+      if (/^[0-9]$/.test(e.key)) {
+        tocarDigito(e.key);
+      } else if (e.key === "Backspace") {
+        borrar();
+      }
+    }
+    document.addEventListener("keydown", alPresionarTecla);
+    return () => document.removeEventListener("keydown", alPresionarTecla);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estado, digitos, verificando, bloqueadoPorIntentos]);
+
   if (estado === "cargando") {
     // Blanco/vacío mientras se sabe si hay PIN — evita el flash de un
     // segundo del contenido antes de decidir si hay que bloquear.
