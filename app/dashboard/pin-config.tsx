@@ -63,6 +63,22 @@ export default function PinConfig() {
     setDigitos((d) => d.slice(0, -1));
   }
 
+  // Teclado físico (desktop) — igual que en pin-gate.tsx, para poder crear
+  // el PIN escribiendo en vez de tener que hacer clic en cada botón.
+  useEffect(() => {
+    if (estado !== "creando" && estado !== "confirmando") return;
+    function alPresionarTecla(e: KeyboardEvent) {
+      if (/^[0-9]$/.test(e.key)) {
+        tocarDigito(e.key);
+      } else if (e.key === "Backspace") {
+        borrar();
+      }
+    }
+    document.addEventListener("keydown", alPresionarTecla);
+    return () => document.removeEventListener("keydown", alPresionarTecla);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estado, digitos, guardando]);
+
   async function guardarPin(pin: string) {
     setGuardando(true);
     setError(null);
