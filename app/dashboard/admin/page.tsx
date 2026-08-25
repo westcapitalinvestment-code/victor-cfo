@@ -46,7 +46,7 @@ export default async function AdminPage() {
     await Promise.all([
       admin
         .from("users")
-        .select("id, full_name, email, plan, plan_status, created_at, cancelled_at")
+        .select("id, full_name, email, plan, plan_status, created_at, cancelled_at, cancellation_reason, cancellation_comment")
         .order("created_at", { ascending: false }),
       admin.from("uso_ia_mensual").select("owner_id, costo_centavos"),
       admin
@@ -155,6 +155,27 @@ export default async function AdminPage() {
     cancelled: { texto: "Cancelado", clase: "text-red" },
   };
 
+  // Traducción de las categorías fijas que usa el Cancellation Flow de
+  // Stripe (subscription.cancellation_details.reason) — si el usuario
+  // canceló por otra vía (ej. lo cancelamos nosotros desde el Dashboard de
+  // Stripe) este campo viene null y simplemente no se muestra razón.
+  const RAZON_CANCELACION_LABEL: Record<string, string> = {
+    too_expensive: "Muy caro",
+    unused: "No lo usaba",
+    missing_features: "Le faltaban funciones",
+    switched_service: "Se cambió a otro servicio",
+    too_complex: "Muy complicado",
+    customer_service: "Mal servicio al cliente",
+    low_quality: "Baja calidad",
+    other: "Otra razón",
+  };
+
+  // ---- Cancelados recientes (últimos 30 días) — para poder escribirles ----
+  const hace30dias = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const canceladosRecientes = todos
+    .filter((u) => u.cancelled_at && new Date(u.cancelled_at) >= hace30dias)
+    .sort((a, b) => new Date(b.cancelled_at!).getTime() - new Date(a.cancelled_at!).getTime());
+
   return (
     <div className="vc-shell">
       <div className="mb-1 flex items-center gap-2">
@@ -249,6 +270,41 @@ export default async function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* Cancelados recientes — con razón (si Stripe la capturó) y botón de email */}
+      {canceladosRecientes.length > 0 && (
+        <div className="vc-card mb-3">
+          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
+            Cancelados recientes (últimos 30 días) — {canceladosRecientes.length}
+          </p>
+          <div className="flex flex-col gap-2">
+            {canceladosRecientes.map((u) => (
+              <div key={u.id} className="flex items-center justify-between gap-2 border-b border-border py-2 text-sm last:border-0">
+                <div className="min-w-0">
+                  <p className="truncate">{u.full_name || "Sin nombre"} <span className="text-[11px] text-muted">· {fmtFecha(u.cancelled_at)}</span></p>
+                  <p className="truncate text-[11px] text-muted">{u.email}</p>
+                  {(u.cancellation_reason || u.cancellation_comment) && (
+                    <p className="mt-0.5 text-[11px] text-amb">
+                      {u.cancellation_reason ? RAZON_CANCELACION_LABEL[u.cancellation_reason] ?? u.cancellation_reason : null}
+                      {u.cancellation_reason && u.cancellation_comment ? " — " : null}
+                      {u.cancellation_comment ? `"${u.cancellation_comment}"` : null}
+                    </p>
+                  )}
+                  {!u.cancellation_reason && !u.cancellation_comment && (
+                    <p className="mt-0.5 text-[11px] text-muted">Sin razón capturada (canceló fuera del portal de Stripe).</p>
+                  )}
+                </div>
+                
+                  href={`mailto:${u.email}?subject=${encodeURIComponent("¿Qué te hizo cancelar VICTOR CFO?")}`}
+                  className="shrink-0 rounded-pill border border-teal px-3 py-1.5 text-[11px] font-medium text-teal"
+                >
+                  Email
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
         {/* Gasto de IA por plan */}
