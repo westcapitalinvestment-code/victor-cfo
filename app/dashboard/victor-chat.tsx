@@ -111,6 +111,27 @@ export default function VictorChat({
   // dashboard (antes se cerraba solo al hacer clic afuera — quitado a
   // propósito). Solo se minimiza si el usuario toca el botón "−" o el FAB.
 
+  // El pill de VICTOR en el topbar (topbar.tsx) dispara este evento al
+  // tocarlo, en vez de necesitar que el estado `open` viva en un ancestro
+  // común — así el topbar puede abrir el chat sin acoplarse a este
+  // componente. Es el reemplazo de la campanita: en vez de una lista de
+  // notificaciones aparte, tocar el pill te trae directo a hablar con
+  // VICTOR, que es donde de verdad están las alertas.
+  useEffect(() => {
+    function handler() {
+      setOpen(true);
+    }
+    window.addEventListener("victor:abrir", handler);
+    return () => window.removeEventListener("victor:abrir", handler);
+  }, []);
+
+  // VICTOR toma la iniciativa: si el usuario acaba de crear su cuenta y
+  // todavía no pasó por el onboarding conversacional (Capa 2), el panel se
+  // abre solo y le manda a VICTOR una señal técnica invisible para que
+  // arranque él mismo — el usuario nunca ve "[INICIO_AUTOMATICO]" en pantalla.
+  const triggeredRef = useRef(false);
+  useEffect(() => {
+    ...
   // VICTOR toma la iniciativa: si el usuario acaba de crear su cuenta y
   // todavía no pasó por el onboarding conversacional (Capa 2), el panel se
   // abre solo y le manda a VICTOR una señal técnica invisible para que
