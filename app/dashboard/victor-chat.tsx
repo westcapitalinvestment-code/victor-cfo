@@ -187,8 +187,9 @@ export default function VictorChat({
         setError("No se escuchó nada — inténtalo de nuevo, más cerca del micrófono.");
       } else if (event.error === "network") {
         setError("El dictado por voz necesita conexión a internet — revisa tu señal e inténtalo de nuevo.");
-      } else if (event.error !== "aborted") {
-        setError("No se pudo usar el micrófono ahora mismo. Inténtalo de nuevo.");
+           } else if (event.error !== "aborted") {
+        setError(`No se pudo usar el micrófono ahora mismo (error: ${event.error}). Inténtalo de nuevo.`);
+      }
       }
     };
     recognition.onend = () => setListening(false);
