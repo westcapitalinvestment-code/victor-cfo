@@ -29,7 +29,15 @@ body {
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  min-height: 100dvh;
   transition: background .3s, color .3s;
+  /* Evita el "rebote" elástico del scroll en los bordes de la pantalla —
+     sin esto, en la PWA instalada ese rebote a veces lo interpreta el
+     celular como un gesto del sistema (cambiar de página/app) en vez de
+     quedarse dentro de VICTOR. Bug real reportado por Joel (28 agosto
+     2026): la pantalla se sentía "desajustada" y un swipe cerca de los
+     íconos de abajo a veces cambiaba de página del teléfono. */
+  overscroll-behavior: none;
 }
 
 /* Contenedor compartido de las pantallas del dashboard — mismos
