@@ -261,10 +261,22 @@ export default function VictorChat({
         className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-lg"
         style={{ background: "#1D9E75" }}
       >
-        {open ? (
+                {open ? (
           <i className="ti ti-minus" style={{ fontSize: 22, color: "#fff" }} />
         ) : (
-          <img src={VICTOR_AVATAR} alt="VICTOR" className="h-full w-full object-cover" />
+          // Fondo blanco explícito — el ícono de VICTOR es un PNG con la
+          // línea de la cara en el mismo verde del botón (#1D9E75). Sin un
+          // fondo que contraste, la cara queda invisible sobre sí misma
+          // (bug real reportado por Joel: se veía "verde sólido, casi sin
+          // cara"). El header y los avatares del chat ya usaban fondo
+          // blanco por esto mismo — aquí faltaba.
+          <img
+            src={VICTOR_AVATAR}
+            alt="VICTOR"
+            className="h-full w-full object-cover"
+            style={{ background: "#fff" }}
+          />
+        )}
         )}
       </button>
 
