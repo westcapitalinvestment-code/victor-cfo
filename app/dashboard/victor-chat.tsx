@@ -29,10 +29,7 @@ const EMOJIS = [
   "💳", "📈", "📉", "🏦", "🏠", "🚗", "😴", "🤷",
 ];
 
-// Logo/cara de VICTOR — el mismo PNG del mockup aprobado (VICTOR — Dashboard
-// Core.html), para que el chat real se vea idéntico, no un ícono genérico.
-const VICTOR_AVATAR =
- // Logo/cara de VICTOR — antes era un PNG en base64 metido directo en el
+// Logo/cara de VICTOR — antes era un PNG en base64 metido directo en el
 // código (~4KB en una sola línea gigante). Se movió a un archivo real en
 // /public (28 agosto 2026) porque ese base64 gigante se corrompía cada vez
 // que Joel lo copiaba/pegaba a mano en el editor web de GitHub (una sola
