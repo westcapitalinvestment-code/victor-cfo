@@ -28,6 +28,7 @@ export default function EditarDocumentoPage() {
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("Otro");
   const [fechaVencimiento, setFechaVencimiento] = useState("");
+  const [fechaVencimientoOriginal, setFechaVencimientoOriginal] = useState("");
   const [archivosGuardados, setArchivosGuardados] = useState<ArchivoGuardado[]>([]);
   const [borrandoArchivoId, setBorrandoArchivoId] = useState<string | null>(null);
   const [archivosPendientes, setArchivosPendientes] = useState<ArchivoPendiente[]>([]);
@@ -68,6 +69,7 @@ export default function EditarDocumentoPage() {
       setNombre(doc.nombre);
       setTipo(doc.tipo ?? "Otro");
       setFechaVencimiento(doc.fecha_vencimiento ?? "");
+      setFechaVencimientoOriginal(doc.fecha_vencimiento ?? "");
       if (!archivosError && archivos) setArchivosGuardados(archivos);
       setFetching(false);
     })();
@@ -109,13 +111,27 @@ export default function EditarDocumentoPage() {
     setArchivosGuardados((prev) => prev.filter((a) => a.id !== fileId));
   }
 
-  async function guardarCambios() {
+    async function guardarCambios() {
     setLoading(true);
     setError(null);
 
+    // Si la fecha de vencimiento cambió (ej. el usuario renovó el marbete/
+    // póliza/licencia y puso la nueva fecha), reseteamos las 3 banderas de
+    // alerta — si no, un documento que ya había cruzado los 90/30/7 días
+    // ANTES de renovarse se queda "silenciado" para siempre, porque el cron
+    // de push y el saludo de VICTOR solo avisan la primera vez que se cruza
+    // cada umbral. Con el reset, el ciclo de alertas arranca de cero para
+    // la nueva fecha.
+    const cambioFecha = fechaVencimiento !== fechaVencimientoOriginal;
+
     const { error: updateError } = await supabase
       .from("documents")
-      .update({ nombre, tipo, fecha_vencimiento: fechaVencimiento || null })
+      .update({
+        nombre,
+        tipo,
+        fecha_vencimiento: fechaVencimiento || null,
+        ...(cambioFecha ? { alerta_90: false, alerta_30: false, alerta_7: false } : {}),
+      })
       .eq("id", params.id);
 
     if (updateError) {
