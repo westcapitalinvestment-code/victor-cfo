@@ -2,6 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
+// Lista de Citas — vive fuera del bottom nav (mismo patrón que
+// /dashboard/clientes), se llega desde la tarjeta "Próxima cita" del Inicio
+// o desde el link dentro de Bóveda. A diferencia de documentos/page.tsx no
+// hay archivos adjuntos ni tipo de renovación — solo fecha, hora y costo
+// estimado. Las citas ya marcadas "hecha" se muestran al final, tachadas,
+// en vez de desaparecer — conservan el historial (ej. cuánto costó al
+// final vs. lo estimado).
 export default async function CitasPage() {
   const supabase = createClient();
   const {
@@ -21,12 +28,7 @@ export default async function CitasPage() {
 
   return (
     <div className="vc-shell">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-medium">Citas</h1>
-          <Link href="/dashboard/documentos" className="text-xs text-muted hover:opacity-80">
-            ← Bóveda
-              <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between">
         <h1 className="text-lg font-medium">Citas</h1>
         <Link href="/dashboard/citas/nueva" className="text-xs font-medium text-teal hover:opacity-80">
           + Nueva
