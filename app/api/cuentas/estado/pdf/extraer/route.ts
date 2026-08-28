@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { costoEnCentavos } from "@/lib/costo-ia";
+import { fechaHoyPR } from "@/lib/hora-pr";
 
 // Un PDF de estado de cuenta no tiene columnas fijas como un CSV — cada
 // banco/tarjeta lo formatea distinto (BPPR no se parece a Citibank, y
@@ -72,6 +74,22 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
 
+  // Clave de ciclo para registrar el costo real de esta llamada — mismo
+  // criterio que app/api/victor/route.ts (28 agosto 2026: hasta hoy esta
+  // ruta llamaba a Claude Sonnet, el modelo más caro de toda la app, sin
+  // registrar nada en uso_ia_mensual/uso_ia_log — el gasto SÍ salía en la
+  // cuenta de Anthropic pero el Dashboard de Operaciones nunca lo veía,
+  // por eso el "Gasto IA" de un usuario podía quedarse fijo mientras el
+  // total real de la cuenta seguía subiendo). Esta ruta no necesita aplicar
+  // el tope de gasto (es una acción explícita del usuario, no chat libre),
+  // solo sumar el costo real al mismo lugar que lee el Dashboard.
+  const { data: perfilCiclo } = await supabase
+    .from("users")
+    .select("ciclo_inicio")
+    .eq("id", user.id)
+    .maybeSingle();
+  const claveCicloUso = perfilCiclo?.ciclo_inicio ?? fechaHoyPR().slice(0, 7);
+
   const body = await req.json().catch(() => null);
   const pdfBase64: string | undefined = body?.pdfBase64;
   const nombreArchivo: string = body?.nombreArchivo || "estado de cuenta";
@@ -111,6 +129,31 @@ export async function POST(req: NextRequest) {
       tools: [HERRAMIENTA_EXTRAER],
       tool_choice: { type: "tool", name: "reportar_transacciones" },
     });
+
+    // Registra el costo real de esta llamada — propio try/catch, nunca debe
+    // tumbar la respuesta al usuario si el registro falla.
+    try {
+      const costoCentavos = costoEnCentavos("claude-sonnet-5", response.usage);
+      await supabase.rpc("registrar_uso_ia", {
+        p_owner_id: user.id,
+        p_costo_centavos: costoCentavos,
+        p_ciclo_clave: claveCicloUso,
+      });
+      await supabase.rpc("registrar_uso_ia_detalle", {
+        p_owner_id: user.id,
+        p_costo_centavos: costoCentavos,
+        p_iteraciones: 1,
+        p_input_tokens: response.usage.input_tokens ?? 0,
+        p_output_tokens: response.usage.output_tokens ?? 0,
+        p_cache_read_tokens: response.usage.cache_read_input_tokens ?? 0,
+        p_cache_creation_tokens: response.usage.cache_creation_input_tokens ?? 0,
+        p_herramientas_usadas: "reportar_transacciones (PDF)",
+        p_mensaje_usuario: `[PDF] ${nombreArchivo}`,
+        p_modelos_usados: "claude-sonnet-5",
+      });
+    } catch (err) {
+      console.error("No se pudo registrar uso_ia_mensual (extraer PDF):", err);
+    }
 
     const toolUse = response.content.find(
       (block): block is Anthropic.ToolUseBlock => block.type === "tool_use" && block.name === "reportar_transacciones"
