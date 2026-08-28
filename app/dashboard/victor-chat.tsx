@@ -131,21 +131,6 @@ export default function VictorChat({
   // arranque él mismo — el usuario nunca ve "[INICIO_AUTOMATICO]" en pantalla.
   const triggeredRef = useRef(false);
   useEffect(() => {
-    const triggeredRef = useRef(false);
-  useEffect(() => {
-    if (autoOpenOnboarding && !triggeredRef.current) {
-      triggeredRef.current = true;
-      setOpen(true);
-      send(ONBOARDING_TRIGGER, { hidden: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoOpenOnboarding]);
-  // VICTOR toma la iniciativa: si el usuario acaba de crear su cuenta y
-  // todavía no pasó por el onboarding conversacional (Capa 2), el panel se
-  // abre solo y le manda a VICTOR una señal técnica invisible para que
-  // arranque él mismo — el usuario nunca ve "[INICIO_AUTOMATICO]" en pantalla.
-  const triggeredRef = useRef(false);
-  useEffect(() => {
     if (autoOpenOnboarding && !triggeredRef.current) {
       triggeredRef.current = true;
       setOpen(true);
