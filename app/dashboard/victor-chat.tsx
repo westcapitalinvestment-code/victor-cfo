@@ -175,10 +175,16 @@ export default function VictorChat({
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
-       recognition.onresult = (event: SpeechRecognitionEvent) => {
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
       const transcript = event.results[event.results.length - 1][0].transcript;
       if (transcript.trim()) send(transcript.trim());
     };
+    // Antes esto solo apagaba "listening" sin decir nada — para el usuario
+    // se sentía como "el micrófono no sirve" sin ninguna pista de por qué
+    // (28 agosto 2026, reportado por Joel). La causa más común en un PWA
+    // instalado es que el permiso de micrófono nunca se concedió para esa
+    // instalación específica (es un permiso aparte del navegador normal) —
+    // ahora se lo decimos explícitamente en vez de fallar en silencio.
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       setListening(false);
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
@@ -187,9 +193,13 @@ export default function VictorChat({
         setError("No se escuchó nada — inténtalo de nuevo, más cerca del micrófono.");
       } else if (event.error === "network") {
         setError("El dictado por voz necesita conexión a internet — revisa tu señal e inténtalo de nuevo.");
-           } else if (event.error !== "aborted") {
+      } else if (event.error !== "aborted") {
+        // Incluye el código real (event.error) en el mensaje — mientras no
+        // sepamos cuál de los errores restantes del spec (audio-capture,
+        // language-not-supported, bad-grammar, etc.) es el que está
+        // pasando de verdad, este texto es la única forma de verlo sin
+        // acceso remoto a la consola del celular de Joel.
         setError(`No se pudo usar el micrófono ahora mismo (error: ${event.error}). Inténtalo de nuevo.`);
-      }
       }
     };
     recognition.onend = () => setListening(false);
@@ -215,7 +225,7 @@ export default function VictorChat({
     });
   }
 
-    function toggleVoice() {
+  function toggleVoice() {
     if (!recognitionRef.current) return;
     if (listening) {
       recognitionRef.current.stop();
@@ -227,6 +237,10 @@ export default function VictorChat({
         recognitionRef.current.start();
         setListening(true);
       } catch {
+        // .start() puede lanzar de una vez (no async) si ya había una
+        // sesión de reconocimiento activa (ej. doble toque rápido) — el
+        // onerror de arriba no se dispara en ese caso porque nunca llegó
+        // a arrancar, así que hay que atraparlo aquí también.
         setListening(false);
         setError("No se pudo activar el micrófono. Inténtalo de nuevo.");
       }
@@ -378,8 +392,6 @@ export default function VictorChat({
           <div className="relative flex gap-2 border-t border-border bg-card p-3">
             {showEmojis && (
               <>
-                {/* Capa invisible para cerrar el panel al tocar afuera,
-                    igual que el resto de los menús de la app. */}
                 <div className="fixed inset-0 z-[55]" onClick={() => setShowEmojis(false)} />
                 <div
                   className="absolute bottom-[52px] left-3 z-[60] grid w-[248px] grid-cols-8 gap-1 rounded-xl border border-border bg-card p-2 shadow-2xl"
