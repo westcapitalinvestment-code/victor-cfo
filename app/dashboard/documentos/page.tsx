@@ -30,11 +30,16 @@ export default async function DocumentosPage() {
 
   return (
     <div className="vc-shell">
-      <div className="mb-4 flex items-center justify-between">
+           <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-medium">Bóveda</h1>
-        <Link href="/dashboard/documentos/nuevo" className="text-xs font-medium text-teal hover:opacity-80">
-          + Nuevo
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/citas" className="text-xs font-medium text-muted hover:opacity-80">
+            Citas →
+          </Link>
+          <Link href="/dashboard/documentos/nuevo" className="text-xs font-medium text-teal hover:opacity-80">
+            + Nuevo
+          </Link>
+        </div>
       </div>
 
       <div className="vc-card">
