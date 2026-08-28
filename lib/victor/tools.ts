@@ -277,6 +277,81 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["nombre_documento"],
     },
   },
+    {
+    name: "crear_cita",
+    description:
+      "Anota una cita puntual del usuario (médica, dental, trámite, reunión, cualquier evento con fecha y " +
+      "hora) — vive en /dashboard/citas, dentro de la sección de Bóveda, y genera avisos automáticos un día " +
+      "antes y el mismo día. Úsala cuando el usuario diga cosas como 'anótame una cita con...' o 'tengo turno " +
+      "el...'. Si menciona un costo aproximado (ej. una cita médica que puede requerir efectivo), pídeselo si " +
+      "no lo dio y guárdalo en costo_estimado — con eso puedes, en este mismo turno, cruzarlo contra su " +
+      "efectivo disponible (que ya tienes en tu contexto) y decirle si tiene cobertura, igual que harías con " +
+      "cualquier gasto grande que te mencione.",
+    input_schema: {
+      type: "object",
+      properties: {
+        titulo: { type: "string", description: "Título corto de la cita, ej. 'Cita Dra. Abreu (Endodoncista)' o 'Renovar pasaporte'." },
+        fecha: { type: "string", description: "Fecha de la cita en formato YYYY-MM-DD." },
+        hora: { type: "string", description: "Hora de la cita en formato HH:MM (24 horas), si el usuario la dio." },
+        costo_estimado: { type: "number", description: "Costo aproximado en dólares, si el usuario lo mencionó o lo pudiste estimar con él." },
+        notas: { type: "string", description: "Cualquier detalle adicional relevante — qué llevar, quién la refirió, etc." },
+      },
+      required: ["titulo", "fecha"],
+    },
+  },
+  {
+    name: "revisar_citas_proximas",
+    description:
+      "Trae la lista real de citas guardadas del usuario que están próximas o ya pasaron sin marcarse como " +
+      "hechas. Úsala SIEMPRE en el saludo proactivo diario (junto con revisar_gastos_sin_categorizar y " +
+      "revisar_documentos_por_vencer), y también cuando el usuario pregunte qué citas tiene o qué le queda " +
+      "pendiente esta semana.",
+    input_schema: {
+      type: "object",
+      properties: {
+        dias: { type: "number", description: "Ventana de días hacia adelante a revisar. Si no se especifica, usa 14." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "actualizar_cita",
+    description:
+      "Actualiza una cita existente — úsala cuando el usuario reagende, cambie la hora, actualice el costo " +
+      "real después de que pasó, o la marque como completada (marcar_hecha: true). Busca la cita por título — " +
+      "si hay más de una coincidencia, pregúntale al usuario cuál es antes de actualizar. Si cambias la fecha " +
+      "u hora, los avisos (día antes / mismo día) arrancan de cero automáticamente. Nunca inventes un dato que " +
+      "el usuario no te dio.",
+    input_schema: {
+      type: "object",
+      properties: {
+        titulo_cita: { type: "string", description: "Título (o parte del título) de la cita a actualizar, tal como está guardada." },
+        nueva_fecha: { type: "string", description: "Nueva fecha en formato YYYY-MM-DD, si cambió." },
+        nueva_hora: { type: "string", description: "Nueva hora en formato HH:MM, si cambió." },
+        nuevo_costo_estimado: { type: "number", description: "Costo actualizado (estimado o real), si el usuario lo dio." },
+        nuevo_titulo: { type: "string", description: "Nuevo título, solo si el usuario pidió cambiarlo." },
+        marcar_hecha: { type: "boolean", description: "true si el usuario confirma que la cita ya pasó/se completó — deja de generar avisos." },
+      },
+      required: ["titulo_cita"],
+    },
+  },
+  {
+    name: "eliminar_cita",
+    description:
+      "Elimina una cita guardada — úsala cuando el usuario la cancele y no quiera seguir viéndola. Es " +
+      "IRREVERSIBLE, así que SIEMPRE confirma con el usuario primero en el chat (algo como '¿seguro que " +
+      "quieres que borre \"Cita Dra. Abreu\"?') y solo llama esta herramienta después de que confirme que sí. " +
+      "Nunca la llames en el mismo turno donde el usuario apenas lo menciona por primera vez. Si la cita ya " +
+      "pasó y solo quieres que deje de aparecer como pendiente, usa actualizar_cita con marcar_hecha en vez de " +
+      "borrarla — así conservas el historial.",
+    input_schema: {
+      type: "object",
+      properties: {
+        titulo_cita: { type: "string", description: "Título (o parte del título) de la cita a eliminar, tal como está guardada." },
+      },
+      required: ["titulo_cita"],
+    },
+  },
   {
     name: "crear_categoria_personal",
     description:
@@ -1025,7 +1100,154 @@ export async function executeVictorTool(
 
       return { ok: true, message: `Eliminé "${doc.nombre}" de la Bóveda.` };
     }
+    case "crear_cita": {
+      const titulo = String(input.titulo ?? "").trim();
+      const fecha = String(input.fecha ?? "").trim();
+      if (!titulo || !fecha) return { ok: false, message: "Faltan datos válidos (título y fecha) para anotar la cita." };
 
+      const hora = typeof input.hora === "string" && input.hora.trim() ? input.hora.trim() : null;
+      const costoEstimado = Number.isFinite(Number(input.costo_estimado)) ? Number(input.costo_estimado) : null;
+      const notas = typeof input.notas === "string" && input.notas.trim() ? input.notas.trim() : null;
+
+      const { error } = await supabase.from("citas").insert({
+        owner_id: ownerId,
+        titulo,
+        fecha,
+        hora,
+        costo_estimado: costoEstimado,
+        notas,
+      });
+
+      if (error) return { ok: false, message: `No se pudo guardar la cita: ${error.message}` };
+      return {
+        ok: true,
+        message:
+          `Cita "${titulo}" guardada para ${fecha}${hora ? ` a las ${hora}` : ""}` +
+          `${costoEstimado !== null ? `, costo estimado $${costoEstimado}` : ""}. ` +
+          `Se le avisará al usuario un día antes y el mismo día.`,
+      };
+    }
+
+    case "revisar_citas_proximas": {
+      const diasVentana = Number.isFinite(Number(input.dias)) && Number(input.dias) > 0
+        ? Math.min(Number(input.dias), 90)
+        : 14;
+      const hoy = new Date();
+      const limite = new Date(hoy.getTime() + diasVentana * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const hoyISO = hoy.toISOString().slice(0, 10);
+
+      const { data: citasProximas, error } = await supabase
+        .from("citas")
+        .select("titulo, fecha, hora, costo_estimado")
+        .eq("owner_id", ownerId)
+        .eq("hecha", false)
+        .gte("fecha", hoyISO)
+        .lte("fecha", limite)
+        .order("fecha", { ascending: true });
+
+      if (error) return { ok: false, message: `No se pudo revisar las citas: ${error.message}` };
+      if (!citasProximas || citasProximas.length === 0) {
+        return { ok: true, message: `No hay citas pendientes en los próximos ${diasVentana} días.` };
+      }
+
+      const lista = citasProximas
+        .map((c) => {
+          const dias = Math.round(
+            (new Date(c.fecha + "T00:00:00").getTime() - hoy.getTime()) / (24 * 60 * 60 * 1000)
+          );
+          const cuando = dias === 0 ? "hoy" : dias === 1 ? "mañana" : `en ${dias} días (${c.fecha})`;
+          return (
+            `"${c.titulo}" ${cuando}${c.hora ? ` a las ${c.hora}` : ""}` +
+            `${c.costo_estimado !== null ? ` (costo estimado $${c.costo_estimado})` : ""}`
+          );
+        })
+        .join("; ");
+
+      return { ok: true, message: `Citas próximas: ${lista}.` };
+    }
+
+    case "actualizar_cita": {
+      const tituloBuscado = String(input.titulo_cita ?? "").trim();
+      if (!tituloBuscado) return { ok: false, message: "Falta el título de la cita a actualizar." };
+
+      const nuevaFecha = input.nueva_fecha ? String(input.nueva_fecha).trim() : null;
+      const nuevaHora = input.nueva_hora ? String(input.nueva_hora).trim() : null;
+      const nuevoCosto = Number.isFinite(Number(input.nuevo_costo_estimado)) ? Number(input.nuevo_costo_estimado) : null;
+      const nuevoTitulo = input.nuevo_titulo ? String(input.nuevo_titulo).trim() : null;
+      const marcarHecha = typeof input.marcar_hecha === "boolean" ? input.marcar_hecha : null;
+
+      if (!nuevaFecha && !nuevaHora && nuevoCosto === null && !nuevoTitulo && marcarHecha === null) {
+        return { ok: false, message: "No hay ningún cambio que hacer en la cita." };
+      }
+
+      const { data: candidatos, error: buscarError } = await supabase
+        .from("citas")
+        .select("id, titulo, fecha, hora")
+        .eq("owner_id", ownerId)
+        .eq("hecha", false)
+        .ilike("titulo", `%${tituloBuscado}%`);
+
+      if (buscarError) return { ok: false, message: `No se pudo buscar la cita: ${buscarError.message}` };
+      if (!candidatos || candidatos.length === 0) {
+        return { ok: false, message: `No encontré ninguna cita pendiente parecida a "${tituloBuscado}".` };
+      }
+      if (candidatos.length > 1) {
+        return {
+          ok: false,
+          message: `Hay varias citas parecidas a "${tituloBuscado}" (${candidatos.map((c) => c.titulo).join(", ")}). Pídele al usuario que aclare cuál.`,
+        };
+      }
+
+      const cita = candidatos[0];
+      const cambioFechaUOra = (nuevaFecha !== null && nuevaFecha !== cita.fecha) || (nuevaHora !== null && nuevaHora !== cita.hora);
+
+      const cambios: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (nuevoTitulo) cambios.titulo = nuevoTitulo;
+      if (nuevaFecha) cambios.fecha = nuevaFecha;
+      if (nuevaHora) cambios.hora = nuevaHora;
+      if (nuevoCosto !== null) cambios.costo_estimado = nuevoCosto;
+      if (marcarHecha !== null) cambios.hecha = marcarHecha;
+      if (cambioFechaUOra) {
+        cambios.recordatorio_1dia = false;
+        cambios.recordatorio_mismodia = false;
+      }
+
+      const { error: updateError } = await supabase.from("citas").update(cambios).eq("id", cita.id);
+      if (updateError) return { ok: false, message: `No se pudo actualizar la cita: ${updateError.message}` };
+
+      return {
+        ok: true,
+        message: `Actualicé "${nuevoTitulo ?? cita.titulo}"${nuevaFecha ? ` — nueva fecha: ${nuevaFecha}` : ""}${nuevaHora ? ` a las ${nuevaHora}` : ""}${marcarHecha ? " — marcada como hecha" : ""}.`,
+      };
+    }
+
+    case "eliminar_cita": {
+      const tituloBuscado = String(input.titulo_cita ?? "").trim();
+      if (!tituloBuscado) return { ok: false, message: "Falta el título de la cita a eliminar." };
+
+      const { data: candidatos, error: buscarError } = await supabase
+        .from("citas")
+        .select("id, titulo")
+        .eq("owner_id", ownerId)
+        .ilike("titulo", `%${tituloBuscado}%`);
+
+      if (buscarError) return { ok: false, message: `No se pudo buscar la cita: ${buscarError.message}` };
+      if (!candidatos || candidatos.length === 0) {
+        return { ok: false, message: `No encontré ninguna cita parecida a "${tituloBuscado}".` };
+      }
+      if (candidatos.length > 1) {
+        return {
+          ok: false,
+          message: `Hay varias citas parecidas a "${tituloBuscado}" (${candidatos.map((c) => c.titulo).join(", ")}). Pídele al usuario que aclare cuál.`,
+        };
+      }
+
+      const cita = candidatos[0];
+      const { error: deleteError } = await supabase.from("citas").delete().eq("id", cita.id);
+      if (deleteError) return { ok: false, message: `No se pudo eliminar la cita: ${deleteError.message}` };
+
+      return { ok: true, message: `Eliminé "${cita.titulo}" de las citas.` };
+    }
     case "crear_categoria_personal": {
       const nombre = String(input.nombre ?? "").trim();
       if (!nombre) return { ok: false, message: "Falta el nombre de la categoría a crear." };
