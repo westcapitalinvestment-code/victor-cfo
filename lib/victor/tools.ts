@@ -227,7 +227,21 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
-  {
+    {
+    name: "revisar_documentos_por_vencer",
+    description:
+      "Trae la lista real de documentos de la Bóveda del usuario que están por vencer o ya vencieron — " +
+      "licencias, marbete, pólizas, permisos, certificaciones, etc. Úsala SIEMPRE en el saludo proactivo " +
+      "diario (junto con revisar_gastos_sin_categorizar), y también cuando el usuario pregunte qué le " +
+      "falta renovar, qué está por vencer, o algo sobre un documento específico de su Bóveda.",
+    input_schema: {
+      type: "object",
+      properties: {
+        dias: { type: "number", description: "Ventana de días hacia adelante a revisar. Si no se especifica, usa 30." },
+      },
+      required: [],
+    },
+  },
     name: "crear_categoria_personal",
     description:
       "Crea una categoría de gasto NUEVA, personal del usuario (no la ve nadie más, no toca el catálogo " +
