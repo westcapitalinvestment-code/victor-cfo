@@ -64,13 +64,20 @@ body {
 .vc-tk { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
 .vc-tk.on { left: 18px; background: #1D9E75; }
 
-.vc-bell { position: relative; display: flex; height: 32px; width: 32px; align-items: center; justify-content: center; border-radius: 50%; color: var(--muted); background: transparent; border: none; cursor: pointer; }
-.vc-bell:hover { background: rgba(0,0,0,.04); }
-
-/* Pill decorativo de VICTOR en el topbar (el chat de verdad ya vive
-   siempre visible como flotante — esto solo indica que está activo) */
-.vc-victor-pill { display: flex; align-items: center; gap: 6px; background: rgba(29,158,117,.1); border: .5px solid rgba(29,158,117,.35); color: #1D9E75; border-radius: 999px; padding: 6px 11px; }
+/* Pill de VICTOR en el topbar — dejó de ser decorativo. Es el centro de
+   notificaciones real de la app (decisión de Joel, 28 agosto 2026: "no
+   quiero campana, quiero innovar" — en vez de una lista muda como todas
+   las apps, tocar esto abre el chat y VICTOR te dice qué pasa). El punto
+   es verde fijo cuando no hay nada pendiente, y ámbar pulsante cuando sí
+   (gastos sin categorizar o documentos por vencer). */
+.vc-victor-pill { display: flex; align-items: center; gap: 6px; background: rgba(29,158,117,.1); border: .5px solid rgba(29,158,117,.35); color: #1D9E75; border-radius: 999px; padding: 6px 11px; cursor: pointer; }
+.vc-victor-pill:hover { opacity: .85; }
 .vc-victor-dot { width: 6px; height: 6px; border-radius: 50%; background: #1D9E75; }
+.vc-victor-dot.alerta { background: #E8A33D; animation: vc-pulse 1.6s ease-in-out infinite; }
+@keyframes vc-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232,163,61,.55); }
+  50% { box-shadow: 0 0 0 4px rgba(232,163,61,0); }
+}
 
 /* Banner central "Invita a tu contable" — gratis para cualquier plan,
    por eso va centrado y visible, no escondido como un upsell más. */
