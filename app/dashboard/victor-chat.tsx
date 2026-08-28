@@ -175,11 +175,22 @@ export default function VictorChat({
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+       recognition.onresult = (event: SpeechRecognitionEvent) => {
       const transcript = event.results[event.results.length - 1][0].transcript;
       if (transcript.trim()) send(transcript.trim());
     };
-    recognition.onerror = () => setListening(false);
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      setListening(false);
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        setError("VICTOR no tiene permiso para usar el micrófono. Revisa los permisos de la app en Ajustes del celular y vuelve a intentar.");
+      } else if (event.error === "no-speech") {
+        setError("No se escuchó nada — inténtalo de nuevo, más cerca del micrófono.");
+      } else if (event.error === "network") {
+        setError("El dictado por voz necesita conexión a internet — revisa tu señal e inténtalo de nuevo.");
+      } else if (event.error !== "aborted") {
+        setError("No se pudo usar el micrófono ahora mismo. Inténtalo de nuevo.");
+      }
+    };
     recognition.onend = () => setListening(false);
 
     recognitionRef.current = recognition;
@@ -203,15 +214,21 @@ export default function VictorChat({
     });
   }
 
-  function toggleVoice() {
+    function toggleVoice() {
     if (!recognitionRef.current) return;
     if (listening) {
       recognitionRef.current.stop();
       setListening(false);
     } else {
       setOpen(true);
-      recognitionRef.current.start();
-      setListening(true);
+      setError(null);
+      try {
+        recognitionRef.current.start();
+        setListening(true);
+      } catch {
+        setListening(false);
+        setError("No se pudo activar el micrófono. Inténtalo de nuevo.");
+      }
     }
   }
 
