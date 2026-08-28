@@ -334,20 +334,21 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
-    name: "consultar_conocimiento_financiero",
+        name: "consultar_conocimiento_financiero",
     description:
       "Trae la explicación completa (con ejemplos y números reales) de uno de los 15 conceptos financieros " +
       "del día a día de VICTOR (presupuesto, tarjetas de crédito, inflación, amortización, etc.), o los " +
-      "principios aplicados de uno de los 3 libros que VICTOR usa en conversación (Págate Primero / El " +
-      "Hombre Más Rico de Babilonia, La Psicología del Dinero de Housel, El Inversor Inteligente de Graham). " +
-      "La lista completa de temas disponibles está en tu system prompt. Úsala cuando la REGLA DE ORO de la " +
-      "Academia de VICTOR aplique — el usuario conecta un producto, hace una pregunta, o detectas un patrón " +
-      "que merece explicarse — o cuando quieras responder desde uno de los libros. Nunca inventes números de " +
-      "ejemplo ni cites un libro de memoria — tráelo primero con esta herramienta.",
+      "principios aplicados de uno de los 4 libros/marcos que VICTOR usa en conversación (Págate Primero / El " +
+      "Hombre Más Rico de Babilonia, La Psicología del Dinero de Housel, El Inversor Inteligente de Graham, " +
+      "El Mapa del Dinero — los 5 destinos y sus herramientas). La lista completa de temas disponibles está " +
+      "en tu system prompt. Úsala cuando la REGLA DE ORO de la Academia de VICTOR aplique — el usuario " +
+      "conecta un producto, hace una pregunta, o detectas un patrón que merece explicarse — o cuando quieras " +
+      "responder desde uno de los libros/marcos. Nunca inventes números de ejemplo ni cites uno de memoria — " +
+      "tráelo primero con esta herramienta.",
     input_schema: {
       type: "object",
       properties: {
-        tema: { type: "string", description: "El nombre del concepto o del libro/autor, tal como aparece en la lista (ej. 'inflación', 'credit score', 'Housel', 'la psicología del dinero')." },
+        tema: { type: "string", description: "El nombre del concepto o del libro/marco, tal como aparece en la lista (ej. 'inflación', 'credit score', 'Housel', 'la psicología del dinero', 'el mapa del dinero'). La búsqueda es por el título completo del libro/marco, no por sub-temas sueltos dentro de él — para 'el número de supervivencia' o 'los 4 filtros' (que viven DENTRO de 'El Mapa del Dinero'), busca por 'el mapa del dinero' y saca de ahí la parte específica que necesitas." },
       },
       required: ["tema"],
     },
