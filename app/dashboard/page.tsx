@@ -219,6 +219,24 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     return { ...d, dias };
   });
 
+  // Próximas citas (0030) — mismo criterio de ventana que documentos, pero
+  // sin cron de por medio: "hecha = false" y fecha desde hoy en adelante,
+  // calculado aquí mismo para que siempre esté correcto.
+  const hoyISO = hoy.toISOString().slice(0, 10);
+  const { data: citasProximasRaw } = await supabase
+    .from("citas")
+    .select("id, titulo, fecha, hora, costo_estimado")
+    .eq("owner_id", user.id)
+    .eq("hecha", false)
+    .gte("fecha", hoyISO)
+    .order("fecha", { ascending: true })
+    .limit(3);
+
+  const citasProximas = (citasProximasRaw ?? []).map((c) => {
+    const dias = Math.ceil((new Date(c.fecha + "T00:00:00").getTime() - hoy.getTime()) / (24 * 60 * 60 * 1000));
+    return { ...c, dias };
+  });
+
   // Gastos sin categorizar — lo que el motor (trigger_auto_categorize, en
   // 0001) NO pudo decidir solo al llegar la transacción. Se muestra aquí en
   // el Inicio, no escondido en Gastos, porque es justo lo que el usuario
@@ -227,12 +245,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // pantalla, no en una pestaña aparte.
   const LIMITE_PENDIENTES = 8;
   const [{ data: pendientesRaw }, { count: totalPendientes }, { data: categorias }] = await Promise.all([
-        supabase
+    supabase
       .from("transactions")
-            .select("id, description_raw, amount, fecha, tipo_flujo, pending, plaid_account_id, manual_account_id")
+      .select("id, description_raw, amount, fecha, tipo_flujo, pending, plaid_account_id, manual_account_id")
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .is("hacienda_category_id", null)
+      // Mientras está pendiente, el banco todavía puede reemplazarla por una
+      // versión posteada con otro plaid_transaction_id (ver lib/plaid-sync.ts,
+      // fix del 23 de agosto) — pedirle al usuario que categorice algo que
+      // puede desaparecer y reaparecer con otro ID es justo lo que causaba
+      // los "duplicados ya categorizados". Se espera a que postee.
       .eq("pending", false)
       .order("fecha", { ascending: false })
       .limit(LIMITE_PENDIENTES),
@@ -246,7 +269,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
-    const [{ data: cuentasPlaidParaLabel }, { data: cuentasManualesParaLabel }] = await Promise.all([
+  // Bug real (23 agosto 2026, reportado por Joel): con dos cuentas
+  // "checking" del mismo banco (nombres iguales o parecidos), esta lista no
+  // decía de cuál venía cada transacción — imposible categorizar bien sin
+  // adivinar. Mismo patrón de nombrePorCuenta que ya usa /dashboard/gastos,
+  // ahora también prefiriendo el nickname (migración 0024) sobre el nombre
+  // que manda el banco.
+  const [{ data: cuentasPlaidParaLabel }, { data: cuentasManualesParaLabel }] = await Promise.all([
     supabase.from("plaid_accounts").select("plaid_account_id, name, nickname, mask").eq("owner_id", user.id),
     supabase.from("manual_accounts").select("id, name, mask").eq("owner_id", user.id),
   ]);
@@ -428,6 +457,42 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                         </p>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* PRÓXIMAS CITAS (0030) */}
+        <div className="vc-card !p-0">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">Próxima cita</p>
+            <Link href="/dashboard/citas/nueva" className="text-xs font-medium text-teal hover:opacity-80">
+              + Nueva
+            </Link>
+          </div>
+          <div className="p-4">
+            {citasProximas.length === 0 && (
+              <p className="text-xs text-muted">Sin citas pendientes.</p>
+            )}
+            {citasProximas.length > 0 && (
+              <div>
+                {citasProximas.map((c) => {
+                  const color = c.dias <= 1 ? "var(--red)" : c.dias <= 3 ? "var(--amb)" : "var(--grn)";
+                  const cuando = c.dias === 0 ? "Hoy" : c.dias === 1 ? "Mañana" : `En ${c.dias} días`;
+                  return (
+                    <Link key={c.id} href={`/dashboard/citas/${c.id}/editar`} className="vc-alert">
+                      <div className="vc-adot" style={{ background: color }} />
+                      <div>
+                        <p className="text-xs text-text">{c.titulo}</p>
+                        <p className="mt-0.5 text-[10px] text-muted">
+                          {cuando} · {c.fecha}
+                          {c.hora && ` · ${c.hora}`}
+                          {c.costo_estimado !== null && ` · $${Number(c.costo_estimado).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                        </p>
+                      </div>
+                    </Link>
                   );
                 })}
               </div>
