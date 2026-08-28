@@ -242,7 +242,41 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
-    {
+      {
+    name: "actualizar_documento",
+    description:
+      "Actualiza un documento existente de la Bóveda del usuario — úsala cuando diga que ya renovó, pagó, o " +
+      "tramitó algo que ya estaba guardado (ej. 'ya renové el marbete, vence el 15 de marzo' o 'ya pagué la " +
+      "póliza, la nueva vence en un año'). Busca el documento por nombre — si hay más de una coincidencia, " +
+      "pregúntale al usuario cuál es antes de actualizar. Si cambias la fecha de vencimiento, el ciclo de " +
+      "alertas (90/30/7 días) arranca de cero automáticamente para la nueva fecha — no hace falta que hagas " +
+      "nada más. Nunca inventes una fecha que el usuario no te dio.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre_documento: { type: "string", description: "Nombre (o parte del nombre) del documento a actualizar, tal como está guardado, ej. 'marbete' o 'póliza de auto'." },
+        nueva_fecha_vencimiento: { type: "string", description: "Nueva fecha de vencimiento en formato YYYY-MM-DD, si el usuario la dio." },
+        nuevo_nombre: { type: "string", description: "Nuevo nombre para el documento, solo si el usuario pidió cambiarlo." },
+      },
+      required: ["nombre_documento"],
+    },
+  },
+  {
+    name: "eliminar_documento",
+    description:
+      "Elimina un documento de la Bóveda del usuario — úsala cuando ya no aplica (ej. 'vendí el carro, borra " +
+      "el marbete' o 'cancelé esa póliza'). Es IRREVERSIBLE, así que SIEMPRE confirma con el usuario primero " +
+      "en el chat (algo como '¿seguro que quieres que borre \"Marbete Toyota 2019\" de tu Bóveda?') y solo " +
+      "llama esta herramienta después de que confirme que sí. Nunca la llames en el mismo turno donde el " +
+      "usuario apenas lo menciona por primera vez.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre_documento: { type: "string", description: "Nombre (o parte del nombre) del documento a eliminar, tal como está guardado." },
+      },
+      required: ["nombre_documento"],
+    },
+  },
     name: "crear_categoria_personal",
     description:
       "Crea una categoría de gasto NUEVA, personal del usuario (no la ve nadie más, no toca el catálogo " +
