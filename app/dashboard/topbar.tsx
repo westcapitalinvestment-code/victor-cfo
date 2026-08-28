@@ -45,11 +45,55 @@ function ThemeToggle() {
   );
 }
 
+// Evento simple para "abrir el chat de VICTOR" desde cualquier parte de la
+// UI sin tener que subir el estado `open` (que vive local en victor-chat.tsx)
+// hasta un ancestro común — victor-chat.tsx escucha este evento y hace
+// setOpen(true). Mismo patrón liviano que ya usa badge-updater.tsx con
+// visibilitychange, sin necesidad de un state manager nuevo.
+const EVENTO_ABRIR_VICTOR = "victor:abrir";
+
 export default function Topbar({ fullName, plan }: { fullName: string | null; plan: string | null }) {
   const esPro = plan === "pro" || plan === "proplus";
   const nombreCorto = (fullName || "").split(" ")[0];
   const pathname = usePathname();
   const enResumen = pathname === "/dashboard/resumen";
+
+  // El "pill" de VICTOR en el topbar ERA solo decorativo (un puntito verde
+  // fijo). Decisión de Joel (28 agosto 2026): en vez de agregar una
+  // campanita de notificaciones tradicional (que todas las apps tienen),
+  // este pill se convierte en el centro de notificaciones real — el punto
+  // cambia de verde fijo a ámbar pulsante cuando hay algo pendiente
+  // (gastos sin categorizar o documentos por vencer, mismo cálculo que ya
+  // usa el badge de la PWA en /api/badge-count), y tocarlo abre el chat de
+  // VICTOR directo — porque a diferencia de otras apps, aquí las alertas
+  // las da VICTOR conversando, no una lista muda.
+  const [pendientes, setPendientes] = useState(0);
+
+  useEffect(() => {
+    let activo = true;
+    function revisarPendientes() {
+      fetch("/api/badge-count")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (activo && data) setPendientes(Number(data.count) || 0);
+        })
+        .catch(() => {
+          // Silencioso — el indicador es un "nice to have", nunca debe
+          // tumbar el topbar si falla el fetch.
+        });
+    }
+    revisarPendientes();
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") revisarPendientes();
+    });
+    return () => {
+      activo = false;
+    };
+  }, []);
+
+  function abrirVictor() {
+    window.dispatchEvent(new Event(EVENTO_ABRIR_VICTOR));
+  }
 
   return (
     <div className="vc-topbar-wrap">
@@ -69,14 +113,17 @@ export default function Topbar({ fullName, plan }: { fullName: string | null; pl
           </div>
 
           <div className="vc-topbar-icons flex items-center gap-2">
-            <div className="vc-victor-pill">
+            <button
+              type="button"
+              className="vc-victor-pill"
+              onClick={abrirVictor}
+              title={pendientes > 0 ? `VICTOR tiene ${pendientes} cosa(s) pendiente(s) para ti` : "Hablar con VICTOR"}
+              aria-label="Abrir VICTOR"
+            >
               <span className="text-xs font-medium">VICTOR</span>
-              <span className="vc-victor-dot" />
-            </div>
-            <ThemeToggle />
-            <button type="button" className="vc-bell" title="Notificaciones" aria-label="Notificaciones">
-              <i className="ti ti-bell" style={{ fontSize: 17 }} />
+              <span className={`vc-victor-dot ${pendientes > 0 ? "alerta" : ""}`} />
             </button>
+            <ThemeToggle />
           </div>
         </div>
 
