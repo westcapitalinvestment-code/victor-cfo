@@ -868,7 +868,44 @@ export async function executeVictorTool(
           `mensaje y pregúntale.${avisoTotal}`,
       };
     }
+    case "revisar_documentos_por_vencer": {
+      const diasVentana = Number.isFinite(Number(input.dias)) && Number(input.dias) > 0
+        ? Math.min(Number(input.dias), 120)
+        : 30;
+      const hoy = new Date();
+      const limite = new Date(hoy.getTime() + diasVentana * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+      const { data: docs, error } = await supabase
+        .from("documents")
+        .select("nombre, fecha_vencimiento")
+        .eq("owner_id", ownerId)
+        .eq("estado", "activo")
+        .not("fecha_vencimiento", "is", null)
+        .lte("fecha_vencimiento", limite)
+        .order("fecha_vencimiento", { ascending: true });
+
+      if (error) return { ok: false, message: `No se pudo revisar los documentos de la Bóveda: ${error.message}` };
+      if (!docs || docs.length === 0) {
+        return { ok: true, message: `No hay documentos venciendo en los próximos ${diasVentana} días.` };
+      }
+
+      const lista = docs
+        .map((d) => {
+          const dias = Math.round(
+            (new Date(d.fecha_vencimiento + "T00:00:00").getTime() - hoy.getTime()) / (24 * 60 * 60 * 1000)
+          );
+          const cuando =
+            dias < 0
+              ? `venció hace ${Math.abs(dias)} día(s)`
+              : dias === 0
+                ? "vence hoy"
+                : `vence en ${dias} día(s) (${d.fecha_vencimiento})`;
+          return `"${d.nombre}" ${cuando}`;
+        })
+        .join("; ");
+
+      return { ok: true, message: `Documentos por vencer o vencidos: ${lista}.` };
+    }
     case "crear_categoria_personal": {
       const nombre = String(input.nombre ?? "").trim();
       if (!nombre) return { ok: false, message: "Falta el nombre de la categoría a crear." };
