@@ -227,7 +227,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
-    {
+  {
     name: "revisar_documentos_por_vencer",
     description:
       "Trae la lista real de documentos de la Bóveda del usuario que están por vencer o ya vencieron — " +
@@ -242,7 +242,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
-      {
+  {
     name: "actualizar_documento",
     description:
       "Actualiza un documento existente de la Bóveda del usuario — úsala cuando diga que ya renovó, pagó, o " +
@@ -277,6 +277,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["nombre_documento"],
     },
   },
+  {
     name: "crear_categoria_personal",
     description:
       "Crea una categoría de gasto NUEVA, personal del usuario (no la ve nadie más, no toca el catálogo " +
@@ -902,6 +903,7 @@ export async function executeVictorTool(
           `mensaje y pregúntale.${avisoTotal}`,
       };
     }
+
     case "revisar_documentos_por_vencer": {
       const diasVentana = Number.isFinite(Number(input.dias)) && Number(input.dias) > 0
         ? Math.min(Number(input.dias), 120)
@@ -940,6 +942,89 @@ export async function executeVictorTool(
 
       return { ok: true, message: `Documentos por vencer o vencidos: ${lista}.` };
     }
+
+    case "actualizar_documento": {
+      const nombreBuscado = String(input.nombre_documento ?? "").trim();
+      if (!nombreBuscado) return { ok: false, message: "Falta el nombre del documento a actualizar." };
+
+      const nuevaFecha = input.nueva_fecha_vencimiento ? String(input.nueva_fecha_vencimiento).trim() : null;
+      const nuevoNombre = input.nuevo_nombre ? String(input.nuevo_nombre).trim() : null;
+      if (!nuevaFecha && !nuevoNombre) {
+        return { ok: false, message: "No hay nada que actualizar — falta la nueva fecha de vencimiento o el nuevo nombre." };
+      }
+
+      const { data: candidatos, error: buscarError } = await supabase
+        .from("documents")
+        .select("id, nombre, fecha_vencimiento")
+        .eq("owner_id", ownerId)
+        .eq("estado", "activo")
+        .ilike("nombre", `%${nombreBuscado}%`);
+
+      if (buscarError) return { ok: false, message: `No se pudo buscar el documento: ${buscarError.message}` };
+      if (!candidatos || candidatos.length === 0) {
+        return { ok: false, message: `No encontré ningún documento parecido a "${nombreBuscado}" en la Bóveda.` };
+      }
+      if (candidatos.length > 1) {
+        return {
+          ok: false,
+          message: `Hay varios documentos parecidos a "${nombreBuscado}" (${candidatos.map((d) => d.nombre).join(", ")}). Pídele al usuario que aclare cuál.`,
+        };
+      }
+
+      const doc = candidatos[0];
+      const cambioFecha = nuevaFecha !== null && nuevaFecha !== doc.fecha_vencimiento;
+
+      const cambios: Record<string, unknown> = {};
+      if (nuevoNombre) cambios.nombre = nuevoNombre;
+      if (nuevaFecha) cambios.fecha_vencimiento = nuevaFecha;
+      // Igual que en el formulario de editar: si cambió la fecha, resetea
+      // las 3 banderas de alerta para que el ciclo 90/30/7 arranque de
+      // cero con la nueva fecha — si no, un documento que ya había avisado
+      // antes de renovarse se queda silenciado para siempre.
+      if (cambioFecha) {
+        cambios.alerta_90 = false;
+        cambios.alerta_30 = false;
+        cambios.alerta_7 = false;
+      }
+
+      const { error: updateError } = await supabase.from("documents").update(cambios).eq("id", doc.id);
+      if (updateError) return { ok: false, message: `No se pudo actualizar el documento: ${updateError.message}` };
+
+      return {
+        ok: true,
+        message: `Actualicé "${nuevoNombre ?? doc.nombre}"${nuevaFecha ? ` — nueva fecha de vencimiento: ${nuevaFecha}` : ""}.`,
+      };
+    }
+
+    case "eliminar_documento": {
+      const nombreBuscado = String(input.nombre_documento ?? "").trim();
+      if (!nombreBuscado) return { ok: false, message: "Falta el nombre del documento a eliminar." };
+
+      const { data: candidatos, error: buscarError } = await supabase
+        .from("documents")
+        .select("id, nombre")
+        .eq("owner_id", ownerId)
+        .eq("estado", "activo")
+        .ilike("nombre", `%${nombreBuscado}%`);
+
+      if (buscarError) return { ok: false, message: `No se pudo buscar el documento: ${buscarError.message}` };
+      if (!candidatos || candidatos.length === 0) {
+        return { ok: false, message: `No encontré ningún documento parecido a "${nombreBuscado}" en la Bóveda.` };
+      }
+      if (candidatos.length > 1) {
+        return {
+          ok: false,
+          message: `Hay varios documentos parecidos a "${nombreBuscado}" (${candidatos.map((d) => d.nombre).join(", ")}). Pídele al usuario que aclare cuál.`,
+        };
+      }
+
+      const doc = candidatos[0];
+      const { error: deleteError } = await supabase.from("documents").delete().eq("id", doc.id);
+      if (deleteError) return { ok: false, message: `No se pudo eliminar el documento: ${deleteError.message}` };
+
+      return { ok: true, message: `Eliminé "${doc.nombre}" de la Bóveda.` };
+    }
+
     case "crear_categoria_personal": {
       const nombre = String(input.nombre ?? "").trim();
       if (!nombre) return { ok: false, message: "Falta el nombre de la categoría a crear." };
