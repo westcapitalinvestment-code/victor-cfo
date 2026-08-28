@@ -30,16 +30,28 @@ export default async function DocumentosPage() {
 
   return (
     <div className="vc-shell">
-           <div className="mb-4 flex items-center justify-between">
+                 <div className="mb-3 flex items-center justify-between">
         <h1 className="text-lg font-medium">Bóveda</h1>
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard/citas" className="text-xs font-medium text-muted hover:opacity-80">
-            Citas →
-          </Link>
-          <Link href="/dashboard/documentos/nuevo" className="text-xs font-medium text-teal hover:opacity-80">
-            + Nuevo
-          </Link>
-        </div>
+        <Link href="/dashboard/documentos/nuevo" className="text-xs font-medium text-teal hover:opacity-80">
+          + Nuevo
+        </Link>
+      </div>
+
+      {/* Tabs Documentos/Citas — mismo estilo de pill que el toggle
+      Gastos/Ingresos (app/dashboard/gastos/page.tsx), para que se note de
+      un vistazo que hay una segunda sección aquí y no sea un link chiquito
+      perdido en una esquina. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="rounded-pill border border-teal px-3 py-1.5 text-xs font-medium text-teal">
+          Documentos
+        </span>
+        <Link
+          href="/dashboard/citas"
+          className="rounded-pill border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-80"
+          style={{ borderColor: "var(--border)" }}
+        >
+          Citas →
+        </Link>
       </div>
 
       <div className="vc-card">
