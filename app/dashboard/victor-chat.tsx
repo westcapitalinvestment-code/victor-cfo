@@ -255,21 +255,15 @@ export default function VictorChat({
     <>
       {/* Botón flotante — visible siempre, por encima de la barra inferior.
           Alterna abrir/minimizar el panel (icono cambia a "−" cuando está abierto). */}
-            <button
+      <button
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "Minimizar chat con VICTOR" : "Abrir chat con VICTOR"}
-        className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-lg"
-        style={{ background: "#1D9E75" }}
+        className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-lg"
+        style={{ background: "#1D9E75", bottom: "calc(6rem + env(safe-area-inset-bottom))" }}
       >
         {open ? (
           <i className="ti ti-minus" style={{ fontSize: 22, color: "#fff" }} />
         ) : (
-          // Fondo blanco explícito — el ícono de VICTOR es un PNG con la
-          // línea de la cara en el mismo verde del botón (#1D9E75). Sin un
-          // fondo que contraste, la cara queda invisible sobre sí misma
-          // (bug real reportado por Joel: se veía "verde sólido, casi sin
-          // cara"). El header y los avatares del chat ya usaban fondo
-          // blanco por esto mismo — aquí faltaba.
           <img
             src={VICTOR_AVATAR}
             alt="VICTOR"
@@ -280,7 +274,10 @@ export default function VictorChat({
       </button>
 
       {open && (
-        <div className="fixed bottom-[168px] right-4 z-50 flex max-h-[70vh] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+        <div
+          className="fixed right-4 z-50 flex max-h-[70dvh] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+          style={{ bottom: "calc(168px + env(safe-area-inset-bottom))" }}
+        >
           {/* Header */}
           <div className="flex items-center gap-2.5 px-4 py-3.5" style={{ background: "#1D9E75" }}>
             <img
