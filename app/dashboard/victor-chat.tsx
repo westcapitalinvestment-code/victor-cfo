@@ -255,13 +255,13 @@ export default function VictorChat({
     <>
       {/* Botón flotante — visible siempre, por encima de la barra inferior.
           Alterna abrir/minimizar el panel (icono cambia a "−" cuando está abierto). */}
-      <button
+            <button
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "Minimizar chat con VICTOR" : "Abrir chat con VICTOR"}
         className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-lg"
         style={{ background: "#1D9E75" }}
       >
-                {open ? (
+        {open ? (
           <i className="ti ti-minus" style={{ fontSize: 22, color: "#fff" }} />
         ) : (
           // Fondo blanco explícito — el ícono de VICTOR es un PNG con la
@@ -276,7 +276,6 @@ export default function VictorChat({
             className="h-full w-full object-cover"
             style={{ background: "#fff" }}
           />
-        )}
         )}
       </button>
 
