@@ -242,6 +242,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
+    {
     name: "crear_categoria_personal",
     description:
       "Crea una categoría de gasto NUEVA, personal del usuario (no la ve nadie más, no toca el catálogo " +
