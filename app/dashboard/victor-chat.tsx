@@ -63,6 +63,9 @@ export default function VictorChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Guarda el stream de getUserMedia mientras dura el dictado — ver nota
+  // larga en toggleVoice() sobre por qué NO se cierra de inmediato.
+  const micStreamRef = useRef<MediaStream | null>(null);
 
   // Continuidad real entre dispositivos: al montar, trae la conversación
   // más reciente del usuario desde el servidor (no solo lo que haya en
@@ -187,6 +190,7 @@ export default function VictorChat({
     // ahora se lo decimos explícitamente en vez de fallar en silencio.
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       setListening(false);
+      detenerStreamMic();
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         setError("VICTOR no tiene permiso para usar el micrófono. Revisa los permisos de la app en Ajustes del celular y vuelve a intentar.");
       } else if (event.error === "no-speech") {
@@ -197,7 +201,10 @@ export default function VictorChat({
         setError(`No se pudo usar el micrófono ahora mismo (error: ${event.error}). Inténtalo de nuevo.`);
       }
     };
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      setListening(false);
+      detenerStreamMic();
+    };
 
     recognitionRef.current = recognition;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -220,11 +227,20 @@ export default function VictorChat({
     });
   }
 
+  // Suelta el micrófono físico que pedimos con getUserMedia — se llama al
+  // terminar de escuchar por cualquier vía (usuario para, reconocimiento
+  // termina solo, o error) para no dejar el micrófono "prendido" de fondo.
+  function detenerStreamMic() {
+    micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    micStreamRef.current = null;
+  }
+
   async function toggleVoice() {
     if (!recognitionRef.current) return;
     if (listening) {
       recognitionRef.current.stop();
       setListening(false);
+      detenerStreamMic();
       return;
     }
 
@@ -236,14 +252,23 @@ export default function VictorChat({
     // agosto 2026, PWA instalada): dejar que SpeechRecognition pida el
     // permiso por su cuenta terminaba en "audio-capture" sin que el
     // sistema operativo mostrara nunca el diálogo real de "Permitir
-    // micrófono". Pidiéndolo explícito con getUserMedia, el sistema SÍ lo
-    // muestra la primera vez; después queda recordado igual que cualquier
-    // otro permiso. No necesitamos el audio en sí (SpeechRecognition abre
-    // su propio canal), así que el stream se cierra de inmediato.
+    // micrófono".
+    //
+    // Segunda vuelta del mismo bug (28 agosto 2026): pedir el permiso y
+    // CERRAR el stream de inmediato (stream.getTracks().forEach(t =>
+    // t.stop())) seguía dando "audio-capture" — Joel confirmó que el error
+    // no cambió. Causa real: en Android/Chrome, detener el stream de
+    // getUserMedia no libera el hardware de audio al instante; si
+    // recognition.start() intenta abrir SU PROPIA captura mientras el
+    // sistema todavía está soltando la anterior, choca con "audio-capture".
+    // Fix real: NO cerrar el stream — se deja vivo en micStreamRef mientras
+    // dura el dictado (así nunca hay una segunda apertura de hardware que
+    // compita) y se suelta recién cuando termina de escuchar, en
+    // detenerStreamMic() (ver onend/onerror de recognition y el branch de
+    // "ya estaba escuchando" arriba).
     if (navigator.mediaDevices?.getUserMedia) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((t) => t.stop());
+        micStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch (err) {
         if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
           setError("VICTOR no tiene permiso para usar el micrófono. Revisa los permisos de la app en Ajustes del celular y vuelve a intentar.");
@@ -265,6 +290,7 @@ export default function VictorChat({
       // onerror de arriba no se dispara en ese caso porque nunca llegó
       // a arrancar, así que hay que atraparlo aquí también.
       setListening(false);
+      detenerStreamMic();
       setError("No se pudo activar el micrófono. Inténtalo de nuevo.");
     }
   }
