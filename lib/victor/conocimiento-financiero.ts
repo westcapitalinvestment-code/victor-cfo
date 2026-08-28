@@ -295,6 +295,71 @@ Cuando el usuario quiere vender por miedo:
 
 ──────────────────────────────────────`,
   },
+  {
+    // Añadido 28 agosto 2026 — Joel vio este marco en una sesión de
+    // educación financiera de una comunidad de trading (su esposa es
+    // miembro) y pidió incorporarlo: esas comunidades son un canal de
+    // mercadeo real para VICTOR, y este contenido ya encaja con lo que
+    // la Academia enseña (Págate Primero, Housel). Reescrito en las
+    // palabras de VICTOR, no copiado — es una variante conocida del
+    // método de "cuentas con propósito" (6 jarras / presupuesto
+    // consciente), no algo exclusivo de esa comunidad.
+    clave: "mapa_del_dinero",
+    titulo: `El Mapa del Dinero — Los 5 Destinos y las 5 Herramientas`,
+    texto: `EL MAPA DEL DINERO — LOS 5 DESTINOS
+Marco de gestión de flujo de efectivo por "cuentas con propósito" (variante
+del método de las 6 jarras / presupuesto consciente), popular en
+comunidades de trading e inversión como forma de ordenar qué hacer con
+cada dólar que entra, no solo cuánto gastar.
+
+Los 5 destinos de cada ingreso:
+1. VIVIR — gastos necesarios/fijos: vivienda, comida, transporte
+   (préstamo/leasing), servicios, seguro.
+2. PROTEGER — dinero que te protege si vuelves a cero: fondo de
+   emergencia/liquidez, reserva.
+3. CRECER — dinero para aumentar tu patrimonio: ETFs, acciones, fondos
+   indexados, bonos del Tesoro.
+4. REINVERTIR — negocio, educación, marketing, expansión (para quien
+   tiene negocio propio o ingreso activo que puede escalar).
+5. DISFRUTAR = libertad financiera — viajes, restaurantes, compras. Solo
+   después de que los primeros 4 destinos tienen su parte.
+
+Las herramientas que lo hacen accionable:
+
+La Regla de las Cuentas: separar el dinero, mentalmente y físicamente,
+en cuentas reales (o sub-cuentas) — gastos personales, gastos de
+emergencia, inversiones, disfrute. No todo revuelto en una sola cuenta
+corriente.
+
+Los 4 Filtros (antes de cualquier gasto no esencial):
+  - ¿Esto es una necesidad, un deseo, o una inversión?
+  - ¿Me genera valor real o solo una emoción temporal?
+  - ¿Lo compro porque de verdad puedo pagarlo?
+  - Si lo compro, ¿qué oportunidad financiera estoy sacrificando?
+
+El Plan del Dinero Extra: la mayoría de la gente no tiene un plan para
+el dinero que le sobra (bono, ingreso extra, venta) — se va sin
+dirección. Define de antemano un % fijo hacia protección, inversión,
+reinversión y disfrute, ANTES de que llegue el dinero extra.
+
+El Número de Supervivencia: cuánto dinero necesitas CADA MES solo para
+sobrevivir (los gastos de "Vivir" del destino 1). Es la base de
+cualquier fondo de emergencia real — sin este número, "ahorra 3-6 meses
+de gastos" es una frase vacía.
+
+Cómo lo usa VICTOR:
+Cuando el usuario pregunta "¿qué hago con este dinero extra?":
+"Antes de gastarlo, hagamos el Plan del Dinero Extra: ¿qué % separamos
+para protección, cuánto para inversión, y cuánto es tuyo para disfrutar
+sin culpa? Definirlo ahora, antes de que se vaya solo, es la diferencia."
+
+Cuando el usuario no tiene claro su fondo de emergencia:
+"Primero necesitamos tu Número de Supervivencia — cuánto necesitas cada
+mes solo para vivir (vivienda, comida, transporte, servicios, seguro).
+Ya con ese número real, tu fondo de emergencia deja de ser un estimado."
+
+──────────────────────────────────────`,
+  },
 ];
 
 const TODO_EL_CONOCIMIENTO = [...CONCEPTOS_FINANCIEROS, ...BIBLIOTECA_VICTOR];
