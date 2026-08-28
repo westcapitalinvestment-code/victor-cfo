@@ -26,11 +26,25 @@ export default async function CitasPage() {
           <h1 className="text-lg font-medium">Citas</h1>
           <Link href="/dashboard/documentos" className="text-xs text-muted hover:opacity-80">
             ← Bóveda
-          </Link>
-        </div>
+              <div className="mb-3 flex items-center justify-between">
+        <h1 className="text-lg font-medium">Citas</h1>
         <Link href="/dashboard/citas/nueva" className="text-xs font-medium text-teal hover:opacity-80">
           + Nueva
         </Link>
+      </div>
+
+      {/* Mismo par de tabs que en Bóveda, con Citas activo aquí. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Link
+          href="/dashboard/documentos"
+          className="rounded-pill border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-80"
+          style={{ borderColor: "var(--border)" }}
+        >
+          ← Documentos
+        </Link>
+        <span className="rounded-pill border border-teal px-3 py-1.5 text-xs font-medium text-teal">
+          Citas
+        </span>
       </div>
 
       <div className="vc-card">
