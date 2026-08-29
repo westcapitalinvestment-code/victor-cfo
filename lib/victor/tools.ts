@@ -401,6 +401,26 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["nombre_cuenta", "nuevo_saldo"],
     },
   },
+    {
+    name: "eliminar_cuenta_manual",
+    description:
+      "Elimina por completo una cuenta MANUAL del usuario (sin Plaid detrás, como Apple Card) — junto con " +
+      "todas las transacciones que se le hayan importado por CSV. Es IRREVERSIBLE, así que SIEMPRE confirma " +
+      "con el usuario primero en el chat (algo como '¿seguro que quieres que borre la cuenta \"Apple Card\" " +
+      "y sus transacciones? Esto no se puede deshacer') y solo llama esta herramienta después de que confirme " +
+      "que sí. Nunca la llames en el mismo turno donde el usuario apenas lo menciona por primera vez. Si el " +
+      "usuario solo quiere que el balance quede en $0 porque ya la pagó, usa actualizar_saldo_cuenta_manual " +
+      "en vez de esta — borrar la cuenta es para cuando de verdad ya no la quiere ver más (la cerró, dejó de " +
+      "usarla, etc.), no como sinónimo de 'ya la pagué'. Esta herramienta SOLO existe para cuentas manuales — " +
+      "las cuentas conectadas por Plaid se desconectan desde Cuentas en la app, no por chat.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre_cuenta: { type: "string", description: "Nombre (o parte del nombre) de la cuenta manual a eliminar, tal como está guardada." },
+      },
+      required: ["nombre_cuenta"],
+    },
+  },
   {
     name: "crear_categoria_personal",
     description:
@@ -1404,6 +1424,33 @@ export async function executeVictorTool(
         ok: true,
         message: `Actualicé "${cuenta.name}" — balance anterior $${Number(cuenta.current_balance)}, nuevo balance $${nuevoSaldo}.`,
       };
+    }
+    case "eliminar_cuenta_manual": {
+      const nombreBuscado = String(input.nombre_cuenta ?? "").trim();
+      if (!nombreBuscado) return { ok: false, message: "Falta el nombre de la cuenta manual a eliminar." };
+
+      const { data: candidatos, error: buscarError } = await supabase
+        .from("manual_accounts")
+        .select("id, name")
+        .eq("owner_id", ownerId)
+        .ilike("name", `%${nombreBuscado}%`);
+
+      if (buscarError) return { ok: false, message: `No se pudo buscar la cuenta: ${buscarError.message}` };
+      if (!candidatos || candidatos.length === 0) {
+        return { ok: false, message: `No encontré ninguna cuenta MANUAL parecida a "${nombreBuscado}". Si es una cuenta de Plaid, esa se desconecta desde la pantalla de Cuentas, no por chat.` };
+      }
+      if (candidatos.length > 1) {
+        return {
+          ok: false,
+          message: `Hay varias cuentas manuales parecidas a "${nombreBuscado}" (${candidatos.map((c) => c.name).join(", ")}). Pídele al usuario que aclare cuál.`,
+        };
+      }
+
+      const cuenta = candidatos[0];
+      const { error: deleteError } = await supabase.from("manual_accounts").delete().eq("id", cuenta.id);
+      if (deleteError) return { ok: false, message: `No se pudo eliminar la cuenta: ${deleteError.message}` };
+
+      return { ok: true, message: `Eliminé la cuenta manual "${cuenta.name}" y sus transacciones importadas.` };
     }
     case "crear_categoria_personal": {
       const nombre = String(input.nombre ?? "").trim();
