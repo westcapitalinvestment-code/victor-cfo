@@ -401,6 +401,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["nombre_cuenta", "nuevo_saldo"],
     },
   },
+  {
     name: "crear_categoria_personal",
     description:
       "Crea una categoría de gasto NUEVA, personal del usuario (no la ve nadie más, no toca el catálogo " +
