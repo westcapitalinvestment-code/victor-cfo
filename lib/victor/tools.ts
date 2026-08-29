@@ -381,6 +381,27 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "crear_cuenta_manual",
+    description:
+      "Crea una cuenta MANUAL nueva (sin Plaid detrás) — para bancos/inversiones/tarjetas que no se pueden " +
+      "conectar por banco, como Apple Card, Acorn, o una cuenta de otro país. Aparece en /dashboard/cuentas " +
+      "junto a las conectadas, y su balance cuenta en el panorama financiero del usuario igual que las demás. " +
+      "Úsala cuando el usuario pida añadir/registrar una cuenta, tarjeta, préstamo o inversión que no tiene " +
+      "conectada por banco — NUNCA uses crear_documento para esto, aunque el nombre se parezca a algo que " +
+      "podría ir en la Bóveda (documentos son para papeles con fecha de vencimiento — licencias, pólizas, " +
+      "permisos — no para dinero real que debe aparecer en Cuentas y en el balance total).",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre: { type: "string", description: "Nombre de la cuenta, ej. 'Apple Card' o 'Acorn'." },
+        tipo: { type: "string", description: "Uno de: depository (cuenta de banco), credit (tarjeta de crédito), loan (préstamo), investment (inversión)." },
+        saldo_inicial: { type: "number", description: "Balance actual de la cuenta. Si no lo da el usuario, usa 0." },
+        es_negocio: { type: "boolean", description: "true solo si el usuario deja claro que es una cuenta de su negocio, no personal. Si no dice nada, usa false." },
+      },
+      required: ["nombre", "tipo"],
+    },
+  },
+  {
     name: "actualizar_saldo_cuenta_manual",
     description:
       "Actualiza el balance de una cuenta MANUAL del usuario (una cuenta sin Plaid detrás, como Apple Card — " +
@@ -1401,6 +1422,28 @@ export async function executeVictorTool(
       if (deleteError) return { ok: false, message: `No se pudo eliminar la cita: ${deleteError.message}` };
 
       return { ok: true, message: `Eliminé "${cita.titulo}" de las citas.` };
+    }
+
+    case "crear_cuenta_manual": {
+      const nombre = String(input.nombre ?? "").trim();
+      const tipo = String(input.tipo ?? "").trim();
+      const tiposValidos = ["depository", "credit", "loan", "investment"];
+      if (!nombre || !tiposValidos.includes(tipo)) {
+        return { ok: false, message: `Faltan datos válidos — nombre y tipo (uno de: ${tiposValidos.join(", ")}) para crear la cuenta.` };
+      }
+      const saldoInicial = Number.isFinite(Number(input.saldo_inicial)) ? Number(input.saldo_inicial) : 0;
+      const esNegocio = input.es_negocio === true;
+
+      const { error } = await supabase.from("manual_accounts").insert({
+        owner_id: ownerId,
+        name: nombre,
+        type: tipo,
+        current_balance: saldoInicial,
+        es_negocio: esNegocio,
+      });
+
+      if (error) return { ok: false, message: `No se pudo crear la cuenta: ${error.message}` };
+      return { ok: true, message: `Cuenta manual "${nombre}" creada en Cuentas con balance $${saldoInicial}.` };
     }
 
     case "actualizar_saldo_cuenta_manual": {
