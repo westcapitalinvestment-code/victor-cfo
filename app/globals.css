@@ -170,12 +170,14 @@ body {
 .vc-bal { background: #1D9E75; border-radius: 14px; padding: 18px; margin-bottom: 14px; }
 .vc-bal-lbl { font-size: 11px; color: rgba(255,255,255,.75); margin-bottom: 4px; }
 .vc-bal-amt { font-size: 32px; font-weight: 500; color: #fff; letter-spacing: -.5px; }
-/* 2x2 en móvil (4 tarjetas: Ingresos, Gastos, Ahorrado, Deuda) — a 4 en
-   una sola fila los montos grandes ($1,245.02) quedaban apretados en
-   pantallas angostas. Desde tablet (768px) sí caben las 4 en una fila. */
+/* 2 columnas en móvil (5 tarjetas: Ingresos, Gastos, Ahorrado, Deuda,
+   Inversiones — la 5ta cae sola en su propia fila, igual que pasa ya con
+   las 3 cards de Metas/Alertas/Próxima cita más abajo) — a 5 en una sola
+   fila los montos grandes ($1,245.02) quedaban apretados en pantallas
+   angostas. Desde tablet (768px) sí caben las 5 en una fila. */
 .vc-mets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
 @media (min-width: 768px) {
-  .vc-mets { grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .vc-mets { grid-template-columns: repeat(5, 1fr); gap: 12px; }
   .vc-mv { font-size: 22px; }
   .vc-bal-amt { font-size: 36px; }
 }
@@ -191,12 +193,21 @@ body {
 .vc-alert:last-child { border-bottom: none; }
 .vc-adot { width: 7px; height: 7px; border-radius: 50%; margin-top: 3px; flex-shrink: 0; }
 
-/* Bottom nav — calcada de VICTOR — Dashboard Core.html */
-.vc-bnav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 900px; background: var(--card); border-top: .5px solid var(--border); z-index: 100; padding: 6px 0 14px; }
+/* Bottom nav — calcada de VICTOR — Dashboard Core.html.
+   padding-bottom usa env(safe-area-inset-bottom) — junto con viewportFit:
+   "cover" en layout.tsx — para que los íconos no queden pegados a la barra
+   de gestos del celular (iPhone con Face ID, Android con gestos). */
+.vc-bnav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 900px; background: var(--card); border-top: .5px solid var(--border); z-index: 100; padding: 6px 0 calc(14px + env(safe-area-inset-bottom)); }
 @media (min-width: 1024px) {
   .vc-bnav { max-width: 1100px; }
 }
-.vc-bnav-scroll { display: flex; overflow-x: auto; scrollbar-width: none; padding: 0 8px; gap: 2px; justify-content: center; }
+/* overscroll-behavior-x: contain + touch-action: pan-x — el bug real que
+   reportó Joel: al llegar al borde de este scroll horizontal (más íconos
+   de los que caben en pantalla), seguir arrastrando el dedo lo tomaba el
+   celular como un swipe de sistema y cambiaba de página/app. "contain"
+   detiene el rebote justo en el borde de este elemento en vez de dejarlo
+   seguir hacia la página completa. */
+.vc-bnav-scroll { display: flex; overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; scrollbar-width: none; padding: 0 8px; gap: 2px; justify-content: center; }
 .vc-nb { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; background: none; border: none; padding: 6px 10px; border-radius: 10px; transition: all .15s; flex-shrink: 0; min-width: 60px; text-decoration: none; }
 .vc-nb:hover { background: rgba(29,158,117,.06); }
 .vc-nb i { font-size: 20px; color: var(--muted); transition: color .15s; }
