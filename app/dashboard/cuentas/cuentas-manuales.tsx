@@ -73,6 +73,20 @@ export default function CuentasManuales() {
     cargar();
   }, [cargar]);
 
+  // Esta sección trae sus datos con su propio fetch (arriba), no como prop
+  // del Server Component de la página — así que router.refresh() (lo que
+  // dispara victor-chat.tsx cuando VICTOR ejecuta algo) no la toca para
+  // nada, porque ese mecanismo solo re-renderiza Server Components. Bug
+  // real (29 agosto 2026, reportado por Joel): creó "Coinbase" desde el
+  // chat estando parado aquí mismo en Cuentas y no apareció hasta que
+  // salió a Home y volvió. victor-chat.tsx ahora manda este evento cada
+  // vez que una herramienta corrió de verdad — al escucharlo, se vuelve a
+  // pedir la lista fresca sin que el usuario tenga que navegar para nada.
+  useEffect(() => {
+    window.addEventListener("victor:accion", cargar);
+    return () => window.removeEventListener("victor:accion", cargar);
+  }, [cargar]);
+
   async function crearCuenta() {
     if (!nombre.trim()) {
       setError("Falta el nombre de la cuenta.");
