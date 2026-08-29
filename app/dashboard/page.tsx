@@ -170,6 +170,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     .filter((c) => c.type === "credit" || c.type === "loan")
     .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
 
+  // Inversiones (ej. Acorn como cuenta manual): antes no se sumaban en
+  // NINGÚN número del Inicio (ni Balance, ni Ahorrado, ni Deuda las
+  // filtran, porque ninguna busca type === "investment") — el dinero
+  // estaba ahí y solo se veía entrando a Cuentas. Se calcula y se muestra
+  // aparte, no mezclado con Balance personal, por la misma razón que
+  // Ahorrado/Deuda están separados: "cuánto tengo líquido hoy" es una
+  // pregunta distinta de "cuánto tengo invertido".
+  const inversionTotal = todasLasCuentas
+    .filter((c) => c.type === "investment")
+    .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
+
   // Si es Core, contamos también cuántas cuentas de negocio detectamos
   // pero dejamos afuera, para avisarle con honestidad en vez de esconderlo.
   let cuentasNegocioOcultas = 0;
@@ -393,6 +404,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             <Sensitive>{bancoConectado ? formatMoney(deudaTotal) : "—"}</Sensitive>
           </p>
           <p className="mt-0.5 text-[10px] text-muted">{bancoConectado ? "tarjetas y préstamos" : "conecta tu banco"}</p>
+        </div>
+        <div className="vc-met">
+          <p className="vc-ml">Inversiones</p>
+          <p className="vc-mv">
+            <Sensitive>{bancoConectado ? formatMoney(inversionTotal) : "—"}</Sensitive>
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted">{bancoConectado ? "cuentas de inversión" : "conecta tu banco"}</p>
         </div>
       </div>
 
