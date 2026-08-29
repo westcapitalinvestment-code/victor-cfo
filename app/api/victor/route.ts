@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Falta el mensaje." }, { status: 400 });
   }
 
-   // 1. Perfil del usuario (nombre, plan) para el bloque de contexto.
+  // 1. Perfil del usuario (nombre, plan) para el bloque de contexto.
   // ciclo_inicio/ciclo_fin (migración 0026) son las fechas del ciclo de
   // facturación REAL de Stripe (ej. 23 ago → 23 sept), que el webhook
   // guarda aquí en cada activación/renovación — el tope de gasto de abajo
@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
   // costo real sin que nadie se entere hasta la factura. El founder queda
   // exento porque necesita poder probar la app libremente — su uso sí se
   // sigue registrando más abajo, solo no lo bloquea.
-   // Cifras actualizadas (23 agosto 2026) tras subir Core a $19.99/mes y
+  // Cifras actualizadas (23 agosto 2026) tras subir Core a $19.99/mes y
   // conectar Stripe de verdad. Cálculo de margen para Core: $19.99 ingreso
   // − $7.50 tope de IA − $2.00 Plaid − ~$0.88 fees de Stripe (2.9%+$0.30)
   // = $9.61 de ganancia ≈ 48% de margen, en el peor caso (usuario que pega
@@ -236,7 +236,7 @@ export async function POST(req: NextRequest) {
   // "aviso" o "normal" más adelante sin que nadie tenga que intervenir —
   // por diseño, no debería ser posible llegar al límite mensual completo
   // a mitad de mes precisamente porque este ritmo diario ya lo frena antes.
-     const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 750, pro: 620, proplus: 1033 };
+  const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 750, pro: 620, proplus: 1033 };
   // Piso mínimo de presupuesto para los primeros días de CUALQUIER ciclo
   // (protege la conversación de onboarding, la más pesada de toda la
   // relación) — deja de importar apenas el ritmo-parejo lo supere solo
@@ -313,6 +313,7 @@ export async function POST(req: NextRequest) {
       estadoUso = "aviso";
     }
   }
+
   // Guarda un mensaje fijo (sin llamar a Claude) y responde — usado por los
   // niveles 2 y 3 de arriba, que no deben gastar ni un centavo más.
   async function responderSinLlamarAClaude(mensaje: string) {
@@ -655,11 +656,96 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // SALVAVIDAS ANTI-FABRICACIÓN (29 agosto 2026 — tercer incidente real el
+  // mismo día: Apple Card, Acorn, y ahora "cambiame a coinbase a $600" —
+  // VICTOR contestó "Hecho. Coinbase está actualizada a $600.00" sin haber
+  // llamado NINGUNA herramienta, confirmado con uso_ia_log en null). Los
+  // guardrails de texto en system-prompt.txt ya lo advierten dos veces con
+  // casos reales y el modelo lo sigue haciendo de todas formas — un prompt
+  // nunca garantiza al 100% que el modelo llame la herramienta correcta.
+  // Este bloque no depende de que el texto del prompt "convenza" a Claude:
+  // revisa la respuesta YA ESCRITA después del loop, y si suena a que
+  // confirmó una acción sin haber llamado ninguna herramienta este turno,
+  // le da UNA oportunidad más, explícita, de hacerlo de verdad — y si ni
+  // así, se le dice la verdad al usuario en vez de dejar pasar la mentira.
+  const SUENA_A_ACCION_CONFIRMADA =
+    /^\s*(listo|hecho)\b|\bya\s+(la|lo|el)?\s*(cambi[eé]|actualic[eé]|elimin[eé]|cre[eé]|guard[eé]|saqu[eé])|\b(actualizad[oa]|eliminad[oa]|cambiad[oa]|creada?|guardad[oa])\b|acabo de (cambiar|actualizar|eliminar|crear|guardar|sacar|arreglar)/i;
+
+  if (herramientasUsadasTurno.size === 0 && SUENA_A_ACCION_CONFIRMADA.test(assistantText)) {
+    console.error("Posible fabricación detectada — VICTOR confirmó una acción sin llamar herramienta:", {
+      userMessage,
+      assistantText,
+    });
+    try {
+      apiMessages.push({ role: "assistant", content: assistantText });
+      apiMessages.push({
+        role: "user",
+        content:
+          "[VERIFICACIÓN INTERNA — el usuario no escribió esto] Tu respuesta anterior sonaba a que ya " +
+          "hiciste un cambio real (crear, actualizar o eliminar algo), pero no llamaste ninguna " +
+          "herramienta en este turno. Si el usuario te pidió modificar, crear o eliminar algo: hazlo " +
+          "AHORA MISMO llamando la herramienta correspondiente. Si de verdad no puedes (no existe una " +
+          "herramienta para eso, o no encuentras la cuenta/dato), dile la verdad — que no se pudo — en " +
+          "vez de decir que ya está hecho.",
+      });
+
+      const retryResponse = await anthropic.messages.create({
+        model: modeloTurno,
+        max_tokens: 8192,
+        system: systemBlocks,
+        tools: VICTOR_TOOLS,
+        messages: apiMessages,
+      });
+
+      modelosUsadosTurno.add("haiku");
+      tokensUsados += retryResponse.usage.input_tokens + retryResponse.usage.output_tokens;
+      costoAcumuladoCentavos += costoEnCentavos(modeloTurno, retryResponse.usage);
+      iteracionesTurno++;
+      inputTokensTurno += retryResponse.usage.input_tokens ?? 0;
+      outputTokensTurno += retryResponse.usage.output_tokens ?? 0;
+      cacheReadTokensTurno += retryResponse.usage.cache_read_input_tokens ?? 0;
+
+      if (retryResponse.stop_reason === "tool_use") {
+        // Esta vez sí pidió la herramienta — se ejecuta de verdad y se usa
+        // el mensaje de la propia herramienta como respuesta final (ya es
+        // una frase completa y honesta, no hace falta gastar otra llamada
+        // a Claude solo para redactar la confirmación).
+        const toolUseBlocks = retryResponse.content.filter(
+          (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
+        );
+        const mensajesHerramientas: string[] = [];
+        for (const toolUse of toolUseBlocks) {
+          herramientasUsadasTurno.add(toolUse.name);
+          const result = await executeVictorTool(
+            supabase,
+            user.id,
+            toolUse.name,
+            (toolUse.input as Record<string, unknown>) ?? {}
+          );
+          mensajesHerramientas.push(result.message);
+        }
+        assistantText = mensajesHerramientas.join("\n\n");
+      } else {
+        const textoRetry = retryResponse.content
+          .filter((block): block is Anthropic.TextBlock => block.type === "text")
+          .map((block) => block.text)
+          .join("\n");
+        assistantText =
+          textoRetry && textoRetry.trim()
+            ? textoRetry
+            : "Me di cuenta de que no llegué a hacer ese cambio de verdad — ¿me lo repites para intentarlo ahora mismo?";
+      }
+    } catch (err) {
+      console.error("Falló el reintento anti-fabricación:", err);
+      assistantText = "Creo que no llegué a hacer ese cambio de verdad — ¿me lo repites para intentarlo ahora mismo?";
+    }
+  }
+
   // Registra el costo real de este turno para el tope de gasto mensual de
   // arriba — en su propio try/catch, igual que el resto de "extras" de esta
   // ruta (memoria, saludo diario): si falla, no debe tumbar la respuesta
   // que el usuario ya está esperando.
-   try {
+  try {
     await supabase.rpc("registrar_uso_ia", {
       p_owner_id: user.id,
       p_costo_centavos: costoAcumuladoCentavos,
@@ -769,9 +855,15 @@ export async function POST(req: NextRequest) {
     console.error("No se pudo actualizar victor_memory:", err);
   }
 
-    return NextResponse.json({
+  return NextResponse.json({
     conversationId: conversation.id,
     reply: assistantText,
+    // Le dice al cliente si VICTOR de verdad ejecutó alguna herramienta
+    // este turno (categorizar, crear cita, actualizar meta, etc.) — con
+    // esto el chat puede refrescar la pantalla actual al instante en vez
+    // de esperar los 30 minutos del auto-refresh (bug real reportado por
+    // Joel, 29 agosto 2026: le pidió a VICTOR saldar una tarjeta y el
+    // cambio no se veía en Gastos hasta que él mismo recargaba).
     huboAccion: herramientasUsadasTurno.size > 0,
   });
 }
