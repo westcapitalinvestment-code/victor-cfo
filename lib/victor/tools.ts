@@ -204,7 +204,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["items"],
     },
   },
-    {
+  {
     name: "buscar_transacciones_por_comercio",
     description:
       "Busca, en TODO el historial del usuario (categorizado o no — a diferencia de " +
@@ -305,7 +305,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["nombre_documento"],
     },
   },
-    {
+  {
     name: "crear_cita",
     description:
       "Anota una cita puntual del usuario (médica, dental, trámite, reunión, cualquier evento con fecha y " +
@@ -380,7 +380,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["titulo_cita"],
     },
   },
-    {
+  {
     name: "actualizar_saldo_cuenta_manual",
     description:
       "Actualiza el balance de una cuenta MANUAL del usuario (una cuenta sin Plaid detrás, como Apple Card — " +
@@ -401,7 +401,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["nombre_cuenta", "nuevo_saldo"],
     },
   },
-    {
+  {
     name: "eliminar_cuenta_manual",
     description:
       "Elimina por completo una cuenta MANUAL del usuario (sin Plaid detrás, como Apple Card) — junto con " +
@@ -478,7 +478,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
-        name: "consultar_conocimiento_financiero",
+    name: "consultar_conocimiento_financiero",
     description:
       "Trae la explicación completa (con ejemplos y números reales) de uno de los 15 conceptos financieros " +
       "del día a día de VICTOR (presupuesto, tarjetas de crédito, inflación, amortización, etc.), o los " +
@@ -957,7 +957,16 @@ export async function executeVictorTool(
         message: `${resumenExitosas}${resumenFallidas}${nota}`.trim() || "No se pudo categorizar ninguna del lote.",
       };
     }
+
     case "buscar_transacciones_por_comercio": {
+      // A diferencia de revisar_gastos_sin_categorizar (que solo mira lo
+      // que todavía no tiene categoría), esta busca en TODO el historial —
+      // es lo que le faltaba a VICTOR para poder recategorizar en lote algo
+      // que el usuario ya tenía puesto en otra categoría (bug real
+      // reportado por Joel, 29 agosto 2026: pidió mover todo lo de "Moela"
+      // y "Student Aid" a una categoría nueva de préstamos estudiantiles, y
+      // VICTOR no tenía cómo encontrarlas sin que se las dieran una por
+      // una).
       const terminosRaw = Array.isArray(input.terminos) ? input.terminos : [];
       const terminos = terminosRaw
         .map((t) => String(t ?? "").trim())
@@ -998,6 +1007,10 @@ export async function executeVictorTool(
 
       if (error) return { ok: false, message: `No se pudo buscar las transacciones: ${error.message}` };
 
+      // Trae los nombres de categoría solo para los ids que de verdad
+      // aparecieron en el resultado, en una sola consulta — para que
+      // VICTOR (y de rebote el usuario, si pregunta) sepa de dónde está
+      // moviendo cada cosa, no solo hacia dónde.
       const idsCategorias = Array.from(
         new Set((encontradas ?? []).map((t) => t.hacienda_category_id).filter((id): id is string => !!id))
       );
@@ -1026,6 +1039,7 @@ export async function executeVictorTool(
           `Recategoriza todas de una vez con UNA sola llamada a categorizar_transacciones_lote, mandando el transaction_id de cada una y el nombre EXACTO de la categoría destino — esto funciona aunque ya tuvieran otra categoría asignada.`,
       };
     }
+
     case "revisar_gastos_sin_categorizar": {
       const limite = Number.isFinite(Number(input.limite)) && Number(input.limite) > 0
         ? Math.min(Number(input.limite), 100)
@@ -1237,6 +1251,7 @@ export async function executeVictorTool(
 
       return { ok: true, message: `Eliminé "${doc.nombre}" de la Bóveda.` };
     }
+
     case "crear_cita": {
       const titulo = String(input.titulo ?? "").trim();
       const fecha = String(input.fecha ?? "").trim();
@@ -1344,6 +1359,8 @@ export async function executeVictorTool(
       if (nuevaHora) cambios.hora = nuevaHora;
       if (nuevoCosto !== null) cambios.costo_estimado = nuevoCosto;
       if (marcarHecha !== null) cambios.hecha = marcarHecha;
+      // Si cambió fecha u hora, los avisos arrancan de cero — igual que
+      // el reset de alerta_90/30/7 en actualizar_documento.
       if (cambioFechaUOra) {
         cambios.recordatorio_1dia = false;
         cambios.recordatorio_mismodia = false;
@@ -1385,7 +1402,15 @@ export async function executeVictorTool(
 
       return { ok: true, message: `Eliminé "${cita.titulo}" de las citas.` };
     }
+
     case "actualizar_saldo_cuenta_manual": {
+      // Este tool no existía hasta ahora — VICTOR solo LEÍA manual_accounts
+      // (para tener contexto de balance total, ver app/api/victor/route.ts)
+      // pero nunca podía escribir en ella. Bug real reportado por Joel (29
+      // agosto 2026): le dijo a VICTOR que ya había saldado la Apple Card,
+      // VICTOR contestó que la había puesto en $0 — pero como no existía
+      // ninguna herramienta para eso, esa "acción" fue inventada de
+      // principio a fin. Este case cierra el hueco de verdad.
       const nombreBuscado = String(input.nombre_cuenta ?? "").trim();
       const nuevoSaldo = Number(input.nuevo_saldo);
       if (!nombreBuscado || !Number.isFinite(nuevoSaldo)) {
@@ -1425,6 +1450,7 @@ export async function executeVictorTool(
         message: `Actualicé "${cuenta.name}" — balance anterior $${Number(cuenta.current_balance)}, nuevo balance $${nuevoSaldo}.`,
       };
     }
+
     case "eliminar_cuenta_manual": {
       const nombreBuscado = String(input.nombre_cuenta ?? "").trim();
       if (!nombreBuscado) return { ok: false, message: "Falta el nombre de la cuenta manual a eliminar." };
@@ -1447,11 +1473,15 @@ export async function executeVictorTool(
       }
 
       const cuenta = candidatos[0];
+      // ON DELETE CASCADE en transactions.manual_account_id ya borra las
+      // transacciones importadas de esta cuenta junto con ella (migración
+      // 0013), igual que hace la ruta DELETE de /api/cuentas-manuales/[id].
       const { error: deleteError } = await supabase.from("manual_accounts").delete().eq("id", cuenta.id);
       if (deleteError) return { ok: false, message: `No se pudo eliminar la cuenta: ${deleteError.message}` };
 
       return { ok: true, message: `Eliminé la cuenta manual "${cuenta.name}" y sus transacciones importadas.` };
     }
+
     case "crear_categoria_personal": {
       const nombre = String(input.nombre ?? "").trim();
       if (!nombre) return { ok: false, message: "Falta el nombre de la categoría a crear." };
