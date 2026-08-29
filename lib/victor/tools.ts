@@ -232,6 +232,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["terminos"],
     },
   },
+  {
     name: "revisar_gastos_sin_categorizar",
     description:
       "Trae la lista real de transacciones bancarias del usuario que TODAVÍA no tienen categoría — la " +
