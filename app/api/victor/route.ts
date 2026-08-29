@@ -769,9 +769,10 @@ export async function POST(req: NextRequest) {
     console.error("No se pudo actualizar victor_memory:", err);
   }
 
-  return NextResponse.json({
+    return NextResponse.json({
     conversationId: conversation.id,
     reply: assistantText,
+    huboAccion: herramientasUsadasTurno.size > 0,
   });
 }
 
