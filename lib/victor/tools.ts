@@ -380,7 +380,27 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["titulo_cita"],
     },
   },
-  {
+    {
+    name: "actualizar_saldo_cuenta_manual",
+    description:
+      "Actualiza el balance de una cuenta MANUAL del usuario (una cuenta sin Plaid detrás, como Apple Card — " +
+      "el usuario la ve en /dashboard/cuentas junto a las conectadas por banco). Úsala cuando el usuario diga " +
+      "que ya pagó, saldó, o quiere corregir el balance de una de esas cuentas ('ya saldé la Apple Card', " +
+      "'la tarjeta X ya está en $0', 'actualiza el balance de mi préstamo a $500'). Busca la cuenta por " +
+      "nombre — si hay más de una coincidencia, pregúntale al usuario cuál es antes de actualizar. " +
+      "IMPORTANTE: esta herramienta SOLO existe para cuentas manuales — las cuentas conectadas por Plaid " +
+      "actualizan su balance solas desde el banco, y VICTOR no tiene (ni debe tener) forma de tocarlas " +
+      "directamente. Si el usuario menciona una cuenta que no encuentras aquí, probablemente está conectada " +
+      "por Plaid — dile que esas se actualizan solas la próxima vez que sincronice, no que ya la cambiaste.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre_cuenta: { type: "string", description: "Nombre (o parte del nombre) de la cuenta manual, tal como está guardada, ej. 'Apple Card'." },
+        nuevo_saldo: { type: "number", description: "El nuevo balance total de la cuenta (no un incremento) — para una tarjeta ya pagada, esto es 0." },
+      },
+      required: ["nombre_cuenta", "nuevo_saldo"],
+    },
+  },
     name: "crear_categoria_personal",
     description:
       "Crea una categoría de gasto NUEVA, personal del usuario (no la ve nadie más, no toca el catálogo " +
@@ -1343,6 +1363,46 @@ export async function executeVictorTool(
       if (deleteError) return { ok: false, message: `No se pudo eliminar la cita: ${deleteError.message}` };
 
       return { ok: true, message: `Eliminé "${cita.titulo}" de las citas.` };
+    }
+    case "actualizar_saldo_cuenta_manual": {
+      const nombreBuscado = String(input.nombre_cuenta ?? "").trim();
+      const nuevoSaldo = Number(input.nuevo_saldo);
+      if (!nombreBuscado || !Number.isFinite(nuevoSaldo)) {
+        return { ok: false, message: "Faltan datos válidos (nombre de la cuenta y nuevo saldo) para actualizar el balance." };
+      }
+
+      const { data: candidatos, error: buscarError } = await supabase
+        .from("manual_accounts")
+        .select("id, name, current_balance")
+        .eq("owner_id", ownerId)
+        .ilike("name", `%${nombreBuscado}%`);
+
+      if (buscarError) return { ok: false, message: `No se pudo buscar la cuenta: ${buscarError.message}` };
+      if (!candidatos || candidatos.length === 0) {
+        return {
+          ok: false,
+          message: `No encontré ninguna cuenta MANUAL parecida a "${nombreBuscado}". Si es una cuenta conectada por Plaid (banco), esa no se puede editar desde aquí — se actualiza sola cuando sincroniza. Dile eso al usuario en vez de asumir que ya quedó cambiada.`,
+        };
+      }
+      if (candidatos.length > 1) {
+        return {
+          ok: false,
+          message: `Hay varias cuentas manuales parecidas a "${nombreBuscado}" (${candidatos.map((c) => c.name).join(", ")}). Pídele al usuario que aclare cuál.`,
+        };
+      }
+
+      const cuenta = candidatos[0];
+      const { error: updateError } = await supabase
+        .from("manual_accounts")
+        .update({ current_balance: nuevoSaldo, balance_actualizado_en: new Date().toISOString() })
+        .eq("id", cuenta.id);
+
+      if (updateError) return { ok: false, message: `No se pudo actualizar el balance: ${updateError.message}` };
+
+      return {
+        ok: true,
+        message: `Actualicé "${cuenta.name}" — balance anterior $${Number(cuenta.current_balance)}, nuevo balance $${nuevoSaldo}.`,
+      };
     }
     case "crear_categoria_personal": {
       const nombre = String(input.nombre ?? "").trim();
