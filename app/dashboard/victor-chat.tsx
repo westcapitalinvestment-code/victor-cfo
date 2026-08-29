@@ -52,6 +52,9 @@ export default function VictorChat({
   // no escondido detrás de un botón. Si el usuario lo cierra, se queda
   // cerrado mientras navega (el layout no se remonta entre páginas del
   // dashboard); vuelve a abrirse solo en la próxima carga completa.
+  // Para refrescar la pantalla actual al instante cuando VICTOR ejecuta
+  // algo que cambia datos (categorizar, crear cita, etc.) — ver el uso en
+  // send(), justo después de recibir data.huboAccion.
   const router = useRouter();
   const [open, setOpen] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -65,9 +68,6 @@ export default function VictorChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  // Guarda el stream de getUserMedia mientras dura el dictado — ver nota
-  // larga en toggleVoice() sobre por qué NO se cierra de inmediato.
-  const micStreamRef = useRef<MediaStream | null>(null);
 
   // Continuidad real entre dispositivos: al montar, trae la conversación
   // más reciente del usuario desde el servidor (no solo lo que haya en
@@ -192,7 +192,6 @@ export default function VictorChat({
     // ahora se lo decimos explícitamente en vez de fallar en silencio.
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       setListening(false);
-      detenerStreamMic();
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         setError("VICTOR no tiene permiso para usar el micrófono. Revisa los permisos de la app en Ajustes del celular y vuelve a intentar.");
       } else if (event.error === "no-speech") {
@@ -200,13 +199,15 @@ export default function VictorChat({
       } else if (event.error === "network") {
         setError("El dictado por voz necesita conexión a internet — revisa tu señal e inténtalo de nuevo.");
       } else if (event.error !== "aborted") {
+        // Incluye el código real (event.error) en el mensaje — mientras no
+        // sepamos cuál de los errores restantes del spec (audio-capture,
+        // language-not-supported, bad-grammar, etc.) es el que está
+        // pasando de verdad, este texto es la única forma de verlo sin
+        // acceso remoto a la consola del celular de Joel.
         setError(`No se pudo usar el micrófono ahora mismo (error: ${event.error}). Inténtalo de nuevo.`);
       }
     };
-    recognition.onend = () => {
-      setListening(false);
-      detenerStreamMic();
-    };
+    recognition.onend = () => setListening(false);
 
     recognitionRef.current = recognition;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -229,20 +230,11 @@ export default function VictorChat({
     });
   }
 
-  // Suelta el micrófono físico que pedimos con getUserMedia — se llama al
-  // terminar de escuchar por cualquier vía (usuario para, reconocimiento
-  // termina solo, o error) para no dejar el micrófono "prendido" de fondo.
-  function detenerStreamMic() {
-    micStreamRef.current?.getTracks().forEach((t) => t.stop());
-    micStreamRef.current = null;
-  }
-
   async function toggleVoice() {
     if (!recognitionRef.current) return;
     if (listening) {
       recognitionRef.current.stop();
       setListening(false);
-      detenerStreamMic();
       return;
     }
 
@@ -254,23 +246,14 @@ export default function VictorChat({
     // agosto 2026, PWA instalada): dejar que SpeechRecognition pida el
     // permiso por su cuenta terminaba en "audio-capture" sin que el
     // sistema operativo mostrara nunca el diálogo real de "Permitir
-    // micrófono".
-    //
-    // Segunda vuelta del mismo bug (28 agosto 2026): pedir el permiso y
-    // CERRAR el stream de inmediato (stream.getTracks().forEach(t =>
-    // t.stop())) seguía dando "audio-capture" — Joel confirmó que el error
-    // no cambió. Causa real: en Android/Chrome, detener el stream de
-    // getUserMedia no libera el hardware de audio al instante; si
-    // recognition.start() intenta abrir SU PROPIA captura mientras el
-    // sistema todavía está soltando la anterior, choca con "audio-capture".
-    // Fix real: NO cerrar el stream — se deja vivo en micStreamRef mientras
-    // dura el dictado (así nunca hay una segunda apertura de hardware que
-    // compita) y se suelta recién cuando termina de escuchar, en
-    // detenerStreamMic() (ver onend/onerror de recognition y el branch de
-    // "ya estaba escuchando" arriba).
+    // micrófono". Pidiéndolo explícito con getUserMedia, el sistema SÍ lo
+    // muestra la primera vez; después queda recordado igual que cualquier
+    // otro permiso. No necesitamos el audio en sí (SpeechRecognition abre
+    // su propio canal), así que el stream se cierra de inmediato.
     if (navigator.mediaDevices?.getUserMedia) {
       try {
-        micStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
       } catch (err) {
         if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
           setError("VICTOR no tiene permiso para usar el micrófono. Revisa los permisos de la app en Ajustes del celular y vuelve a intentar.");
@@ -292,7 +275,6 @@ export default function VictorChat({
       // onerror de arriba no se dispara en ese caso porque nunca llegó
       // a arrancar, así que hay que atraparlo aquí también.
       setListening(false);
-      detenerStreamMic();
       setError("No se pudo activar el micrófono. Inténtalo de nuevo.");
     }
   }
@@ -326,8 +308,28 @@ export default function VictorChat({
       }
 
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
-       if (data.huboAccion) router.refresh();
-      
+
+      // VICTOR ejecutó algo de verdad este turno (categorizar, crear cita,
+      // actualizar meta, etc.) — refresca la pantalla actual ahora mismo en
+      // vez de esperar los 30 minutos del auto-refresh (bug real reportado
+      // por Joel, 29 agosto 2026: saldó una tarjeta por el chat y el cambio
+      // no se veía en Gastos hasta recargar a mano). router.refresh() solo
+      // vuelve a pedir los datos de Supabase de esta ruta, no pierde el
+      // chat ni el estado de la pantalla.
+      if (data.huboAccion) {
+        router.refresh();
+        // router.refresh() solo re-renderiza Server Components — no le
+        // llega a secciones que traen sus propios datos por su cuenta con
+        // fetch() dentro de un useEffect que ya corrió (ej. CuentasManuales
+        // en /dashboard/cuentas). Bug real (29 agosto 2026, reportado por
+        // Joel): creó una cuenta manual (Coinbase) desde el chat estando
+        // parado en Cuentas — no apareció ahí hasta que salió a Home y
+        // volvió (eso remonta el componente, disparando su fetch de
+        // nuevo). Este evento le avisa a esas secciones "algo cambió,
+        // vuelve a pedir tus datos" sin que el usuario tenga que navegar
+        // para forzar el remount — ver el listener en cuentas-manuales.tsx.
+        window.dispatchEvent(new Event("victor:accion"));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "VICTOR no pudo responder.");
     } finally {
@@ -343,11 +345,21 @@ export default function VictorChat({
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "Minimizar chat con VICTOR" : "Abrir chat con VICTOR"}
         className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-lg"
+        // bottom usa env(safe-area-inset-bottom) en vez de la clase
+        // bottom-24 fija — así el botón no queda pegado a la barra de
+        // gestos del celular (bug real reportado por Joel, 28 agosto 2026:
+        // "la pantalla se desajusta").
         style={{ background: "#1D9E75", bottom: "calc(6rem + env(safe-area-inset-bottom))" }}
       >
         {open ? (
           <i className="ti ti-minus" style={{ fontSize: 22, color: "#fff" }} />
         ) : (
+          // Fondo blanco explícito — el ícono de VICTOR es un PNG con la
+          // línea de la cara en el mismo verde del botón (#1D9E75). Sin un
+          // fondo que contraste, la cara queda invisible sobre sí misma
+          // (bug real reportado por Joel: se veía "verde sólido, casi sin
+          // cara"). El header y los avatares del chat ya usaban fondo
+          // blanco por esto mismo — aquí faltaba.
           <img
             src={VICTOR_AVATAR}
             alt="VICTOR"
@@ -360,6 +372,11 @@ export default function VictorChat({
       {open && (
         <div
           className="fixed right-4 z-50 flex max-h-[70dvh] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+          // Mismo ajuste que el botón flotante (safe-area-inset-bottom), y
+          // max-h-[70dvh] en vez de 70vh — dvh (dynamic viewport height) se
+          // recalcula cuando el teclado del celular aparece/desaparece al
+          // abrir el chat; 100vh clásico en Safari/PWA no lo hace, y eso
+          // era parte del "desajuste" que reportó Joel al abrir/cerrar.
           style={{ bottom: "calc(168px + env(safe-area-inset-bottom))" }}
         >
           {/* Header */}
@@ -444,6 +461,8 @@ export default function VictorChat({
           <div className="relative flex gap-2 border-t border-border bg-card p-3">
             {showEmojis && (
               <>
+                {/* Capa invisible para cerrar el panel al tocar afuera,
+                    igual que el resto de los menús de la app. */}
                 <div className="fixed inset-0 z-[55]" onClick={() => setShowEmojis(false)} />
                 <div
                   className="absolute bottom-[52px] left-3 z-[60] grid w-[248px] grid-cols-8 gap-1 rounded-xl border border-border bg-card p-2 shadow-2xl"
