@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 // "El alma de VICTOR" — botón flotante + panel de chat, disponible en
 // cualquier pantalla del dashboard (se monta una sola vez desde el
@@ -51,6 +52,7 @@ export default function VictorChat({
   // no escondido detrás de un botón. Si el usuario lo cierra, se queda
   // cerrado mientras navega (el layout no se remonta entre páginas del
   // dashboard); vuelve a abrirse solo en la próxima carga completa.
+  const router = useRouter();
   const [open, setOpen] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -324,6 +326,8 @@ export default function VictorChat({
       }
 
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
+       if (data.huboAccion) router.refresh();
+      
     } catch (err) {
       setError(err instanceof Error ? err.message : "VICTOR no pudo responder.");
     } finally {
