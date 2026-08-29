@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/format";
@@ -39,6 +39,19 @@ export default function GastosPendientesCard({
   const [pendientes, setPendientes] = useState(pendientesIniciales);
   const [guardando, setGuardando] = useState<string | null>(null);
   const [abierto, setAbierto] = useState(true);
+
+  // useState(pendientesIniciales) solo usa ese valor en el PRIMER render —
+  // si el Server Component padre (page.tsx) vuelve a correr con datos
+  // frescos (ej. router.refresh() disparado desde victor-chat.tsx cuando
+  // VICTOR categoriza algo por el chat), React no reinicia este estado
+  // solo porque cambió el prop. Mismo bug de fondo que CuentasManuales
+  // (ver ese archivo) pero con un síntoma distinto: aquí sí se re-renderiza
+  // el componente, solo que con el estado viejo. Sin este efecto, VICTOR
+  // podía categorizar algo por el chat y esta tarjeta seguía mostrándolo
+  // como pendiente hasta que el usuario recargara a mano.
+  useEffect(() => {
+    setPendientes(pendientesIniciales);
+  }, [pendientesIniciales]);
 
   const nombreCategoria = (id: number | null) => categorias.find((c) => c.id === id)?.nombre ?? null;
 
@@ -95,7 +108,7 @@ export default function GastosPendientesCard({
                     ⏳ Pendiente — el banco todavía puede corregir el monto o el nombre
                   </p>
                 )}
-                              <p className="mt-0.5 text-[11px] text-muted">
+                <p className="mt-0.5 text-[11px] text-muted">
                   {p.fecha}
                   {p.cuentaLabel ? ` · ${p.cuentaLabel}` : ""} ·{" "}
                   <span
