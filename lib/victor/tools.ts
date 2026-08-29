@@ -204,7 +204,34 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["items"],
     },
   },
-  {
+    {
+    name: "buscar_transacciones_por_comercio",
+    description:
+      "Busca, en TODO el historial del usuario (categorizado o no — a diferencia de " +
+      "revisar_gastos_sin_categorizar, que solo trae lo pendiente), transacciones cuya descripción del banco " +
+      "coincida con uno o más términos/comercios. Úsala cuando el usuario pida mover o recategorizar TODO lo " +
+      "de un comercio o patrón (ej. 'crea la categoría Préstamos estudiantiles y pon ahí todo lo de Moela y " +
+      "Student Aid', o 'mueve todos los Uber Eats a Restaurantes') — no le pidas que te copie cada transacción " +
+      "una por una, esta herramienta te trae los ids reales para que tú hagas el trabajo. Cada resultado trae " +
+      "su id entre corchetes (guárdalo internamente, nunca lo repitas al usuario) y su categoría ACTUAL, si " +
+      "tiene una — con esos ids, categoriza todo de una vez con UNA sola llamada a categorizar_transacciones_lote " +
+      "mandando el transaction_id de cada una (así recategoriza aunque ya tuviera categoría, que es justo el " +
+      "caso de uso aquí). Si el total de coincidencias es alto, dile al usuario cuántas encontraste antes de " +
+      "moverlas todas, por si alguna no debería incluirse (ej. un término muy genérico que también matchea " +
+      "otra cosa) — para patrones claros y específicos como un nombre de comercio, procede directo sin preguntar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        terminos: {
+          type: "array",
+          description: "Uno o más fragmentos de texto a buscar en la descripción bancaria (ej. ['Moela', 'Student Aid', 'Nelnet']). Cualquier transacción que contenga AL MENOS UNO de estos términos se incluye.",
+          items: { type: "string" },
+        },
+        limite: { type: "number", description: "Cuántas transacciones traer como máximo. Si no se especifica, usa 80 (tope 200)." },
+      },
+      required: ["terminos"],
+    },
+  },
     name: "revisar_gastos_sin_categorizar",
     description:
       "Trae la lista real de transacciones bancarias del usuario que TODAVÍA no tienen categoría — la " +
@@ -888,7 +915,75 @@ export async function executeVictorTool(
         message: `${resumenExitosas}${resumenFallidas}${nota}`.trim() || "No se pudo categorizar ninguna del lote.",
       };
     }
+    case "buscar_transacciones_por_comercio": {
+      const terminosRaw = Array.isArray(input.terminos) ? input.terminos : [];
+      const terminos = terminosRaw
+        .map((t) => String(t ?? "").trim())
+        .filter((t) => t.length > 0);
 
+      if (terminos.length === 0) {
+        return { ok: false, message: "Faltan términos de búsqueda (nombre del comercio o patrón) para buscar transacciones." };
+      }
+
+      const limite = Number.isFinite(Number(input.limite)) && Number(input.limite) > 0
+        ? Math.min(Number(input.limite), 200)
+        : 80;
+
+      const filtroOr = terminos.map((t) => `description_raw.ilike.%${t}%`).join(",");
+
+      const { count: totalCoincidencias, error: countError } = await supabase
+        .from("transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", ownerId)
+        .or(filtroOr);
+
+      if (countError) return { ok: false, message: `No se pudo contar las transacciones: ${countError.message}` };
+
+      if (!totalCoincidencias || totalCoincidencias === 0) {
+        return {
+          ok: true,
+          message: `No encontré ninguna transacción que contenga ${terminos.map((t) => `"${t}"`).join(", ")}. Confírmale al usuario el nombre exacto como aparece en su banco.`,
+        };
+      }
+
+      const { data: encontradas, error } = await supabase
+        .from("transactions")
+        .select("id, description_raw, amount, fecha, hacienda_category_id")
+        .eq("owner_id", ownerId)
+        .or(filtroOr)
+        .order("fecha", { ascending: false })
+        .limit(limite);
+
+      if (error) return { ok: false, message: `No se pudo buscar las transacciones: ${error.message}` };
+
+      const idsCategorias = Array.from(
+        new Set((encontradas ?? []).map((t) => t.hacienda_category_id).filter((id): id is string => !!id))
+      );
+      let nombrePorCategoriaId = new Map<string, string>();
+      if (idsCategorias.length > 0) {
+        const { data: cats } = await supabase.from("hacienda_categories").select("id, nombre").in("id", idsCategorias);
+        nombrePorCategoriaId = new Map((cats ?? []).map((c) => [c.id, c.nombre]));
+      }
+
+      const lista = (encontradas ?? [])
+        .map((t) => {
+          const categoriaActual = t.hacienda_category_id ? nombrePorCategoriaId.get(t.hacienda_category_id) ?? "categoría desconocida" : "sin categoría";
+          return `- [${t.id}] "${t.description_raw}" · $${Math.abs(Number(t.amount))} · ${t.fecha} · actualmente: ${categoriaActual}`;
+        })
+        .join("\n");
+
+      const quedanFuera = totalCoincidencias - (encontradas?.length ?? 0);
+      const avisoTotal = quedanFuera > 0
+        ? `\n\nOJO: en total hay ${totalCoincidencias} coincidencias — esta lista trae solo las ${encontradas?.length ?? 0} más recientes. Después de recategorizar estas, vuelve a llamar esta herramienta con los mismos términos para traer las ${quedanFuera} que quedan.`
+        : "";
+
+      return {
+        ok: true,
+        message:
+          `${encontradas?.length ?? 0} transacción(es) encontrada(s) (de ${totalCoincidencias} en total) que contienen ${terminos.map((t) => `"${t}"`).join(", ")}:\n${lista}${avisoTotal}\n\n` +
+          `Recategoriza todas de una vez con UNA sola llamada a categorizar_transacciones_lote, mandando el transaction_id de cada una y el nombre EXACTO de la categoría destino — esto funciona aunque ya tuvieran otra categoría asignada.`,
+      };
+    }
     case "revisar_gastos_sin_categorizar": {
       const limite = Number.isFinite(Number(input.limite)) && Number(input.limite) > 0
         ? Math.min(Number(input.limite), 100)
