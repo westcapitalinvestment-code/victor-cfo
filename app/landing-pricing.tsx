@@ -9,12 +9,12 @@ import styles from "./landing.module.css";
 // esto era JS de vainilla manipulando el DOM a mano (onclick="...") — acá
 // es el mismo comportamiento pero con estado de React, como el resto de
 // la app.
-// Anual = 11 meses (se paga 11, se usan 12 — "1 mes gratis"), no 10. Mismo
-// redondeo hacia abajo al dólar entero que ya se usaba antes (14.99*11 =
-// 219.89 → 219), solo que ahora con un mes de descuento en vez de dos.
+// Anual = 11 meses (se paga 11, se usan 12 — "1 mes gratis"). Core bajó de
+// $19.99 a $14.99/mes (30 agosto 2026, decisión de Joel) — mismo redondeo
+// hacia abajo al dólar entero de siempre: 14.99*11 = 164.89 → 164.
 const PRECIOS = {
-  mensual: { core: "19", coreSuf: ".99/mes", pro: "49", proSuf: ".99/mes", proplus: "99", proplusSuf: ".99/mes" },
-  anual: { core: "219", coreSuf: "/año", pro: "549", proSuf: "/año", proplus: "1099", proplusSuf: "/año" },
+  mensual: { core: "14", coreSuf: ".99/mes", pro: "49", proSuf: ".99/mes", proplus: "99", proplusSuf: ".99/mes" },
+  anual: { core: "164", coreSuf: "/año", pro: "549", proSuf: "/año", proplus: "1099", proplusSuf: "/año" },
 };
 
 export default function LandingPricing() {
