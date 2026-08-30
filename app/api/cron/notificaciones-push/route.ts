@@ -1,7 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarPush } from "@/lib/push";
+import { fechaHoyPR } from "@/lib/hora-pr";
 
+// Cron diario — le manda un push de verdad (suena/aparece en el celular,
+// con la app cerrada) a cada usuario que tenga al menos una suscripción
+// activa Y algo de verdad pendiente: documentos que cruzan un umbral de
+// vencimiento (90, 30 o 7 días) por primera vez, o transacciones sin
+// categorizar. A propósito NO manda nada si no hay ninguna de las dos
+// cosas — un push vacío ("no tienes pendientes") todos los días entrena
+// al usuario a ignorar las notificaciones de VICTOR, que es justo lo
+// contrario de lo que se busca.
+//
+// Los umbrales usan las columnas alerta_90/alerta_30/alerta_7 de
+// documents para avisar UNA sola vez por umbral cruzado, no todos los
+// días mientras el documento siga pendiente. Al marcar un umbral se
+// marcan también los umbrales "menos urgentes" (ej. si un documento
+// aparece por primera vez a 5 días de vencer, se marcan alerta_7,
+// alerta_30 y alerta_90 juntas, porque ya pasamos esos tres umbrales).
+//
+// Corre DESPUÉS del sync nocturno de Plaid (vercel.json: Plaid a las 8:00
+// UTC, este cron a la 1:00 PM UTC = 9:00 AM hora de PR) para que el conteo
+// de gastos sin categorizar ya refleje las transacciones de esta madrugada.
+//
+// Misma protección que sync-all-plaid: header Authorization con
+// CRON_SECRET, cliente admin porque itera TODOS los usuarios sin sesión.
 export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
@@ -23,8 +46,14 @@ export async function GET(req: NextRequest) {
   const ownerIds = Array.from(new Set(subs.map((s) => s.owner_id)));
   const hoy = new Date();
   const msPorDia = 24 * 60 * 60 * 1000;
-  const en90dias = new Date(hoy.getTime() + 90 * msPorDia).toISOString().slice(0, 10);
-  const hoyISO = hoy.toISOString().slice(0, 10);
+  // hoyISO ancla a la fecha de CALENDARIO en Puerto Rico (fechaHoyPR), no a
+  // la fecha UTC cruda del servidor — este cron corre a hora fija (9am PR)
+  // así que en la práctica nunca coincidía con el bug real que sí afectaba
+  // a revisar_documentos_por_vencer/revisar_citas_proximas y al Home (ver
+  // diasHastaPR en lib/hora-pr.ts), pero usar la misma base aquí evita que
+  // el mismo problema aparezca si el horario del cron cambia algún día.
+  const hoyISO = fechaHoyPR(hoy);
+  const en90dias = new Date(new Date(`${hoyISO}T00:00:00Z`).getTime() + 90 * msPorDia).toISOString().slice(0, 10);
 
   function diasRestantes(fechaISO: string): number {
     const objetivo = new Date(fechaISO + "T00:00:00Z");
@@ -36,7 +65,7 @@ export async function GET(req: NextRequest) {
   let suscripcionesExpiradas = 0;
   const resultados: Record<string, unknown> = {};
 
-  const enUnDia = new Date(hoy.getTime() + 1 * msPorDia).toISOString().slice(0, 10);
+  const enUnDia = new Date(new Date(`${hoyISO}T00:00:00Z`).getTime() + 1 * msPorDia).toISOString().slice(0, 10);
 
   for (const ownerId of ownerIds) {
     try {
@@ -47,6 +76,7 @@ export async function GET(req: NextRequest) {
           .eq("owner_id", ownerId)
           .is("entity_id", null)
           .is("hacienda_category_id", null)
+          // No contar pendientes — pueden reemplazarse por otro ID al postear.
           .eq("pending", false),
         supabase
           .from("documents")
@@ -56,6 +86,8 @@ export async function GET(req: NextRequest) {
           .not("fecha_vencimiento", "is", null)
           .lte("fecha_vencimiento", en90dias)
           .order("fecha_vencimiento", { ascending: true }),
+        // Citas (0030) — solo hoy y mañana, aviso binario (día antes / mismo
+        // día), no escalonado como los documentos.
         supabase
           .from("citas")
           .select("id, titulo, fecha, hora, recordatorio_1dia, recordatorio_mismodia")
@@ -66,6 +98,9 @@ export async function GET(req: NextRequest) {
           .order("fecha", { ascending: true }),
       ]);
 
+      // De todos los documentos dentro de la ventana de 90 días, nos
+      // interesan solo los que CRUZAN un umbral por primera vez hoy (no
+      // los que ya avisamos en un cron anterior).
       const docsParaAvisar: { id: string; nombre: string; dias: number; umbral: 90 | 30 | 7 }[] = [];
       const columnasAMarcar: Record<string, { alerta_90?: boolean; alerta_30?: boolean; alerta_7?: boolean }> = {};
 
@@ -80,6 +115,7 @@ export async function GET(req: NextRequest) {
 
         docsParaAvisar.push({ id: doc.id, nombre: doc.nombre, dias, umbral });
 
+        // Al cruzar un umbral, se cruzaron también los menos urgentes.
         const marcar: { alerta_90?: boolean; alerta_30?: boolean; alerta_7?: boolean } = {};
         if (umbral <= 90) marcar.alerta_90 = true;
         if (umbral <= 30) marcar.alerta_30 = true;
@@ -87,6 +123,9 @@ export async function GET(req: NextRequest) {
         columnasAMarcar[doc.id] = marcar;
       }
 
+      // Citas: aviso binario — "es mañana" (recordatorio_1dia) o "es hoy"
+      // (recordatorio_mismodia), cada uno una sola vez. A diferencia de los
+      // documentos no hay niveles intermedios que marcar de paso.
       const citasParaAvisar: { id: string; titulo: string; dias: 0 | 1 }[] = [];
       const columnasAMarcarCitas: Record<string, { recordatorio_1dia?: boolean; recordatorio_mismodia?: boolean }> = {};
 
@@ -136,6 +175,10 @@ export async function GET(req: NextRequest) {
       const body = partes.join(" · ");
       const misSubs = subs.filter((s) => s.owner_id === ownerId);
 
+      // Marcar los umbrales/recordatorios cruzados ANTES de intentar el
+      // push — el aviso ya se decidió mostrar (push aquí y/o saludo diario
+      // de VICTOR), y no queremos re-marcar en el próximo cron solo porque
+      // el push falló por una suscripción expirada.
       for (const [docId, columnas] of Object.entries(columnasAMarcar)) {
         await supabase.from("documents").update(columnas).eq("id", docId);
       }
