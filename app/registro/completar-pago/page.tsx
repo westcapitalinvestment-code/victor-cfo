@@ -20,7 +20,7 @@ import { esPlanValido, esCicloValido, type PlanId, type Ciclo } from "@/lib/stri
 // — "Los 3 planes" ya están en el código, pero solo Core cobra de verdad
 // hasta que Joel cree los otros dos Price en Stripe Dashboard).
 const PLANES: { id: PlanId; nombre: string; precioMensual: string; precioAnual: string; disponible: boolean }[] = [
-  { id: "core", nombre: "VICTOR Core", precioMensual: "$19.99/mes", precioAnual: "$219/año", disponible: true },
+  { id: "core", nombre: "VICTOR Core", precioMensual: "$14.99/mes", precioAnual: "$164/año", disponible: true },
   { id: "pro", nombre: "VICTOR Pro", precioMensual: "$49.99/mes", precioAnual: "$549/año", disponible: false },
   { id: "proplus", nombre: "VICTOR Enterprise", precioMensual: "$99.99/mes", precioAnual: "$1,099/año", disponible: false },
 ];
