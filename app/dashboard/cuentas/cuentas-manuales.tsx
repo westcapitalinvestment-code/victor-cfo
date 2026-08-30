@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
 import SubirEstado from "./subir-csv";
@@ -27,18 +28,14 @@ const TIPOS = [
   { value: "investment", label: "Inversión" },
 ];
 
-// Cuentas manuales — bancos/tarjetas que Plaid no soporta (ej. Apple Card,
-// que no tiene integración con Plaid porque Goldman Sachs no la expone) o
-// que el usuario prefiere llevar a mano. Vive como su propia sección,
-// separada de las cuentas de Plaid, porque el balance no se sincroniza
-// solo — el usuario lo actualiza, y las transacciones (si las hay) se
-// suben por CSV en vez de llegar automáticas.
 export default function CuentasManuales() {
+  const supabase = createClient();
   const [cuentas, setCuentas] = useState<CuentaManual[]>([]);
   const [loading, setLoading] = useState(true);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [plan, setPlan] = useState<string | null>(null);
 
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("depository");
@@ -48,10 +45,6 @@ export default function CuentasManuales() {
   const [nuevoBalance, setNuevoBalance] = useState("");
   const [subiendoCsvId, setSubiendoCsvId] = useState<string | null>(null);
 
-  // Editar cuenta completa (nombre + tipo + balance) — separado del click
-  // rápido sobre el balance de arriba, que sigue existiendo para el caso
-  // más común (solo actualizar el número cada mes). Este botón es para
-  // cuando también hace falta corregir el nombre o el tipo.
   const [editandoCuentaId, setEditandoCuentaId] = useState<string | null>(null);
   const [nombreEditado, setNombreEditado] = useState("");
   const [tipoEditado, setTipoEditado] = useState("depository");
@@ -70,18 +63,18 @@ export default function CuentasManuales() {
   }, []);
 
   useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return;
+      const { data: perfil } = await supabase.from("users").select("plan").eq("id", user.id).maybeSingle();
+      setPlan(perfil?.plan ?? null);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     cargar();
   }, [cargar]);
 
-  // Esta sección trae sus datos con su propio fetch (arriba), no como prop
-  // del Server Component de la página — así que router.refresh() (lo que
-  // dispara victor-chat.tsx cuando VICTOR ejecuta algo) no la toca para
-  // nada, porque ese mecanismo solo re-renderiza Server Components. Bug
-  // real (29 agosto 2026, reportado por Joel): creó "Coinbase" desde el
-  // chat estando parado aquí mismo en Cuentas y no apareció hasta que
-  // salió a Home y volvió. victor-chat.tsx ahora manda este evento cada
-  // vez que una herramienta corrió de verdad — al escucharlo, se vuelve a
-  // pedir la lista fresca sin que el usuario tenga que navegar para nada.
   useEffect(() => {
     window.addEventListener("victor:accion", cargar);
     return () => window.removeEventListener("victor:accion", cargar);
@@ -313,6 +306,7 @@ export default function CuentasManuales() {
             <SubirEstado
               origen="manual"
               cuentaId={c.id}
+              plan={plan}
               onCerrar={() => {
                 setSubiendoCsvId(null);
                 cargar();
@@ -365,7 +359,7 @@ export default function CuentasManuales() {
             </button>
           </div>
         </div>
-            ) : (
+      ) : (
         <button
           className="flex w-full items-center justify-center gap-2 px-4 py-4 text-sm font-medium text-teal hover:opacity-80"
           onClick={() => setMostrarForm(true)}
