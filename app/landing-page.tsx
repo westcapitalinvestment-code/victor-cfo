@@ -245,45 +245,34 @@ export default function LandingPage() {
           </p>
           <div className={styles.addonsGrid}>
             <div className={styles.addonCard}>
-              <div className={styles.addonIcon}>🏢</div>
+              <div className={styles.addonIcon}>🙋</div>
               <div>
-                <div className={styles.addonName}>Formación de entidad</div>
-                <div className={styles.addonDesc}>LLC o corporación · estructura legal correcta desde día uno</div>
+                <div className={styles.addonName}>Usuario Referido</div>
+                <div className={styles.addonDesc}>$12.99/mes · invita a un familiar gratis en modo vista, upgrade con descuento</div>
               </div>
             </div>
             <div className={styles.addonCard}>
-              <div className={styles.addonIcon}>🧾</div>
+              <div className={styles.addonIcon}>🧑‍💼</div>
               <div>
-                <div className={styles.addonName}>CPA Coordinado</div>
-                <div className={styles.addonDesc}>Tu planilla, sin el caos · números ya organizados</div>
+                <div className={styles.addonName}>
+                  Admin/Secretaria
+                  <div style={{ fontSize: "0.7rem", color: "var(--teal-mid)", fontWeight: 600, marginTop: "0.2rem" }}>
+                    Plan Pro
+                  </div>
+                </div>
+                <div className={styles.addonDesc}>$10/mes · dale acceso a tu asistente para llevar los números</div>
               </div>
             </div>
             <div className={styles.addonCard}>
               <div className={styles.addonIcon}>👥</div>
               <div>
-                <div className={styles.addonName}>Nómina Automatizada</div>
-                <div className={styles.addonDesc}>Cumplimiento completo · sin cálculos manuales</div>
-              </div>
-            </div>
-            <div className={styles.addonCard}>
-              <div className={styles.addonIcon}>📂</div>
-              <div>
-                <div className={styles.addonName}>Bóveda Inteligente</div>
-                <div className={styles.addonDesc}>Documentos que VICTOR lee, categoriza y recuerda</div>
-              </div>
-            </div>
-            <div className={styles.addonCard}>
-              <div className={styles.addonIcon}>📈</div>
-              <div>
-                <div className={styles.addonName}>Inversiones Automatizadas</div>
-                <div className={styles.addonDesc}>Tu excedente trabajando · en piloto automático</div>
-              </div>
-            </div>
-            <div className={styles.addonCard}>
-              <div className={styles.addonIcon}>⚖️</div>
-              <div>
-                <div className={styles.addonName}>Optimización Fiscal</div>
-                <div className={styles.addonDesc}>Incentivos y decretos · según tu región y estructura</div>
+                <div className={styles.addonName}>
+                  Equipo/Técnicos
+                  <div style={{ fontSize: "0.7rem", color: "var(--teal-mid)", fontWeight: 600, marginTop: "0.2rem" }}>
+                    Plan Pro
+                  </div>
+                </div>
+                <div className={styles.addonDesc}>$15/mes · añade a tu equipo con acceso completo</div>
               </div>
             </div>
           </div>
