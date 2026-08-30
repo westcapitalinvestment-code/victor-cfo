@@ -117,7 +117,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className={styles.stat}>
-            <div className={styles.statNum}>$19.99</div>
+            <div className={styles.statNum}>$14.99</div>
             <div className={styles.statLabel}>
               al mes — menos que
               <br />
