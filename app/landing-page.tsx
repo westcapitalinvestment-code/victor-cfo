@@ -248,7 +248,7 @@ export default function LandingPage() {
               <div className={styles.addonIcon}>🙋</div>
               <div>
                 <div className={styles.addonName}>Usuario Referido</div>
-                <div className={styles.addonDesc}>$12.99/mes · invita a un familiar gratis en modo vista, upgrade con descuento</div>
+                <div className={styles.addonDesc}>Gratis · comparte tu link — cada quien tiene su propia cuenta, y paga Core a $12.99/mes en vez de $14.99</div>
               </div>
             </div>
             <div className={styles.addonCard}>
