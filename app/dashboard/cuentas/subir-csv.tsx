@@ -3,23 +3,6 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 
-// Subir un estado de cuenta (CSV/QuickBooks, o PDF) a CUALQUIER cuenta —
-// una manual (Apple Card y similares) o una YA conectada por Plaid, para
-// rellenar el hueco de historial que Plaid no trajo (algunos bancos, ej.
-// BPPR, solo entregan ~45 días aunque el banco tenga el año completo en su
-// portal). Esto es lo que hace posible armar un reporte contable completo
-// desde el 1 de enero para las planillas.
-//
-// Dos modos, cada uno con su propio flujo:
-//  - CSV/QuickBooks: 1) leer columnas → 2) el usuario confirma cuál
-//    columna es cuál (cada banco exporta distinto) → 3) importar.
-//  - PDF: 1) Claude lee el PDF y extrae las transacciones solo → 2) el
-//    usuario revisa la lista (puede quitar filas que no apliquen) → 3)
-//    importar. No hace falta mapear columnas porque Claude ya normaliza
-//    fecha/descripción/monto.
-// En ambos casos, nada se guarda en la base de datos hasta que el usuario
-// confirma explícitamente en el último paso.
-
 type Modo = "csv" | "pdf";
 type PasoCsv = "elegir_archivo" | "mapear" | "resultado";
 type PasoPdf = "elegir_archivo" | "revisar" | "resultado";
@@ -30,14 +13,16 @@ export default function SubirEstado({
   origen,
   cuentaId,
   onCerrar,
+  plan = null,
 }: {
   origen: "plaid" | "manual";
   cuentaId: string;
   onCerrar: () => void;
+  plan?: string | null;
 }) {
+  const bloqueadoPdf = plan === "gratis";
   const [modo, setModo] = useState<Modo>("csv");
 
-  // --- estado del flujo CSV ---
   const [pasoCsv, setPasoCsv] = useState<PasoCsv>("elegir_archivo");
   const [csvTexto, setCsvTexto] = useState<string>("");
   const [nombreArchivoCsv, setNombreArchivoCsv] = useState<string>("");
@@ -53,17 +38,13 @@ export default function SubirEstado({
   const [formatoFecha, setFormatoFecha] = useState<"MDY" | "DMY" | "YMD">("MDY");
   const [invertirSigno, setInvertirSigno] = useState(false);
 
-  // --- estado del flujo PDF ---
   const [pasoPdf, setPasoPdf] = useState<PasoPdf>("elegir_archivo");
   const [nombreArchivoPdf, setNombreArchivoPdf] = useState<string>("");
   const [transaccionesPdf, setTransaccionesPdf] = useState<TransaccionExtraida[]>([]);
 
-  // --- compartido ---
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ importadas: number; duplicadas: number; errores: number } | null>(null);
-
-  // ================= CSV =================
 
   async function manejarArchivoCsv(file: File) {
     setError(null);
@@ -160,15 +141,11 @@ export default function SubirEstado({
     }
   }
 
-  // ================= PDF =================
-
   function leerArchivoComoBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         const resultadoStr = reader.result as string;
-        // FileReader.readAsDataURL da "data:application/pdf;base64,XXXX" —
-        // a la API solo le mandamos la parte de después de la coma.
         const base64 = resultadoStr.split(",")[1] || "";
         resolve(base64);
       };
@@ -243,7 +220,7 @@ export default function SubirEstado({
             className={`flex-1 rounded-pill py-1.5 font-medium ${modo === "pdf" ? "bg-teal text-white" : "text-muted"}`}
             onClick={() => { setModo("pdf"); setError(null); }}
           >
-            PDF
+            PDF{bloqueadoPdf ? " (Core)" : ""}
           </button>
         </div>
       )}
@@ -414,7 +391,19 @@ export default function SubirEstado({
 
       {modo === "pdf" && (
         <>
-          {pasoPdf === "elegir_archivo" && (
+          {bloqueadoPdf ? (
+            <div className="text-center">
+              <p className="mb-2 text-sm font-medium">Leer PDF con IA es parte de Core</p>
+              <p className="mb-3 text-xs text-muted">
+                Extraer transacciones de un PDF usa inteligencia artificial — se activa junto con Core.
+                Mientras tanto, usa la pestaña de CSV / QuickBooks de arriba, que es gratis.
+              </p>
+              <button className="text-xs text-muted underline" onClick={onCerrar}>
+                Cancelar
+              </button>
+            </div>
+          ) : (
+          pasoPdf === "elegir_archivo" && (
             <div>
               <p className="mb-2 text-sm font-medium">Subir estado de cuenta (PDF)</p>
               <p className="mb-3 text-xs text-muted">
@@ -437,6 +426,7 @@ export default function SubirEstado({
                 Cancelar
               </button>
             </div>
+          )
           )}
 
           {pasoPdf === "revisar" && (
