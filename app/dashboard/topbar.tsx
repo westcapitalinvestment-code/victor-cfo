@@ -54,6 +54,7 @@ const EVENTO_ABRIR_VICTOR = "victor:abrir";
 
 export default function Topbar({ fullName, plan }: { fullName: string | null; plan: string | null }) {
   const esPro = plan === "pro" || plan === "proplus";
+  const esGratis = plan === "gratis";
   const nombreCorto = (fullName || "").split(" ")[0];
   const pathname = usePathname();
   const enResumen = pathname === "/dashboard/resumen";
@@ -106,7 +107,9 @@ export default function Topbar({ fullName, plan }: { fullName: string | null; pl
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="vc-logo-name">VICTOR</span>
-                <span className={`vc-plan-badge ${esPro ? "pro" : ""}`}>{esPro ? "Pro" : "Core"}</span>
+               <span className={`vc-plan-badge ${esPro ? "pro" : esGratis ? "gratis" : ""}`}>
+                  {esPro ? "Pro" : esGratis ? "Free" : "Core"}
+                </span>
               </div>
               {nombreCorto && <div className="text-[11px] text-muted">{nombreCorto}</div>}
             </div>
