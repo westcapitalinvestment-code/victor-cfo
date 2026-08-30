@@ -335,7 +335,7 @@ export default function CuentasPage() {
           {plan === "gratis" && (
             <div className="mb-3 rounded-lg border border-teal bg-teal/[.06] p-3 text-center text-xs text-text">
               ¿Prefieres no conectar el banco todavía? Crea tus cuentas manual abajo (ej. "BPPR
-              Checking, Oriental, Fistbank, etc") y sube tus CSV para categorizar tus gastos —
+              Checking, Oriental, Firstbank, etc") y sube tus CSV para categorizar tus gastos —
               es gratis.
             </div>
           )}
