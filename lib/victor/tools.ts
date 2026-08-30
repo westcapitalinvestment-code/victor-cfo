@@ -4,6 +4,7 @@ import { buscarEstrategia } from "@/lib/victor/estrategias-financieras";
 import { buscarConocimiento } from "@/lib/victor/conocimiento-financiero";
 import { buscarIdentidadCultural } from "@/lib/victor/identidad-cultural";
 import { direccionCategoriaValida } from "@/lib/direccion-categoria";
+import { fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 
 // El texto real del banco (description_raw) casi nunca coincide palabra
 // por palabra con cómo el usuario describe una transacción en el chat —
@@ -1156,8 +1157,16 @@ export async function executeVictorTool(
       const diasVentana = Number.isFinite(Number(input.dias)) && Number(input.dias) > 0
         ? Math.min(Number(input.dias), 120)
         : 30;
-      const hoy = new Date();
-      const limite = new Date(hoy.getTime() + diasVentana * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      // fechaHoyPR()/diasHastaPR() en vez de new Date() crudo — ver la nota
+      // grande junto a diasHastaPR() en lib/hora-pr.ts: comparar un
+      // INSTANTE real (new Date()) contra fechas de calendario hacía que,
+      // pasada cierta hora de la tarde/noche en Puerto Rico, un documento
+      // que vence MAÑANA se reportara como que vence HOY (bug real, 30
+      // agosto 2026, reportado por Joel).
+      const hoyStr = fechaHoyPR();
+      const limite = new Date(new Date(`${hoyStr}T00:00:00Z`).getTime() + diasVentana * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
 
       const { data: docs, error } = await supabase
         .from("documents")
@@ -1175,9 +1184,7 @@ export async function executeVictorTool(
 
       const lista = docs
         .map((d) => {
-          const dias = Math.round(
-            (new Date(d.fecha_vencimiento + "T00:00:00").getTime() - hoy.getTime()) / (24 * 60 * 60 * 1000)
-          );
+          const dias = diasHastaPR(d.fecha_vencimiento as string);
           const cuando =
             dias < 0
               ? `venció hace ${Math.abs(dias)} día(s)`
@@ -1305,16 +1312,24 @@ export async function executeVictorTool(
       const diasVentana = Number.isFinite(Number(input.dias)) && Number(input.dias) > 0
         ? Math.min(Number(input.dias), 90)
         : 14;
-      const hoy = new Date();
-      const limite = new Date(hoy.getTime() + diasVentana * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const hoyISO = hoy.toISOString().slice(0, 10);
+      // fechaHoyPR() en vez de new Date().toISOString() crudo — ver la nota
+      // grande junto a diasHastaPR() en lib/hora-pr.ts. Bug real más grave
+      // aquí que en documentos: hoyISO calculado con new Date() crudo (hora
+      // UTC del servidor) podía adelantarse al día siguiente todavía de
+      // noche en Puerto Rico, y el filtro .gte("fecha", hoyISO) EXCLUÍA por
+      // completo una cita de HOY mismo (en hora de PR) de "citas próximas"
+      // — no solo se veía mal etiquetada, directamente desaparecía.
+      const hoyStr = fechaHoyPR();
+      const limite = new Date(new Date(`${hoyStr}T00:00:00Z`).getTime() + diasVentana * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
 
       const { data: citasProximas, error } = await supabase
         .from("citas")
         .select("titulo, fecha, hora, costo_estimado")
         .eq("owner_id", ownerId)
         .eq("hecha", false)
-        .gte("fecha", hoyISO)
+        .gte("fecha", hoyStr)
         .lte("fecha", limite)
         .order("fecha", { ascending: true });
 
@@ -1325,9 +1340,7 @@ export async function executeVictorTool(
 
       const lista = citasProximas
         .map((c) => {
-          const dias = Math.round(
-            (new Date(c.fecha + "T00:00:00").getTime() - hoy.getTime()) / (24 * 60 * 60 * 1000)
-          );
+          const dias = diasHastaPR(c.fecha as string);
           const cuando = dias === 0 ? "hoy" : dias === 1 ? "mañana" : `en ${dias} días (${c.fecha})`;
           return (
             `"${c.titulo}" ${cuando}${c.hora ? ` a las ${c.hora}` : ""}` +
