@@ -311,7 +311,7 @@ export default function VictorChat({
               />
               <p className="text-center text-sm font-medium text-text">Hablar con VICTOR es parte de Core</p>
               <p className="text-center text-xs text-muted">
-                Analiza tus gastos, arma tu plan y contesta lo que sea de tu plata, 24/7 — se activa con Core.
+                Analiza tus gastos, arma tu plan financiero y habla contigo de tu sutiación 24/7 — Actívalo ahora!
               </p>
               <div className="rounded-lg border border-teal bg-teal/[.06] p-3 text-center">
                 <p className="text-2xl font-semibold text-teal">
