@@ -113,7 +113,7 @@ function RegistroForm() {
           <div className="vc-card">
             <p className="mb-2 text-sm font-medium">Revisa tu correo</p>
             <p className="text-xs text-muted">
-              Te mandamos un link de confirmación a {email}. Confirmalo para activar tu cuenta y empezar.
+              Te enviamos un link de confirmación a {email}. Confirmalo para activar tu cuenta y comenzar.
               {accionEnCurso === "gratis"
                 ? " Tu plan gratis queda activo — ¡bienvenid@ a VICTOR CFO!"
                 : " Luego de confirmar, te vamos a pedir que completes el pago para activar tu plan."}
