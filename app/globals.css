@@ -52,7 +52,7 @@ body {
 .vc-logo-name { font-size: 17px; font-weight: 600; }
 .vc-plan-badge { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; padding: 2px 8px; border-radius: 999px; background: rgba(29,158,117,.12); color: #1D9E75; }
 .vc-plan-badge.pro { background: rgba(83,74,183,.12); color: #534AB7; }
-
+.vc-plan-badge.gratis { background: rgba(87,96,106,.12); color: var(--muted); }
 .vc-tw { display: flex; align-items: center; gap: 6px; cursor: pointer; background: none; border: none; padding: 0; }
 .vc-tt { width: 34px; height: 18px; border-radius: 999px; background: var(--border); position: relative; transition: background .2s; }
 .vc-tk { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
