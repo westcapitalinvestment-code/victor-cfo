@@ -5,6 +5,7 @@ import NotificacionesToggle from "../notificaciones-toggle";
 import GestionarPlan from "../gestionar-plan";
 import PinConfig from "../pin-config";
 import SessionTimeoutConfig from "../session-timeout-config";
+import ReferralLink from "../referral-link";
 
 export default async function ConfigPage() {
   const supabase = createClient();
@@ -32,6 +33,8 @@ export default async function ConfigPage() {
           Plan {profile?.plan ?? "core"} · {profile?.plan_status ?? "trialing"}
         </p>
       </div>
+
+      <ReferralLink userId={user.id} />
 
       <NotificacionesToggle />
 
