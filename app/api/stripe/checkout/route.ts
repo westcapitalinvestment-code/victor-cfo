@@ -2,13 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, priceIdPara, esPlanValido, esCicloValido } from "@/lib/stripe";
 
-// Crea una Stripe Checkout Session y devuelve la URL a la que hay que
-// mandar al usuario. Se usa en dos momentos distintos: (1) justo después
-// de /registro, para el primer pago (returnTo="/onboarding"), y (2) desde
-// el paywall de Pro (/dashboard/equipo) cuando un usuario Core ya
-// existente quiere subir de plan (returnTo="/dashboard/equipo"). En los
-// dos casos el usuario YA tiene sesión de Supabase — esta ruta nunca crea
-// la cuenta, solo la conecta a un pago real.
 export async function POST(req: NextRequest) {
   const supabase = createClient();
   const {
@@ -26,19 +19,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Plan o ciclo inválido." }, { status: 400 });
   }
 
-  const priceId = priceIdPara(plan, ciclo);
+  const { data: perfil } = await supabase
+    .from("users")
+    .select("stripe_customer_id, referred_by")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const esReferido = !!perfil?.referred_by;
+  const priceId = priceIdPara(plan, ciclo, esReferido);
   if (!priceId) {
     return NextResponse.json(
       { error: `Falta configurar el Price ID de Stripe para ${plan}/${ciclo} en las variables de entorno.` },
       { status: 500 }
     );
   }
-
-  const { data: perfil } = await supabase
-    .from("users")
-    .select("stripe_customer_id")
-    .eq("id", user.id)
-    .maybeSingle();
 
   const origin = req.headers.get("origin") || "https://www.victorcfo.com";
   const separadorReturn = returnTo.includes("?") ? "&" : "?";
