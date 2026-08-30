@@ -365,12 +365,15 @@ export default function CuentasManuales() {
             </button>
           </div>
         </div>
-      ) : (
+            ) : (
         <button
-          className="w-full px-4 py-3 text-left text-xs text-muted hover:opacity-80"
+          className="flex w-full items-center justify-center gap-2 px-4 py-4 text-sm font-medium text-teal hover:opacity-80"
           onClick={() => setMostrarForm(true)}
         >
-          + Añadir cuenta manual
+          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-teal text-base leading-none text-white">
+            +
+          </span>
+          Añadir cuenta manual
         </button>
       )}
     </div>
