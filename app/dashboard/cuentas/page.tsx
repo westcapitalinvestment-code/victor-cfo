@@ -427,6 +427,7 @@ export default function CuentasPage() {
                   <SubirEstado
                     origen="plaid"
                     cuentaId={c.plaid_account_id}
+                    plan={plan}
                     onCerrar={() => {
                       setSubiendoEstadoId(null);
                       cargarCuentas();
