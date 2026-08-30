@@ -328,10 +328,17 @@ export default function CuentasPage() {
               Conecta BPPR, FirstBank, Oriental o Mercury para ver tu balance real y traer tus
               transacciones automáticamente.
             </p>
-            <button className="vc-btn-primary" disabled={conectando} onClick={() => iniciarConexion()}>
+               <button className="vc-btn-primary" disabled={conectando} onClick={() => iniciarConexion()}>
               {conectando ? "Conectando..." : "Conectar banco"}
             </button>
           </div>
+          {plan === "gratis" && (
+            <div className="mb-3 rounded-lg border border-teal bg-teal/[.06] p-3 text-center text-xs text-text">
+              ¿Prefieres no conectar el banco todavía? Crea una cuenta manual abajo (ej. "BPPR
+              Checking") y ahí te va a salir la opción de subir tu CSV para categorizar tus gastos —
+              es gratis.
+            </div>
+          )}
           <CuentasManuales />
         </>
       ) : (
