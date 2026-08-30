@@ -91,9 +91,12 @@ export default function LandingPricing() {
                 <li>Manejo de tarjetas: balance, APR y fecha de corte en un vistazo</li>
                 <li>Plan de retiro con proyección visual a tu medida</li>
                 <li>Plan de estudios para tus hijos — empieza hoy, llega lejos 🎓</li>
+                <li>Trackea tus cuentas de inversión junto al resto de tu dinero</li>
                 <li>Calendario de fechas importantes y vencimientos</li>
+                <li>Citas y actividades con costo estimado — VICTOR te avisa antes</li>
                 <li>Alertas 90/30/7 días antes de que algo venza</li>
                 <li>Reporte mensual automático de tu situación real</li>
+                <li>Invita a tu contable gratis — sin costo adicional</li>
                 <li>Chat con VICTOR 24/7 — te conoce, no te juzga</li>
               </>
             )}
