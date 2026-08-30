@@ -114,12 +114,12 @@ export default async function AdminPage() {
 
   // ---- MRR (estimado — ver nota sobre Pro/Pro+ y mensual vs anual) ----
   // Solo Core es vendible hoy (Pro/Pro+ muestran "Próximamente"), así que
-  // su precio real ($19.99/mes) es lo único confiable. No se distingue
-  // aquí si un usuario pagó mensual o anual ($219/año ≈ $18.25/mes) — la
-  // tabla `users` no guarda el ciclo elegido, así que esto sobreestima
-  // levemente el MRR de los que pagan anual. Cuando Pro/Pro+ se activen,
-  // hay que poner sus precios reales aquí.
-  const PRECIO_MENSUAL_ESTIMADO: Record<string, number> = { core: 19.99, pro: 0, proplus: 0 };
+  // su precio real ($14.99/mes, bajado de $19.99 el 30 de agosto 2026) es
+  // lo único confiable. No se distingue aquí si un usuario pagó mensual o
+  // anual ($164/año ≈ $13.67/mes) — la tabla `users` no guarda el ciclo
+  // elegido, así que esto sobreestima levemente el MRR de los que pagan
+  // anual. Cuando Pro/Pro+ se activen, hay que poner sus precios reales aquí.
+  const PRECIO_MENSUAL_ESTIMADO: Record<string, number> = { core: 14.99, pro: 0, proplus: 0 };
   const mrr = activos.reduce((sum, u) => sum + (PRECIO_MENSUAL_ESTIMADO[u.plan ?? "core"] ?? 0), 0);
 
   // ---- Costos estimados por usuario ----
@@ -140,7 +140,7 @@ export default async function AdminPage() {
   const plaidEstimado =
     PLAID_BASE_MENSUAL + Math.max(0, activos.length - PLAID_USUARIOS_INCLUIDOS) * PLAID_POR_USUARIO_ADICIONAL;
 
-  const STRIPE_FEE_POR_USUARIO = 0.88; // 2.9% + $0.30 sobre $19.99 — esto sí es genuinamente por-usuario (fee de Stripe por transacción)
+  const STRIPE_FEE_POR_USUARIO = 0.73; // 2.9% + $0.30 sobre $14.99 — esto sí es genuinamente por-usuario (fee de Stripe por transacción)
   const stripeFeesEstimado = activos.length * STRIPE_FEE_POR_USUARIO;
 
   // Costos fijos de plataforma — NO son por usuario, ajústalos a mano si
