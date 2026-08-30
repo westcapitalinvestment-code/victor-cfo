@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Sensitive, PrivacyToggle } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
-import { saludoPorHora, fechaHoyPR } from "@/lib/hora-pr";
+import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import GastosPendientesCard from "./gastos-pendientes-card";
 
 // Primer día del mes SIGUIENTE a "YYYY-MM" — mismo helper que en
@@ -214,7 +214,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // solo se llenan con un cron job que todavía no existe, así que la urgencia
   // se calcula aquí mismo a partir de fecha_vencimiento — siempre correcto,
   // sin depender de un job que corra a diario.
-  const en90dias = new Date(hoy.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // fechaHoyPR()/diasHastaPR() en vez de new Date() crudo — bug real (30
+  // agosto 2026, reportado por Joel): comparar el INSTANTE real del
+  // servidor (UTC en Vercel) contra fechas de calendario hacía que, pasada
+  // cierta hora de la tarde/noche en Puerto Rico (4 horas detrás de UTC),
+  // un documento o cita de MAÑANA se reportara como que es HOY. Ver la
+  // nota grande junto a diasHastaPR() en lib/hora-pr.ts.
+  const hoyStrPR = fechaHoyPR(hoy);
+  const en90dias = new Date(new Date(`${hoyStrPR}T00:00:00Z`).getTime() + 90 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
   const { data: docsPorVencerRaw } = await supabase
     .from("documents")
     .select("id, nombre, fecha_vencimiento")
@@ -226,25 +235,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     .limit(3);
 
   const docsPorVencer = (docsPorVencerRaw ?? []).map((d) => {
-    const dias = Math.ceil((new Date(d.fecha_vencimiento).getTime() - hoy.getTime()) / (24 * 60 * 60 * 1000));
+    const dias = diasHastaPR(d.fecha_vencimiento as string, hoy);
     return { ...d, dias };
   });
 
   // Próximas citas (0030) — mismo criterio de ventana que documentos, pero
   // sin cron de por medio: "hecha = false" y fecha desde hoy en adelante,
-  // calculado aquí mismo para que siempre esté correcto.
-  const hoyISO = hoy.toISOString().slice(0, 10);
+  // calculado aquí mismo para que siempre esté correcto. hoyStrPR (no
+  // hoy.toISOString()) también evita que una cita de HOY MISMO desaparezca
+  // de la lista si se consulta de noche en Puerto Rico — ver nota arriba.
   const { data: citasProximasRaw } = await supabase
     .from("citas")
     .select("id, titulo, fecha, hora, costo_estimado")
     .eq("owner_id", user.id)
     .eq("hecha", false)
-    .gte("fecha", hoyISO)
+    .gte("fecha", hoyStrPR)
     .order("fecha", { ascending: true })
     .limit(3);
 
   const citasProximas = (citasProximasRaw ?? []).map((c) => {
-    const dias = Math.ceil((new Date(c.fecha + "T00:00:00").getTime() - hoy.getTime()) / (24 * 60 * 60 * 1000));
+    const dias = diasHastaPR(c.fecha as string, hoy);
     return { ...c, dias };
   });
 
