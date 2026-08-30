@@ -41,23 +41,31 @@ export default function CuentasPage() {
   const [sincronizando, setSincronizando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Rellenar el hueco de historial que Plaid no trajo (ej. BPPR solo da
-  // ~45 días) — subir el estado de cuenta directo a una cuenta que YA
-  // está conectada, igual que se puede hacer con una cuenta manual.
-   const [subiendoEstadoId, setSubiendoEstadoId] = useState<string | null>(null);
+  const [subiendoEstadoId, setSubiendoEstadoId] = useState<string | null>(null);
   const [renombrandoId, setRenombrandoId] = useState<string | null>(null);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [guardandoNombre, setGuardandoNombre] = useState(false);
+  const [plan, setPlan] = useState<string | null>(null);
+  const [esReferido, setEsReferido] = useState(false);
+  const [mostrandoUpsell, setMostrandoUpsell] = useState(false);
+  const [activandoCore, setActivandoCore] = useState(false);
+  const [upsellError, setUpsellError] = useState<string | null>(null);
   const cargarCuentas = useCallback(async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
-    const { data: perfil } = await supabase.from("users").select("plan").eq("id", user.id).maybeSingle();
+    const { data: perfil } = await supabase
+      .from("users")
+      .select("plan, referred_by")
+      .eq("id", user.id)
+      .maybeSingle();
     const pro = perfil?.plan === "pro" || perfil?.plan === "proplus";
+    setPlan(perfil?.plan ?? null);
+    setEsReferido(!!perfil?.referred_by);
     const { data } = await supabase
       .from("plaid_accounts")
-           .select("id, plaid_account_id, name, nickname, mask, type, subtype, current_balance, iso_currency_code, es_negocio")
+      .select("id, plaid_account_id, name, nickname, mask, type, subtype, current_balance, iso_currency_code, es_negocio")
       .eq("owner_id", user.id)
       .order("name", { ascending: true });
     const todas = data ?? [];
@@ -74,6 +82,32 @@ export default function CuentasPage() {
   useEffect(() => {
     cargarCuentas();
   }, [cargarCuentas]);
+  async function activarCore() {
+    setActivandoCore(true);
+    setUpsellError(null);
+    const returnTo = typeof window !== "undefined" ? window.location.pathname : "/dashboard/cuentas";
+    const res = await fetch("/api/stripe/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan: "core", ciclo: "mensual", returnTo, cancelTo: returnTo }),
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json?.url) {
+      window.location.href = json.url;
+      return;
+    }
+    setActivandoCore(false);
+    setUpsellError(json?.error || "No se pudo iniciar el pago. Intenta de nuevo en un momento.");
+  }
+
+  function iniciarConexion(itemId?: string) {
+    if (plan === "gratis") {
+      setMostrandoUpsell(true);
+      return;
+    }
+    pedirLinkToken(itemId);
+  }
+
   async function pedirLinkToken(itemId?: string) {
     setError(null);
     setReconectandoItemId(itemId ?? null);
@@ -180,15 +214,11 @@ export default function CuentasPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo sincronizar.");
       const omitidas = data.cuentasNegocioOmitidas || 0;
-           setMensaje(
+      setMensaje(
         `${data.nuevas} transacción(es) nueva(s), ${data.modificadas} actualizada(s)` +
           (data.eliminadas > 0 ? `, ${data.eliminadas} reemplazada(s) por el banco` : "") +
           `. (Plaid mandó ${data.totalPlaidAdded ?? "?"} nuevas / ${data.totalPlaidModified ?? "?"} modificadas en total.)` +
           (omitidas > 0 ? ` (${omitidas} de cuentas de negocio, no incluidas en tu plan Core.)` : "") +
-          // Diagnóstico del refresh a Plaid — si el banco no soporta pedirle
-          // datos frescos ahora mismo, esto lo dice explícito en vez de
-          // dejar la pantalla en silencio sin explicar por qué "Plaid
-          // mandó 0 nuevas" aunque el usuario vea algo distinto en su banco.
           (data.refreshInfo && data.refreshInfo.length > 0 ? ` — ${data.refreshInfo.join(" | ")}` : "")
       );
       if (data.errores && data.errores.length > 0) {
@@ -201,7 +231,7 @@ export default function CuentasPage() {
       setSincronizando(false);
     }
   }
-   async function guardarNickname(accountId: string) {
+  async function guardarNickname(accountId: string) {
     setGuardandoNombre(true);
     setError(null);
     try {
@@ -252,7 +282,7 @@ export default function CuentasPage() {
               <button
                 className="vc-btn-primary shrink-0"
                 disabled={conectando}
-                onClick={() => pedirLinkToken(b.id)}
+                onClick={() => iniciarConexion(b.id)}
               >
                 Reconectar
               </button>
@@ -262,6 +292,32 @@ export default function CuentasPage() {
       )}
       {error && <p className="mb-3 text-xs text-red">{error}</p>}
       {mensaje && <p className="mb-3 text-xs text-teal">{mensaje}</p>}
+      {mostrandoUpsell && (
+        <div className="vc-card mb-3 text-center">
+          <p className="mb-1 text-sm font-medium">Conectar banco es parte de Core</p>
+          <p className="mb-3 text-xs text-muted">
+            En el plan gratis puedes categorizar por CSV — conectar tu banco de verdad (BPPR, FirstBank,
+            Oriental, Mercury) se activa con Core.
+          </p>
+          <div className="mb-3 rounded-lg border border-teal bg-teal/[.06] p-3">
+            <p className="text-2xl font-semibold text-teal">
+              ${esReferido ? "12.99" : "14.99"}
+              <span className="text-sm font-normal">/mes</span>
+            </p>
+            {esReferido && <p className="text-xs text-muted">Precio de referido</p>}
+          </div>
+          {upsellError && <p className="mb-2 text-xs text-red">{upsellError}</p>}
+          <button className="vc-btn-primary mb-2" disabled={activandoCore} onClick={activarCore}>
+            {activandoCore ? "Conectando con Stripe..." : `Activar Core — $${esReferido ? "12.99" : "14.99"}/mes`}
+          </button>
+          <button
+            className="w-full rounded-lg border border-border bg-transparent p-3 text-sm text-muted"
+            onClick={() => setMostrandoUpsell(false)}
+          >
+            Ahora no
+          </button>
+        </div>
+      )}
       {loading ? (
         <p className="text-sm text-muted">Cargando…</p>
       ) : cuentas.length === 0 && bancos.length === 0 ? (
@@ -272,7 +328,7 @@ export default function CuentasPage() {
               Conecta BPPR, FirstBank, Oriental o Mercury para ver tu balance real y traer tus
               transacciones automáticamente.
             </p>
-            <button className="vc-btn-primary" disabled={conectando} onClick={() => pedirLinkToken()}>
+            <button className="vc-btn-primary" disabled={conectando} onClick={() => iniciarConexion()}>
               {conectando ? "Conectando..." : "Conectar banco"}
             </button>
           </div>
@@ -300,7 +356,7 @@ export default function CuentasPage() {
           <div className="vc-card mb-3 !p-0">
             {cuentas.map((c) => (
               <div key={c.id} className="border-b border-border px-4 py-3 last:border-b-0">
-                               <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-text">{c.nickname || c.name}</p>
                     <p className="text-xs capitalize text-muted">
@@ -401,7 +457,7 @@ export default function CuentasPage() {
             <button
               className="rounded-lg border border-border px-4 py-3 text-sm text-muted"
               disabled={conectando}
-              onClick={() => pedirLinkToken()}
+              onClick={() => iniciarConexion()}
             >
               + Otro banco
             </button>
