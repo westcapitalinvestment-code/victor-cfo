@@ -27,6 +27,21 @@ export default function OnboardingForm({ initialFullName }: { initialFullName: s
       return;
     }
 
+    // Dos tablas: users (cuenta/plan) y user_profiles (datos personales) —
+    // así se diseñó en 0001 a propósito, para no mezclar billing con
+    // preferencias. Ambas filas ya existen (las crea el trigger 0002),
+    // así que aquí siempre es UPDATE, nunca INSERT.
+    //
+    // Bug real (30 agosto 2026, reportado por Joel): esto guardaba y
+    // navegaba a /dashboard sin comprobar que el UPDATE de verdad tocara
+    // una fila — si por lo que sea (RLS, timing, lo que sea) el UPDATE
+    // afecta 0 filas, Supabase NO lo reporta como error, así que el código
+    // de antes seguía para adelante creyendo que había guardado.
+    // /dashboard vuelve a leer onboarding_completed=false y rebota a
+    // /onboarding otra vez — un loop infinito sin ningún error visible.
+    // Encadenar .select() aquí obliga a Supabase a devolver la fila
+    // actualizada; si no vuelve ninguna, ahora se ve como un error real en
+    // vez de fallar en silencio.
     const { data: usersData, error: usersError } = await supabase
       .from("users")
       .update({ full_name: fullName, onboarding_completed: true })
@@ -39,7 +54,7 @@ export default function OnboardingForm({ initialFullName }: { initialFullName: s
       return;
     }
     if (!usersData || usersData.length === 0) {
-      setError("No se pudo guardar tu cuenta. Intenta cerrar sesión y volver a entrar, o escríbenos si sigue pasando.");
+      setError("No se pudo guardar tu cuenta. Intenta cerrar sesión y volver a entrar.");
       setLoading(false);
       return;
     }
@@ -93,7 +108,15 @@ export default function OnboardingForm({ initialFullName }: { initialFullName: s
         />
       </div>
 
-      {error && <p className="text-xs text-red">{error}</p>}
+      {error && (
+        <p className="text-xs text-red">
+          {error} Si sigue pasando,{" "}
+          <a href="mailto:soporte@westcapitalventuresllc.com" className="underline">
+            escríbenos
+          </a>
+          .
+        </p>
+      )}
 
       <button type="submit" className="vc-btn-primary mt-2" disabled={loading || !fullName}>
         {loading ? "Guardando..." : "Continuar"}
