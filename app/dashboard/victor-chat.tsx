@@ -474,7 +474,7 @@ export default function VictorChat({
                   nada (30 agosto 2026, pedido de Joel) — que no se sienta
                   solo: le dejamos una salida directa a soporte humano justo
                   aquí, donde normalmente le hablaría a VICTOR. */}
-              
+              <a
                 href="mailto:soporte@westcapitalventuresllc.com"
                 className="text-center text-xs text-muted underline"
               >
