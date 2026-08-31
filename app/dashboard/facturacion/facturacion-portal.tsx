@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
@@ -19,6 +19,27 @@ type Factura = {
   numero: string;
   subtotal: number;
   retencion_monto: number;
+  total: number;
+  estado: string;
+  fecha_emision: string;
+  fecha_vencimiento: string | null;
+  client_id: string | null;
+  clients: { name: string } | null;
+};
+
+type Servicio = {
+  id: string;
+  nombre: string;
+  tipo: string;
+  precio: number;
+  ivu_exento: boolean;
+  activo: boolean;
+  entity_id: string | null;
+};
+
+type Cotizacion = {
+  id: string;
+  numero: string;
   total: number;
   estado: string;
   fecha_emision: string;
@@ -92,10 +113,16 @@ function Badge({ estado }: { estado: string }) {
 export default function FacturacionPortal({
   clients,
   facturas,
+  servicios,
+  cotizaciones,
+  entidadId,
   tabInicial,
 }: {
   clients: Cliente[];
   facturas: Factura[];
+  servicios: Servicio[];
+  cotizaciones: Cotizacion[];
+  entidadId: string | null;
   tabInicial?: string;
 }) {
   const tabValido = TABS.some((t) => t.id === tabInicial);
@@ -144,27 +171,9 @@ export default function FacturacionPortal({
       {tab === "facturas" && <FacturasTab facturas={facturas} />}
       {tab === "cobros" && <CobrosTab facturasIniciales={facturas.filter((f) => f.estado !== "borrador" && f.estado !== "pagada")} />}
       {tab === "clientes" && <ClientesTab clients={clients} />}
-      {tab === "cotizaciones" && (
-        <Proximamente
-          icono="ti-file-description"
-          titulo="Cotizaciones"
-          texto="Envía cotizaciones con depósito + balance, y conviértelas en factura en un toque cuando el cliente apruebe."
-        />
-      )}
-      {tab === "servicios" && (
-        <Proximamente
-          icono="ti-package"
-          titulo="Catálogo de servicios"
-          texto="Guarda tus servicios más comunes con precio fijo para armar facturas y cotizaciones más rápido."
-        />
-      )}
-      {tab === "reportes" && (
-        <Proximamente
-          icono="ti-chart-bar"
-          titulo="Reportes"
-          texto="Ingresos por cliente, por servicio, y reportes listos para tu CPA — en camino."
-        />
-      )}
+      {tab === "cotizaciones" && <CotizacionesTab cotizaciones={cotizaciones} />}
+      {tab === "servicios" && <ServiciosTab servicios={servicios} entidadId={entidadId} />}
+      {tab === "reportes" && <ReportesTab facturas={facturas} />}
     </div>
   );
 }
@@ -229,17 +238,22 @@ function FacturasTab({ facturas }: { facturas: Factura[] }) {
         <span className="text-sm font-medium text-teal">{formatMoney(creditosHacienda)}</span>
       </div>
 
-      <div className="mb-3 flex gap-2">
-        <div className="relative flex-1">
+      <div className="mb-3 flex gap-1.5">
+        <div className="relative min-w-0 flex-1">
           <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-teal" />
           <input
-            className="vc-input pl-8"
-            placeholder="Buscar factura, cliente..."
+            className="vc-input w-full min-w-0 pl-8"
+            placeholder="Buscar..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
         </div>
-        <select className="vc-input w-32 flex-shrink-0" value={filtro} onChange={(e) => setFiltro(e.target.value)}>
+        <select
+          className="vc-input flex-shrink-0 px-1.5"
+          style={{ width: 92 }}
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+        >
           <option value="todas">Todas</option>
           <option value="pagadas">Pagadas</option>
           <option value="pendientes">Pendientes</option>
@@ -248,7 +262,7 @@ function FacturasTab({ facturas }: { facturas: Factura[] }) {
         </select>
         <Link
           href="/dashboard/facturacion/nueva"
-          className="flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-3.5 py-2.5 text-xs font-medium text-white hover:opacity-90"
+          className="flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-2.5 text-xs font-medium text-white hover:opacity-90"
           style={{ background: "#1D9E75", width: "auto" }}
         >
           <i className="ti ti-plus" /> Nueva
@@ -428,19 +442,24 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
 
   return (
     <>
-      <div className="mb-3 flex gap-2">
-        <div className="relative flex-1">
+      <div className="mb-3 flex gap-1.5">
+        <div className="relative min-w-0 flex-1">
           <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-teal" />
           <input
-            className="vc-input pl-8"
+            className="vc-input w-full min-w-0 pl-8"
             placeholder="Buscar cliente..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
         </div>
-        <select className="vc-input w-32 flex-shrink-0" value={filtro} onChange={(e) => setFiltro(e.target.value)}>
+        <select
+          className="vc-input flex-shrink-0 px-1.5"
+          style={{ width: 100 }}
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+        >
           <option value="todos">Todos</option>
-          <option value="negocio">Con retención</option>
+          <option value="negocio">Retención</option>
           <option value="individual">Individual</option>
         </select>
       </div>
@@ -486,6 +505,501 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
           )}
         </div>
       ))}
+      </div>
+    </>
+  );
+}
+
+const TIPOS_SERVICIO = [
+  { value: "fijo", label: "Precio fijo", sufijo: "" },
+  { value: "hora", label: "Por hora", sufijo: "/hora" },
+  { value: "proyecto", label: "Por proyecto", sufijo: "/proyecto" },
+  { value: "recurrente", label: "Recurrente", sufijo: "/mes" },
+] as const;
+
+function labelTipo(tipo: string): string {
+  return TIPOS_SERVICIO.find((t) => t.value === tipo)?.label ?? tipo;
+}
+
+function sufijoTipo(tipo: string): string {
+  return TIPOS_SERVICIO.find((t) => t.value === tipo)?.sufijo ?? "";
+}
+
+function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidadId: string | null }) {
+  const supabase = createClient();
+  const [lista, setLista] = useState(servicios);
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState("");
+  const [formAbierto, setFormAbierto] = useState<"nuevo" | string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [nombre, setNombre] = useState("");
+  const [tipo, setTipo] = useState<(typeof TIPOS_SERVICIO)[number]["value"]>("fijo");
+  const [precio, setPrecio] = useState("");
+  const [ivuExento, setIvuExento] = useState(true);
+
+  function abrirNuevo() {
+    setFormAbierto("nuevo");
+    setNombre("");
+    setTipo("fijo");
+    setPrecio("");
+    setIvuExento(true);
+    setError(null);
+  }
+
+  function abrirEditar(s: Servicio) {
+    setFormAbierto(s.id);
+    setNombre(s.nombre);
+    setTipo(s.tipo as (typeof TIPOS_SERVICIO)[number]["value"]);
+    setPrecio(String(s.precio));
+    setIvuExento(s.ivu_exento);
+    setError(null);
+  }
+
+  async function guardar() {
+    if (!nombre.trim() || !precio) return;
+    setGuardando(true);
+    setError(null);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setError("Sesión expirada — vuelve a entrar.");
+      setGuardando(false);
+      return;
+    }
+
+    if (formAbierto === "nuevo") {
+      const { data, error: insertError } = await supabase
+        .from("services")
+        .insert({
+          owner_id: user.id,
+          entity_id: entidadId,
+          nombre: nombre.trim(),
+          tipo,
+          precio: Number(precio),
+          ivu_exento: ivuExento,
+        })
+        .select("id, nombre, tipo, precio, ivu_exento, activo, entity_id")
+        .single();
+      setGuardando(false);
+      if (insertError || !data) {
+        setError(insertError?.message ?? "No se pudo guardar.");
+        return;
+      }
+      setLista((prev) => [data as Servicio, ...prev]);
+      setFormAbierto(null);
+    } else if (formAbierto) {
+      const { error: updateError } = await supabase
+        .from("services")
+        .update({ nombre: nombre.trim(), tipo, precio: Number(precio), ivu_exento: ivuExento })
+        .eq("id", formAbierto);
+      setGuardando(false);
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+      setLista((prev) =>
+        prev.map((s) => (s.id === formAbierto ? { ...s, nombre: nombre.trim(), tipo, precio: Number(precio), ivu_exento: ivuExento } : s))
+      );
+      setFormAbierto(null);
+    }
+  }
+
+  async function eliminar(id: string) {
+    if (!confirm("¿Eliminar este servicio del catálogo?")) return;
+    const { error: deleteError } = await supabase.from("services").delete().eq("id", id);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+    setLista((prev) => prev.filter((s) => s.id !== id));
+    if (formAbierto === id) setFormAbierto(null);
+  }
+
+  const filtrados = useMemo(() => {
+    return lista.filter((s) => {
+      if (filtroTipo && s.tipo !== filtroTipo) return false;
+      if (busqueda.trim() && !s.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false;
+      return true;
+    });
+  }, [lista, filtroTipo, busqueda]);
+
+  return (
+    <>
+      <div className="mb-3 flex gap-1.5">
+        <div className="relative min-w-0 flex-1">
+          <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-teal" />
+          <input
+            className="vc-input w-full min-w-0 pl-8"
+            placeholder="Buscar servicio..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+        </div>
+        <select
+          className="vc-input flex-shrink-0 px-1.5"
+          style={{ width: 110 }}
+          value={filtroTipo}
+          onChange={(e) => setFiltroTipo(e.target.value)}
+        >
+          <option value="">Todos</option>
+          {TIPOS_SERVICIO.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={abrirNuevo}
+          className="flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-2.5 text-xs font-medium text-white hover:opacity-90"
+          style={{ background: "#1D9E75", width: "auto" }}
+        >
+          <i className="ti ti-plus" /> Nuevo
+        </button>
+      </div>
+
+      {formAbierto && (
+        <div className="vc-card mb-3 flex flex-col gap-2.5">
+          <p className="text-xs uppercase tracking-wide text-muted">
+            {formAbierto === "nuevo" ? "Nuevo servicio" : "Editar servicio"}
+          </p>
+          {error && <p className="text-xs text-red">{error}</p>}
+          <input className="vc-input" placeholder="Nombre del servicio" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+          <div className="flex gap-2">
+            <select className="vc-input flex-1" value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)}>
+              {TIPOS_SERVICIO.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <input
+              className="vc-input w-28 flex-shrink-0"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Precio"
+              value={precio}
+              onChange={(e) => setPrecio(e.target.value)}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-xs text-muted">
+            <input type="checkbox" checked={ivuExento} onChange={(e) => setIvuExento(e.target.checked)} />
+            No aplica IVU (servicio profesional)
+          </label>
+          <div className="flex gap-2">
+            <button className="vc-btn-primary flex-1" disabled={!nombre || !precio || guardando} onClick={guardar}>
+              {guardando ? "Guardando..." : "Guardar"}
+            </button>
+            <button className="flex-shrink-0 px-3 text-xs text-muted hover:opacity-80" onClick={() => setFormAbierto(null)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="vc-card">
+        <p className="mb-2 text-xs uppercase tracking-wide text-muted">
+          Catálogo <span className="normal-case text-muted">· {lista.length} servicio{lista.length === 1 ? "" : "s"}</span>
+        </p>
+
+        {lista.length === 0 && (
+          <p className="text-xs text-muted">Todavía no tienes servicios guardados. Dale a "+ Nuevo" arriba para crear el primero.</p>
+        )}
+        {lista.length > 0 && filtrados.length === 0 && <p className="text-xs text-muted">No hay servicios que coincidan.</p>}
+
+        {filtrados.map((s) => (
+          <div key={s.id} className="border-b border-border py-2.5 text-sm last:border-0">
+            <div className="flex items-center gap-2.5">
+              <div
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-white"
+                style={{ background: colorAvatar(s.id) }}
+              >
+                <i className="ti ti-package" style={{ fontSize: 16 }} />
+              </div>
+              <button className="min-w-0 flex-1 text-left" onClick={() => abrirEditar(s)}>
+                <p className="truncate">{s.nombre}</p>
+                <p className="truncate text-xs text-muted">
+                  {labelTipo(s.tipo)} · {s.ivu_exento ? "No aplica IVU" : "Aplica IVU"}
+                </p>
+              </button>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <span className="font-medium">
+                  {formatMoney(Number(s.precio))}
+                  <span className="text-xs font-normal text-muted">{sufijoTipo(s.tipo)}</span>
+                </span>
+                <button onClick={() => eliminar(s.id)} className="text-muted hover:text-red">
+                  <i className="ti ti-trash" style={{ fontSize: 15 }} />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+const ESTILOS_BADGE_COT: Record<string, string> = {
+  enviada: "bg-teal/10 text-teal",
+  aprobada: "bg-teal text-white",
+  rechazada: "bg-red/10 text-red",
+  convertida: "bg-border text-muted",
+};
+
+const ETIQUETAS_BADGE_COT: Record<string, string> = {
+  enviada: "Pendiente",
+  aprobada: "Aprobada",
+  rechazada: "Rechazada",
+  convertida: "Convertida",
+};
+
+function CotizacionesTab({ cotizaciones }: { cotizaciones: Cotizacion[] }) {
+  const [busqueda, setBusqueda] = useState("");
+  const [filtro, setFiltro] = useState("todas");
+
+  const pendientes = cotizaciones.filter((c) => c.estado === "enviada");
+  const aprobadas = cotizaciones.filter((c) => c.estado === "aprobada" || c.estado === "convertida");
+  const rechazadas = cotizaciones.filter((c) => c.estado === "rechazada");
+  const pctAprobadas = cotizaciones.length > 0 ? Math.round((aprobadas.length / cotizaciones.length) * 100) : 0;
+  const totalPendiente = pendientes.reduce((s, c) => s + Number(c.total), 0);
+
+  const filtradas = useMemo(() => {
+    return cotizaciones.filter((c) => {
+      if (filtro !== "todas" && c.estado !== filtro) return false;
+      if (busqueda.trim()) {
+        const q = busqueda.toLowerCase();
+        const nombre = c.clients?.name?.toLowerCase() ?? "";
+        if (!nombre.includes(q) && !c.numero.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [cotizaciones, filtro, busqueda]);
+
+  return (
+    <>
+      <div className="mb-3 grid grid-cols-3 gap-2">
+        <StatCard label="Pendientes" valor={String(pendientes.length)} sub={formatMoney(totalPendiente)} tono="a" />
+        <StatCard label="Aprobadas" valor={String(aprobadas.length)} sub={`${pctAprobadas}%`} tono="g" />
+        <StatCard label="Rechazadas" valor={String(rechazadas.length)} sub="" tono="r" />
+      </div>
+
+      <div className="mb-3 flex gap-1.5">
+        <div className="relative min-w-0 flex-1">
+          <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-teal" />
+          <input
+            className="vc-input w-full min-w-0 pl-8"
+            placeholder="Buscar..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+        </div>
+        <select
+          className="vc-input flex-shrink-0 px-1.5"
+          style={{ width: 92 }}
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+        >
+          <option value="todas">Todas</option>
+          <option value="enviada">Pendientes</option>
+          <option value="aprobada">Aprobadas</option>
+          <option value="rechazada">Rechazadas</option>
+          <option value="convertida">Convertidas</option>
+        </select>
+        <Link
+          href="/dashboard/facturacion/cotizaciones/nueva"
+          className="flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-2.5 text-xs font-medium text-white hover:opacity-90"
+          style={{ background: "#1D9E75", width: "auto" }}
+        >
+          <i className="ti ti-plus" /> Nueva
+        </Link>
+      </div>
+
+      <div className="vc-card">
+        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Todas las cotizaciones</p>
+        {filtradas.length === 0 && <p className="text-xs text-muted">No hay cotizaciones que coincidan.</p>}
+        {filtradas.map((c) => {
+          const nombre = c.clients?.name ?? "Sin cliente";
+          return (
+            <Link
+              key={c.id}
+              href={`/dashboard/facturacion/cotizaciones/${c.id}`}
+              className="flex items-center gap-2.5 border-b border-border py-2.5 last:border-0"
+            >
+              <div
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
+                style={{ background: colorAvatar(c.client_id ?? c.id) }}
+              >
+                {iniciales(nombre)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm">{nombre}</p>
+                <p className="truncate text-xs text-muted">
+                  #{c.numero} · {c.fecha_emision}
+                </p>
+              </div>
+              <div className="flex flex-shrink-0 flex-col items-end gap-1">
+                <span className="text-sm font-medium">{formatMoney(Number(c.total))}</span>
+                <span className={`rounded px-2 py-1 text-xs font-medium ${ESTILOS_BADGE_COT[c.estado] ?? "bg-border text-muted"}`}>
+                  {ETIQUETAS_BADGE_COT[c.estado] ?? c.estado}
+                </span>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+const PERIODOS = [
+  { value: "mes", label: "Este mes" },
+  { value: "anio", label: "Este año" },
+  { value: "todo", label: "Todo" },
+] as const;
+
+function inicioPeriodo(periodo: string): string {
+  const hoy = new Date();
+  if (periodo === "mes") return new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+  if (periodo === "anio") return new Date(hoy.getFullYear(), 0, 1).toISOString().slice(0, 10);
+  return "0000-01-01";
+}
+
+function ReportesTab({ facturas }: { facturas: Factura[] }) {
+  const supabase = createClient();
+  const [periodo, setPeriodo] = useState<(typeof PERIODOS)[number]["value"]>("mes");
+  const [itemsFacturados, setItemsFacturados] = useState<
+    { descripcion: string; subtotal_linea: number; estado: string; fecha_emision: string }[] | null
+  >(null);
+
+  useEffect(() => {
+    let activo = true;
+    supabase
+      .from("invoice_items")
+      .select("descripcion, subtotal_linea, cantidad, precio_unitario, invoices(estado, fecha_emision)")
+      .then(({ data }) => {
+        if (!activo) return;
+        const filas = (data ?? []).map((it: any) => ({
+          descripcion: it.descripcion as string,
+          subtotal_linea: Number(it.subtotal_linea ?? it.cantidad * it.precio_unitario),
+          estado: it.invoices?.estado ?? "borrador",
+          fecha_emision: it.invoices?.fecha_emision ?? "",
+        }));
+        setItemsFacturados(filas);
+      });
+    return () => {
+      activo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const desde = inicioPeriodo(periodo);
+  const facturasFiltradas = useMemo(
+    () => facturas.filter((f) => f.estado !== "borrador" && f.fecha_emision >= desde),
+    [facturas, desde]
+  );
+
+  const porCliente = useMemo(() => {
+    const mapa = new Map<string, { nombre: string; facturado: number; cobrado: number; count: number }>();
+    for (const f of facturasFiltradas) {
+      const key = f.client_id ?? "sin-cliente";
+      const nombre = f.clients?.name ?? "Sin cliente";
+      const actual = mapa.get(key) ?? { nombre, facturado: 0, cobrado: 0, count: 0 };
+      actual.facturado += Number(f.total);
+      if (f.estado === "pagada") actual.cobrado += Number(f.total);
+      actual.count += 1;
+      mapa.set(key, actual);
+    }
+    return [...mapa.values()].sort((a, b) => b.facturado - a.facturado);
+  }, [facturasFiltradas]);
+
+  const porServicio = useMemo(() => {
+    if (!itemsFacturados) return [];
+    const mapa = new Map<string, { descripcion: string; total: number; count: number }>();
+    for (const it of itemsFacturados) {
+      if (it.estado === "borrador" || it.fecha_emision < desde) continue;
+      const actual = mapa.get(it.descripcion) ?? { descripcion: it.descripcion, total: 0, count: 0 };
+      actual.total += it.subtotal_linea;
+      actual.count += 1;
+      mapa.set(it.descripcion, actual);
+    }
+    return [...mapa.values()].sort((a, b) => b.total - a.total).slice(0, 10);
+  }, [itemsFacturados, desde]);
+
+  const totalFacturado = facturasFiltradas.reduce((s, f) => s + Number(f.total), 0);
+  const totalCobrado = facturasFiltradas.filter((f) => f.estado === "pagada").reduce((s, f) => s + Number(f.total), 0);
+
+  return (
+    <>
+      <div className="mb-3 flex gap-1.5">
+        {PERIODOS.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => setPeriodo(p.value)}
+            className="flex-1 rounded-lg px-2 py-2 text-xs font-medium"
+            style={
+              periodo === p.value
+                ? { background: "#1D9E75", color: "#fff" }
+                : { background: "var(--card)", color: "var(--muted)", border: "1px solid var(--border)" }
+            }
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <StatCard label="Facturado" valor={formatMoney(totalFacturado)} sub={`${facturasFiltradas.length} facturas`} />
+        <StatCard
+          label="Cobrado"
+          valor={formatMoney(totalCobrado)}
+          sub={totalFacturado > 0 ? `${Math.round((totalCobrado / totalFacturado) * 100)}%` : "0%"}
+          tono="g"
+        />
+      </div>
+
+      <div className="vc-card mb-3">
+        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Ingresos por cliente</p>
+        {porCliente.length === 0 && <p className="text-xs text-muted">No hay facturas en este período.</p>}
+        {porCliente.map((c) => (
+          <div key={c.nombre} className="flex items-center gap-2.5 border-b border-border py-2.5 text-sm last:border-0">
+            <div
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
+              style={{ background: colorAvatar(c.nombre) }}
+            >
+              {iniciales(c.nombre)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate">{c.nombre}</p>
+              <p className="truncate text-xs text-muted">
+                {c.count} factura{c.count === 1 ? "" : "s"} · {formatMoney(c.cobrado)} cobrado
+              </p>
+            </div>
+            <span className="flex-shrink-0 font-medium">{formatMoney(c.facturado)}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="vc-card">
+        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Ingresos por servicio (top 10)</p>
+        {itemsFacturados === null && <p className="text-xs text-muted">Cargando...</p>}
+        {itemsFacturados !== null && porServicio.length === 0 && (
+          <p className="text-xs text-muted">No hay líneas de factura en este período.</p>
+        )}
+        {porServicio.map((s) => (
+          <div key={s.descripcion} className="flex items-center justify-between border-b border-border py-2.5 text-sm last:border-0">
+            <div className="min-w-0 flex-1">
+              <p className="truncate">{s.descripcion}</p>
+              <p className="text-xs text-muted">
+                {s.count} línea{s.count === 1 ? "" : "s"}
+              </p>
+            </div>
+            <span className="flex-shrink-0 font-medium">{formatMoney(s.total)}</span>
+          </div>
+        ))}
       </div>
     </>
   );

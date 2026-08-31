@@ -56,10 +56,25 @@ export default async function FacturacionPage({
     .eq("owner_id", user.id)
     .order("fecha_emision", { ascending: false });
 
+  const { data: servicios } = await supabase
+    .from("services")
+    .select("id, nombre, tipo, precio, ivu_exento, activo, entity_id")
+    .eq("owner_id", user.id)
+    .order("created_at", { ascending: false });
+
+  const { data: cotizaciones } = await supabase
+    .from("cotizaciones")
+    .select("id, numero, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
+    .eq("owner_id", user.id)
+    .order("fecha_emision", { ascending: false });
+
   return (
     <FacturacionPortal
       clients={clients ?? []}
       facturas={(facturas ?? []) as any}
+      servicios={servicios ?? []}
+      cotizaciones={(cotizaciones ?? []) as any}
+      entidadId={entities[0]?.id ?? null}
       tabInicial={searchParams?.tab}
     />
   );
