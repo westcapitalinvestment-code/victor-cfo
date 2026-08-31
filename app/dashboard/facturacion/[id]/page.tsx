@@ -17,7 +17,7 @@ export default async function FacturaDetallePage({ params }: { params: { id: str
   const { data: factura } = await supabase
     .from("invoices")
     .select(
-      "id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, metodo_pago, notas, clients(name, email), business_entities(name)"
+      "id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, metodo_pago, notas, metodos_cobro_aceptados, late_fee_habilitado, late_fee_tipo, late_fee_monto, late_fee_dias_gracia, clients(name, email, telefono), business_entities(name)"
     )
     .eq("id", params.id)
     .eq("owner_id", user.id)
@@ -31,8 +31,14 @@ export default async function FacturaDetallePage({ params }: { params: { id: str
     .eq("invoice_id", params.id)
     .order("created_at", { ascending: true });
 
+  const { data: adjuntos } = await supabase
+    .from("invoice_attachments")
+    .select("id, nombre_archivo")
+    .eq("invoice_id", params.id)
+    .order("created_at", { ascending: true });
+
   // Mismo caso que en cobros/page.tsx: clients/business_entities vienen
   // tipados como arreglo por la inferencia genérica de Supabase, pero en
   // tiempo de ejecución son un objeto único (relación 1:1 por FK).
-  return <FacturaDetalle factura={factura as any} items={items ?? []} />;
+  return <FacturaDetalle factura={factura as any} items={items ?? []} adjuntosIniciales={adjuntos ?? []} />;
 }

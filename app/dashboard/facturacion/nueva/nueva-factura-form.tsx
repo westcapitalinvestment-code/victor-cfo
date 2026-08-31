@@ -23,31 +23,34 @@ type Client = {
   es_negocio: boolean;
   retention_pct: number;
   ivu_exempt_reseller: boolean;
+  telefono: string | null;
 };
 
-type Linea = { descripcion: string; cantidad: string; precioUnitario: string };
+type ServicioCat = { id: string; nombre: string; tipo: string; precio: number; ivu_exento: boolean };
 
-// Convierte "Net 30" / "Net 15" / "Net 0" en días — cualquier otro texto
-// (ej. "Al recibir", "Sin recargo") cae en el default de 30 días, que es
-// el término más común y nunca deja el campo vacío.
+const METODOS_COBRO = ["ATH Móvil", "Transferencia / ACH", "Cheque", "Efectivo"];
+
+// Fee real de Stripe en PR: 2.9% + $0.30 por transacción de tarjeta. Es
+// solo un estimado informativo — no procesamos el cobro todavía, es para
+// que Joel (o cualquier dueño) sepa qué le quedaría neto si decide cobrar
+// con un link de pago de Stripe por su cuenta.
+const STRIPE_FEE_PCT = 0.029;
+const STRIPE_FEE_FIJO = 0.3;
+
 function diasDeTermino(term: string): number {
   const m = term.match(/(\d+)/);
   return m ? Number(m[1]) : 30;
 }
 
-function sumaLinea(l: Linea): number {
-  const cant = Number(l.cantidad) || 0;
-  const precio = Number(l.precioUnitario) || 0;
-  return cant * precio;
-}
-
 export default function NuevaFacturaForm({
   entities,
   clients,
+  servicios,
   conteosPorEntidad,
 }: {
   entities: Entity[];
   clients: Client[];
+  servicios: ServicioCat[];
   conteosPorEntidad: Record<string, number>;
 }) {
   const router = useRouter();
@@ -63,51 +66,62 @@ export default function NuevaFacturaForm({
   const [clientId, setClientId] = useState(clientesDeEntidad[0]?.id ?? "");
   const cliente = clientesDeEntidad.find((c) => c.id === clientId) ?? clientesDeEntidad[0];
 
+  const [servicioId, setServicioId] = useState<string>(servicios[0]?.id ?? "personalizado");
+  const servicio = servicios.find((s) => s.id === servicioId);
+  const [descripcionPersonalizada, setDescripcionPersonalizada] = useState("");
+  const [monto, setMonto] = useState(servicios[0] ? String(servicios[0].precio) : "");
+
+  function elegirServicio(id: string) {
+    setServicioId(id);
+    const s = servicios.find((x) => x.id === id);
+    if (s) setMonto(String(s.precio));
+  }
+
+  const [metodosCobro, setMetodosCobro] = useState<string[]>(["ATH Móvil", "Transferencia / ACH"]);
+  function toggleMetodo(m: string) {
+    setMetodosCobro((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
+  }
+
+  const [moraTipo, setMoraTipo] = useState<"ninguno" | "fijo" | "porcentaje">("ninguno");
+  const [moraMonto, setMoraMonto] = useState("");
+  const [moraDias, setMoraDias] = useState("10");
+
   const hoy = new Date().toISOString().slice(0, 10);
+  const [fechaFactura, setFechaFactura] = useState(hoy);
   const [fechaVencimiento, setFechaVencimiento] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + diasDeTermino(entidad?.default_payment_terms ?? "Net 30"));
     return d.toISOString().slice(0, 10);
   });
   const [notas, setNotas] = useState("");
-  const [lineas, setLineas] = useState<Linea[]>([{ descripcion: "", cantidad: "1", precioUnitario: "" }]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function actualizarLinea(i: number, campo: keyof Linea, valor: string) {
-    setLineas((prev) => prev.map((l, idx) => (idx === i ? { ...l, [campo]: valor } : l)));
-  }
-  function agregarLinea() {
-    setLineas((prev) => [...prev, { descripcion: "", cantidad: "1", precioUnitario: "" }]);
-  }
-  function quitarLinea(i: number) {
-    setLineas((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
-  }
+  const descripcionFinal = servicioId === "personalizado" ? descripcionPersonalizada : servicio?.nombre ?? "";
+  const montoNum = Number(monto) || 0;
 
-  const subtotal = lineas.reduce((sum, l) => sum + sumaLinea(l), 0);
-  // IVU: solo si la entidad lo tiene activo, y nunca si el cliente trae
-  // certificado de exención de revendedor validado (ver 0001/comentario
-  // en la tabla clients — "feedback CPA vía Gemini").
+  const ivuExentoServicio = servicioId !== "personalizado" && servicio ? servicio.ivu_exento : true;
   const ivuPct =
-    entidad?.ivu_applies && !cliente?.ivu_exempt_reseller
+    entidad?.ivu_applies && !cliente?.ivu_exempt_reseller && !ivuExentoServicio
       ? Number(entidad.ivu_rate_estatal || 0) + Number(entidad.ivu_rate_municipal || 0)
       : 0;
+  const subtotal = montoNum;
   const ivuMonto = subtotal * (ivuPct / 100);
-  // Retención: la que el cliente (como pagador) aplica al pagarle al
-  // negocio — viene de clients.retention_pct, solo si es_negocio. Se
-  // calcula sobre el subtotal de servicios, no sobre el IVU (práctica
-  // estándar en PR).
   const retencionPct = cliente?.es_negocio ? Number(cliente.retention_pct || 0) : 0;
   const retencionMonto = subtotal * (retencionPct / 100);
   const total = subtotal + ivuMonto - retencionMonto;
+
+  // Cobro en línea real (que el cliente pague con tarjeta directo en la
+  // app) todavía no está activo — este fee es solo un estimado informativo.
+  const feeStripeEstimado = (subtotal + ivuMonto) * STRIPE_FEE_PCT + STRIPE_FEE_FIJO;
+  const recibirasConTarjeta = total - feeStripeEstimado;
 
   const numeroPreview = entidad ? `${entidad.invoice_prefix}-${entidad.invoice_start_number + (conteosPorEntidad[entidad.id] ?? 0)}` : "";
 
   async function guardar() {
     if (!entidad || !cliente) return;
-    const lineasValidas = lineas.filter((l) => l.descripcion.trim() && sumaLinea(l) > 0);
-    if (lineasValidas.length === 0) {
-      setError("Añade al menos una línea con descripción y precio.");
+    if (!descripcionFinal.trim() || montoNum <= 0) {
+      setError("Elige un servicio (o describe uno personalizado) y pon un monto mayor a $0.");
       return;
     }
 
@@ -129,6 +143,7 @@ export default function NuevaFacturaForm({
         owner_id: user.id,
         entity_id: entidad.id,
         client_id: cliente.id,
+        servicio_id: servicioId !== "personalizado" ? servicioId : null,
         numero: numeroPreview,
         subtotal,
         ivu_pct: ivuPct,
@@ -137,9 +152,14 @@ export default function NuevaFacturaForm({
         retencion_monto: retencionMonto,
         total,
         estado: "borrador",
-        fecha_emision: hoy,
+        fecha_emision: fechaFactura,
         fecha_vencimiento: fechaVencimiento,
         notas: notas || null,
+        metodos_cobro_aceptados: metodosCobro,
+        late_fee_habilitado: moraTipo !== "ninguno",
+        late_fee_tipo: moraTipo !== "ninguno" ? moraTipo : null,
+        late_fee_monto: moraTipo !== "ninguno" ? Number(moraMonto) || 0 : 0,
+        late_fee_dias_gracia: moraTipo !== "ninguno" ? Number(moraDias) || 0 : 0,
       })
       .select("id")
       .maybeSingle();
@@ -150,15 +170,13 @@ export default function NuevaFacturaForm({
       return;
     }
 
-    const { error: itemsError } = await supabase.from("invoice_items").insert(
-      lineasValidas.map((l) => ({
-        invoice_id: factura.id,
-        descripcion: l.descripcion,
-        cantidad: Number(l.cantidad) || 1,
-        precio_unitario: Number(l.precioUnitario) || 0,
-        subtotal_linea: sumaLinea(l),
-      }))
-    );
+    const { error: itemsError } = await supabase.from("invoice_items").insert({
+      invoice_id: factura.id,
+      descripcion: descripcionFinal,
+      cantidad: 1,
+      precio_unitario: montoNum,
+      subtotal_linea: montoNum,
+    });
 
     setLoading(false);
 
@@ -183,7 +201,9 @@ export default function NuevaFacturaForm({
       <div className="vc-card flex flex-col gap-3">
         {error && <p className="text-xs text-red">{error}</p>}
 
-        <p className="text-xs text-muted">Número de factura: <span className="font-medium text-text">{numeroPreview}</span></p>
+        <p className="text-xs text-muted">
+          Número de factura: <span className="font-medium text-text">{numeroPreview}</span>
+        </p>
 
         {entities.length > 1 && (
           <Field label="Entidad">
@@ -205,97 +225,187 @@ export default function NuevaFacturaForm({
               {clientesDeEntidad.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                  {c.es_negocio && Number(c.retention_pct) > 0 ? ` (Créd. Hacienda ${Number(c.retention_pct)}%)` : ""}
                 </option>
               ))}
             </select>
           )}
         </Field>
 
-        <Field label="Fecha de vencimiento">
+        <Field label="Servicio">
+          <select className="vc-input" value={servicioId} onChange={(e) => elegirServicio(e.target.value)}>
+            {servicios.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nombre} — {formatMoney(s.precio)}
+              </option>
+            ))}
+            <option value="personalizado">Personalizado...</option>
+          </select>
+        </Field>
+
+        {servicioId === "personalizado" && (
+          <Field label="Descripción">
+            <input
+              className="vc-input"
+              placeholder="Descripción del servicio"
+              value={descripcionPersonalizada}
+              onChange={(e) => setDescripcionPersonalizada(e.target.value)}
+            />
+          </Field>
+        )}
+
+        <Field label="Monto">
           <input
             className="vc-input"
-            type="date"
-            value={fechaVencimiento}
-            onChange={(e) => setFechaVencimiento(e.target.value)}
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            value={monto}
+            onChange={(e) => setMonto(e.target.value)}
           />
         </Field>
 
-        <div>
-          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Líneas</label>
-          <div className="flex flex-col gap-2">
-            {lineas.map((l, i) => (
-              <div key={i} className="flex items-center gap-2">
+        <Field label="Métodos de cobro aceptados">
+          <div className="flex flex-wrap gap-2">
+            {METODOS_COBRO.map((m) => (
+              <button
+                type="button"
+                key={m}
+                onClick={() => toggleMetodo(m)}
+                className="rounded-lg border px-2.5 py-1.5 text-xs font-medium"
+                style={
+                  metodosCobro.includes(m)
+                    ? { borderColor: "#1D9E75", background: "rgba(29,158,117,.08)", color: "#1D9E75" }
+                    : { borderColor: "var(--border)", color: "var(--muted)" }
+                }
+              >
+                {metodosCobro.includes(m) ? "✓ " : ""}
+                {m}
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled
+              title="Próximamente — todavía no procesamos cobros en línea"
+              className="rounded-lg border px-2.5 py-1.5 text-xs font-medium opacity-40"
+              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+            >
+              Stripe (tarjeta) — próximamente
+            </button>
+          </div>
+        </Field>
+
+        <Field label="Recargo por mora">
+          <div className="flex gap-2">
+            <select className="vc-input flex-1" value={moraTipo} onChange={(e) => setMoraTipo(e.target.value as typeof moraTipo)}>
+              <option value="ninguno">Sin recargo por mora</option>
+              <option value="fijo">Monto fijo</option>
+              <option value="porcentaje">Porcentaje</option>
+            </select>
+            {moraTipo !== "ninguno" && (
+              <>
                 <input
-                  className="vc-input flex-1"
-                  placeholder="Descripción del servicio"
-                  value={l.descripcion}
-                  onChange={(e) => actualizarLinea(i, "descripcion", e.target.value)}
-                />
-                <input
-                  className="vc-input w-16"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="Cant."
-                  value={l.cantidad}
-                  onChange={(e) => actualizarLinea(i, "cantidad", e.target.value)}
-                />
-                <input
-                  className="vc-input w-24"
+                  className="vc-input w-24 flex-shrink-0"
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="Precio"
-                  value={l.precioUnitario}
-                  onChange={(e) => actualizarLinea(i, "precioUnitario", e.target.value)}
+                  placeholder={moraTipo === "porcentaje" ? "%" : "$"}
+                  value={moraMonto}
+                  onChange={(e) => setMoraMonto(e.target.value)}
                 />
-                <button
-                  type="button"
-                  onClick={() => quitarLinea(i)}
-                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg"
-                  title="Quitar línea"
-                >
-                  <i className="ti ti-trash" style={{ fontSize: 14 }} />
-                </button>
-              </div>
-            ))}
+                <div className="flex flex-shrink-0 items-center gap-1 text-xs text-muted">
+                  después de
+                  <input
+                    className="vc-input w-14"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={moraDias}
+                    onChange={(e) => setMoraDias(e.target.value)}
+                  />
+                  días
+                </div>
+              </>
+            )}
           </div>
-          <button type="button" onClick={agregarLinea} className="mt-2 text-xs font-medium text-teal hover:opacity-80">
-            + Añadir línea
-          </button>
+          {moraTipo !== "ninguno" && (
+            <p className="mt-1 text-xs text-muted">
+              El recargo se muestra en la factura como referencia — todavía no se suma solo al total si se vence.
+            </p>
+          )}
+        </Field>
+
+        <div className="flex gap-2">
+          <Field label="Fecha de factura">
+            <input className="vc-input" type="date" value={fechaFactura} onChange={(e) => setFechaFactura(e.target.value)} />
+          </Field>
+          <Field label="Fecha de vencimiento">
+            <input
+              className="vc-input"
+              type="date"
+              value={fechaVencimiento}
+              onChange={(e) => setFechaVencimiento(e.target.value)}
+            />
+          </Field>
         </div>
 
-        <Field label="Notas (opcional)">
+        <Field label="Notas para el cliente (opcional)">
           <textarea
             className="vc-input"
             rows={2}
             value={notas}
             onChange={(e) => setNotas(e.target.value)}
-            placeholder="Términos, instrucciones de pago, etc."
+            placeholder="Ej: Servicios julio 2026 — período 1-31 jul"
           />
         </Field>
 
-        <div className="rounded-lg border border-border bg-bg p-3 text-sm">
+        <div className="rounded-lg border border-teal bg-teal/[.04] p-3 text-sm">
+          <p className="mb-1.5 text-xs uppercase tracking-wide text-teal">Vista del cliente</p>
           <div className="flex justify-between py-0.5">
             <span className="text-muted">Subtotal</span>
             <span>{formatMoney(subtotal)}</span>
           </div>
-          {ivuPct > 0 && (
+          {ivuMonto > 0 && (
             <div className="flex justify-between py-0.5">
               <span className="text-muted">IVU ({ivuPct}%)</span>
               <span>+{formatMoney(ivuMonto)}</span>
             </div>
           )}
-          {retencionPct > 0 && (
+          {retencionMonto > 0 && (
             <div className="flex justify-between py-0.5">
-              <span className="text-muted">Retención ({retencionPct}%)</span>
-              <span>-{formatMoney(retencionMonto)}</span>
+              <span className="text-amb">Retención {retencionPct}% (cliente retiene)</span>
+              <span className="text-amb">-{formatMoney(retencionMonto)}</span>
             </div>
           )}
-          <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-medium">
-            <span>Total</span>
-            <span>{formatMoney(total)}</span>
+          <div className="mt-1 flex justify-between border-t border-teal/30 pt-1.5 font-medium">
+            <span>Total a pagar</span>
+            <span className="text-teal">{formatMoney(total)}</span>
           </div>
+          {retencionMonto > 0 && (
+            <p className="mt-1 text-[11px] text-muted">
+              Los {formatMoney(retencionMonto)} de retención los deposita el cliente a Hacienda PR según la Sección 1062.03.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-bg p-3 text-sm">
+          <p className="mb-1.5 text-xs uppercase tracking-wide text-muted">Solo visible para ti</p>
+          {retencionMonto > 0 && (
+            <div className="flex justify-between py-0.5">
+              <span className="text-muted">Retención a tu favor</span>
+              <span className="text-teal">+{formatMoney(retencionMonto)}</span>
+            </div>
+          )}
+          <div className="flex justify-between py-0.5">
+            <span className="text-muted">Fee Stripe estimado (~2.9% + $0.30)</span>
+            <span className="text-red">-{formatMoney(feeStripeEstimado)}</span>
+          </div>
+          <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-medium">
+            <span>Recibirías si el cliente paga con tarjeta</span>
+            <span>{formatMoney(recibirasConTarjeta)}</span>
+          </div>
+          <p className="mt-1 text-[11px] text-muted">Estimado — todavía no procesamos cobros con tarjeta directamente en la app.</p>
         </div>
 
         <button className="vc-btn-primary mt-1" disabled={loading || !cliente} onClick={guardar}>
@@ -308,7 +418,7 @@ export default function NuevaFacturaForm({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className="flex-1">
       <label className="mb-1 block text-xs uppercase tracking-wide text-muted">{label}</label>
       {children}
     </div>

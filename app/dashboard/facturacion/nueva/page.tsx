@@ -36,7 +36,7 @@ export default async function NuevaFacturaPage() {
 
   const { data: clients } = await supabase
     .from("clients")
-    .select("id, name, entity_id, es_negocio, retention_pct, ivu_exempt_reseller")
+    .select("id, name, entity_id, es_negocio, retention_pct, ivu_exempt_reseller, telefono")
     .eq("owner_id", user.id)
     .order("name", { ascending: true });
 
@@ -72,5 +72,19 @@ export default async function NuevaFacturaPage() {
     conteosPorEntidad[ent.id] = count ?? 0;
   }
 
-  return <NuevaFacturaForm entities={entities} clients={clients} conteosPorEntidad={conteosPorEntidad} />;
+  const { data: servicios } = await supabase
+    .from("services")
+    .select("id, nombre, tipo, precio, ivu_exento")
+    .eq("owner_id", user.id)
+    .eq("activo", true)
+    .order("nombre", { ascending: true });
+
+  return (
+    <NuevaFacturaForm
+      entities={entities}
+      clients={clients}
+      servicios={servicios ?? []}
+      conteosPorEntidad={conteosPorEntidad}
+    />
+  );
 }

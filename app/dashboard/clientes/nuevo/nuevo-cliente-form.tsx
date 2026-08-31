@@ -22,6 +22,7 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
   const [entityId, setEntityId] = useState(entities[0]?.id ?? "");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [telefono, setTelefono] = useState("");
   const [esNegocio, setEsNegocio] = useState(false);
   const [retentionPct, setRetentionPct] = useState("10.00");
 
@@ -44,6 +45,7 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
       entity_id: entityId,
       name,
       email: email || null,
+      telefono: telefono || null,
       es_negocio: esNegocio,
       retention_pct: esNegocio ? Number(retentionPct) : 0,
     });
@@ -99,6 +101,16 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
             placeholder="cliente@email.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+          />
+        </Field>
+
+        <Field label="Teléfono (opcional — para enviar facturas por WhatsApp)">
+          <input
+            className="vc-input"
+            type="tel"
+            placeholder="787-555-0123"
+            value={telefono}
+            onChange={(e) => setTelefono(e.target.value)}
           />
         </Field>
 
