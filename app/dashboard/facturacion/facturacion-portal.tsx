@@ -114,19 +114,27 @@ export default function FacturacionPortal({
           <p className="text-lg font-medium">Facturación</p>
           <p className="text-xs text-muted">Portal completo</p>
         </div>
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
+        <div
+          className="flex"
+          style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 4, gap: 3 }}
+        >
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className="flex flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap"
-              style={
-                tab === t.id
-                  ? { background: "#1D9E75", color: "#fff" }
-                  : { background: "var(--card)", color: "var(--muted)", border: "1px solid var(--border)" }
-              }
+              className="flex flex-1 flex-col items-center gap-0.5"
+              style={{
+                padding: "9px 4px",
+                fontSize: 11,
+                fontWeight: 500,
+                lineHeight: 1.2,
+                textAlign: "center",
+                color: tab === t.id ? "#1D9E75" : "var(--muted)",
+                borderBottom: tab === t.id ? "2px solid #1D9E75" : "2px solid transparent",
+                background: "none",
+              }}
             >
-              <i className={`ti ${t.icon}`} style={{ fontSize: 13 }} />
+              <i className={`ti ${t.icon}`} style={{ fontSize: 17 }} />
               {t.label}
             </button>
           ))}
@@ -212,16 +220,14 @@ function FacturasTab({ facturas }: { facturas: Factura[] }) {
         <StatCard label="Vencida" valor={formatMoney(vencida)} sub={`${vencidas.length} fact.`} tono="r" />
       </div>
 
-      {creditosHacienda > 0 && (
-        <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-border bg-card p-3">
-          <i className="ti ti-coins flex-shrink-0 text-lg text-teal" />
-          <div className="flex-1">
-            <p className="text-xs font-medium">Créditos en Hacienda</p>
-            <p className="text-xs text-muted">{formatMoney(creditosHacienda)} acumulado</p>
-          </div>
-          <span className="text-sm font-medium text-teal">{formatMoney(creditosHacienda)}</span>
+      <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-border bg-card p-3">
+        <i className="ti ti-coins flex-shrink-0 text-lg text-teal" />
+        <div className="flex-1">
+          <p className="text-xs font-medium">Créditos en Hacienda</p>
+          <p className="text-xs text-muted">{formatMoney(creditosHacienda)} acumulado</p>
         </div>
-      )}
+        <span className="text-sm font-medium text-teal">{formatMoney(creditosHacienda)}</span>
+      </div>
 
       <div className="mb-3 flex gap-2">
         <div className="relative flex-1">
@@ -240,7 +246,11 @@ function FacturasTab({ facturas }: { facturas: Factura[] }) {
           <option value="vencidas">Vencidas</option>
           <option value="borradores">Borradores</option>
         </select>
-        <Link href="/dashboard/facturacion/nueva" className="vc-btn-primary flex-shrink-0 px-3.5 py-0 text-xs" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <Link
+          href="/dashboard/facturacion/nueva"
+          className="flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-3.5 py-2.5 text-xs font-medium text-white hover:opacity-90"
+          style={{ background: "#1D9E75", width: "auto" }}
+        >
           <i className="ti ti-plus" /> Nueva
         </Link>
       </div>
@@ -399,23 +409,63 @@ function CobrosTab({ facturasIniciales }: { facturasIniciales: Factura[] }) {
 }
 
 function ClientesTab({ clients }: { clients: Cliente[] }) {
+  const [busqueda, setBusqueda] = useState("");
+  const [filtro, setFiltro] = useState("todos");
+
+  const filtrados = useMemo(() => {
+    return clients.filter((c) => {
+      if (filtro === "negocio" && !c.es_negocio) return false;
+      if (filtro === "individual" && c.es_negocio) return false;
+      if (busqueda.trim()) {
+        const q = busqueda.toLowerCase();
+        const nombre = c.name.toLowerCase();
+        const email = c.email?.toLowerCase() ?? "";
+        if (!nombre.includes(q) && !email.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [clients, filtro, busqueda]);
+
   return (
-    <div className="vc-card">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs uppercase tracking-wide text-muted">Clientes</p>
-        <Link
-          href="/dashboard/clientes/nuevo?returnTo=/dashboard/facturacion"
-          className="text-xs font-medium text-teal hover:opacity-80"
-        >
-          + Nuevo cliente
-        </Link>
+    <>
+      <div className="mb-3 flex gap-2">
+        <div className="relative flex-1">
+          <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-teal" />
+          <input
+            className="vc-input pl-8"
+            placeholder="Buscar cliente..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+        </div>
+        <select className="vc-input w-32 flex-shrink-0" value={filtro} onChange={(e) => setFiltro(e.target.value)}>
+          <option value="todos">Todos</option>
+          <option value="negocio">Con retención</option>
+          <option value="individual">Individual</option>
+        </select>
       </div>
+
+      <div className="vc-card">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs uppercase tracking-wide text-muted">
+            Directorio <span className="normal-case text-muted">· {clients.length} cliente{clients.length === 1 ? "" : "s"}</span>
+          </p>
+          <Link
+            href="/dashboard/clientes/nuevo?returnTo=/dashboard/facturacion"
+            className="text-xs font-medium text-teal hover:opacity-80"
+          >
+            + Nuevo cliente
+          </Link>
+        </div>
 
       {clients.length === 0 && (
         <p className="text-xs text-muted">Todavía no tienes clientes. Dale a "+ Nuevo cliente" arriba para crear el primero.</p>
       )}
+      {clients.length > 0 && filtrados.length === 0 && (
+        <p className="text-xs text-muted">No hay clientes que coincidan con la búsqueda.</p>
+      )}
 
-      {clients.map((c) => (
+      {filtrados.map((c) => (
         <div key={c.id} className="flex items-center gap-2.5 border-b border-border py-2.5 text-sm last:border-0">
           <div
             className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
@@ -436,6 +486,7 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
           )}
         </div>
       ))}
-    </div>
+      </div>
+    </>
   );
 }
