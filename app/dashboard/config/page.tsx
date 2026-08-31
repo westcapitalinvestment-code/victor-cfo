@@ -47,7 +47,7 @@ export default async function ConfigPage() {
         <p className="mt-1 text-sm">
           ¿Tienes una pregunta o algo no está funcionando? Escríbenos, te contestamos lo antes posible.
         </p>
-        
+        <a
           href="mailto:soporte@westcapitalventuresllc.com"
           className="vc-btn-secondary mt-2 inline-block text-center no-underline"
         >
