@@ -21,7 +21,7 @@ export default function LandingPage() {
           <a href="#victor">VICTOR</a>
           <a href="#precios">Precios</a>
           <Link href="/registro" className={styles.navCta}>
-            Comienza ahora
+            Comienza Gratis
           </Link>
         </div>
       </nav>
@@ -39,13 +39,13 @@ export default function LandingPage() {
         </h1>
 
         <p className={styles.heroSub}>
-          El primer CFO virtual para negocios de habla hispana. Organiza tus finanzas, genera
+          El primer CFO virtual personal y para negocios de habla hispana. Organiza tus finanzas, genera
           reportes automáticos, y te guía paso a paso hacia una estructura que realmente funciona.
         </p>
 
         <div className={styles.heroActions}>
           <a href="#precios" className={styles.btnPrimary}>
-            Comienza ahora
+            Comienza Gratis
           </a>
           <a href="#como-funciona" className={styles.btnGhost}>
             Ver cómo funciona →
@@ -177,7 +177,13 @@ export default function LandingPage() {
 
       <div className={styles.section} id="victor" style={{ paddingTop: 0 }}>
         <div className={styles.victorBox}>
-          <div className={styles.victorAvatar}>🤖</div>
+          <div className={styles.victorAvatar}>
+            <img
+              src="/victor-avatar.png"
+              alt="VICTOR"
+              style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }}
+            />
+          </div>
           <div className={styles.victorName}>VICTOR</div>
           <div className={styles.victorRole}>Tu Director Financiero Personal · Disponible 24/7</div>
           <p className={styles.victorMessage}>
