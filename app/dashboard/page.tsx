@@ -36,11 +36,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
+    const { data: profile } = await supabase
     .from("users")
     .select("full_name, onboarding_completed, plan")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
 
