@@ -45,7 +45,10 @@ export default async function NuevaFacturaPage() {
       <div className="mx-auto max-w-lg px-6 py-8">
         <div className="vc-card text-center">
           <p className="mb-3 text-sm">Necesitas al menos un cliente antes de facturar.</p>
-          <Link href="/dashboard/clientes/nuevo" className="vc-btn-primary inline-block">
+          <Link
+            href="/dashboard/clientes/nuevo?returnTo=/dashboard/facturacion/nueva"
+            className="vc-btn-primary inline-block"
+          >
             Crear mi primer cliente
           </Link>
         </div>

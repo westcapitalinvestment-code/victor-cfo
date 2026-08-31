@@ -2,6 +2,12 @@
 
 import { useState } from "react";
 
+// Sistema de referidos (30 agosto 2026, migración 0031): el link usa el
+// uuid real de users.id como ?ref= — decisión deliberada de no generar un
+// código corto aparte (sin lógica de colisiones/unicidad que mantener).
+// Quien se registre con este link entra con referred_by apuntando a este
+// usuario, y paga Core con descuento ($12.99 en vez de $14.99) si decide
+// pagar en vez de empezar gratis — ver /registro y la migración 0031.
 export default function ReferralLink({ userId }: { userId: string }) {
   const [copiado, setCopiado] = useState(false);
 
@@ -16,7 +22,8 @@ export default function ReferralLink({ userId }: { userId: string }) {
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2000);
     } catch {
-      // Sin permiso de portapapeles — el link ya está seleccionable a mano.
+      // Sin permiso de portapapeles (raro, pero pasa en algunos navegadores
+      // in-app) — el link ya está seleccionable a mano en el input de abajo.
     }
   }
 

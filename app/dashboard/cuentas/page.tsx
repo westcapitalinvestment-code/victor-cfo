@@ -41,10 +41,22 @@ export default function CuentasPage() {
   const [sincronizando, setSincronizando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Rellenar el hueco de historial que Plaid no trajo (ej. BPPR solo da
+  // ~45 días) — subir el estado de cuenta directo a una cuenta que YA
+  // está conectada, igual que se puede hacer con una cuenta manual.
   const [subiendoEstadoId, setSubiendoEstadoId] = useState<string | null>(null);
+  // Renombrar cuenta de Plaid — caso real de Joel: dos cuentas "checking"
+  // del mismo banco llegan con nombres iguales o casi iguales, y no hay
+  // forma de saber cuál es cuál sin adivinar por el balance. Nunca se toca
+  // el "name" real que manda el banco — nickname es aparte y se prefiere
+  // mostrar cuando existe (ver migración 0024).
   const [renombrandoId, setRenombrandoId] = useState<string | null>(null);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [guardandoNombre, setGuardandoNombre] = useState(false);
+  // Gate del plan gratis (30 agosto 2026, migración 0031): conectar banco
+  // es una de las dos cosas caras (~$2/usuario/mes de Plaid) que requieren
+  // Core — un usuario 'gratis' ve el mismo upsell que en el chat de
+  // VICTOR en vez de abrir Plaid Link de una vez.
   const [plan, setPlan] = useState<string | null>(null);
   const [esReferido, setEsReferido] = useState(false);
   const [mostrandoUpsell, setMostrandoUpsell] = useState(false);
@@ -82,6 +94,9 @@ export default function CuentasPage() {
   useEffect(() => {
     cargarCuentas();
   }, [cargarCuentas]);
+  // Igual que en victor-chat.tsx: llama al checkout de Stripe de verdad,
+  // con el precio correcto ($12.99 referido / $14.99 normal) ya resuelto
+  // por priceIdPara en el server a partir de users.referred_by.
   async function activarCore() {
     setActivandoCore(true);
     setUpsellError(null);
@@ -100,6 +115,9 @@ export default function CuentasPage() {
     setUpsellError(json?.error || "No se pudo iniciar el pago. Intenta de nuevo en un momento.");
   }
 
+  // Punto único por el que pasa cualquier botón que quiera abrir Plaid
+  // Link — así el gate de plan='gratis' no se puede saltar añadiendo un
+  // botón nuevo que llame pedirLinkToken() directo.
   function iniciarConexion(itemId?: string) {
     if (plan === "gratis") {
       setMostrandoUpsell(true);
@@ -219,6 +237,10 @@ export default function CuentasPage() {
           (data.eliminadas > 0 ? `, ${data.eliminadas} reemplazada(s) por el banco` : "") +
           `. (Plaid mandó ${data.totalPlaidAdded ?? "?"} nuevas / ${data.totalPlaidModified ?? "?"} modificadas en total.)` +
           (omitidas > 0 ? ` (${omitidas} de cuentas de negocio, no incluidas en tu plan Core.)` : "") +
+          // Diagnóstico del refresh a Plaid — si el banco no soporta pedirle
+          // datos frescos ahora mismo, esto lo dice explícito en vez de
+          // dejar la pantalla en silencio sin explicar por qué "Plaid
+          // mandó 0 nuevas" aunque el usuario vea algo distinto en su banco.
           (data.refreshInfo && data.refreshInfo.length > 0 ? ` — ${data.refreshInfo.join(" | ")}` : "")
       );
       if (data.errores && data.errores.length > 0) {
@@ -328,11 +350,17 @@ export default function CuentasPage() {
               Conecta BPPR, FirstBank, Oriental o Mercury para ver tu balance real y traer tus
               transacciones automáticamente.
             </p>
-               <button className="vc-btn-primary" disabled={conectando} onClick={() => iniciarConexion()}>
+            <button className="vc-btn-primary" disabled={conectando} onClick={() => iniciarConexion()}>
               {conectando ? "Conectando..." : "Conectar banco"}
             </button>
           </div>
           {plan === "gratis" && (
+            // Pista explícita para plan gratis (30 agosto 2026, reportado por
+            // Joel: "no vi dónde el usuario sube el CSV" al probar el flujo
+            // gratis) — sin Plaid, la única forma de traer transacciones es
+            // crear una cuenta manual abajo y subir el CSV desde ahí. Antes
+            // no había ningún texto que conectara "categorizar por CSV" (lo
+            // que promete /registro) con la sección de Cuentas manuales.
             <div className="mb-3 rounded-lg border border-teal bg-teal/[.06] p-3 text-center text-xs text-text">
               ¿Prefieres no conectar el banco todavía? Crea tus cuentas manual abajo (ej. "BPPR
               Checking, Oriental, Firstbank, etc") y sube tus CSV para categorizar tus gastos —

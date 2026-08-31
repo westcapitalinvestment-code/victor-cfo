@@ -17,11 +17,16 @@ const TABS_PERSONAL = [
   { href: "/dashboard/cuentas", label: "Cuentas", icon: "ti-credit-card" },
 ];
 
+// Orden y nombres calcados de VICTOR Pro — Producto Completo_FINAL.html
+// (30-31 agosto 2026, corrección de Joel): "Cobros" no es un ícono propio
+// del nav — vive DENTRO del portal de Facturación como pestaña. El segundo
+// ícono de negocio es "Pagos" (pagarle a contratistas/técnicos con
+// retención 480.6) — pantalla nueva y distinta, todavía sin construir.
 const TABS_NEGOCIO = [
-  { href: "/dashboard/cobros", label: "Cobros", icon: "ti-cash" },
   { href: "/dashboard/facturacion", label: "Facturas", icon: "ti-file-invoice" },
-  { href: "/dashboard/equipo", label: "Equipo", icon: "ti-users" },
+  { href: "/dashboard/pagos", label: "Pagos", icon: "ti-cash" },
   { href: "/dashboard/admin", label: "Admin", icon: "ti-user-cog" },
+  { href: "/dashboard/equipo", label: "Equipo", icon: "ti-users" },
   { href: "/dashboard/tecnico", label: "Técnico", icon: "ti-tool" },
 ];
 

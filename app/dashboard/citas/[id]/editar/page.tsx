@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+// Editar/marcar hecha/eliminar una cita existente — mismo patrón que
+// documentos/[id]/editar/page.tsx, sin la parte de archivos. Si fecha u
+// hora cambian, resetea los 2 recordatorios (igual que el reset de
+// alerta_90/30/7 en documentos) para que el ciclo de avisos arranque de
+// cero con el nuevo horario.
 export default function EditarCitaPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();

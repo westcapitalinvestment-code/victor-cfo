@@ -111,7 +111,7 @@ export default function EditarDocumentoPage() {
     setArchivosGuardados((prev) => prev.filter((a) => a.id !== fileId));
   }
 
-    async function guardarCambios() {
+  async function guardarCambios() {
     setLoading(true);
     setError(null);
 

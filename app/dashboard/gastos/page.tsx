@@ -116,7 +116,7 @@ export default async function GastosPage({
   // Card) en una sola lista de pills.
   let cuentasQuery = supabase
     .from("plaid_accounts")
-    .select("plaid_account_id, name, mask, type, subtype")
+    .select("plaid_account_id, name, nickname, mask, type, subtype")
     .eq("owner_id", user.id)
     .order("name");
   if (!esPro) cuentasQuery = cuentasQuery.eq("es_negocio", false);
@@ -227,8 +227,8 @@ export default async function GastosPage({
   // para la etiqueta en cada fila de la lista — con el mismo prefijo
   // plaid:/manual: como llave, así GastosList sabe cuál usar para cada
   // transacción sin importar de dónde vino.
-  const etiquetaCuenta = (c: { name: string | null; mask: string | null }) =>
-    `${c.name ?? "Cuenta sin nombre"}${c.mask ? ` ···${c.mask}` : ""}`;
+  const etiquetaCuenta = (c: { name: string | null; nickname?: string | null; mask: string | null }) =>
+    `${c.nickname || c.name || "Cuenta sin nombre"}${c.mask ? ` ···${c.mask}` : ""}`;
   const nombrePorCuenta = new Map<string, string>();
   for (const c of cuentasPlaid ?? []) nombrePorCuenta.set(idConPrefijo("plaid", c.plaid_account_id), etiquetaCuenta(c));
   for (const c of cuentasManuales ?? []) nombrePorCuenta.set(idConPrefijo("manual", c.id), etiquetaCuenta(c));

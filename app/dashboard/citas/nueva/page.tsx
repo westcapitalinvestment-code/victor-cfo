@@ -4,6 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+// Nueva cita — mismo patrón que documentos/nuevo/page.tsx pero sin subida
+// de archivos. hora y costo_estimado son opcionales: una cita puede
+// anotarse solo con fecha (ej. "recordarme llamar al banco el jueves") o
+// completa (ej. una cita médica con hora y costo aproximado a llevar).
 export default function NuevaCitaPage() {
   const router = useRouter();
   const supabase = createClient();

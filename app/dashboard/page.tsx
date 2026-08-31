@@ -36,7 +36,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   if (!user) redirect("/login");
 
-    const { data: profile } = await supabase
+  // .maybeSingle() en vez de .single() (30 agosto 2026) — mismo fix que en
+  // onboarding/page.tsx: .single() truena en vez de devolver null cuando la
+  // fila no vuelve, y ese error quedaba invisible porque solo se miraba
+  // `data`, causando un rebote a /onboarding sin explicación.
+  const { data: profile } = await supabase
     .from("users")
     .select("full_name, onboarding_completed, plan")
     .eq("id", user.id)

@@ -11,7 +11,8 @@ import { createClient } from "@/lib/supabase/client";
 
 type Entity = { id: string; name: string };
 
-export default function NuevoClienteForm({ entities }: { entities: Entity[] }) {
+export default function NuevoClienteForm({ entities, returnTo }: { entities: Entity[]; returnTo?: string }) {
+  const destino = returnTo || "/dashboard/clientes";
   const router = useRouter();
   const supabase = createClient();
 
@@ -54,7 +55,7 @@ export default function NuevoClienteForm({ entities }: { entities: Entity[] }) {
       return;
     }
 
-    router.push("/dashboard/clientes");
+    router.push(destino);
     router.refresh();
   }
 
@@ -62,7 +63,7 @@ export default function NuevoClienteForm({ entities }: { entities: Entity[] }) {
     <div className="mx-auto max-w-lg px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium">Nuevo cliente</h1>
-        <button onClick={() => router.push("/dashboard/clientes")} className="text-sm text-muted hover:opacity-80">
+        <button onClick={() => router.push(destino)} className="text-sm text-muted hover:opacity-80">
           Cancelar
         </button>
       </div>

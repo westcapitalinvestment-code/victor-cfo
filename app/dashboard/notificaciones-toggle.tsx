@@ -70,7 +70,12 @@ export default function NotificacionesToggle() {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-           applicationServerKey: base64UrlAUint8Array(publicKey) as BufferSource,
+        // "as BufferSource" — TypeScript 5.5+ distingue ArrayBuffer de
+        // SharedArrayBuffer de forma más estricta que antes, y por eso
+        // marca un Uint8Array normal como "incompatible" con el tipo que
+        // pide el navegador para applicationServerKey, aunque en tiempo de
+        // ejecución es exactamente el dato correcto que Push API espera.
+        applicationServerKey: base64UrlAUint8Array(publicKey) as BufferSource,
       });
 
       const json = sub.toJSON();

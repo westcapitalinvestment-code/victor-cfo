@@ -3,13 +3,23 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import NuevoClienteForm from "./nuevo-cliente-form";
 
-export default async function NuevoClientePage() {
+export default async function NuevoClientePage({
+  searchParams,
+}: {
+  searchParams: { returnTo?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+
+  // returnTo (30-31 agosto 2026, bug reportado por Joel): si se llega acá
+  // desde "crear factura" porque todavía no había clientes, antes esto
+  // siempre mandaba de vuelta a /dashboard/clientes — el usuario tenía que
+  // navegar a mano de regreso a facturación para terminar lo que empezó.
+  const returnTo = searchParams?.returnTo;
 
   const { data: entities } = await supabase
     .from("business_entities")
@@ -34,5 +44,5 @@ export default async function NuevoClientePage() {
     );
   }
 
-  return <NuevoClienteForm entities={entities} />;
+  return <NuevoClienteForm entities={entities} returnTo={returnTo} />;
 }

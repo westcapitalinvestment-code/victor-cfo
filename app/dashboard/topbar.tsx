@@ -54,6 +54,10 @@ const EVENTO_ABRIR_VICTOR = "victor:abrir";
 
 export default function Topbar({ fullName, plan }: { fullName: string | null; plan: string | null }) {
   const esPro = plan === "pro" || plan === "proplus";
+  // Badge de plan (30 agosto 2026, reportado por Joel): antes esto solo
+  // distinguía Pro de "todo lo demás" (mostraba "Core" incluso para un
+  // usuario en plan gratis, que nunca pagó nada) — con el plan gratis ya
+  // real, hace falta un tercer estado.
   const esGratis = plan === "gratis";
   const nombreCorto = (fullName || "").split(" ")[0];
   const pathname = usePathname();
@@ -107,7 +111,7 @@ export default function Topbar({ fullName, plan }: { fullName: string | null; pl
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="vc-logo-name">VICTOR</span>
-               <span className={`vc-plan-badge ${esPro ? "pro" : esGratis ? "gratis" : ""}`}>
+                <span className={`vc-plan-badge ${esPro ? "pro" : esGratis ? "gratis" : ""}`}>
                   {esPro ? "Pro" : esGratis ? "Free" : "Core"}
                 </span>
               </div>
