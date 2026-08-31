@@ -14,11 +14,11 @@ export default async function OnboardingPage() {
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
+    const { data: profile } = await supabase
     .from("users")
     .select("full_name, onboarding_completed")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
   // Ya completó esto antes — no lo mandamos de vuelta aquí.
   if (profile?.onboarding_completed) redirect("/dashboard");
