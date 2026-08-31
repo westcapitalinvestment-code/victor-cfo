@@ -27,30 +27,37 @@ export default function OnboardingForm({ initialFullName }: { initialFullName: s
       return;
     }
 
-    // Dos tablas: users (cuenta/plan) y user_profiles (datos personales) —
-    // así se diseñó en 0001 a propósito, para no mezclar billing con
-    // preferencias. Ambas filas ya existen (las crea el trigger 0002),
-    // así que aquí siempre es UPDATE, nunca INSERT.
-    const { error: usersError } = await supabase
+    const { data: usersData, error: usersError } = await supabase
       .from("users")
       .update({ full_name: fullName, onboarding_completed: true })
-      .eq("id", user.id);
+      .eq("id", user.id)
+      .select("id");
 
     if (usersError) {
       setError(usersError.message);
       setLoading(false);
       return;
     }
+    if (!usersData || usersData.length === 0) {
+      setError("No se pudo guardar tu cuenta. Intenta cerrar sesión y volver a entrar, o escríbenos si sigue pasando.");
+      setLoading(false);
+      return;
+    }
 
-    const { error: profileError } = await supabase
+    const { data: profileData, error: profileError } = await supabase
       .from("user_profiles")
       .update({ phone })
-      .eq("id", user.id);
+      .eq("id", user.id)
+      .select("id");
 
     setLoading(false);
 
     if (profileError) {
       setError(profileError.message);
+      return;
+    }
+    if (!profileData || profileData.length === 0) {
+      setError("No se pudo guardar tu teléfono. Intenta de nuevo en un momento.");
       return;
     }
 
