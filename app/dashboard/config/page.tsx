@@ -15,11 +15,15 @@ export default async function ConfigPage() {
 
   if (!user) redirect("/login");
 
+  // .maybeSingle() en vez de .single() (30 agosto 2026, mismo fix que en
+  // onboarding/page.tsx y dashboard/page.tsx): .single() truena si por lo
+  // que sea la fila no vuelve, y eso tumbaba la página entera en vez de
+  // mostrar el fallback "core"/"trialing" de abajo.
   const { data: profile } = await supabase
     .from("users")
     .select("full_name, plan, plan_status")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
   return (
     <div className="vc-shell">
@@ -32,6 +36,23 @@ export default async function ConfigPage() {
         <p className="mt-2 inline-block rounded bg-teal/10 px-2 py-1 text-xs font-medium text-teal">
           Plan {profile?.plan ?? "core"} · {profile?.plan_status ?? "trialing"}
         </p>
+      </div>
+
+      {/* Área de soporte (30 agosto 2026, pedido de Joel): que ningún
+          usuario se sienta solo si algo falla — sobre todo el plan gratis,
+          que no tiene acceso a VICTOR para preguntarle nada. Visible para
+          todos, en un lugar fijo y fácil de encontrar. */}
+      <div className="vc-card mb-4">
+        <p className="text-xs uppercase tracking-wide text-muted">Soporte</p>
+        <p className="mt-1 text-sm">
+          ¿Tienes una pregunta o algo no está funcionando? Escríbenos, te contestamos lo antes posible.
+        </p>
+        
+          href="mailto:soporte@westcapitalventuresllc.com"
+          className="vc-btn-secondary mt-2 inline-block text-center no-underline"
+        >
+          Escríbenos
+        </a>
       </div>
 
       <ReferralLink userId={user.id} />
