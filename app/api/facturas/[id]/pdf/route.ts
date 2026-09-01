@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data: factura, error } = await supabase
     .from("invoices")
     .select(
-      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, logo_r2_key)"
+      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -38,6 +38,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     name: string;
     ein: string | null;
     municipio: string | null;
+    phone: string | null;
+    address: string | null;
+    zip: string | null;
+    invoice_footer: string | null;
     logo_r2_key: string | null;
   } | null;
 
@@ -126,8 +130,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     texto(`RUC/EIN: ${entidad.ein}`, margin, y, { size: 9, color: gris });
     y -= 12;
   }
+  if (entidad?.address) {
+    texto(entidad.address, margin, y, { size: 9, color: gris });
+    y -= 12;
+  }
   if (entidad?.municipio) {
-    texto(`${entidad.municipio}, PR`, margin, y, { size: 9, color: gris });
+    texto(`${entidad.municipio}, PR${entidad?.zip ? " " + entidad.zip : ""}`, margin, y, { size: 9, color: gris });
+    y -= 12;
+  }
+  if (entidad?.phone) {
+    texto(entidad.phone, margin, y, { size: 9, color: gris });
     y -= 12;
   }
 
@@ -232,6 +244,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (factura.metodos_cobro_aceptados && factura.metodos_cobro_aceptados.length > 0) {
     texto(`Métodos de cobro aceptados: ${factura.metodos_cobro_aceptados.join(", ")}`, margin, y, { size: 8, color: gris });
     y -= 14;
+  }
+
+  if (entidad?.invoice_footer) {
+    const lineasPie = envolverTexto(String(entidad.invoice_footer).slice(0, 300), font, 8, width - margin * 2);
+    for (const linea of lineasPie) {
+      texto(linea, margin, y, { size: 8, color: gris });
+      y -= 11;
+    }
   }
 
   textoDerecha("¡Gracias por su preferencia!", width - margin, 40, { size: 9, color: gris });

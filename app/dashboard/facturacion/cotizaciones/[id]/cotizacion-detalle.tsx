@@ -31,7 +31,18 @@ type Cotizacion = {
   entity_id: string | null;
   client_id: string | null;
   clients: { name: string; email: string | null; telefono: string | null; es_negocio: boolean; retention_pct: number } | null;
-  business_entities: { name: string; invoice_prefix: string; invoice_start_number: number; default_payment_terms: string } | null;
+  business_entities: {
+    name: string;
+    invoice_prefix: string;
+    invoice_start_number: number;
+    default_payment_terms: string;
+    ein: string | null;
+    municipio: string | null;
+    phone: string | null;
+    address: string | null;
+    zip: string | null;
+    invoice_footer: string | null;
+  } | null;
 };
 
 // Mismo helper que en factura-detalle.tsx.
@@ -236,6 +247,30 @@ export default function CotizacionDetalle({
       <div className="vc-card flex flex-col gap-3">
         {error && <p className="text-xs text-red">{error}</p>}
 
+        {(cotizacion.business_entities?.ein ||
+          cotizacion.business_entities?.address ||
+          cotizacion.business_entities?.municipio ||
+          cotizacion.business_entities?.phone) && (
+          <div className="border-b border-border pb-3">
+            <p className="text-sm font-medium">{entidadNombre}</p>
+            {cotizacion.business_entities?.ein && (
+              <p className="text-xs text-muted">RUC/EIN: {cotizacion.business_entities.ein}</p>
+            )}
+            {cotizacion.business_entities?.address && (
+              <p className="text-xs text-muted">{cotizacion.business_entities.address}</p>
+            )}
+            {cotizacion.business_entities?.municipio && (
+              <p className="text-xs text-muted">
+                {cotizacion.business_entities.municipio}, PR
+                {cotizacion.business_entities.zip ? ` ${cotizacion.business_entities.zip}` : ""}
+              </p>
+            )}
+            {cotizacion.business_entities?.phone && (
+              <p className="text-xs text-muted">{cotizacion.business_entities.phone}</p>
+            )}
+          </div>
+        )}
+
         <div className="flex items-start justify-between">
           <div>
             <p className="text-lg font-medium">{cotizacion.numero}</p>
@@ -289,6 +324,12 @@ export default function CotizacionDetalle({
           <div>
             <p className="mb-1 text-xs uppercase tracking-wide text-muted">Notas</p>
             <p className="text-sm text-text">{cotizacion.notas}</p>
+          </div>
+        )}
+
+        {cotizacion.business_entities?.invoice_footer && (
+          <div>
+            <p className="text-xs text-muted">{cotizacion.business_entities.invoice_footer}</p>
           </div>
         )}
 

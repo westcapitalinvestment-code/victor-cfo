@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data: cotizacion, error } = await supabase
     .from("cotizaciones")
     .select(
-      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, total, estado, fecha_emision, fecha_vencimiento, notas, clients(name, email, tax_id), business_entities(name, ein, municipio, logo_r2_key)"
+      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, total, estado, fecha_emision, fecha_vencimiento, notas, clients(name, email, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -38,6 +38,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     name: string;
     ein: string | null;
     municipio: string | null;
+    phone: string | null;
+    address: string | null;
+    zip: string | null;
+    invoice_footer: string | null;
     logo_r2_key: string | null;
   } | null;
 
@@ -109,8 +113,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     texto(`RUC/EIN: ${entidad.ein}`, margin, y, { size: 9, color: gris });
     y -= 12;
   }
+  if (entidad?.address) {
+    texto(entidad.address, margin, y, { size: 9, color: gris });
+    y -= 12;
+  }
   if (entidad?.municipio) {
-    texto(`${entidad.municipio}, PR`, margin, y, { size: 9, color: gris });
+    texto(`${entidad.municipio}, PR${entidad?.zip ? " " + entidad.zip : ""}`, margin, y, { size: 9, color: gris });
+    y -= 12;
+  }
+  if (entidad?.phone) {
+    texto(entidad.phone, margin, y, { size: 9, color: gris });
     y -= 12;
   }
 
@@ -203,6 +215,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       y -= 12;
     }
     y -= 14;
+  }
+
+  if (entidad?.invoice_footer) {
+    const lineasPie = envolverTexto(String(entidad.invoice_footer).slice(0, 300), font, 8, width - margin * 2);
+    for (const linea of lineasPie) {
+      texto(linea, margin, y, { size: 8, color: gris });
+      y -= 11;
+    }
   }
 
   textoDerecha("Cotización sujeta a cambios — ¡gracias por considerarnos!", width - margin, 40, { size: 9, color: gris });

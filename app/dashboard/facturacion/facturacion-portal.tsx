@@ -18,6 +18,7 @@ type Factura = {
   id: string;
   numero: string;
   subtotal: number;
+  retencion_pct: number;
   retencion_monto: number;
   total: number;
   estado: string;
@@ -961,6 +962,31 @@ function ReportesTab({ facturas }: { facturas: Factura[] }) {
     return [...mapa.values()].sort((a, b) => b.facturado - a.facturado);
   }, [facturasFiltradas]);
 
+  // Retenciones acumuladas (1 sept 2026) — pote visual pedido por Joel:
+  // cuando un cliente-negocio retiene (Sección 1062.03), esa plata la
+  // deposita ÉL a Hacienda a nombre de Joel, no Joel — así que solo cuenta
+  // como "crédito real" cuando la factura ya está pagada (antes de eso la
+  // retención todavía no ocurrió). Se agrupa por cliente para que Joel
+  // pueda cuadrar cada uno contra lo que SURI le muestre al declarar, y
+  // detectar si alguno no ha estado depositando lo que le retiene.
+  const porRetencion = useMemo(() => {
+    const mapa = new Map<string, { nombre: string; retenido: number; facturado: number; pct: number; count: number }>();
+    for (const f of facturasFiltradas) {
+      if (f.estado !== "pagada") continue;
+      const monto = Number(f.retencion_monto || 0);
+      if (monto <= 0) continue;
+      const key = f.client_id ?? "sin-cliente";
+      const nombre = f.clients?.name ?? "Sin cliente";
+      const actual = mapa.get(key) ?? { nombre, retenido: 0, facturado: 0, pct: Number(f.retencion_pct || 0), count: 0 };
+      actual.retenido += monto;
+      actual.facturado += Number(f.total) + monto;
+      actual.count += 1;
+      mapa.set(key, actual);
+    }
+    return [...mapa.values()].sort((a, b) => b.retenido - a.retenido);
+  }, [facturasFiltradas]);
+  const totalRetenido = porRetencion.reduce((s, c) => s + c.retenido, 0);
+
   const porServicio = useMemo(() => {
     if (!itemsFacturados) return [];
     const mapa = new Map<string, { descripcion: string; total: number; count: number }>();
@@ -1033,6 +1059,37 @@ function ReportesTab({ facturas }: { facturas: Factura[] }) {
           </div>
         ))}
       </div>
+
+      {porRetencion.length > 0 && (
+        <div className="vc-card mb-3">
+          <div className="mb-1 flex items-center justify-between">
+            <p className="text-xs uppercase tracking-wide text-muted">Retenciones acumuladas</p>
+            <span className="text-sm font-medium text-teal">{formatMoney(totalRetenido)}</span>
+          </div>
+          <p className="mb-2 text-xs text-muted">
+            Lo que tus clientes te retuvieron y depositaron a Hacienda a tu nombre — cuadra esto contra lo que SURI te muestre al
+            declarar, factura por factura.
+          </p>
+          {porRetencion.map((c) => (
+            <div key={c.nombre} className="flex items-center gap-2.5 border-b border-border py-2.5 text-sm last:border-0">
+              <div
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
+                style={{ background: colorAvatar(c.nombre) }}
+              >
+                {iniciales(c.nombre)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate">{c.nombre}</p>
+                <p className="truncate text-xs text-muted">
+                  {c.count} factura{c.count === 1 ? "" : "s"} pagada{c.count === 1 ? "" : "s"} · {c.pct}% retenido sobre{" "}
+                  {formatMoney(c.facturado)}
+                </p>
+              </div>
+              <span className="flex-shrink-0 font-medium text-amb">{formatMoney(c.retenido)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="vc-card">
         <p className="mb-2 text-xs uppercase tracking-wide text-muted">Ingresos por servicio (top 10)</p>

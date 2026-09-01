@@ -36,7 +36,15 @@ type Factura = {
   late_fee_monto: number;
   late_fee_dias_gracia: number;
   clients: { name: string; email: string | null; telefono: string | null; tax_id: string | null } | null;
-  business_entities: { name: string; ein: string | null; municipio: string | null } | null;
+  business_entities: {
+    name: string;
+    ein: string | null;
+    municipio: string | null;
+    phone: string | null;
+    address: string | null;
+    zip: string | null;
+    invoice_footer: string | null;
+  } | null;
 };
 
 const EXTENSIONES_IMAGEN = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"];
@@ -224,8 +232,16 @@ export default function FacturaDetalle({
           {factura.business_entities?.ein && (
             <p className="text-xs text-muted">RUC/EIN: {factura.business_entities.ein}</p>
           )}
+          {factura.business_entities?.address && (
+            <p className="text-xs text-muted">{factura.business_entities.address}</p>
+          )}
           {factura.business_entities?.municipio && (
-            <p className="text-xs text-muted">{factura.business_entities.municipio}, PR</p>
+            <p className="text-xs text-muted">
+              {factura.business_entities.municipio}, PR{factura.business_entities.zip ? ` ${factura.business_entities.zip}` : ""}
+            </p>
+          )}
+          {factura.business_entities?.phone && (
+            <p className="text-xs text-muted">{factura.business_entities.phone}</p>
           )}
         </div>
 
@@ -320,6 +336,12 @@ export default function FacturaDetalle({
                 </span>
               ))}
             </div>
+          </div>
+        )}
+
+        {factura.business_entities?.invoice_footer && (
+          <div>
+            <p className="text-xs text-muted">{factura.business_entities.invoice_footer}</p>
           </div>
         )}
 
