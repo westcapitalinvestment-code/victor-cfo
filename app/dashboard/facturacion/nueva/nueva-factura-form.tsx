@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
@@ -16,7 +16,19 @@ type Entity = {
   invoice_prefix: string;
   invoice_start_number: number;
   default_payment_terms: string;
+  client_retention_situation: string | null;
 };
+
+// Convierte el "relevo" de la entidad (0039: no | 10 | 6 | exento — lo que
+// LE retienen a Joel sus clientes) en el % y el default de si el toggle de
+// retención debe salir prendido o apagado cuando el cliente todavía no
+// tiene su propio historial guardado.
+function defaultRetencion(entidad: Entity | undefined): { activa: boolean; pct: string } {
+  const situacion = entidad?.client_retention_situation;
+  if (situacion === "10") return { activa: true, pct: "10.00" };
+  if (situacion === "6") return { activa: true, pct: "6.00" };
+  return { activa: false, pct: "10.00" };
+}
 
 type Client = {
   id: string;
@@ -78,6 +90,26 @@ export default function NuevaFacturaForm({
   );
   const [clientId, setClientId] = useState(clientesDeEntidad[0]?.id ?? "");
   const cliente = clientesDeEntidad.find((c) => c.id === clientId) ?? clientesDeEntidad[0];
+
+  // Toggle "Cliente te retiene" (1 sept 2026, pedido de Joel): si el
+  // cliente ya tiene su propio % guardado (es_negocio + retention_pct) se
+  // usa ese; si no, arranca según el relevo por defecto de la entidad
+  // (business_entities.client_retention_situation) — así la mayoría de las
+  // facturas salen ya correctas y solo hay que apagar el toggle en las
+  // excepciones que no retienen.
+  const [retencionActiva, setRetencionActiva] = useState(false);
+  const [retencionPctInput, setRetencionPctInput] = useState("10.00");
+  useEffect(() => {
+    if (cliente?.es_negocio && Number(cliente.retention_pct) > 0) {
+      setRetencionActiva(true);
+      setRetencionPctInput(String(cliente.retention_pct));
+    } else {
+      const d = defaultRetencion(entidad);
+      setRetencionActiva(d.activa);
+      setRetencionPctInput(d.pct);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
 
   const [listaServicios, setListaServicios] = useState<ServicioCat[]>(servicios);
   const [servicioId, setServicioId] = useState<string>(listaServicios[0]?.id ?? "personalizado");
@@ -194,7 +226,7 @@ export default function NuevaFacturaForm({
       : 0;
   const subtotal = montoNum;
   const ivuMonto = subtotal * (ivuPct / 100);
-  const retencionPct = cliente?.es_negocio ? Number(cliente.retention_pct || 0) : 0;
+  const retencionPct = retencionActiva ? Number(retencionPctInput) || 0 : 0;
   const retencionMonto = subtotal * (retencionPct / 100);
   const total = subtotal + ivuMonto - retencionMonto;
 
@@ -222,6 +254,17 @@ export default function NuevaFacturaForm({
       setError("Sesión expirada — vuelve a entrar.");
       setLoading(false);
       return;
+    }
+
+    // El toggle "Cliente te retiene" queda guardado en el cliente también
+    // (no solo en esta factura) para que la próxima factura a este mismo
+    // cliente ya salga con el estado correcto sin tener que volver a
+    // tocarlo — mismo campo que usa /dashboard/clientes.
+    if (cliente.es_negocio !== retencionActiva || (retencionActiva && Number(cliente.retention_pct) !== retencionPct)) {
+      await supabase
+        .from("clients")
+        .update({ es_negocio: retencionActiva, retention_pct: retencionActiva ? retencionPct : 0 })
+        .eq("id", cliente.id);
     }
 
     const { data: factura, error: insertError } = await supabase
@@ -344,6 +387,37 @@ export default function NuevaFacturaForm({
             </select>
           )}
         </Field>
+
+        {cliente && (
+          <div className="flex items-center justify-between rounded-lg border border-border bg-bg p-3">
+            <div className="flex-1">
+              <p className="text-sm font-medium">Cliente te retiene</p>
+              <p className="text-xs text-muted">Retención automática (Sección 1062.03)</p>
+            </div>
+            {retencionActiva && (
+              <input
+                className="vc-input mr-2 w-16 flex-shrink-0"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={retencionPctInput}
+                onChange={(e) => setRetencionPctInput(e.target.value)}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => setRetencionActiva(!retencionActiva)}
+              className="relative h-[17px] w-[30px] flex-shrink-0 rounded-full transition-colors"
+              style={{ background: retencionActiva ? "#1D9E75" : "var(--border)" }}
+            >
+              <span
+                className="absolute top-[2px] h-[13px] w-[13px] rounded-full bg-white transition-all"
+                style={{ left: retencionActiva ? "15px" : "2px" }}
+              />
+            </button>
+          </div>
+        )}
 
         <Field label="Servicio">
           <select className="vc-input" value={servicioId} onChange={(e) => elegirServicio(e.target.value)}>

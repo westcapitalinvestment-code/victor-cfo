@@ -67,7 +67,6 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const margin = 50;
   const width = 612;
-  let y = 792 - margin;
 
   const teal = rgb(0.114, 0.62, 0.459); // #1D9E75
   const gris = rgb(0.45, 0.45, 0.45);
@@ -115,83 +114,93 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     page.drawText(contenido, { x: xDerecha - w, y: yPos, size, font: f, color: opts.color ?? negro });
   }
 
-  // --- Encabezado: logo (si hay) + negocio a la izquierda, "FACTURA" + número a la derecha ---
+  // --- Encabezado estilo FreshBooks (pedido de Joel, 1 sept 2026): logo +
+  // negocio arriba a la derecha (sin nombre personal ni EIN — eso también
+  // lo pidió quitar), línea de color debajo, y una fila con el cliente a la
+  // izquierda y el número de factura + fechas + el total bien grande a la
+  // derecha, calcando el peso visual que le da FreshBooks al "Amount Due".
+  let yLogo = 792 - margin;
   if (logoImg) {
-    page.drawImage(logoImg, { x: margin, y: y - logoDims.height, width: logoDims.width, height: logoDims.height });
-    y -= logoDims.height + 10;
+    page.drawImage(logoImg, { x: margin, y: yLogo - logoDims.height, width: logoDims.width, height: logoDims.height });
   }
-  texto(entidad?.name || owner?.full_name || "VICTOR CFO", margin, y, { f: bold, size: 15 });
-  y -= 16;
-  if (owner?.full_name && entidad?.name && owner.full_name !== entidad.name) {
-    texto(owner.full_name, margin, y, { size: 9, color: gris });
-    y -= 12;
-  }
-  if (entidad?.ein) {
-    texto(`RUC/EIN: ${entidad.ein}`, margin, y, { size: 9, color: gris });
-    y -= 12;
+
+  let yNeg = 792 - margin - 2;
+  textoDerecha(entidad?.name || owner?.full_name || "VICTOR CFO", width - margin, yNeg, { f: bold, size: 14 });
+  yNeg -= 15;
+  if (entidad?.phone) {
+    textoDerecha(entidad.phone, width - margin, yNeg, { size: 9, color: gris });
+    yNeg -= 12;
   }
   if (entidad?.address) {
-    texto(entidad.address, margin, y, { size: 9, color: gris });
-    y -= 12;
+    textoDerecha(entidad.address, width - margin, yNeg, { size: 9, color: gris });
+    yNeg -= 12;
   }
   if (entidad?.municipio) {
-    texto(`${entidad.municipio}, PR${entidad?.zip ? " " + entidad.zip : ""}`, margin, y, { size: 9, color: gris });
-    y -= 12;
-  }
-  if (entidad?.phone) {
-    texto(entidad.phone, margin, y, { size: 9, color: gris });
-    y -= 12;
+    textoDerecha(`${entidad.municipio}, PR${entidad?.zip ? " " + entidad.zip : ""}`, width - margin, yNeg, { size: 9, color: gris });
+    yNeg -= 12;
   }
 
-  textoDerecha("FACTURA", width - margin, 792 - margin, { f: bold, size: 20, color: teal });
-  textoDerecha(`# ${factura.numero}`, width - margin, 792 - margin - 20, { size: 11 });
-  textoDerecha(`Emitida: ${formatFecha(factura.fecha_emision)}`, width - margin, 792 - margin - 35, { size: 9, color: gris });
-  if (factura.fecha_vencimiento) {
-    textoDerecha(`Vence: ${formatFecha(factura.fecha_vencimiento)}`, width - margin, 792 - margin - 47, { size: 9, color: gris });
-  }
+  const yLogoAbajo = logoImg ? yLogo - logoDims.height - 24 : yLogo;
+  let y = Math.min(yLogoAbajo, yNeg) - 14;
 
-  y -= 14;
-  page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1, color: lineaGris });
-  y -= 20;
+  page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1.5, color: teal });
+  y -= 26;
 
-  // --- Cliente ---
-  texto("FACTURAR A", margin, y, { f: bold, size: 8, color: gris });
-  y -= 14;
-  texto(cliente?.name ?? "Sin cliente", margin, y, { f: bold, size: 11 });
-  y -= 14;
+  const yFila = y;
+  texto("FACTURAR A", margin, yFila, { f: bold, size: 8, color: gris });
+  textoDerecha("FACTURA #", width - margin, yFila, { f: bold, size: 8, color: gris });
+
+  let yIzq = yFila - 14;
+  texto(cliente?.name ?? "Sin cliente", margin, yIzq, { f: bold, size: 12 });
+  let yDer = yFila - 14;
+  textoDerecha(factura.numero, width - margin, yDer, { f: bold, size: 12 });
+
+  yIzq -= 14;
   if (cliente?.email) {
-    texto(cliente.email, margin, y, { size: 9, color: gris });
-    y -= 12;
+    texto(cliente.email, margin, yIzq, { size: 9, color: gris });
+    yIzq -= 12;
   }
   if (cliente?.telefono) {
-    texto(cliente.telefono, margin, y, { size: 9, color: gris });
-    y -= 12;
+    texto(cliente.telefono, margin, yIzq, { size: 9, color: gris });
+    yIzq -= 12;
   }
   if (cliente?.tax_id) {
-    texto(`RUC: ${cliente.tax_id}`, margin, y, { size: 9, color: gris });
-    y -= 12;
+    texto(`RUC: ${cliente.tax_id}`, margin, yIzq, { size: 9, color: gris });
+    yIzq -= 12;
   }
 
-  y -= 15;
+  yDer -= 14;
+  textoDerecha(`Emitida: ${formatFecha(factura.fecha_emision)}`, width - margin, yDer, { size: 9, color: gris });
+  yDer -= 12;
+  if (factura.fecha_vencimiento) {
+    textoDerecha(`Vence: ${formatFecha(factura.fecha_vencimiento)}`, width - margin, yDer, { size: 9, color: gris });
+    yDer -= 12;
+  }
+  yDer -= 8;
+  textoDerecha("TOTAL A PAGAR", width - margin, yDer, { f: bold, size: 8, color: gris });
+  yDer -= 22;
+  textoDerecha(formatMoney(Number(factura.total)), width - margin, yDer, { f: bold, size: 22, color: teal });
 
-  // --- Tabla de líneas ---
+  y = Math.min(yIzq, yDer) - 20;
+
+  // --- Tabla de líneas (orden Descripción / Precio / Cant. / Subtotal, como FreshBooks) ---
   const colDesc = margin;
-  const colCant = 330;
-  const colPrecio = 400;
+  const colPrecio = 330;
+  const colCant = 420;
   const colSubtotal = width - margin;
 
   page.drawRectangle({ x: margin, y: y - 4, width: width - margin * 2, height: 20, color: rgb(0.96, 0.96, 0.96) });
   texto("Descripción", colDesc + 5, y + 2, { f: bold, size: 9, color: gris });
-  texto("Cant.", colCant, y + 2, { f: bold, size: 9, color: gris });
   texto("Precio", colPrecio, y + 2, { f: bold, size: 9, color: gris });
+  texto("Cant.", colCant, y + 2, { f: bold, size: 9, color: gris });
   textoDerecha("Subtotal", colSubtotal - 5, y + 2, { f: bold, size: 9, color: gris });
   y -= 24;
 
   for (const it of items ?? []) {
     const subtotalLinea = Number(it.subtotal_linea ?? Number(it.cantidad) * Number(it.precio_unitario));
-    texto(String(it.descripcion).slice(0, 55), colDesc + 5, y, { size: 10 });
-    texto(String(it.cantidad), colCant, y, { size: 10 });
+    texto(String(it.descripcion).slice(0, 50), colDesc + 5, y, { size: 10 });
     texto(formatMoney(Number(it.precio_unitario)), colPrecio, y, { size: 10 });
+    texto(String(it.cantidad), colCant, y, { size: 10 });
     textoDerecha(formatMoney(subtotalLinea), colSubtotal - 5, y, { size: 10 });
     y -= 18;
     page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: width - margin, y: y + 6 }, thickness: 0.5, color: lineaGris });
@@ -201,7 +210,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   // --- Totales ---
   const filaTotales = (label: string, valor: string, opts: { bold?: boolean; color?: ReturnType<typeof rgb> } = {}) => {
-    texto(label, colPrecio - 40, y, { size: 10, color: opts.color ?? gris, f: opts.bold ? bold : font });
+    texto(label, colPrecio - 10, y, { size: 10, color: opts.color ?? gris, f: opts.bold ? bold : font });
     textoDerecha(valor, colSubtotal - 5, y, { size: 10, color: opts.color ?? negro, f: opts.bold ? bold : font });
     y -= 16;
   };
@@ -213,7 +222,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (Number(factura.retencion_pct) > 0) {
     filaTotales(`Retención (${factura.retencion_pct}%)`, `-${formatMoney(Number(factura.retencion_monto))}`);
   }
-  page.drawLine({ start: { x: colPrecio - 40, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 1, color: lineaGris });
+  page.drawLine({ start: { x: colPrecio - 10, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 1, color: lineaGris });
   y -= 4;
   filaTotales("TOTAL", formatMoney(Number(factura.total)), { bold: true, color: teal });
 
@@ -246,11 +255,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     y -= 14;
   }
 
+  // El pie de factura va anclado abajo junto a "¡Gracias por su
+  // preferencia!" (pedido de Joel) — no donde termine de fluir el resto
+  // del contenido, así siempre queda en el mismo sitio sin importar cuántas
+  // líneas tenga la factura arriba.
   if (entidad?.invoice_footer) {
-    const lineasPie = envolverTexto(String(entidad.invoice_footer).slice(0, 300), font, 8, width - margin * 2);
+    const lineasPie = envolverTexto(String(entidad.invoice_footer).slice(0, 300), font, 8, width - margin * 2 - 180);
+    let piePieY = 55;
     for (const linea of lineasPie) {
-      texto(linea, margin, y, { size: 8, color: gris });
-      y -= 11;
+      texto(linea, margin, piePieY, { size: 8, color: gris });
+      piePieY -= 11;
     }
   }
 

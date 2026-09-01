@@ -247,15 +247,13 @@ export default function CotizacionDetalle({
       <div className="vc-card flex flex-col gap-3">
         {error && <p className="text-xs text-red">{error}</p>}
 
-        {(cotizacion.business_entities?.ein ||
-          cotizacion.business_entities?.address ||
+        {/* Ni el nombre personal del dueño ni el RUC/EIN van en la cotización
+            (pedido de Joel, 1 sept 2026) — solo la identidad del negocio. */}
+        {(cotizacion.business_entities?.address ||
           cotizacion.business_entities?.municipio ||
           cotizacion.business_entities?.phone) && (
           <div className="border-b border-border pb-3">
             <p className="text-sm font-medium">{entidadNombre}</p>
-            {cotizacion.business_entities?.ein && (
-              <p className="text-xs text-muted">RUC/EIN: {cotizacion.business_entities.ein}</p>
-            )}
             {cotizacion.business_entities?.address && (
               <p className="text-xs text-muted">{cotizacion.business_entities.address}</p>
             )}

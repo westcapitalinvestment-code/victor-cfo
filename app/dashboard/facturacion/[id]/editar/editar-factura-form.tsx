@@ -1,11 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
 
-type Entity = { id: string; name: string; ivu_applies: boolean; ivu_rate_estatal: number; ivu_rate_municipal: number };
+type Entity = {
+  id: string;
+  name: string;
+  ivu_applies: boolean;
+  ivu_rate_estatal: number;
+  ivu_rate_municipal: number;
+  client_retention_situation: string | null;
+};
+
+// Misma lógica que en nueva-factura-form.tsx.
+function defaultRetencion(entidad: Entity | undefined): { activa: boolean; pct: string } {
+  const situacion = entidad?.client_retention_situation;
+  if (situacion === "10") return { activa: true, pct: "10.00" };
+  if (situacion === "6") return { activa: true, pct: "6.00" };
+  return { activa: false, pct: "10.00" };
+}
 type Client = {
   id: string;
   name: string;
@@ -28,6 +43,7 @@ type Factura = {
   fecha_vencimiento: string | null;
   notas: string | null;
   metodos_cobro_aceptados: string[] | null;
+  retencion_pct: number;
   late_fee_habilitado: boolean;
   late_fee_tipo: string | null;
   late_fee_monto: number;
@@ -67,6 +83,31 @@ export default function EditarFacturaForm({
   );
   const [clientId, setClientId] = useState(factura.client_id ?? clientesDeEntidad[0]?.id ?? "");
   const cliente = clientesDeEntidad.find((c) => c.id === clientId) ?? clientesDeEntidad[0];
+
+  // Toggle "Cliente te retiene" (1 sept 2026) — arranca con lo que ya tenía
+  // guardado ESTA factura (no lo que el cliente tenga hoy, que pudo haber
+  // cambiado desde que se creó); solo se recalcula desde el cliente/entidad
+  // si el usuario cambia el cliente en el dropdown.
+  const [retencionActiva, setRetencionActiva] = useState(Number(factura.retencion_pct || 0) > 0);
+  const [retencionPctInput, setRetencionPctInput] = useState(
+    Number(factura.retencion_pct || 0) > 0 ? String(factura.retencion_pct) : defaultRetencion(entidad).pct
+  );
+  const primerRenderRetencion = useRef(true);
+  useEffect(() => {
+    if (primerRenderRetencion.current) {
+      primerRenderRetencion.current = false;
+      return;
+    }
+    if (cliente?.es_negocio && Number(cliente.retention_pct) > 0) {
+      setRetencionActiva(true);
+      setRetencionPctInput(String(cliente.retention_pct));
+    } else {
+      const d = defaultRetencion(entidad);
+      setRetencionActiva(d.activa);
+      setRetencionPctInput(d.pct);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
 
   const servicioOriginalSigueActivo = factura.servicio_id && servicios.some((s) => s.id === factura.servicio_id);
   const [servicioId, setServicioId] = useState<string>(
@@ -120,7 +161,7 @@ export default function EditarFacturaForm({
       : 0;
   const subtotal = montoNum;
   const ivuMonto = subtotal * (ivuPct / 100);
-  const retencionPct = cliente?.es_negocio ? Number(cliente.retention_pct || 0) : 0;
+  const retencionPct = retencionActiva ? Number(retencionPctInput) || 0 : 0;
   const retencionMonto = subtotal * (retencionPct / 100);
   const total = subtotal + ivuMonto - retencionMonto;
   const feeStripeEstimado = (subtotal + ivuMonto) * STRIPE_FEE_PCT + STRIPE_FEE_FIJO;
@@ -142,6 +183,15 @@ export default function EditarFacturaForm({
 
     setLoading(true);
     setError(null);
+
+    // Igual que en nueva-factura-form.tsx: el toggle también queda
+    // guardado en el cliente para que la próxima factura ya salga bien.
+    if (cliente.es_negocio !== retencionActiva || (retencionActiva && Number(cliente.retention_pct) !== retencionPct)) {
+      await supabase
+        .from("clients")
+        .update({ es_negocio: retencionActiva, retention_pct: retencionActiva ? retencionPct : 0 })
+        .eq("id", cliente.id);
+    }
 
     const { error: updateError } = await supabase
       .from("invoices")
@@ -266,6 +316,37 @@ export default function EditarFacturaForm({
           </select>
         </Field>
 
+        {cliente && (
+          <div className="flex items-center justify-between rounded-lg border border-border bg-bg p-3">
+            <div className="flex-1">
+              <p className="text-sm font-medium">Cliente te retiene</p>
+              <p className="text-xs text-muted">Retención automática (Sección 1062.03)</p>
+            </div>
+            {retencionActiva && (
+              <input
+                className="vc-input mr-2 w-16 flex-shrink-0"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={retencionPctInput}
+                onChange={(e) => setRetencionPctInput(e.target.value)}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => setRetencionActiva(!retencionActiva)}
+              className="relative h-[17px] w-[30px] flex-shrink-0 rounded-full transition-colors"
+              style={{ background: retencionActiva ? "#1D9E75" : "var(--border)" }}
+            >
+              <span
+                className="absolute top-[2px] h-[13px] w-[13px] rounded-full bg-white transition-all"
+                style={{ left: retencionActiva ? "15px" : "2px" }}
+              />
+            </button>
+          </div>
+        )}
+
         <Field label="Servicio">
           <select className="vc-input" value={servicioId} onChange={(e) => elegirServicio(e.target.value)}>
             {servicios.map((s) => (
@@ -338,37 +419,34 @@ export default function EditarFacturaForm({
         </Field>
 
         <Field label="Recargo por mora">
-          <div className="flex gap-2">
-            <select className="vc-input flex-1" value={moraTipo} onChange={(e) => setMoraTipo(e.target.value as typeof moraTipo)}>
-              <option value="ninguno">Sin recargo por mora</option>
-              <option value="fijo">Monto fijo</option>
-              <option value="porcentaje">Porcentaje</option>
-            </select>
-            {moraTipo !== "ninguno" && (
-              <>
-                <input
-                  className="vc-input w-24 flex-shrink-0"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={moraMonto}
-                  onChange={(e) => setMoraMonto(e.target.value)}
-                />
-                <div className="flex flex-shrink-0 items-center gap-1 text-xs text-muted">
-                  después de
-                  <input
-                    className="vc-input w-14"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={moraDias}
-                    onChange={(e) => setMoraDias(e.target.value)}
-                  />
-                  días
-                </div>
-              </>
-            )}
-          </div>
+          <select className="vc-input" value={moraTipo} onChange={(e) => setMoraTipo(e.target.value as typeof moraTipo)}>
+            <option value="ninguno">Sin recargo por mora</option>
+            <option value="fijo">Monto fijo</option>
+            <option value="porcentaje">Porcentaje</option>
+          </select>
+          {moraTipo !== "ninguno" && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                className="vc-input w-24 flex-shrink-0"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder={moraTipo === "porcentaje" ? "%" : "$"}
+                value={moraMonto}
+                onChange={(e) => setMoraMonto(e.target.value)}
+              />
+              <span className="flex-shrink-0 text-xs text-muted">después de</span>
+              <input
+                className="vc-input w-16 flex-shrink-0"
+                type="number"
+                min="0"
+                step="1"
+                value={moraDias}
+                onChange={(e) => setMoraDias(e.target.value)}
+              />
+              <span className="flex-shrink-0 text-xs text-muted">días</span>
+            </div>
+          )}
         </Field>
 
         <div className="flex gap-2">

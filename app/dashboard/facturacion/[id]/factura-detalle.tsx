@@ -224,14 +224,10 @@ export default function FacturaDetalle({
       <div className="vc-card factura-imprimible flex flex-col gap-3">
         {error && <p className="no-imprimir text-xs text-red">{error}</p>}
 
+        {/* Ni el nombre personal del dueño ni el RUC/EIN van en la factura
+            (pedido de Joel, 1 sept 2026) — solo la identidad del negocio. */}
         <div className="border-b border-border pb-3">
-          <p className="text-sm font-medium">{negocioNombre || entidadNombre}</p>
-          {entidadNombre && negocioNombre && entidadNombre !== negocioNombre && (
-            <p className="text-xs text-muted">{entidadNombre}</p>
-          )}
-          {factura.business_entities?.ein && (
-            <p className="text-xs text-muted">RUC/EIN: {factura.business_entities.ein}</p>
-          )}
+          <p className="text-sm font-medium">{entidadNombre}</p>
           {factura.business_entities?.address && (
             <p className="text-xs text-muted">{factura.business_entities.address}</p>
           )}

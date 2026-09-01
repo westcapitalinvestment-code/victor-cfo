@@ -17,7 +17,9 @@ export default async function NuevaFacturaPage() {
 
   const { data: entities } = await supabase
     .from("business_entities")
-    .select("id, name, ivu_applies, ivu_rate_estatal, ivu_rate_municipal, invoice_prefix, invoice_start_number, default_payment_terms")
+    .select(
+      "id, name, ivu_applies, ivu_rate_estatal, ivu_rate_municipal, invoice_prefix, invoice_start_number, default_payment_terms, client_retention_situation"
+    )
     .eq("owner_id", user.id)
     .eq("active", true);
 
