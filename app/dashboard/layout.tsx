@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { fechaHoyPR } from "@/lib/hora-pr";
+import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 import BottomNav from "./bottom-nav";
 import VictorChat from "./victor-chat";
 import Topbar from "./topbar";
@@ -27,6 +28,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // que "referred_by" para el que SÍ paga (eso lo lee el checkout directo
   // de la base de datos); aquí solo es para pintar el número correcto.
   let esReferido = false;
+  // Entidades de negocio del usuario (solo aplica a Pro) + cuál quedó
+  // activa en el selector "Negocio" del topbar — ver lib/entidad-activa.ts.
+  let entidadesNegocio: { id: string; name: string }[] = [];
+  let entidadActivaId: string | null = null;
+  let vistaGlobalNegocio = false;
   try {
     const supabase = createClient();
     const {
@@ -49,6 +55,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
       fullName = userRow?.full_name ?? null;
       plan = userRow?.plan ?? null;
       esReferido = !!userRow?.referred_by;
+
+      const esPro = plan === "pro" || plan === "proplus";
+      if (esPro) {
+        const { data: entidades } = await supabase
+          .from("business_entities")
+          .select("id, name")
+          .eq("owner_id", user.id)
+          .eq("active", true)
+          .order("created_at", { ascending: true });
+        entidadesNegocio = entidades ?? [];
+        const resuelto = resolverEntidadActiva(entidadesNegocio, leerEntidadActivaCookie());
+        entidadActivaId = resuelto.entidadId;
+        vistaGlobalNegocio = resuelto.vistaGlobal;
+      }
     }
   } catch {
     // Si esto falla por lo que sea, simplemente no auto-abrimos el chat —
@@ -59,7 +79,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <PinGate>
       <SessionTimeoutGate />
       <div className="pb-24">
-        <Topbar fullName={fullName} plan={plan} />
+        <Topbar
+          fullName={fullName}
+          plan={plan}
+          entidadesNegocio={entidadesNegocio}
+          entidadActivaId={entidadActivaId}
+          vistaGlobalNegocio={vistaGlobalNegocio}
+        />
         <BadgeUpdater />
         <AutoRefresh />
         {children}

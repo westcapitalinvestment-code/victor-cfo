@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import ProPaywall from "../pro-paywall";
 import FacturacionPortal from "./facturacion-portal";
+import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 
 // Portal único de Facturación (30-31 agosto 2026) — reemplaza el intento
 // anterior de dos pantallas separadas (Facturas/Cobros) para calcar la
@@ -44,29 +45,45 @@ export default async function FacturacionPage({
     );
   }
 
-  const { data: clients } = await supabase
+  // Entidad activa elegida en el selector "Negocio" del topbar (o "vista
+  // global" para ver todo mezclado, como era el comportamiento antes de
+  // este cambio) — cada entidad debe tener su propia facturación separada,
+  // así que en vez de traer todo por owner_id nada más, se filtra también
+  // por entity_id cuando hay una entidad específica activa.
+  const { entidadId: entidadActivaId, vistaGlobal } = resolverEntidadActiva(entities, leerEntidadActivaCookie());
+
+  let clientsQuery = supabase
     .from("clients")
     .select("id, name, email, es_negocio, retention_pct, entity_id")
     .eq("owner_id", user.id)
     .order("name", { ascending: true });
-
-  const { data: facturas } = await supabase
+  let facturasQuery = supabase
     .from("invoices")
     .select("id, numero, subtotal, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
     .eq("owner_id", user.id)
     .order("fecha_emision", { ascending: false });
-
-  const { data: servicios } = await supabase
+  let serviciosQuery = supabase
     .from("services")
     .select("id, nombre, tipo, precio, ivu_exento, activo, entity_id")
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false });
-
-  const { data: cotizaciones } = await supabase
+  let cotizacionesQuery = supabase
     .from("cotizaciones")
     .select("id, numero, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
     .eq("owner_id", user.id)
     .order("fecha_emision", { ascending: false });
+
+  if (!vistaGlobal && entidadActivaId) {
+    clientsQuery = clientsQuery.eq("entity_id", entidadActivaId);
+    facturasQuery = facturasQuery.eq("entity_id", entidadActivaId);
+    serviciosQuery = serviciosQuery.eq("entity_id", entidadActivaId);
+    cotizacionesQuery = cotizacionesQuery.eq("entity_id", entidadActivaId);
+  }
+
+  const { data: clients } = await clientsQuery;
+  const { data: facturas } = await facturasQuery;
+  const { data: servicios } = await serviciosQuery;
+  const { data: cotizaciones } = await cotizacionesQuery;
 
   return (
     <FacturacionPortal
@@ -74,7 +91,7 @@ export default async function FacturacionPage({
       facturas={(facturas ?? []) as any}
       servicios={servicios ?? []}
       cotizaciones={(cotizaciones ?? []) as any}
-      entidadId={entities[0]?.id ?? null}
+      entidadId={entidadActivaId ?? entities[0]?.id ?? null}
       tabInicial={searchParams?.tab}
     />
   );

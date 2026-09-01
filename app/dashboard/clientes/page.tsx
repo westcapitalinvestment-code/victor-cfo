@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 
 // Lista de clientes — Feature 1 del WCV Technical Brief V6 ("Retención B2B
 // 10%/6% con Toggle y Pote Visual", Prioridad ALTA). Cada cliente trae
@@ -14,11 +15,20 @@ export default async function ClientesPage() {
 
   if (!user) redirect("/login");
 
-  const { data: clients, error } = await supabase
+  // Misma entidad activa que usa el portal de Facturación (topbar → cookie)
+  // — cada entidad ve solo sus propios clientes, salvo en "vista global".
+  const { data: entidades } = await supabase.from("business_entities").select("id").eq("owner_id", user.id).eq("active", true);
+  const { entidadId: entidadActivaId, vistaGlobal } = resolverEntidadActiva(entidades ?? [], leerEntidadActivaCookie());
+
+  let clientsQuery = supabase
     .from("clients")
     .select("id, name, email, es_negocio, retention_pct, entity_id")
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false });
+  if (!vistaGlobal && entidadActivaId) {
+    clientsQuery = clientsQuery.eq("entity_id", entidadActivaId);
+  }
+  const { data: clients, error } = await clientsQuery;
 
   return (
     <div className="vc-shell">

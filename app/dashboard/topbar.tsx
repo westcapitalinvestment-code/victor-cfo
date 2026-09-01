@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { VALOR_VISTA_GLOBAL } from "@/lib/entidad-activa";
 
 // Barra superior compartida de todo el dashboard — calcada de la
 // .topbar de VICTOR — Dashboard Core.html: logo + nombre + badge de plan,
 // banner central para invitar al contable (gratis, para cualquier plan —
 // es un loop de referidos, no un upsell de Pro), toggle día/noche
-// funcional, campana, y debajo los tabs de contexto Personal/Resumen.
-// "Negocio" no se muestra todavía — ese selector de entidad es parte del
-// multi-entidad de Pro, que sigue en pausa (ver #34/#35).
+// funcional, campana, y debajo los tabs de contexto Personal/Negocio/Resumen.
+// "Negocio" (selector de entidad, 1 sept 2026) solo aparece si el usuario es
+// Pro y ya tiene al menos una business_entity — deja elegir cuál entidad
+// queda activa (o "vista global") vía cookie, ver lib/entidad-activa.ts.
 // Se monta una sola vez desde app/dashboard/layout.tsx.
 
 const THEME_KEY = "victor_theme";
@@ -52,7 +54,21 @@ function ThemeToggle() {
 // visibilitychange, sin necesidad de un state manager nuevo.
 const EVENTO_ABRIR_VICTOR = "victor:abrir";
 
-export default function Topbar({ fullName, plan }: { fullName: string | null; plan: string | null }) {
+type EntidadNegocio = { id: string; name: string };
+
+export default function Topbar({
+  fullName,
+  plan,
+  entidadesNegocio = [],
+  entidadActivaId = null,
+  vistaGlobalNegocio = false,
+}: {
+  fullName: string | null;
+  plan: string | null;
+  entidadesNegocio?: EntidadNegocio[];
+  entidadActivaId?: string | null;
+  vistaGlobalNegocio?: boolean;
+}) {
   const esPro = plan === "pro" || plan === "proplus";
   // Badge de plan (30 agosto 2026, reportado por Joel): antes esto solo
   // distinguía Pro de "todo lo demás" (mostraba "Core" incluso para un
@@ -61,7 +77,45 @@ export default function Topbar({ fullName, plan }: { fullName: string | null; pl
   const esGratis = plan === "gratis";
   const nombreCorto = (fullName || "").split(" ")[0];
   const pathname = usePathname();
+  const router = useRouter();
+  const enNegocio =
+    pathname.startsWith("/dashboard/facturacion") ||
+    pathname.startsWith("/dashboard/clientes") ||
+    pathname.startsWith("/dashboard/entidades");
   const enResumen = pathname === "/dashboard/resumen";
+
+  const [openNegocio, setOpenNegocio] = useState(false);
+  const [cambiando, setCambiando] = useState(false);
+  const negocioRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickFuera(e: MouseEvent) {
+      if (negocioRef.current && !negocioRef.current.contains(e.target as Node)) setOpenNegocio(false);
+    }
+    document.addEventListener("mousedown", onClickFuera);
+    return () => document.removeEventListener("mousedown", onClickFuera);
+  }, []);
+
+  const entidadActiva = entidadesNegocio.find((e) => e.id === entidadActivaId);
+  const etiquetaNegocio = vistaGlobalNegocio ? "Vista global" : entidadActiva?.name || "Negocio";
+
+  async function seleccionarEntidad(valor: string) {
+    setCambiando(true);
+    try {
+      await fetch("/api/entidades/activa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entidadId: valor }),
+      });
+    } catch {
+      // Si falla el guardado de la cookie no pasa nada grave — el usuario
+      // simplemente sigue viendo la entidad que estaba activa antes.
+    }
+    setOpenNegocio(false);
+    setCambiando(false);
+    router.push("/dashboard/facturacion");
+    router.refresh();
+  }
 
   // El "pill" de VICTOR en el topbar ERA solo decorativo (un puntito verde
   // fijo). Decisión de Joel (28 agosto 2026): en vez de agregar una
@@ -147,12 +201,69 @@ export default function Topbar({ fullName, plan }: { fullName: string | null; pl
       </div>
 
       {/* Tabs de contexto — Personal y Resumen están disponibles en Core.
-          Negocio (selector de entidad) llega con el multi-entidad de Pro. */}
+          Negocio (selector de entidad) solo aparece si el usuario es Pro. */}
       <div className="vc-ctxbar">
         <div className="vc-ctxwrap">
-          <Link href="/dashboard" className={`vc-ctxtab ${!enResumen ? "on" : ""}`}>
+          <Link href="/dashboard" className={`vc-ctxtab ${!enResumen && !enNegocio ? "on" : ""}`}>
             Personal
           </Link>
+
+          {esPro && entidadesNegocio.length === 0 && (
+            <Link href="/dashboard/entidades/nueva" className={`vc-ctxtab ${enNegocio ? "on" : ""}`}>
+              + Negocio
+            </Link>
+          )}
+
+          {esPro && entidadesNegocio.length > 0 && (
+            <div ref={negocioRef} className={`vc-ctxtab-negocio-wrap ${enNegocio ? "on" : ""}`}>
+              <Link
+                href="/dashboard/facturacion"
+                className="vc-ctxtab-negocio-label"
+                onClick={() => setOpenNegocio(false)}
+                title={etiquetaNegocio}
+              >
+                {etiquetaNegocio}
+              </Link>
+              <button
+                type="button"
+                className="vc-ctxtab-negocio-chevron"
+                onClick={() => setOpenNegocio((v) => !v)}
+                aria-label="Cambiar entidad de negocio"
+              >
+                <i className="ti ti-chevron-down" style={{ fontSize: 12 }} />
+              </button>
+
+              {openNegocio && (
+                <div className="vc-negocio-menu">
+                  {entidadesNegocio.map((ent) => (
+                    <button
+                      key={ent.id}
+                      type="button"
+                      disabled={cambiando}
+                      className={`vc-negocio-item ${!vistaGlobalNegocio && ent.id === entidadActivaId ? "activo" : ""}`}
+                      onClick={() => seleccionarEntidad(ent.id)}
+                    >
+                      <span className="vc-negocio-dot" />
+                      {ent.name}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={cambiando}
+                    className={`vc-negocio-item ${vistaGlobalNegocio ? "activo" : ""}`}
+                    onClick={() => seleccionarEntidad(VALOR_VISTA_GLOBAL)}
+                  >
+                    <span className="vc-negocio-dot" style={{ background: "var(--muted)" }} />
+                    Vista global — todas las entidades
+                  </button>
+                  <Link href="/dashboard/entidades/nueva" className="vc-negocio-item vc-negocio-add" onClick={() => setOpenNegocio(false)}>
+                    + Añadir entidad — $24.99/mes
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
           <Link href="/dashboard/resumen" className={`vc-ctxtab ${enResumen ? "on" : ""}`}>
             Resumen
           </Link>
