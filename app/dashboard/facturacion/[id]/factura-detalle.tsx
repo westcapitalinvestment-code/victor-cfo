@@ -462,23 +462,57 @@ export default function FacturaDetalle({
 
             {!confirmandoPago ? (
               <button className="vc-btn-primary" disabled={loading} onClick={() => setConfirmandoPago(true)}>
-                Marcar como pagada
+                Registrar pago
               </button>
             ) : (
-              <div className="flex items-center gap-2">
-                <select className="vc-input flex-1" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
-                  {METODOS_PAGO.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
+              <div className="flex flex-col gap-2">
+                {/* Antes esto marcaba pagada de una vez, sin dar chance de
+                    revisar si lo que llegó cuadra con la retención esperada
+                    — pedido de Joel (1 sept 2026): a veces el cliente se
+                    olvida de retener o retiene mal, y si eso pasa no se debe
+                    marcar pagada tal cual, hay que ajustar la factura primero. */}
+                <div className="rounded-lg border border-border bg-bg p-3 text-sm">
+                  <p className="mb-1.5 text-xs uppercase tracking-wide text-muted">Verifica antes de confirmar</p>
+                  <div className="flex justify-between py-0.5">
+                    <span className="text-muted">Total que debía cobrar</span>
+                    <span className="font-medium">{formatMoney(factura.total)}</span>
+                  </div>
+                  {factura.retencion_pct > 0 && (
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-amb">Retención ({factura.retencion_pct}%) que el cliente debía depositar</span>
+                      <span className="font-medium text-amb">{formatMoney(factura.retencion_monto)}</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted">
+                  Si lo que recibiste no coincide con esto (el cliente no retuvo, o retuvo mal), no la marques pagada así —{" "}
+                  <Link href={`/dashboard/facturacion/${factura.id}/editar`} className="font-medium text-teal underline">
+                    ajústala primero
+                  </Link>
+                  .
+                </p>
+                <div className="flex items-center gap-2">
+                  <select className="vc-input flex-1" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
+                    {METODOS_PAGO.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="vc-btn-primary flex-shrink-0"
+                    disabled={loading}
+                    onClick={() => actualizarEstado("pagada", { metodo_pago: metodoPago })}
+                  >
+                    {loading ? "..." : "Está correcto, confirmar"}
+                  </button>
+                </div>
                 <button
-                  className="vc-btn-primary flex-shrink-0"
+                  className="self-start text-xs text-muted underline"
                   disabled={loading}
-                  onClick={() => actualizarEstado("pagada", { metodo_pago: metodoPago })}
+                  onClick={() => setConfirmandoPago(false)}
                 >
-                  {loading ? "..." : "Confirmar"}
+                  Cancelar
                 </button>
               </div>
             )}

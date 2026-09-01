@@ -408,27 +408,52 @@ function CobrosTab({ facturasIniciales }: { facturasIniciales: Factura[] }) {
                       className="rounded-lg border border-teal px-2.5 py-1.5 text-xs font-medium text-teal hover:opacity-80"
                       onClick={() => setPagando(f.id)}
                     >
-                      Marcar pagada
+                      Registrar pago
                     </button>
                   )}
                 </div>
               </div>
 
               {pagando === f.id && (
-                <div className="mt-2 flex items-center gap-2 pl-[42px]">
-                  <select className="vc-input flex-1" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
-                    {METODOS_PAGO.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                  <button className="vc-btn-primary flex-shrink-0" disabled={loading} onClick={() => marcarPagada(f.id)}>
-                    {loading ? "..." : "Confirmar"}
-                  </button>
-                  <button className="flex-shrink-0 text-xs text-muted hover:opacity-80" onClick={() => setPagando(null)}>
-                    Cancelar
-                  </button>
+                <div className="mt-2 flex flex-col gap-2 pl-[42px]">
+                  {/* Antes marcaba pagada de una vez sin mostrar la retención
+                      esperada — pedido de Joel (1 sept 2026): a veces el
+                      cliente se olvida de retener o retiene mal, y si eso
+                      pasa hay que ajustar la factura antes de marcarla pagada. */}
+                  {Number(f.retencion_pct) > 0 && (
+                    <div className="rounded-lg border border-border bg-bg p-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-muted">Total que debía cobrar</span>
+                        <span className="font-medium">{formatMoney(Number(f.total))}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-amb">Retención ({f.retencion_pct}%) que el cliente debía depositar</span>
+                        <span className="font-medium text-amb">{formatMoney(Number(f.retencion_monto))}</span>
+                      </div>
+                      <p className="mt-1 text-muted">
+                        ¿No coincide con lo que recibiste?{" "}
+                        <Link href={`/dashboard/facturacion/${f.id}/editar`} className="font-medium text-teal underline">
+                          Ajústala primero
+                        </Link>
+                        .
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <select className="vc-input flex-1" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
+                      {METODOS_PAGO.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="vc-btn-primary flex-shrink-0" disabled={loading} onClick={() => marcarPagada(f.id)}>
+                      {loading ? "..." : "Está correcto"}
+                    </button>
+                    <button className="flex-shrink-0 text-xs text-muted hover:opacity-80" onClick={() => setPagando(null)}>
+                      Cancelar
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
