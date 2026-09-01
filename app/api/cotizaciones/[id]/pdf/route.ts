@@ -228,7 +228,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   // Mismo patrón que /api/facturas: el pie de la cotización va anclado
-  // abajo junto a la nota final, no donde termine de fluir el contenido.
+  // abajo, no donde termine de fluir el contenido. Antes se mostraba SIEMPRE
+  // el mensaje genérico además del pie personalizado — 2 mensajes distintos
+  // (bug reportado por Joel, 1 sept 2026). El genérico ahora es solo
+  // respaldo cuando la entidad no configuró su propio pie de factura.
   if (entidad?.invoice_footer) {
     const lineasPie = envolverTexto(String(entidad.invoice_footer).slice(0, 300), font, 8, width - margin * 2 - 260);
     let piePieY = 55;
@@ -236,9 +239,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       texto(linea, margin, piePieY, { size: 8, color: gris });
       piePieY -= 11;
     }
+  } else {
+    textoDerecha("Cotización sujeta a cambios — ¡gracias por considerarnos!", width - margin, 40, { size: 9, color: gris });
   }
 
-  textoDerecha("Cotización sujeta a cambios — ¡gracias por considerarnos!", width - margin, 40, { size: 9, color: gris });
+  // Marca de VICTOR CFO al pie, centrada y discreta — separada del pie
+  // personalizado de la entidad (pedido de Joel, 1 sept 2026).
+  const marcaTexto = "Generado con VICTOR CFO";
+  const marcaSize = 7;
+  const marcaAncho = font.widthOfTextAtSize(marcaTexto, marcaSize);
+  texto(marcaTexto, width / 2 - marcaAncho / 2, 20, { size: marcaSize, color: rgb(0.7, 0.7, 0.7) });
 
   const bytes = await pdf.save();
   return new NextResponse(Buffer.from(bytes), {

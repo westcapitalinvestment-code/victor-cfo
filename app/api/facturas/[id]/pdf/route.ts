@@ -258,10 +258,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     y -= 14;
   }
 
-  // El pie de factura va anclado abajo junto a "¡Gracias por su
-  // preferencia!" (pedido de Joel) — no donde termine de fluir el resto
-  // del contenido, así siempre queda en el mismo sitio sin importar cuántas
-  // líneas tenga la factura arriba.
+  // El pie de factura va anclado abajo (pedido de Joel) — no donde termine
+  // de fluir el resto del contenido, así siempre queda en el mismo sitio sin
+  // importar cuántas líneas tenga la factura arriba. Antes se mostraba
+  // SIEMPRE el mensaje genérico "¡Gracias por su preferencia!" además del
+  // pie personalizado de la entidad, lo que salía como 2 mensajes distintos
+  // (bug reportado por Joel, 1 sept 2026). Ahora el genérico solo aparece
+  // como respaldo cuando la entidad no configuró su propio pie de factura.
   if (entidad?.invoice_footer) {
     const lineasPie = envolverTexto(String(entidad.invoice_footer).slice(0, 300), font, 8, width - margin * 2 - 180);
     let piePieY = 55;
@@ -269,9 +272,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       texto(linea, margin, piePieY, { size: 8, color: gris });
       piePieY -= 11;
     }
+  } else {
+    textoDerecha("¡Gracias por su preferencia!", width - margin, 40, { size: 9, color: gris });
   }
 
-  textoDerecha("¡Gracias por su preferencia!", width - margin, 40, { size: 9, color: gris });
+  // Marca de VICTOR CFO al pie, centrada y discreta — separada del pie
+  // personalizado de la entidad (pedido de Joel, 1 sept 2026).
+  const marcaTexto = "Generado con VICTOR CFO";
+  const marcaSize = 7;
+  const marcaAncho = font.widthOfTextAtSize(marcaTexto, marcaSize);
+  texto(marcaTexto, width / 2 - marcaAncho / 2, 20, { size: marcaSize, color: rgb(0.7, 0.7, 0.7) });
 
   const bytes = await pdf.save();
   return new NextResponse(Buffer.from(bytes), {
