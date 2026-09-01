@@ -131,10 +131,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // cuentan aquí — Plaid trae todas las cuentas bajo un mismo login, así
   // que sin este filtro alguien podría conectar su cuenta de negocio y
   // verla gratis sin pagar Pro.
+  // entity_id (migración 0040, 1 sept 2026): una cuenta ya asignada a una
+  // entidad de negocio desde /dashboard/cuentas ("Pertenece a") deja de
+  // contar aquí — su balance/deuda ahora vive en el Inicio de esa entidad
+  // (app/dashboard/negocio/page.tsx). Antes esto solo miraba es_negocio
+  // (el detector automático), así que una cuenta ya asignada a mano
+  // seguía sumando en Personal aunque el usuario la hubiera movido.
   let cuentasQuery = supabase
     .from("plaid_accounts")
-    .select("current_balance, es_negocio, type, subtype")
-    .eq("owner_id", user.id);
+    .select("current_balance, es_negocio, type, subtype, entity_id")
+    .eq("owner_id", user.id)
+    .is("entity_id", null);
   if (!esPro) cuentasQuery = cuentasQuery.eq("es_negocio", false);
   const { data: cuentasPlaid } = await cuentasQuery;
 

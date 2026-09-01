@@ -366,10 +366,14 @@ export async function POST(req: NextRequest) {
   // revisar la pantalla de Cuentas. Mismo filtro de negocio que el resto de
   // la app: si el plan es Core, las cuentas que parecen de negocio no cuentan.
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
+  // entity_id (migración 0040, 1 sept 2026): cuentas ya asignadas a una
+  // entidad de negocio no deben contar en el contexto de VICTOR de
+  // Personal — mismo criterio que dashboard/page.tsx.
   let cuentasQuery = supabase
     .from("plaid_accounts")
     .select("name, type, subtype, current_balance, es_negocio")
-    .eq("owner_id", user.id);
+    .eq("owner_id", user.id)
+    .is("entity_id", null);
   if (!esPro) cuentasQuery = cuentasQuery.eq("es_negocio", false);
 
   // Cuentas manuales (sin Plaid — ej. Apple Card) cuentan igual que las de

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatMoney } from "@/lib/format";
+import { Sensitive } from "@/lib/privacy";
 import { saludoPorHora } from "@/lib/hora-pr";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 
@@ -10,15 +11,15 @@ function hoyISO(): string {
 }
 
 // Inicio de negocio — versión ligera del mockup "VICTOR — Dashboard Pro.html"
-// (Inicio con contexto Negocio): saludo, Facturado/Cobrado/Pendiente,
-// facturas recientes, metas del negocio, alertas — todo ya real, scoped por
-// la entidad activa (mismo mecanismo que Facturación).
+// (Inicio con contexto Negocio): saludo, balance/deuda de las cuentas
+// asignadas a esta entidad, Facturado/Cobrado/Pendiente, facturas
+// recientes, metas del negocio, alertas — todo real, scoped por la entidad
+// activa (mismo mecanismo que Facturación).
 //
-// A propósito NO incluye la tarjeta de balance bancario del mockup
-// ("Ingresos del mes · BPPR ••4821") — todavía no existe forma de conectar
-// una cuenta (Plaid o manual) a una entidad de negocio, así que mostrar esa
-// tarjeta hoy sería inventar un número. Esa pieza llega con Cuentas de
-// negocio, que queda para otra sesión.
+// El balance/deuda (1 sept 2026, migración 0040) lee plaid_accounts.entity_id
+// — el usuario asigna cada cuenta a su entidad desde /dashboard/cuentas
+// ("Pertenece a"). Antes de esto no había forma de saber qué cuenta era de
+// qué entidad, así que esta tarjeta no existía.
 export default async function InicioNegocioPage() {
   const supabase = createClient();
   const {
@@ -63,7 +64,7 @@ export default async function InicioNegocioPage() {
 
   const entidadActiva = entidades.find((e) => e.id === entidadId);
 
-  const [{ data: facturasRaw }, { data: goals }, { data: documentos }] = await Promise.all([
+  const [{ data: facturasRaw }, { data: goals }, { data: documentos }, { data: cuentasNegocio }] = await Promise.all([
     supabase
       .from("invoices")
       .select("id, numero, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
@@ -82,7 +83,21 @@ export default async function InicioNegocioPage() {
       .eq("entity_id", entidadId)
       .not("fecha_vencimiento", "is", null)
       .order("fecha_vencimiento", { ascending: true }),
+    supabase
+      .from("plaid_accounts")
+      .select("current_balance, type")
+      .eq("owner_id", user.id)
+      .eq("entity_id", entidadId),
   ]);
+
+  const cuentasDeLaEntidad = cuentasNegocio ?? [];
+  const balanceNegocio = cuentasDeLaEntidad
+    .filter((c) => c.type === "depository")
+    .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
+  const deudaNegocio = cuentasDeLaEntidad
+    .filter((c) => c.type === "credit" || c.type === "loan")
+    .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
+  const tieneCuentas = cuentasDeLaEntidad.length > 0;
 
   // Supabase tipa la relación clients(name) como arreglo por defecto — se
   // castea a objeto único aquí, mismo truco que ya usa facturacion/page.tsx
@@ -139,6 +154,23 @@ export default async function InicioNegocioPage() {
           + Factura
         </Link>
       </div>
+
+      {tieneCuentas && (
+        <div className="mb-4 grid grid-cols-2 gap-3">
+          <div className="vc-card text-center">
+            <p className="text-[10px] uppercase tracking-wide text-muted">Balance</p>
+            <p className="mt-1 text-lg font-medium">
+              <Sensitive>{formatMoney(balanceNegocio)}</Sensitive>
+            </p>
+          </div>
+          <div className="vc-card text-center">
+            <p className="text-[10px] uppercase tracking-wide text-muted">Deuda</p>
+            <p className="mt-1 text-lg font-medium" style={{ color: deudaNegocio > 0 ? "#B7304A" : undefined }}>
+              <Sensitive>{formatMoney(deudaNegocio)}</Sensitive>
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-3 gap-3">
         <div className="vc-card text-center">

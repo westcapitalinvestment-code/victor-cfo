@@ -118,6 +118,7 @@ export default async function GastosPage({
     .from("plaid_accounts")
     .select("plaid_account_id, name, nickname, mask, type, subtype")
     .eq("owner_id", user.id)
+    .is("entity_id", null)
     .order("name");
   if (!esPro) cuentasQuery = cuentasQuery.eq("es_negocio", false);
 
