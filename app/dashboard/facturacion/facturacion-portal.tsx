@@ -137,9 +137,20 @@ export default function FacturacionPortal({
       </div>
 
       <div className="mb-4 rounded-2xl border border-teal bg-teal/[.04] p-3.5">
-        <div className="mb-3">
-          <p className="text-lg font-medium">Facturación</p>
-          <p className="text-xs text-muted">Portal completo</p>
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-lg font-medium">Facturación</p>
+            <p className="text-xs text-muted">Portal completo</p>
+          </div>
+          {entidadId && (
+            <Link
+              href={`/dashboard/entidades/${entidadId}/editar`}
+              className="flex flex-shrink-0 items-center gap-1 text-xs font-medium text-teal hover:opacity-80"
+            >
+              <i className="ti ti-settings" style={{ fontSize: 14 }} />
+              Editar negocio
+            </Link>
+          )}
         </div>
         <div
           className="flex"

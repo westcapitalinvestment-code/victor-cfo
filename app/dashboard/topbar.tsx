@@ -235,6 +235,17 @@ export default function Topbar({
 
               {openNegocio && (
                 <div className="vc-negocio-menu">
+                  {!vistaGlobalNegocio && entidadActivaId && (
+                    <Link
+                      href={`/dashboard/entidades/${entidadActivaId}/editar`}
+                      className="vc-negocio-item"
+                      style={{ color: "var(--muted)" }}
+                      onClick={() => setOpenNegocio(false)}
+                    >
+                      <i className="ti ti-settings" style={{ fontSize: 13 }} />
+                      Editar {etiquetaNegocio}
+                    </Link>
+                  )}
                   {entidadesNegocio.map((ent) => (
                     <button
                       key={ent.id}

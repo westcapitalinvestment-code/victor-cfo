@@ -71,12 +71,15 @@ export default function EntidadForm({
   modo,
   entidad,
   esPrimeraEntidad,
+  bienvenida: bienvenidaProp,
 }: {
   modo: "crear" | "editar";
   entidad?: EntidadCompleta;
   esPrimeraEntidad: boolean;
+  bienvenida?: boolean;
 }) {
   const router = useRouter();
+  const bienvenida = modo === "editar" && !!bienvenidaProp;
   const supabase = createClient();
   const [tab, setTab] = useState<Tab>("perfil");
   const [guardando, setGuardando] = useState(false);
@@ -194,16 +197,22 @@ export default function EntidadForm({
       return;
     }
 
-    const { error: insertError } = await supabase.from("business_entities").insert({
-      owner_id: user.id,
-      ...camposComunes(),
-    });
+    const { data: nueva, error: insertError } = await supabase
+      .from("business_entities")
+      .insert({ owner_id: user.id, ...camposComunes() })
+      .select("id")
+      .single();
     setGuardando(false);
-    if (insertError) {
-      setError(insertError.message);
+    if (insertError || !nueva) {
+      setError(insertError?.message ?? "No se pudo crear el negocio.");
       return;
     }
-    router.push("/dashboard/facturacion");
+    // Al logo y al certificado de relevo les hace falta un id real de
+    // entidad para subirse (ver LogoUploader y el input de relevo arriba,
+    // ambos deshabilitados en modo "crear") — por eso, en vez de mandar
+    // directo a Facturación, se manda a la página de editar de la entidad
+    // recién creada, donde esos dos uploads ya sí funcionan.
+    router.push(`/dashboard/entidades/${nueva.id}/editar?bienvenida=1`);
     router.refresh();
   }
 
@@ -216,10 +225,23 @@ export default function EntidadForm({
             {esPrimeraEntidad ? "Incluido en tu plan Pro." : modo === "crear" ? "Entidad adicional — $24.99/mes." : "Cada entidad se factura por separado."}
           </p>
         </div>
-        <button onClick={() => router.push(modo === "crear" ? "/dashboard" : "/dashboard/config")} className="text-sm text-muted hover:opacity-80">
-          Cancelar
-        </button>
+        {bienvenida ? (
+          <button onClick={() => router.push("/dashboard/facturacion")} className="text-sm font-medium text-teal hover:opacity-80">
+            Ir a Facturación →
+          </button>
+        ) : (
+          <button onClick={() => router.push(modo === "crear" ? "/dashboard" : "/dashboard/config")} className="text-sm text-muted hover:opacity-80">
+            Cancelar
+          </button>
+        )}
       </div>
+
+      {bienvenida && (
+        <div className="mb-4 rounded-lg border border-teal bg-teal/5 p-3 text-xs text-teal">
+          <strong>¡Tu negocio quedó creado!</strong> Aquí puedes subir el logo y, si aplica, tu Certificado de Relevo — pestaña Perfil
+          y Fiscal. Cuando termines, dale a "Ir a Facturación" arriba.
+        </div>
+      )}
 
       <div className="mb-4 flex gap-1 rounded-lg border border-border bg-bg p-1">
         {(["perfil", "fiscal", "facturas"] as Tab[]).map((t) => (

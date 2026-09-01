@@ -2,7 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import EntidadForm from "../../entidad-form";
 
-export default async function EditarEntidadPage({ params }: { params: { id: string } }) {
+export default async function EditarEntidadPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { bienvenida?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
@@ -29,5 +35,12 @@ export default async function EditarEntidadPage({ params }: { params: { id: stri
 
   const esPrimeraEntidad = entidades?.[0]?.id === entidad.id;
 
-  return <EntidadForm modo="editar" entidad={entidad as any} esPrimeraEntidad={esPrimeraEntidad} />;
+  return (
+    <EntidadForm
+      modo="editar"
+      entidad={entidad as any}
+      esPrimeraEntidad={esPrimeraEntidad}
+      bienvenida={searchParams?.bienvenida === "1"}
+    />
+  );
 }
