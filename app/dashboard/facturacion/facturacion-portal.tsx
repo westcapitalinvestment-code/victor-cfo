@@ -505,6 +505,13 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
           ) : (
             <span className="flex-shrink-0 text-xs text-muted">Individual</span>
           )}
+          <Link
+            href={`/dashboard/clientes/${c.id}/editar?returnTo=/dashboard/facturacion`}
+            className="flex-shrink-0 text-muted hover:text-teal"
+            title="Editar cliente"
+          >
+            <i className="ti ti-edit" style={{ fontSize: 15 }} />
+          </Link>
         </div>
       ))}
       </div>

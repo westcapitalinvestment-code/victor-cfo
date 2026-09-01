@@ -152,17 +152,20 @@ export default function FacturaDetalle({
     const mensaje = `Hola ${clienteNombre}, aquí tienes tu factura ${factura.numero}${
       entidadNombre ? ` de ${entidadNombre}` : ""
     } por ${formatMoney(factura.total)}.${factura.fecha_vencimiento ? ` Vence el ${factura.fecha_vencimiento}.` : ""} ¡Gracias!`;
+    const linkPDF = `${window.location.origin}/api/facturas/${factura.id}/pdf`;
+    const mensajeConLink = `${mensaje} Aquí puedes verla: ${linkPDF}`;
     const destino = factura.clients?.telefono ? telefonoWhatsapp(factura.clients.telefono) : "";
-    const url = `https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`;
+    const url = `https://wa.me/${destino}?text=${encodeURIComponent(mensajeConLink)}`;
     window.open(url, "_blank");
   }
 
-  // "PDF" real requeriría una librería nueva — por ahora usamos el diálogo
-  // de impresión del navegador con estilos @media print (ver abajo), que
-  // deja "Guardar como PDF" como una de las impresoras. Cero dependencias
-  // nuevas y funciona igual en celular y computadora.
-  function descargarPDF() {
-    window.print();
+  // PDF real generado en el servidor (app/api/facturas/[id]/pdf) — no es
+  // una captura de pantalla ni window.print(), es un documento limpio
+  // armado con pdf-lib. El link es público (por UUID) para que también
+  // funcione cuando se comparte por WhatsApp sin que el cliente tenga que
+  // iniciar sesión.
+  function urlPDF() {
+    return `${window.location.origin}/api/facturas/${factura.id}/pdf`;
   }
 
   async function eliminarFactura() {
@@ -391,12 +394,14 @@ export default function FacturaDetalle({
         )}
 
         <div className="no-imprimir grid grid-cols-4 gap-2 border-t border-border pt-3">
-          <button
-            onClick={descargarPDF}
+          <a
+            href={`/api/facturas/${factura.id}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
           >
             <i className="ti ti-file-download text-base" /> PDF
-          </button>
+          </a>
           <button
             onClick={enviarPorWhatsapp}
             className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"

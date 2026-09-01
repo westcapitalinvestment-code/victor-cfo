@@ -1,109 +1,41 @@
-import type { createClient } from "@/lib/supabase/server";
+-- ============================================================================
+-- VICTOR CFO — 0014: subir estados de cuenta (CSV/QuickBooks/PDF) a
+-- CUALQUIER cuenta, no solo a las manuales
+-- ============================================================================
+-- Motivación (caso real de Joel): Plaid solo entrega ~45 días de historial
+-- en algunos bancos (ej. BPPR), aunque el banco tenga el año completo
+-- disponible en su portal. Para armar un reporte contable completo (ene 1
+-- en adelante, para las planillas) el usuario necesita poder rellenar ese
+-- hueco subiendo el estado de cuenta directo — de un banco/tarjeta YA
+-- conectado por Plaid, no solo de una cuenta manual como Apple Card.
+--
+-- La tabla transactions ya soporta esto sin cambios de columnas: sigue
+-- usando plaid_account_id (texto, ya existe desde 0010) para asociar la
+-- fila a la cuenta correcta. Solo falta el índice de dedup — el que ya
+-- existe (0013) es específico de manual_account_id.
+-- ============================================================================
 
-// Compartido por los dos flujos de "subir estado de cuenta" (CSV/QuickBooks
-// y PDF), y usable tanto para una cuenta conectada por Plaid (rellenar el
-// hueco de historial que Plaid no trajo) como para una cuenta manual (ej.
-// Apple Card).
-export type FilaTransaccionImportar = {
-  description_raw: string;
-  amount: number;
-  fecha: string; // YYYY-MM-DD
-};
+-- Dedup (seguro de última instancia) para estados subidos a mano en una
+-- cuenta de Plaid: mismo criterio que en cuentas manuales (cuenta + fecha +
+-- descripción + monto). NOTA IMPORTANTE sobre cómo se usa este índice: el
+-- código de importación (app/api/cuentas/estado/*) NO depende de este
+-- índice vía "ON CONFLICT" — Postgres no permite usar un índice único
+-- PARCIAL como árbitro de ON CONFLICT a menos que el predicado se
+-- especifique explícitamente en el propio INSERT, y el cliente de Supabase
+-- no deja pasar eso. En su lugar, el código revisa manualmente qué ya
+-- existe antes de insertar. Este índice queda como red de seguridad real a
+-- nivel de base de datos (si por lo que sea la revisión manual fallara, el
+-- INSERT truena en vez de crear un duplicado silencioso).
+--
+-- Se limita a origen <> 'plaid' a propósito — las transacciones que SÍ
+-- llegan solas por transactionsSync (lib/plaid-sync.ts) ya tienen su propio
+-- dedup real por plaid_transaction_id (constraint distinta), y no queremos
+-- que este índice nuevo les afecte si dos transacciones legítimas de Plaid
+-- llegan con el mismo monto/fecha/descripción (pasa — ej. dos cafés de
+-- $4.50 el mismo día en el mismo Starbucks).
+CREATE UNIQUE INDEX IF NOT EXISTS transactions_plaid_backfill_dedup_key
+  ON transactions (plaid_account_id, fecha, description_raw, amount)
+  WHERE plaid_account_id IS NOT NULL AND origen <> 'plaid';
 
-// Inserta un lote de transacciones importadas evitando duplicados.
-//
-// A propósito NO se usa upsert()+onConflict aquí: el índice que haría
-// falta para eso es un índice único PARCIAL (transactions_manual_dedup_key
-// / transactions_plaid_backfill_dedup_key, migraciones 0013/0014), y
-// Postgres solo acepta un índice parcial como árbitro de "ON CONFLICT" si
-// el predicado del índice (el "WHERE ...") se repite en el propio INSERT —
-// algo que el cliente de Supabase no deja pasar (su opción `onConflict`
-// solo acepta nombres de columna). Sin eso, "ON CONFLICT (columnas)"
-// contra un índice parcial revienta con "no unique or exclusion
-// constraint matching the ON CONFLICT specification" en TODA subida, no
-// solo cuando hay un duplicado real.
-//
-// En su lugar: 1) se deduplica dentro del propio archivo (por si trae la
-// misma fila dos veces), 2) se compara contra lo que ya existe en esa
-// cuenta, y 3) se inserta con un INSERT normal. El índice parcial de la
-// base de datos se queda como red de seguridad de última instancia — si
-// por una carrera rara (ej. doble clic, o subir el mismo archivo en dos
-// pestañas a la vez) algo se escapa del paso 2, el INSERT truena con un
-// error de duplicado (23505) en vez de crear una fila repetida, y ese caso
-// se recupera fila por fila más abajo.
-export async function importarTransaccionesDedup(
-  supabase: ReturnType<typeof createClient>,
-  params: {
-    ownerId: string;
-    origenCuenta: "plaid" | "manual";
-    cuentaId: string;
-    origen: "csv" | "pdf";
-    filas: FilaTransaccionImportar[];
-  }
-): Promise<{ importadas: number; duplicadas: number }> {
-  const { ownerId, origenCuenta, cuentaId, origen, filas } = params;
-  const columnaCuenta = origenCuenta === "manual" ? "manual_account_id" : "plaid_account_id";
-  const clave = (f: FilaTransaccionImportar) => `${f.fecha}|${f.description_raw}|${f.amount}`;
-
-  // 1. Dedup dentro del propio lote.
-  const vistos = new Set<string>();
-  const filasUnicasEnLote = filas.filter((f) => {
-    const k = clave(f);
-    if (vistos.has(k)) return false;
-    vistos.add(k);
-    return true;
-  });
-
-  // 2. Dedup contra lo que ya existe en esa cuenta (Plaid ya sincronizado,
-  // o una subida anterior).
-  const { data: existentes } = await supabase
-    .from("transactions")
-    .select("fecha, description_raw, amount")
-    .eq(columnaCuenta, cuentaId);
-
-  const clavesExistentes = new Set(
-    (existentes ?? []).map((t: { fecha: string; description_raw: string; amount: number }) =>
-      `${t.fecha}|${t.description_raw}|${t.amount}`
-    )
-  );
-
-  const filasNuevas = filasUnicasEnLote.filter((f) => !clavesExistentes.has(clave(f)));
-  const duplicadas = filas.length - filasNuevas.length;
-
-  if (filasNuevas.length === 0) {
-    return { importadas: 0, duplicadas };
-  }
-
-  const filasParaInsertar = filasNuevas.map((f) => ({
-    owner_id: ownerId,
-    entity_id: null,
-    manual_account_id: origenCuenta === "manual" ? cuentaId : null,
-    plaid_account_id: origenCuenta === "plaid" ? cuentaId : null,
-    origen,
-    description_raw: f.description_raw,
-    amount: f.amount,
-    fecha: f.fecha,
-  }));
-
-  const { data: insertadas, error } = await supabase
-    .from("transactions")
-    .insert(filasParaInsertar)
-    .select("id");
-
-  if (!error) {
-    return { importadas: insertadas?.length ?? 0, duplicadas };
-  }
-
-  if ((error as { code?: string }).code !== "23505") {
-    throw new Error(error.message);
-  }
-
-  // Carrera rara — insertamos fila por fila para salvar las que sí son
-  // nuevas de verdad, en vez de perder el lote completo por una sola.
-  let importadasFallback = 0;
-  for (const fila of filasParaInsertar) {
-    const { error: errorFila } = await supabase.from("transactions").insert(fila);
-    if (!errorFila) importadasFallback++;
-  }
-  return { importadas: importadasFallback, duplicadas: filas.length - importadasFallback };
-}
+COMMENT ON COLUMN transactions.origen IS
+  'plaid = llegó sola por transactionsSync. manual = cuenta manual sin transacciones reales todavía. csv = importado de un CSV/QuickBooks (puede ser de una cuenta Plaid o manual). pdf = extraído de un PDF de estado de cuenta con Claude (puede ser de una cuenta Plaid o manual).';

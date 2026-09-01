@@ -26,12 +26,20 @@ export async function POST(req: NextRequest) {
   const publicToken: string | undefined = body?.publicToken;
   const institutionId: string | null = body?.institutionId ?? null;
   const institutionName: string | null = body?.institutionName ?? null;
+  // Si el frontend no manda nada (clientes viejos, o algo raro), por
+  // defecto asumimos que sí quiere el año completo — es la opción
+  // recomendada y la más segura para no dejar a nadie a medias de cara
+  // a las planillas de abril.
   const historialCompleto: boolean = body?.historialCompleto !== false;
 
   if (!publicToken) {
     return NextResponse.json({ error: "Falta el public_token de Plaid." }, { status: 400 });
   }
 
+  // "Año completo" = desde el 1 de enero del año en curso, en hora de
+  // Puerto Rico (no UTC, para que no se corra un día cerca de medianoche).
+  // "Desde ahora" = desde hoy mismo, así no se le importa historial viejo
+  // a alguien que prefiere empezar de cero.
   const anoActualPR = fechaHoyPR().slice(0, 4);
   const historialDesde = historialCompleto ? `${anoActualPR}-01-01` : fechaHoyPR();
 
@@ -44,9 +52,9 @@ export async function POST(req: NextRequest) {
       .from("plaid_items")
       .insert({
         owner_id: user.id,
-        entity_id: null,
+        entity_id: null, // conexión personal — igual convención que goals/documents
         plaid_item_id: plaidItemId,
-        access_token: encryptSecret(accessToken),
+        access_token: encryptSecret(accessToken), // nunca se guarda en texto plano
         institution_id: institutionId,
         institution_name: institutionName,
         historial_desde: historialDesde,
@@ -58,6 +66,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: itemError?.message || "No se pudo guardar la conexión." }, { status: 500 });
     }
 
+    // Traemos las cuentas (checking, savings, etc.) de este Item de una vez,
+    // así el usuario ve algo real apenas termina de conectar el banco.
     const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken });
 
     const accountRows = accountsResponse.data.accounts.map((acc) => ({
@@ -78,6 +88,8 @@ export async function POST(req: NextRequest) {
     if (accountRows.length > 0) {
       const { error: accountsError } = await supabase.from("plaid_accounts").insert(accountRows);
       if (accountsError) {
+        // La conexión ya quedó guardada — esto no debe tumbar la respuesta,
+        // pero sí avisamos para poder investigarlo.
         console.error("No se pudieron guardar las cuentas de Plaid:", accountsError);
       }
     }

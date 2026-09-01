@@ -24,6 +24,9 @@ interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList;
 }
 
+// Agregado 28 agosto 2026 — faltaba, y sin esto no se puede leer
+// event.error para decirle al usuario POR QUÉ falló el micrófono (permiso
+// denegado, sin red, sin voz detectada, etc.) en vez de fallar en silencio.
 interface SpeechRecognitionErrorEvent extends Event {
   error: string;
   message: string;

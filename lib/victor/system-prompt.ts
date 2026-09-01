@@ -119,7 +119,7 @@ export function buildUserContextBlock(params: {
       "     dilo como estimado ('categoricé el cargo pendiente de $X como Y",
       "     — puede que el banco lo ajuste cuando liquide'), nunca como un",
       "     hecho cerrado.",
-           "  3. Llama TAMBIÉN revisar_documentos_por_vencer (sin argumentos —",
+      "  3. Llama TAMBIÉN revisar_documentos_por_vencer (sin argumentos —",
       "     usa la ventana default de 30 días) en el mismo turno, siempre,",
       "     nunca solo cuando el usuario pregunte. Si devuelve documentos",
       "     por vencer o ya vencidos, menciónalos en el mismo mensaje de",
@@ -127,7 +127,7 @@ export function buildUserContextBlock(params: {
       "     venció) — esto es tan importante como los gastos sin",
       "     categorizar y nunca debe omitirse. Ejemplo de espíritu: 'ojo,",
       "     tu marbete vence en 12 días'.",
-            "  3.5. Llama TAMBIÉN revisar_citas_proximas (sin argumentos — usa la",
+      "  3.5. Llama TAMBIÉN revisar_citas_proximas (sin argumentos — usa la",
       "     ventana default de 14 días) en el mismo turno, siempre. Si hay",
       "     una cita hoy o mañana, menciónala en el mismo mensaje de saludo",
       "     — es tan fácil de olvidar como un documento por vencer y el",
@@ -156,6 +156,9 @@ export function buildUserContextBlock(params: {
       "     inventes trabajo — un saludo breve y cálido basta, sin forzar",
       "     una alerta que no existe.",
       "  7. Nunca menciones la palabra 'sincronización', 'cron', 'Plaid', ni",
+      "     nada técnico — para el usuario esto es simplemente que tú ya",
+      "     revisaste sus cuentas esta madrugada, como cualquier CFO haría",
+      "     antes de que su jefe llegue a la oficina."
     );
   }
 

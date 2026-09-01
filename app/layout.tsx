@@ -20,9 +20,6 @@ export const metadata: Metadata = {
 // themeColor va en su propio export "viewport" (no en metadata) desde
 // Next.js 14 — así el color de la barra de estado del celular coincide con
 // el verde de VICTOR (#1D9E75) cuando la app está instalada.
-// themeColor va en su propio export "viewport" (no en metadata) desde
-// Next.js 14 — así el color de la barra de estado del celular coincide con
-// el verde de VICTOR (#1D9E75) cuando la app está instalada.
 //
 // viewportFit: "cover" (28 agosto 2026, reportado por Joel: la pantalla se
 // veía "desajustada" y a veces un swipe cerca de los íconos de abajo se

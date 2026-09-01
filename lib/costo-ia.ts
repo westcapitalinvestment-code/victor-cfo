@@ -16,6 +16,10 @@ type PrecioModelo = {
   outputCentavosPorMillon: number;
 };
 
+// Exportado (además de costoEnCentavos) para que el Dashboard de
+// Operaciones pueda mostrar el desglose real de costo por categoría
+// (input/output/cache) a partir de los totales guardados en uso_ia_log —
+// sin esto tendría que duplicar estos precios a mano en la página.
 export const PRECIOS: Record<string, PrecioModelo> = {
   "claude-sonnet-5": {
     inputCentavosPorMillon: 200,

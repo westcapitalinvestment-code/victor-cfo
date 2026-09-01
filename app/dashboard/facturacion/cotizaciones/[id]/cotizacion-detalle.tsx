@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
@@ -12,6 +13,8 @@ type Item = {
   precio_unitario: number;
   subtotal_linea: number | null;
 };
+
+type Adjunto = { id: string; nombre_archivo: string };
 
 type Cotizacion = {
   id: string;
@@ -27,9 +30,16 @@ type Cotizacion = {
   invoice_id: string | null;
   entity_id: string | null;
   client_id: string | null;
-  clients: { name: string; email: string | null; es_negocio: boolean; retention_pct: number } | null;
+  clients: { name: string; email: string | null; telefono: string | null; es_negocio: boolean; retention_pct: number } | null;
   business_entities: { name: string; invoice_prefix: string; invoice_start_number: number; default_payment_terms: string } | null;
 };
+
+// Mismo helper que en factura-detalle.tsx.
+function telefonoWhatsapp(telefono: string): string {
+  const digitos = telefono.replace(/\D/g, "");
+  if (digitos.length === 10) return `1${digitos}`;
+  return digitos;
+}
 
 const ESTILOS_BADGE: Record<string, string> = {
   enviada: "bg-teal/10 text-teal",
@@ -48,10 +58,12 @@ const ETIQUETAS_BADGE: Record<string, string> = {
 export default function CotizacionDetalle({
   cotizacion,
   items,
+  adjuntosIniciales,
   conteoFacturas,
 }: {
   cotizacion: Cotizacion;
   items: Item[];
+  adjuntosIniciales: Adjunto[];
   conteoFacturas: number;
 }) {
   const router = useRouter();
@@ -59,8 +71,65 @@ export default function CotizacionDetalle({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [adjuntos, setAdjuntos] = useState(adjuntosIniciales);
+  const [subiendo, setSubiendo] = useState(false);
+  const [borrandoId, setBorrandoId] = useState<string | null>(null);
+  const inputCamaraRef = useRef<HTMLInputElement>(null);
+  const inputArchivoRef = useRef<HTMLInputElement>(null);
+
   const clienteNombre = cotizacion.clients?.name ?? "Sin cliente";
   const entidadNombre = cotizacion.business_entities?.name ?? "";
+
+  async function subirEvidencia(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0) return;
+
+    setSubiendo(true);
+    setError(null);
+
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("cotizacionId", cotizacion.id);
+
+      const res = await fetch("/api/cotizaciones/adjuntos/upload", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(data.error ?? "No se pudo subir el archivo.");
+        continue;
+      }
+      setAdjuntos((prev) => [...prev, { id: data.id, nombre_archivo: file.name }]);
+    }
+
+    setSubiendo(false);
+  }
+
+  async function borrarEvidencia(id: string) {
+    setBorrandoId(id);
+    setError(null);
+    const res = await fetch(`/api/cotizaciones/adjuntos/${id}`, { method: "DELETE" });
+    setBorrandoId(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "No se pudo eliminar el archivo.");
+      return;
+    }
+    setAdjuntos((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  function enviarPorWhatsapp() {
+    const linkPDF = `${window.location.origin}/api/cotizaciones/${cotizacion.id}/pdf`;
+    const mensaje = `Hola ${clienteNombre}, aquí tienes tu cotización ${cotizacion.numero}${
+      entidadNombre ? ` de ${entidadNombre}` : ""
+    } por ${formatMoney(cotizacion.total)}.${
+      cotizacion.fecha_vencimiento ? ` Válida hasta el ${cotizacion.fecha_vencimiento}.` : ""
+    } Aquí puedes verla: ${linkPDF}`;
+    const destino = cotizacion.clients?.telefono ? telefonoWhatsapp(cotizacion.clients.telefono) : "";
+    const url = `https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`;
+    window.open(url, "_blank");
+  }
 
   async function actualizarEstado(nuevoEstado: string) {
     setLoading(true);
@@ -221,6 +290,86 @@ export default function CotizacionDetalle({
             <p className="text-sm text-text">{cotizacion.notas}</p>
           </div>
         )}
+
+        {adjuntos.length > 0 && (
+          <div>
+            <p className="mb-1 text-xs uppercase tracking-wide text-muted">Evidencia / documentos</p>
+            <div className="grid grid-cols-3 gap-2">
+              {adjuntos.map((a) => (
+                <div key={a.id} className="relative overflow-hidden rounded-lg border border-border">
+                  <a href={`/api/cotizaciones/adjuntos/${a.id}/ver`} target="_blank" rel="noopener noreferrer" className="block">
+                    <div className="flex h-20 w-full items-center justify-center bg-bg">
+                      <i className="ti ti-file-text text-2xl text-muted" />
+                    </div>
+                    <p className="truncate border-t border-border bg-card px-1.5 py-1 text-[10px] text-muted">{a.nombre_archivo}</p>
+                  </a>
+                  <button
+                    type="button"
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white disabled:opacity-50"
+                    disabled={borrandoId === a.id}
+                    onClick={() => borrarEvidencia(a.id)}
+                    title="Eliminar"
+                  >
+                    <i className="ti ti-x" style={{ fontSize: 12 }} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          {adjuntos.length === 0 && <p className="mb-1 text-xs uppercase tracking-wide text-muted">Evidencia / documentos</p>}
+          <input ref={inputCamaraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={subirEvidencia} />
+          <input ref={inputArchivoRef} type="file" accept="image/*,.pdf" multiple className="hidden" onChange={subirEvidencia} />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={subiendo}
+              className="flex-1 rounded-pill border border-border py-2 text-sm font-medium hover:opacity-80 disabled:opacity-50"
+              onClick={() => inputCamaraRef.current?.click()}
+            >
+              📷 Foto
+            </button>
+            <button
+              type="button"
+              disabled={subiendo}
+              className="flex-1 rounded-pill border border-border py-2 text-sm font-medium hover:opacity-80 disabled:opacity-50"
+              onClick={() => inputArchivoRef.current?.click()}
+            >
+              📁 {subiendo ? "Subiendo..." : "Añadir"}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 border-t border-border pt-3">
+          <a
+            href={`/api/cotizaciones/${cotizacion.id}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+          >
+            <i className="ti ti-file-download text-base" /> PDF
+          </a>
+          <button
+            onClick={enviarPorWhatsapp}
+            className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+          >
+            <i className="ti ti-brand-whatsapp text-base" /> WhatsApp
+          </button>
+          {cotizacion.estado !== "convertida" ? (
+            <Link
+              href={`/dashboard/facturacion/cotizaciones/${cotizacion.id}/editar`}
+              className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+            >
+              <i className="ti ti-edit text-base" /> Editar
+            </Link>
+          ) : (
+            <span className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium text-muted opacity-40">
+              <i className="ti ti-edit text-base" /> Editar
+            </span>
+          )}
+        </div>
 
         {cotizacion.estado === "enviada" && (
           <div className="flex gap-2 border-t border-border pt-3">

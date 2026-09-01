@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, priceIdPara, esPlanValido, esCicloValido } from "@/lib/stripe";
 
+// Crea una Stripe Checkout Session y devuelve la URL a la que hay que
+// mandar al usuario. Se usa en dos momentos distintos: (1) justo después
+// de /registro, para el primer pago (returnTo="/onboarding"), y (2) desde
+// el paywall de Pro (/dashboard/equipo) cuando un usuario Core ya
+// existente quiere subir de plan (returnTo="/dashboard/equipo"). En los
+// dos casos el usuario YA tiene sesión de Supabase — esta ruta nunca crea
+// la cuenta, solo la conecta a un pago real.
 export async function POST(req: NextRequest) {
   const supabase = createClient();
   const {
@@ -25,6 +32,11 @@ export async function POST(req: NextRequest) {
     .eq("id", user.id)
     .maybeSingle();
 
+  // Precio de referido (30 agosto 2026): si a este usuario lo trajo el
+  // link de otro (referred_by no es null — se guarda en el signup, ver
+  // migración 0031), paga el Core con descuento en vez del precio normal.
+  // Nunca se confía en nada que mande el cliente para esto — referred_by
+  // se lee de la base de datos, no del body de este POST.
   const esReferido = !!perfil?.referred_by;
   const priceId = priceIdPara(plan, ciclo, esReferido);
   if (!priceId) {

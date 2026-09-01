@@ -4,14 +4,20 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-// Feature 1 del brief técnico (Retención B2B 10%/6%, Prioridad ALTA):
-// "Al crear un cliente, toggle simple: '¿Es un negocio? (Aplica Retención
-// 10%)'. Si tiene Certificado de Relevo, campo para ingresar el porcentaje
-// (ej. 6% o 0%)". Eso es exactamente lo que hace este formulario.
-
 type Entity = { id: string; name: string };
+type Cliente = {
+  id: string;
+  entity_id: string | null;
+  name: string;
+  email: string | null;
+  telefono: string | null;
+  tax_id: string | null;
+  address: string | null;
+  es_negocio: boolean;
+  retention_pct: number;
+};
 
-export default function NuevoClienteForm({ entities, returnTo }: { entities: Entity[]; returnTo?: string }) {
+export default function EditarClienteForm({ cliente, entities, returnTo }: { cliente: Cliente; entities: Entity[]; returnTo?: string }) {
   const destino = returnTo || "/dashboard/clientes";
   const router = useRouter();
   const supabase = createClient();
@@ -19,45 +25,37 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [entityId, setEntityId] = useState(entities[0]?.id ?? "");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [telefono, setTelefono] = useState("");
-  const [taxId, setTaxId] = useState("");
-  const [direccion, setDireccion] = useState("");
-  const [esNegocio, setEsNegocio] = useState(false);
-  const [retentionPct, setRetentionPct] = useState("10.00");
+  const [entityId, setEntityId] = useState(cliente.entity_id ?? entities[0]?.id ?? "");
+  const [name, setName] = useState(cliente.name);
+  const [email, setEmail] = useState(cliente.email ?? "");
+  const [telefono, setTelefono] = useState(cliente.telefono ?? "");
+  const [taxId, setTaxId] = useState(cliente.tax_id ?? "");
+  const [direccion, setDireccion] = useState(cliente.address ?? "");
+  const [esNegocio, setEsNegocio] = useState(cliente.es_negocio);
+  const [retentionPct, setRetentionPct] = useState(String(cliente.retention_pct || "10.00"));
 
-  async function crearCliente() {
+  async function guardar() {
     setLoading(true);
     setError(null);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setError("Sesión expirada — vuelve a entrar.");
-      setLoading(false);
-      return;
-    }
-
-    const { error: insertError } = await supabase.from("clients").insert({
-      owner_id: user.id,
-      entity_id: entityId,
-      name,
-      email: email || null,
-      telefono: telefono || null,
-      tax_id: taxId || null,
-      address: direccion || null,
-      es_negocio: esNegocio,
-      retention_pct: esNegocio ? Number(retentionPct) : 0,
-    });
+    const { error: updateError } = await supabase
+      .from("clients")
+      .update({
+        entity_id: entityId,
+        name,
+        email: email || null,
+        telefono: telefono || null,
+        tax_id: taxId || null,
+        address: direccion || null,
+        es_negocio: esNegocio,
+        retention_pct: esNegocio ? Number(retentionPct) : 0,
+      })
+      .eq("id", cliente.id);
 
     setLoading(false);
 
-    if (insertError) {
-      setError(insertError.message);
+    if (updateError) {
+      setError(updateError.message);
       return;
     }
 
@@ -68,7 +66,7 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
   return (
     <div className="mx-auto max-w-lg px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-lg font-medium">Nuevo cliente</h1>
+        <h1 className="text-lg font-medium">Editar cliente</h1>
         <button onClick={() => router.push(destino)} className="text-sm text-muted hover:opacity-80">
           Cancelar
         </button>
@@ -109,7 +107,6 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
           <textarea className="vc-input" rows={2} value={direccion} onChange={(e) => setDireccion(e.target.value)} />
         </Field>
 
-        {/* El toggle central de Feature 1 */}
         <div className="flex items-center justify-between rounded-lg border border-border bg-bg p-3">
           <div>
             <p className="text-sm font-medium">¿Es un negocio?</p>
@@ -142,8 +139,8 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
           </Field>
         )}
 
-        <button className="vc-btn-primary mt-1" disabled={!name || loading} onClick={crearCliente}>
-          {loading ? "Guardando..." : "Guardar cliente"}
+        <button className="vc-btn-primary mt-1" disabled={!name || loading} onClick={guardar}>
+          {loading ? "Guardando..." : "Guardar cambios"}
         </button>
       </div>
     </div>

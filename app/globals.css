@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens — copiados de VICTOR Pro — Producto Completo_FINAL.html
+   para que la app real y los mockups compartan exactamente los mismos
+   colores, sin reinterpretar nada. */
 :root {
   --bg: #f5f5f0;
   --card: #ffffff;
@@ -28,9 +31,18 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   transition: background .3s, color .3s;
+  /* Evita el "rebote" elástico del scroll en los bordes de la pantalla —
+     sin esto, en la PWA instalada ese rebote a veces lo interpreta el
+     celular como un gesto del sistema (cambiar de página/app) en vez de
+     quedarse dentro de VICTOR. Bug real reportado por Joel (28 agosto
+     2026): la pantalla se sentía "desajustada" y un swipe cerca de los
+     íconos de abajo a veces cambiaba de página del teléfono. */
   overscroll-behavior: none;
 }
 
+/* Contenedor compartido de las pantallas del dashboard — mismos
+   breakpoints que VICTOR — Dashboard Core.html (.app), para que la vista
+   de escritorio no se quede angosta como en mobile. */
 .vc-shell { margin: 0 auto; max-width: 672px; padding: 32px 24px 32px; }
 @media (min-width: 768px) {
   .vc-shell { max-width: 900px; padding: 32px 32px; }
@@ -39,6 +51,7 @@ body {
   .vc-shell { max-width: 1100px; padding: 32px 40px; }
 }
 
+/* Topbar — calcado de VICTOR — Dashboard Core.html (.topbar) */
 .vc-topbar-wrap { border-bottom: .5px solid var(--border); background: var(--card); }
 .vc-topbar { margin: 0 auto; max-width: 1100px; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
 .vc-topbar-top { display: flex; align-items: center; justify-content: space-between; }
@@ -53,11 +66,19 @@ body {
 .vc-plan-badge { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; padding: 2px 8px; border-radius: 999px; background: rgba(29,158,117,.12); color: #1D9E75; }
 .vc-plan-badge.pro { background: rgba(83,74,183,.12); color: #534AB7; }
 .vc-plan-badge.gratis { background: rgba(87,96,106,.12); color: var(--muted); }
+
+/* Toggle día/noche — calcado de .tw/.tt/.tk del mockup */
 .vc-tw { display: flex; align-items: center; gap: 6px; cursor: pointer; background: none; border: none; padding: 0; }
 .vc-tt { width: 34px; height: 18px; border-radius: 999px; background: var(--border); position: relative; transition: background .2s; }
 .vc-tk { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
 .vc-tk.on { left: 18px; background: #1D9E75; }
 
+/* Pill de VICTOR en el topbar — dejó de ser decorativo. Es el centro de
+   notificaciones real de la app (decisión de Joel, 28 agosto 2026: "no
+   quiero campana, quiero innovar" — en vez de una lista muda como todas
+   las apps, tocar esto abre el chat y VICTOR te dice qué pasa). El punto
+   es verde fijo cuando no hay nada pendiente, y ámbar pulsante cuando sí
+   (gastos sin categorizar o documentos por vencer). */
 .vc-victor-pill { display: flex; align-items: center; gap: 6px; background: rgba(29,158,117,.1); border: .5px solid rgba(29,158,117,.35); color: #1D9E75; border-radius: 999px; padding: 6px 11px; cursor: pointer; }
 .vc-victor-pill:hover { opacity: .85; }
 .vc-victor-dot { width: 6px; height: 6px; border-radius: 50%; background: #1D9E75; }
@@ -67,19 +88,25 @@ body {
   50% { box-shadow: 0 0 0 4px rgba(232,163,61,0); }
 }
 
+/* Banner central "Invita a tu contable" — gratis para cualquier plan,
+   por eso va centrado y visible, no escondido como un upsell más. */
 .vc-invite-banner { display: flex; align-items: center; gap: 8px; background: #1B3A5C; color: #fff; border-radius: 10px; padding: 8px 16px; text-decoration: none; flex-shrink: 0; }
 .vc-invite-banner:hover { opacity: .92; }
 .vc-invite-title { display: block; font-size: 12px; font-weight: 600; }
 .vc-invite-sub { display: block; font-size: 10px; color: rgba(255,255,255,.75); margin-top: 1px; }
 
+/* Tabs de contexto — Personal / Resumen (Negocio llega con Pro multi-entidad) */
 .vc-ctxbar { padding: 0 24px 12px; background: var(--card); }
 .vc-ctxwrap { margin: 0 auto; max-width: 1100px; display: flex; gap: 6px; background: var(--bg); border: .5px solid var(--border); border-radius: 10px; padding: 4px; }
 .vc-ctxtab { flex: 1; text-align: center; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--muted); text-decoration: none; }
 .vc-ctxtab.on { background: #1D9E75; color: #fff; }
 
+/* Ojito de privacidad sobre montos sensibles */
 .vc-eye { background: rgba(255,255,255,.2); border: none; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #fff; font-size: 16px; flex-shrink: 0; }
 .vc-eye:hover { background: rgba(255,255,255,.3); }
 
+/* Componentes compartidos — mismos nombres/estilo que los mockups HTML
+   (VICTOR Pro — Producto Completo_FINAL.html) para continuidad visual. */
 .vc-card {
   background: var(--card);
   border: .5px solid var(--border);
@@ -98,6 +125,10 @@ body {
 }
 .vc-input:focus { border-color: #1D9E75; }
 
+/* Ondas animadas mientras VICTOR escucha por voz — reemplaza el texto
+   plano "Escuchando..." con algo que se vea vivo, como el resto de las
+   apps de dictado. Puramente CSS (barras que suben y bajan con retraso
+   escalonado), no depende de acceso al volumen real del micrófono. */
 .vc-wave { display: flex; align-items: center; justify-content: center; gap: 4px; height: 18px; }
 .vc-wave-bar {
   width: 3px; height: 8px; border-radius: 2px;
@@ -114,6 +145,9 @@ body {
   50% { height: 18px; opacity: 1; }
 }
 
+/* Botón de enviar mientras se escucha por voz — antes se veía "apagado"
+   (opacity-50 de disabled) aunque el mensaje se manda solo al terminar de
+   hablar, lo que parecía roto. Este pulso muestra que sigue "vivo". */
 .vc-send-listening { opacity: 0.9 !important; animation: vc-send-pulse 1.4s ease-in-out infinite; }
 @keyframes vc-send-pulse {
   0%, 100% { transform: scale(1); }
@@ -133,6 +167,9 @@ body {
 .vc-btn-primary:hover { opacity: .9; }
 .vc-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 
+/* Botón secundario — usado en /registro para "Empezar gratis (limitada)",
+   siempre debajo del CTA de pago (vc-btn-primary), nunca al mismo nivel:
+   Joel fue explícito en que pagar debe verse como la opción principal. */
 .vc-btn-secondary {
   width: 100%;
   background: transparent;
@@ -147,9 +184,15 @@ body {
 .vc-btn-secondary:hover { background: var(--border); }
 .vc-btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
 
+/* Pantalla Inicio — calcadas de VICTOR — Dashboard Core.html (vista Personal) */
 .vc-bal { background: #1D9E75; border-radius: 14px; padding: 18px; margin-bottom: 14px; }
 .vc-bal-lbl { font-size: 11px; color: rgba(255,255,255,.75); margin-bottom: 4px; }
 .vc-bal-amt { font-size: 32px; font-weight: 500; color: #fff; letter-spacing: -.5px; }
+/* 2 columnas en móvil (5 tarjetas: Ingresos, Gastos, Ahorrado, Deuda,
+   Inversiones — la 5ta cae sola en su propia fila, igual que pasa ya con
+   las 3 cards de Metas/Alertas/Próxima cita más abajo) — a 5 en una sola
+   fila los montos grandes ($1,245.02) quedaban apretados en pantallas
+   angostas. Desde tablet (768px) sí caben las 5 en una fila. */
 .vc-mets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
 @media (min-width: 768px) {
   .vc-mets { grid-template-columns: repeat(5, 1fr); gap: 12px; }
@@ -168,10 +211,20 @@ body {
 .vc-alert:last-child { border-bottom: none; }
 .vc-adot { width: 7px; height: 7px; border-radius: 50%; margin-top: 3px; flex-shrink: 0; }
 
+/* Bottom nav — calcada de VICTOR — Dashboard Core.html.
+   padding-bottom usa env(safe-area-inset-bottom) — junto con viewportFit:
+   "cover" en layout.tsx — para que los íconos no queden pegados a la barra
+   de gestos del celular (iPhone con Face ID, Android con gestos). */
 .vc-bnav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 900px; background: var(--card); border-top: .5px solid var(--border); z-index: 100; padding: 6px 0 calc(14px + env(safe-area-inset-bottom)); }
 @media (min-width: 1024px) {
   .vc-bnav { max-width: 1100px; }
 }
+/* overscroll-behavior-x: contain + touch-action: pan-x — el bug real que
+   reportó Joel: al llegar al borde de este scroll horizontal (más íconos
+   de los que caben en pantalla), seguir arrastrando el dedo lo tomaba el
+   celular como un swipe de sistema y cambiaba de página/app. "contain"
+   detiene el rebote justo en el borde de este elemento en vez de dejarlo
+   seguir hacia la página completa. */
 .vc-bnav-scroll { display: flex; overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; scrollbar-width: none; padding: 0 8px; gap: 2px; justify-content: center; }
 .vc-nb { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; background: none; border: none; padding: 6px 10px; border-radius: 10px; transition: all .15s; flex-shrink: 0; min-width: 60px; text-decoration: none; }
 .vc-nb:hover { background: rgba(29,158,117,.06); }

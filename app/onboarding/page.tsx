@@ -14,7 +14,12 @@ export default async function OnboardingPage() {
 
   if (!user) redirect("/login");
 
-    const { data: profile } = await supabase
+  // .maybeSingle() en vez de .single() (30 agosto 2026): .single() truena
+  // (data=null, error seteado) si por lo que sea la fila no vuelve, y como
+  // acá solo se mira `data`, ese error quedaba invisible y mandaba de
+  // vuelta a este mismo formulario en loop — ver el fix real en
+  // onboarding-form.tsx. .maybeSingle() nunca truena, solo devuelve null.
+  const { data: profile } = await supabase
     .from("users")
     .select("full_name, onboarding_completed")
     .eq("id", user.id)

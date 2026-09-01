@@ -17,7 +17,7 @@ export default async function CotizacionDetallePage({ params }: { params: { id: 
   const { data: cotizacion } = await supabase
     .from("cotizaciones")
     .select(
-      "id, numero, subtotal, ivu_pct, ivu_monto, total, estado, fecha_emision, fecha_vencimiento, notas, invoice_id, entity_id, client_id, clients(name, email, es_negocio, retention_pct), business_entities(name, invoice_prefix, invoice_start_number, default_payment_terms)"
+      "id, numero, subtotal, ivu_pct, ivu_monto, total, estado, fecha_emision, fecha_vencimiento, notas, invoice_id, entity_id, client_id, clients(name, email, telefono, es_negocio, retention_pct), business_entities(name, invoice_prefix, invoice_start_number, default_payment_terms)"
     )
     .eq("id", params.id)
     .eq("owner_id", user.id)
@@ -28,6 +28,12 @@ export default async function CotizacionDetallePage({ params }: { params: { id: 
   const { data: items } = await supabase
     .from("cotizacion_items")
     .select("id, descripcion, cantidad, precio_unitario, subtotal_linea")
+    .eq("cotizacion_id", params.id)
+    .order("created_at", { ascending: true });
+
+  const { data: adjuntos } = await supabase
+    .from("cotizacion_attachments")
+    .select("id, nombre_archivo")
     .eq("cotizacion_id", params.id)
     .order("created_at", { ascending: true });
 
@@ -44,5 +50,12 @@ export default async function CotizacionDetallePage({ params }: { params: { id: 
   // Igual que en factura-detalle: clients/business_entities vienen tipados
   // como arreglo por la inferencia genérica de Supabase, pero en tiempo de
   // ejecución son un objeto único (relación 1:1 por FK).
-  return <CotizacionDetalle cotizacion={cotizacion as any} items={items ?? []} conteoFacturas={conteoFacturas} />;
+  return (
+    <CotizacionDetalle
+      cotizacion={cotizacion as any}
+      items={items ?? []}
+      adjuntosIniciales={adjuntos ?? []}
+      conteoFacturas={conteoFacturas}
+    />
+  );
 }

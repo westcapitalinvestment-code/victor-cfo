@@ -54,18 +54,21 @@ export default async function ClientesPage() {
         {clients && clients.length > 0 && (
           <ul className="flex flex-col gap-2">
             {clients.map((c) => (
-              <li key={c.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
-                <div>
-                  <p>{c.name}</p>
-                  {c.email && <p className="text-xs text-muted">{c.email}</p>}
+              <li key={c.id} className="flex items-center justify-between gap-2 border-b border-border py-2 text-sm last:border-0">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate">{c.name}</p>
+                  {c.email && <p className="truncate text-xs text-muted">{c.email}</p>}
                 </div>
                 {c.es_negocio ? (
-                  <span className="rounded bg-teal/10 px-2 py-1 text-xs font-medium text-teal">
+                  <span className="flex-shrink-0 rounded bg-teal/10 px-2 py-1 text-xs font-medium text-teal">
                     Retención {Number(c.retention_pct)}%
                   </span>
                 ) : (
-                  <span className="text-xs text-muted">Individual</span>
+                  <span className="flex-shrink-0 text-xs text-muted">Individual</span>
                 )}
+                <Link href={`/dashboard/clientes/${c.id}/editar`} className="flex-shrink-0 text-muted hover:text-teal" title="Editar cliente">
+                  <i className="ti ti-edit" style={{ fontSize: 15 }} />
+                </Link>
               </li>
             ))}
           </ul>
