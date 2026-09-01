@@ -242,7 +242,8 @@ function FacturasTab({ facturas }: { facturas: Factura[] }) {
         <div className="relative min-w-0 flex-1">
           <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-teal" />
           <input
-            className="vc-input w-full min-w-0 pl-8"
+            className="vc-input w-full min-w-0"
+            style={{ paddingLeft: 32 }}
             placeholder="Buscar..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
@@ -446,7 +447,8 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
         <div className="relative min-w-0 flex-1">
           <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-teal" />
           <input
-            className="vc-input w-full min-w-0 pl-8"
+            className="vc-input w-full min-w-0"
+            style={{ paddingLeft: 32 }}
             placeholder="Buscar cliente..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
@@ -633,7 +635,8 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
         <div className="relative min-w-0 flex-1">
           <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-teal" />
           <input
-            className="vc-input w-full min-w-0 pl-8"
+            className="vc-input w-full min-w-0"
+            style={{ paddingLeft: 32 }}
             placeholder="Buscar servicio..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
@@ -791,7 +794,8 @@ function CotizacionesTab({ cotizaciones }: { cotizaciones: Cotizacion[] }) {
         <div className="relative min-w-0 flex-1">
           <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-teal" />
           <input
-            className="vc-input w-full min-w-0 pl-8"
+            className="vc-input w-full min-w-0"
+            style={{ paddingLeft: 32 }}
             placeholder="Buscar..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
