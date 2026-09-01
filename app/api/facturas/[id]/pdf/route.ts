@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, PDFName, PDFString } from "pdf-lib";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { descargarBytesR2 } from "@/lib/r2";
 import { formatMoney, formatFecha } from "@/lib/format";
@@ -113,6 +113,32 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const size = opts.size ?? 10;
     const w = f.widthOfTextAtSize(contenido, size);
     page.drawText(contenido, { x: xDerecha - w, y: yPos, size, font: f, color: opts.color ?? negro });
+  }
+
+  // pdf-lib no trae un helper de "link clickeable" — se arma a mano como
+  // anotación tipo Link con acción URI, y se agrega al arreglo Annots de
+  // la página (pedido de Joel: la marca de VICTOR CFO debe llevar a
+  // victorcfo.com al tocarla, 1 sept 2026).
+  function agregarLinkPDF(x: number, y: number, w: number, h: number, url: string) {
+    const anotacion = pdf.context.register(
+      pdf.context.obj({
+        Type: "Annot",
+        Subtype: "Link",
+        Rect: [x, y, x + w, y + h],
+        Border: [0, 0, 0],
+        A: {
+          Type: "Action",
+          S: "URI",
+          URI: PDFString.of(url),
+        },
+      })
+    );
+    const anotsExistentes = page.node.Annots();
+    if (anotsExistentes) {
+      anotsExistentes.push(anotacion);
+    } else {
+      page.node.set(PDFName.of("Annots"), pdf.context.obj([anotacion]));
+    }
   }
 
   // --- Encabezado estilo FreshBooks (pedido de Joel, 1 sept 2026): logo +
@@ -276,12 +302,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     textoDerecha("¡Gracias por su preferencia!", width - margin, 40, { size: 9, color: gris });
   }
 
-  // Marca de VICTOR CFO al pie, centrada y discreta — separada del pie
-  // personalizado de la entidad (pedido de Joel, 1 sept 2026).
+  // Marca de VICTOR CFO al pie, centrada, en azul y clickeable — lleva a
+  // victorcfo.com al tocarla (pedido de Joel, 1 sept 2026).
   const marcaTexto = "Generado con VICTOR CFO";
   const marcaSize = 7;
   const marcaAncho = font.widthOfTextAtSize(marcaTexto, marcaSize);
-  texto(marcaTexto, width / 2 - marcaAncho / 2, 20, { size: marcaSize, color: rgb(0.7, 0.7, 0.7) });
+  const marcaX = width / 2 - marcaAncho / 2;
+  const azulLink = rgb(0.086, 0.451, 0.812);
+  texto(marcaTexto, marcaX, 20, { size: marcaSize, color: azulLink });
+  agregarLinkPDF(marcaX, 18, marcaAncho, marcaSize + 3, "https://victorcfo.com");
 
   const bytes = await pdf.save();
   return new NextResponse(Buffer.from(bytes), {
