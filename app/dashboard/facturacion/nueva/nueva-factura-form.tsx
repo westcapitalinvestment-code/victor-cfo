@@ -79,15 +79,71 @@ export default function NuevaFacturaForm({
   const [clientId, setClientId] = useState(clientesDeEntidad[0]?.id ?? "");
   const cliente = clientesDeEntidad.find((c) => c.id === clientId) ?? clientesDeEntidad[0];
 
-  const [servicioId, setServicioId] = useState<string>(servicios[0]?.id ?? "personalizado");
-  const servicio = servicios.find((s) => s.id === servicioId);
+  const [listaServicios, setListaServicios] = useState<ServicioCat[]>(servicios);
+  const [servicioId, setServicioId] = useState<string>(listaServicios[0]?.id ?? "personalizado");
+  const servicio = listaServicios.find((s) => s.id === servicioId);
   const [descripcionPersonalizada, setDescripcionPersonalizada] = useState("");
-  const [monto, setMonto] = useState(servicios[0] ? String(servicios[0].precio) : "");
+  const [monto, setMonto] = useState(listaServicios[0] ? String(listaServicios[0].precio) : "");
+  const [cantidad, setCantidad] = useState("1");
 
   function elegirServicio(id: string) {
     setServicioId(id);
-    const s = servicios.find((x) => x.id === id);
+    if (id === "crear_nuevo") {
+      setNuevoServicioNombre("");
+      setNuevoServicioPrecio("");
+      return;
+    }
+    const s = listaServicios.find((x) => x.id === id);
     if (s) setMonto(String(s.precio));
+    setCantidad("1");
+  }
+
+  // "+ Crear nuevo servicio..." en el dropdown de Servicio — para que Joel
+  // no tenga que salirse del formulario a la pestaña de Servicios cuando
+  // factura algo que todavía no tenía guardado en el catálogo.
+  const [nuevoServicioNombre, setNuevoServicioNombre] = useState("");
+  const [nuevoServicioTipo, setNuevoServicioTipo] = useState<"fijo" | "hora" | "proyecto" | "recurrente">("fijo");
+  const [nuevoServicioPrecio, setNuevoServicioPrecio] = useState("");
+  const [nuevoServicioIvuExento, setNuevoServicioIvuExento] = useState(true);
+  const [guardandoServicio, setGuardandoServicio] = useState(false);
+
+  async function crearServicioDesdeFactura() {
+    if (!nuevoServicioNombre.trim() || !nuevoServicioPrecio) return;
+    setGuardandoServicio(true);
+    setError(null);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setError("Sesión expirada — vuelve a entrar.");
+      setGuardandoServicio(false);
+      return;
+    }
+
+    const { data: nuevo, error: insertError } = await supabase
+      .from("services")
+      .insert({
+        owner_id: user.id,
+        entity_id: entidad?.id ?? null,
+        nombre: nuevoServicioNombre.trim(),
+        tipo: nuevoServicioTipo,
+        precio: Number(nuevoServicioPrecio),
+        ivu_exento: nuevoServicioIvuExento,
+      })
+      .select("id, nombre, tipo, precio, ivu_exento")
+      .single();
+
+    setGuardandoServicio(false);
+
+    if (insertError || !nuevo) {
+      setError(insertError?.message ?? "No se pudo crear el servicio.");
+      return;
+    }
+
+    setListaServicios((prev) => [...prev, nuevo as ServicioCat]);
+    setServicioId(nuevo.id);
+    setMonto(String(nuevo.precio));
   }
 
   const [metodosCobro, setMetodosCobro] = useState<string[]>(["ATH Móvil", "Transferencia / ACH"]);
@@ -127,7 +183,9 @@ export default function NuevaFacturaForm({
   }
 
   const descripcionFinal = servicioId === "personalizado" ? descripcionPersonalizada : servicio?.nombre ?? "";
-  const montoNum = Number(monto) || 0;
+  const precioUnitarioNum = Number(monto) || 0;
+  const cantidadNum = Number(cantidad) || 1;
+  const montoNum = precioUnitarioNum * cantidadNum;
 
   const ivuExentoServicio = servicioId !== "personalizado" && servicio ? servicio.ivu_exento : true;
   const ivuPct =
@@ -205,8 +263,8 @@ export default function NuevaFacturaForm({
     const { error: itemsError } = await supabase.from("invoice_items").insert({
       invoice_id: factura.id,
       descripcion: descripcionFinal,
-      cantidad: 1,
-      precio_unitario: montoNum,
+      cantidad: cantidadNum,
+      precio_unitario: precioUnitarioNum,
       subtotal_linea: montoNum,
     });
 
@@ -285,12 +343,13 @@ export default function NuevaFacturaForm({
 
         <Field label="Servicio">
           <select className="vc-input" value={servicioId} onChange={(e) => elegirServicio(e.target.value)}>
-            {servicios.map((s) => (
+            {listaServicios.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.nombre} — {formatMoney(s.precio)}
               </option>
             ))}
-            <option value="personalizado">Personalizado...</option>
+            <option value="personalizado">Personalizado (solo esta factura)...</option>
+            <option value="crear_nuevo">+ Crear nuevo servicio en el catálogo...</option>
           </select>
         </Field>
 
@@ -305,17 +364,79 @@ export default function NuevaFacturaForm({
           </Field>
         )}
 
-        <Field label="Monto">
-          <input
-            className="vc-input"
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="0.00"
-            value={monto}
-            onChange={(e) => setMonto(e.target.value)}
-          />
-        </Field>
+        {servicioId === "crear_nuevo" && (
+          <div className="vc-card !bg-bg flex flex-col gap-2.5">
+            <p className="text-xs uppercase tracking-wide text-muted">Nuevo servicio</p>
+            <input
+              className="vc-input"
+              placeholder="Nombre del servicio"
+              value={nuevoServicioNombre}
+              onChange={(e) => setNuevoServicioNombre(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <select
+                className="vc-input flex-1"
+                value={nuevoServicioTipo}
+                onChange={(e) => setNuevoServicioTipo(e.target.value as typeof nuevoServicioTipo)}
+              >
+                <option value="fijo">Precio fijo</option>
+                <option value="hora">Por hora</option>
+                <option value="proyecto">Por proyecto</option>
+                <option value="recurrente">Recurrente</option>
+              </select>
+              <input
+                className="vc-input w-28 flex-shrink-0"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Precio"
+                value={nuevoServicioPrecio}
+                onChange={(e) => setNuevoServicioPrecio(e.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted">
+              <input type="checkbox" checked={nuevoServicioIvuExento} onChange={(e) => setNuevoServicioIvuExento(e.target.checked)} />
+              No aplica IVU (servicio profesional)
+            </label>
+            <button
+              type="button"
+              className="vc-btn-primary"
+              disabled={!nuevoServicioNombre || !nuevoServicioPrecio || guardandoServicio}
+              onClick={crearServicioDesdeFactura}
+            >
+              {guardandoServicio ? "Guardando..." : "Guardar servicio y usarlo aquí"}
+            </button>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <Field label="Cantidad">
+            <input
+              className="vc-input"
+              type="number"
+              min="1"
+              step="1"
+              value={cantidad}
+              onChange={(e) => setCantidad(e.target.value)}
+            />
+          </Field>
+          <Field label="Precio unitario">
+            <input
+              className="vc-input"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              value={monto}
+              onChange={(e) => setMonto(e.target.value)}
+            />
+          </Field>
+        </div>
+        {cantidadNum > 1 && (
+          <p className="-mt-2 text-xs text-muted">
+            Subtotal de esta línea: {cantidadNum} × {formatMoney(precioUnitarioNum)} = {formatMoney(montoNum)}
+          </p>
+        )}
 
         <Field label="Métodos de cobro aceptados">
           <div className="flex flex-wrap gap-2">
@@ -348,38 +469,34 @@ export default function NuevaFacturaForm({
         </Field>
 
         <Field label="Recargo por mora">
-          <div className="flex gap-2">
-            <select className="vc-input flex-1" value={moraTipo} onChange={(e) => setMoraTipo(e.target.value as typeof moraTipo)}>
-              <option value="ninguno">Sin recargo por mora</option>
-              <option value="fijo">Monto fijo</option>
-              <option value="porcentaje">Porcentaje</option>
-            </select>
-            {moraTipo !== "ninguno" && (
-              <>
-                <input
-                  className="vc-input w-24 flex-shrink-0"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder={moraTipo === "porcentaje" ? "%" : "$"}
-                  value={moraMonto}
-                  onChange={(e) => setMoraMonto(e.target.value)}
-                />
-                <div className="flex flex-shrink-0 items-center gap-1 text-xs text-muted">
-                  después de
-                  <input
-                    className="vc-input w-14"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={moraDias}
-                    onChange={(e) => setMoraDias(e.target.value)}
-                  />
-                  días
-                </div>
-              </>
-            )}
-          </div>
+          <select className="vc-input" value={moraTipo} onChange={(e) => setMoraTipo(e.target.value as typeof moraTipo)}>
+            <option value="ninguno">Sin recargo por mora</option>
+            <option value="fijo">Monto fijo</option>
+            <option value="porcentaje">Porcentaje</option>
+          </select>
+          {moraTipo !== "ninguno" && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                className="vc-input w-24 flex-shrink-0"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder={moraTipo === "porcentaje" ? "%" : "$"}
+                value={moraMonto}
+                onChange={(e) => setMoraMonto(e.target.value)}
+              />
+              <span className="flex-shrink-0 text-xs text-muted">después de</span>
+              <input
+                className="vc-input w-16 flex-shrink-0"
+                type="number"
+                min="0"
+                step="1"
+                value={moraDias}
+                onChange={(e) => setMoraDias(e.target.value)}
+              />
+              <span className="flex-shrink-0 text-xs text-muted">días</span>
+            </div>
+          )}
           {moraTipo !== "ninguno" && (
             <p className="mt-1 text-xs text-muted">
               El recargo se muestra en la factura como referencia — todavía no se suma solo al total si se vence.
@@ -508,7 +625,11 @@ export default function NuevaFacturaForm({
         </div>
 
         <button className="vc-btn-primary mt-1" disabled={loading || !cliente} onClick={() => guardar("enviada")}>
-          {loading ? "Guardando..." : "Enviar factura"}
+          {loading ? "Guardando..." : (
+            <>
+              <i className="ti ti-send" /> Enviar factura
+            </>
+          )}
         </button>
         <button
           className="vc-btn-secondary"
