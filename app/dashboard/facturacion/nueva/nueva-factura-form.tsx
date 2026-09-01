@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
+
+type ArchivoPendiente = { localId: string; file: File };
 
 type Entity = {
   id: string;
@@ -110,6 +112,20 @@ export default function NuevaFacturaForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const inputCamaraRef = useRef<HTMLInputElement>(null);
+  const inputArchivoRef = useRef<HTMLInputElement>(null);
+  const [archivosPendientes, setArchivosPendientes] = useState<ArchivoPendiente[]>([]);
+
+  function agregarArchivos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    setArchivosPendientes((prev) => [...prev, ...files.map((file) => ({ localId: `${Date.now()}-${Math.random()}`, file }))]);
+  }
+  function quitarArchivo(localId: string) {
+    setArchivosPendientes((prev) => prev.filter((a) => a.localId !== localId));
+  }
+
   const descripcionFinal = servicioId === "personalizado" ? descripcionPersonalizada : servicio?.nombre ?? "";
   const montoNum = Number(monto) || 0;
 
@@ -194,13 +210,32 @@ export default function NuevaFacturaForm({
       subtotal_linea: montoNum,
     });
 
-    setLoading(false);
-
     if (itemsError) {
+      setLoading(false);
       setError(itemsError.message);
       return;
     }
 
+    // La evidencia se sube DESPUÉS de crear la factura, igual que en
+    // Documentos — si algún archivo falla, la factura igual queda
+    // guardada (con los que sí subieron); se puede agregar el resto luego
+    // desde Editar.
+    for (const archivo of archivosPendientes) {
+      const formData = new FormData();
+      formData.append("file", archivo.file);
+      formData.append("invoiceId", factura.id);
+      const res = await fetch("/api/facturas/adjuntos/upload", { method: "POST", body: formData });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setLoading(false);
+        setError(data.error ?? "La factura se guardó, pero algún archivo no se pudo subir. Puedes intentar de nuevo desde Editar.");
+        router.push(`/dashboard/facturacion/${factura.id}`);
+        router.refresh();
+        return;
+      }
+    }
+
+    setLoading(false);
     router.push(`/dashboard/facturacion/${factura.id}`);
     router.refresh();
   }
@@ -389,6 +424,39 @@ export default function NuevaFacturaForm({
             onChange={(e) => setNotas(e.target.value)}
             placeholder="Ej: Servicios julio 2026 — período 1-31 jul"
           />
+        </Field>
+
+        <Field label="Evidencia del trabajo (opcional)">
+          <input ref={inputCamaraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={agregarArchivos} />
+          <input ref={inputArchivoRef} type="file" accept="image/*,.pdf" multiple className="hidden" onChange={agregarArchivos} />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="flex-1 rounded-pill border border-border py-2 text-sm font-medium hover:opacity-80"
+              onClick={() => inputCamaraRef.current?.click()}
+            >
+              📷 Foto
+            </button>
+            <button
+              type="button"
+              className="flex-1 rounded-pill border border-border py-2 text-sm font-medium hover:opacity-80"
+              onClick={() => inputArchivoRef.current?.click()}
+            >
+              📁 Añadir archivo(s)
+            </button>
+          </div>
+          {archivosPendientes.length > 0 && (
+            <ul className="mt-2 flex flex-col gap-1">
+              {archivosPendientes.map((a) => (
+                <li key={a.localId} className="flex items-center justify-between rounded-lg border border-border p-2 text-xs">
+                  <span className="truncate">{a.file.name}</span>
+                  <button type="button" className="flex-shrink-0 font-medium text-red underline" onClick={() => quitarArchivo(a.localId)}>
+                    quitar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </Field>
 
         <div className="rounded-lg border border-teal bg-teal/[.04] p-3 text-sm">
