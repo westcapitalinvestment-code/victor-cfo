@@ -304,6 +304,9 @@ export default async function InicioNegocioPage() {
             <p className="text-xs font-medium uppercase tracking-wide text-muted">
               Alertas {totalAlertas > 0 && <span className="ml-1 rounded bg-amb/20 px-1.5 py-0.5 text-[10px] text-amb">{totalAlertas}</span>}
             </p>
+            <Link href="/dashboard/negocio/documentos/nuevo" className="text-xs font-medium text-teal hover:opacity-80">
+              + Nuevo
+            </Link>
           </div>
           <div className="p-4">
             {totalAlertas === 0 && <p className="text-xs text-muted">Todo al día.</p>}
