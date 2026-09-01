@@ -72,6 +72,18 @@ export default async function DocumentosNegocioPage() {
         </Link>
       </div>
 
+      {/* Mismo par de tabs que Bóveda personal, con Documentos activo aquí. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="rounded-pill border border-teal px-3 py-1.5 text-xs font-medium text-teal">Documentos</span>
+        <Link
+          href="/dashboard/negocio/citas"
+          className="rounded-pill border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-80"
+          style={{ borderColor: "var(--border)" }}
+        >
+          Citas →
+        </Link>
+      </div>
+
       <div className="vc-card">
         {error && <p className="text-xs text-amb">No se pudo leer documents ({error.message}).</p>}
 

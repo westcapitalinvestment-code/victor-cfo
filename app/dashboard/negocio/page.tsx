@@ -2,8 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatMoney } from "@/lib/format";
-import { Sensitive } from "@/lib/privacy";
-import { saludoPorHora } from "@/lib/hora-pr";
+import { Sensitive, PrivacyToggle } from "@/lib/privacy";
+import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 
 function hoyISO(): string {
@@ -64,31 +64,47 @@ export default async function InicioNegocioPage() {
 
   const entidadActiva = entidades.find((e) => e.id === entidadId);
 
-  const [{ data: facturasRaw }, { data: goals }, { data: documentos }, { data: cuentasNegocio }] = await Promise.all([
-    supabase
-      .from("invoices")
-      .select("id, numero, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
-      .eq("owner_id", user.id)
-      .eq("entity_id", entidadId)
-      .order("fecha_emision", { ascending: false }),
-    supabase
-      .from("goals")
-      .select("id, current_amount, target_amount")
-      .eq("owner_id", user.id)
-      .eq("entity_id", entidadId),
-    supabase
-      .from("documents")
-      .select("id, nombre, fecha_vencimiento")
-      .eq("owner_id", user.id)
-      .eq("entity_id", entidadId)
-      .not("fecha_vencimiento", "is", null)
-      .order("fecha_vencimiento", { ascending: true }),
-    supabase
-      .from("plaid_accounts")
-      .select("current_balance, type")
-      .eq("owner_id", user.id)
-      .eq("entity_id", entidadId),
-  ]);
+  const hoyStrPR = fechaHoyPR();
+
+  const [{ data: facturasRaw }, { data: goals }, { data: documentos }, { data: cuentasNegocio }, { data: citasProximasRaw }] =
+    await Promise.all([
+      supabase
+        .from("invoices")
+        .select("id, numero, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
+        .eq("owner_id", user.id)
+        .eq("entity_id", entidadId)
+        .order("fecha_emision", { ascending: false }),
+      supabase
+        .from("goals")
+        .select("id, current_amount, target_amount")
+        .eq("owner_id", user.id)
+        .eq("entity_id", entidadId),
+      supabase
+        .from("documents")
+        .select("id, nombre, fecha_vencimiento")
+        .eq("owner_id", user.id)
+        .eq("entity_id", entidadId)
+        .not("fecha_vencimiento", "is", null)
+        .order("fecha_vencimiento", { ascending: true }),
+      supabase
+        .from("plaid_accounts")
+        .select("current_balance, type")
+        .eq("owner_id", user.id)
+        .eq("entity_id", entidadId),
+      // Próxima cita (1 sept 2026, migración 0041) — mismo criterio que
+      // Personal (dashboard/page.tsx): hecha=false, desde hoy en adelante.
+      supabase
+        .from("citas")
+        .select("id, titulo, fecha, hora, costo_estimado")
+        .eq("owner_id", user.id)
+        .eq("entity_id", entidadId)
+        .eq("hecha", false)
+        .gte("fecha", hoyStrPR)
+        .order("fecha", { ascending: true })
+        .limit(3),
+    ]);
+
+  const citasProximas = (citasProximasRaw ?? []).map((c) => ({ ...c, dias: diasHastaPR(c.fecha as string) }));
 
   const cuentasDeLaEntidad = cuentasNegocio ?? [];
   const balanceNegocio = cuentasDeLaEntidad
@@ -96,6 +112,11 @@ export default async function InicioNegocioPage() {
     .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
   const deudaNegocio = cuentasDeLaEntidad
     .filter((c) => c.type === "credit" || c.type === "loan")
+    .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
+  // Inversiones (1 sept 2026) — mismo criterio que Personal (dashboard/page.tsx):
+  // cuentas type "investment" conectadas por Plaid y asignadas a esta entidad.
+  const inversionNegocio = cuentasDeLaEntidad
+    .filter((c) => c.type === "investment")
     .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
   const tieneCuentas = cuentasDeLaEntidad.length > 0;
 
@@ -155,19 +176,42 @@ export default async function InicioNegocioPage() {
         </Link>
       </div>
 
-      {tieneCuentas && (
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          <div className="vc-card text-center">
-            <p className="text-[10px] uppercase tracking-wide text-muted">Balance</p>
-            <p className="mt-1 text-lg font-medium">
-              <Sensitive>{formatMoney(balanceNegocio)}</Sensitive>
+      {/* BALANCE — mismo componente vc-bal que usa Personal (dashboard/page.tsx),
+          para que el Inicio de negocio se vea y se sienta igual. Si la entidad
+          todavía no tiene cuentas asignadas, mismo estado vacío honesto que
+          Personal usa cuando no hay banco conectado. */}
+      <div className="vc-bal">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="vc-bal-lbl">Balance de negocio</p>
+            <p className="vc-bal-amt">
+              <Sensitive>{tieneCuentas ? formatMoney(balanceNegocio) : "—"}</Sensitive>
             </p>
           </div>
-          <div className="vc-card text-center">
-            <p className="text-[10px] uppercase tracking-wide text-muted">Deuda</p>
-            <p className="mt-1 text-lg font-medium" style={{ color: deudaNegocio > 0 ? "#B7304A" : undefined }}>
+          <PrivacyToggle />
+        </div>
+        {!tieneCuentas && (
+          <Link href="/dashboard/cuentas" className="mt-2 inline-block text-xs font-medium text-white underline">
+            Asigna una cuenta a esta entidad →
+          </Link>
+        )}
+      </div>
+
+      {tieneCuentas && (
+        <div className="vc-mets" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+          <div className="vc-met">
+            <p className="vc-ml">Deuda</p>
+            <p className="vc-mv" style={{ color: deudaNegocio > 0 ? "var(--red)" : undefined }}>
               <Sensitive>{formatMoney(deudaNegocio)}</Sensitive>
             </p>
+            <p className="mt-0.5 text-[10px] text-muted">tarjetas y préstamos</p>
+          </div>
+          <div className="vc-met">
+            <p className="vc-ml">Inversiones</p>
+            <p className="vc-mv">
+              <Sensitive>{formatMoney(inversionNegocio)}</Sensitive>
+            </p>
+            <p className="mt-0.5 text-[10px] text-muted">cuentas de inversión</p>
           </div>
         </div>
       )}
@@ -231,54 +275,101 @@ export default async function InicioNegocioPage() {
         })}
       </div>
 
-      <div className="vc-card mb-4">
-        <div className="mb-1 flex items-center justify-between">
-          <p className="text-xs uppercase tracking-wide text-muted">Metas del negocio</p>
-          <Link href="/dashboard/negocio/metas" className="text-xs font-medium text-teal hover:opacity-80">
-            ver todas →
-          </Link>
-        </div>
-        {metasTotal === 0 ? (
-          <p className="py-3 text-center text-sm text-muted">Sin metas de negocio todavía.</p>
-        ) : (
-          <p className="py-2 text-sm text-muted">
-            {formatMoney(metasAhorrado)} / {formatMoney(metasObjetivo)} · {metasTotal} meta{metasTotal === 1 ? "" : "s"}
-          </p>
-        )}
-      </div>
-
-      <div className="vc-card">
-        <div className="mb-1 flex items-center justify-between">
-          <p className="text-xs uppercase tracking-wide text-muted">
-            Alertas {totalAlertas > 0 && <span className="ml-1 rounded bg-amb/20 px-1.5 py-0.5 text-[10px] text-amb">{totalAlertas} pendientes</span>}
-          </p>
-        </div>
-
-        {totalAlertas === 0 && <p className="py-3 text-center text-sm text-muted">Todo al día.</p>}
-
-        {facturasVencidas.map((f) => (
-          <div key={f.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
-            <span>
-              <i className="ti ti-alert-triangle mr-1.5" style={{ color: "#B7304A", fontSize: 14 }} />
-              Factura vencida — {f.clients?.name ?? "Sin cliente"}
-            </span>
-            <Link href={`/dashboard/facturacion/${f.id}`} className="text-xs font-medium text-teal">
-              Cobrar →
+      {/* Metas / Alertas / Próxima cita — mismo grid de 2 columnas que usa
+          Personal (dashboard/page.tsx) para las mismas 3 tarjetas. */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="vc-card !p-0">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">Metas</p>
+            <Link href="/dashboard/negocio/metas/nueva" className="text-xs font-medium text-teal hover:opacity-80">
+              + Nueva
             </Link>
           </div>
-        ))}
+          <div className="p-4">
+            {metasTotal === 0 ? (
+              <p className="text-xs text-muted">Sin metas de negocio todavía.</p>
+            ) : (
+              <p className="text-sm text-muted">
+                <Sensitive>
+                  {formatMoney(metasAhorrado)} / {formatMoney(metasObjetivo)}
+                </Sensitive>{" "}
+                · {metasTotal} meta{metasTotal === 1 ? "" : "s"}
+              </p>
+            )}
+          </div>
+        </div>
 
-        {documentosPorVencer.map((d) => (
-          <div key={d.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
-            <span>
-              <i className="ti ti-clock mr-1.5" style={{ color: "var(--amb)", fontSize: 14 }} />
-              {d.nombre} vence {d.fecha_vencimiento}
-            </span>
-            <Link href="/dashboard/negocio/documentos" className="text-xs font-medium text-teal">
-              Ver →
+        <div className="vc-card !p-0">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">
+              Alertas {totalAlertas > 0 && <span className="ml-1 rounded bg-amb/20 px-1.5 py-0.5 text-[10px] text-amb">{totalAlertas}</span>}
+            </p>
+          </div>
+          <div className="p-4">
+            {totalAlertas === 0 && <p className="text-xs text-muted">Todo al día.</p>}
+
+            {facturasVencidas.map((f) => (
+              <div key={f.id} className="vc-alert">
+                <div className="vc-adot" style={{ background: "#B7304A" }} />
+                <div className="flex-1">
+                  <p className="text-xs text-text">Factura vencida — {f.clients?.name ?? "Sin cliente"}</p>
+                  <Link href={`/dashboard/facturacion/${f.id}`} className="mt-0.5 inline-block text-[10px] font-medium text-teal">
+                    Cobrar →
+                  </Link>
+                </div>
+              </div>
+            ))}
+
+            {documentosPorVencer.map((d) => (
+              <div key={d.id} className="vc-alert">
+                <div className="vc-adot" style={{ background: "var(--amb)" }} />
+                <div className="flex-1">
+                  <p className="text-xs text-text">{d.nombre} vence {d.fecha_vencimiento}</p>
+                  <Link href="/dashboard/negocio/documentos" className="mt-0.5 inline-block text-[10px] font-medium text-teal">
+                    Ver →
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="vc-card !p-0">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">Próxima cita</p>
+            <Link href="/dashboard/negocio/citas/nueva" className="text-xs font-medium text-teal hover:opacity-80">
+              + Nueva
             </Link>
           </div>
-        ))}
+          <div className="p-4">
+            {citasProximas.length === 0 && <p className="text-xs text-muted">Sin citas pendientes.</p>}
+            {citasProximas.length > 0 && (
+              <div>
+                {citasProximas.map((c) => {
+                  const color = c.dias <= 1 ? "var(--red)" : c.dias <= 3 ? "var(--amb)" : "var(--grn)";
+                  const cuando = c.dias === 0 ? "Hoy" : c.dias === 1 ? "Mañana" : `En ${c.dias} días`;
+                  return (
+                    <Link
+                      key={c.id}
+                      href={`/dashboard/citas/${c.id}/editar?volver=/dashboard/negocio`}
+                      className="vc-alert"
+                    >
+                      <div className="vc-adot" style={{ background: color }} />
+                      <div>
+                        <p className="text-xs text-text">{c.titulo}</p>
+                        <p className="mt-0.5 text-[10px] text-muted">
+                          {cuando} · {c.fecha}
+                          {c.hora && ` · ${c.hora}`}
+                          {c.costo_estimado !== null && ` · $${Number(c.costo_estimado).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -21,6 +21,7 @@ export default async function CitasPage() {
     .from("citas")
     .select("id, titulo, fecha, hora, costo_estimado, hecha")
     .eq("owner_id", user.id)
+    .is("entity_id", null)
     .order("hecha", { ascending: true })
     .order("fecha", { ascending: true });
 

@@ -259,6 +259,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     .from("citas")
     .select("id, titulo, fecha, hora, costo_estimado")
     .eq("owner_id", user.id)
+    .is("entity_id", null)
     .eq("hecha", false)
     .gte("fecha", hoyStrPR)
     .order("fecha", { ascending: true })

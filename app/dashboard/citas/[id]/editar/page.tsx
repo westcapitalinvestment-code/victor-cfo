@@ -9,6 +9,14 @@ import { createClient } from "@/lib/supabase/client";
 // hora cambian, resetea los 2 recordatorios (igual que el reset de
 // alerta_90/30/7 en documentos) para que el ciclo de avisos arranque de
 // cero con el nuevo horario.
+//
+// Compartida entre Citas personal y Citas de negocio (1 sept 2026) — mismo
+// patrón ?volver= que ya usan metas/[id]/editar y documentos/[id]/editar.
+function volverDestino(): string {
+  if (typeof window === "undefined") return "/dashboard/citas";
+  return new URLSearchParams(window.location.search).get("volver") || "/dashboard/citas";
+}
+
 export default function EditarCitaPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -94,7 +102,7 @@ export default function EditarCitaPage() {
     }
 
     setLoading(false);
-    router.push("/dashboard/citas");
+    router.push(volverDestino());
     router.refresh();
   }
 
@@ -116,7 +124,7 @@ export default function EditarCitaPage() {
       return;
     }
 
-    router.push("/dashboard/citas");
+    router.push(volverDestino());
     router.refresh();
   }
 
@@ -132,7 +140,7 @@ export default function EditarCitaPage() {
     <div className="mx-auto max-w-lg px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium">Editar cita</h1>
-        <button onClick={() => router.push("/dashboard/citas")} className="text-sm text-muted hover:opacity-80">
+        <button onClick={() => router.push(volverDestino())} className="text-sm text-muted hover:opacity-80">
           Cancelar
         </button>
       </div>

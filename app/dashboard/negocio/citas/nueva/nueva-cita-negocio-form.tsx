@@ -4,11 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-// Nueva cita — mismo patrón que documentos/nuevo/page.tsx pero sin subida
-// de archivos. hora y costo_estimado son opcionales: una cita puede
-// anotarse solo con fecha (ej. "recordarme llamar al banco el jueves") o
-// completa (ej. una cita médica con hora y costo aproximado a llevar).
-export default function NuevaCitaPage() {
+// Igual que app/dashboard/citas/nueva/page.tsx pero con entity_id fijo (la
+// entidad activa, resuelta server-side) — sin placeholders de ejemplo, misma
+// regla que ya aplica en Metas/Bóveda de negocio (1 sept 2026).
+export default function NuevaCitaNegocioForm({ entidadId }: { entidadId: string }) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -37,6 +36,7 @@ export default function NuevaCitaPage() {
 
     const { error: insertError } = await supabase.from("citas").insert({
       owner_id: user.id,
+      entity_id: entidadId,
       titulo,
       fecha,
       hora: hora || null,
@@ -51,15 +51,15 @@ export default function NuevaCitaPage() {
       return;
     }
 
-    router.push("/dashboard/citas");
+    router.push("/dashboard/negocio/citas");
     router.refresh();
   }
 
   return (
     <div className="mx-auto max-w-lg px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-lg font-medium">Nueva cita</h1>
-        <button onClick={() => router.push("/dashboard/citas")} className="text-sm text-muted hover:opacity-80">
+        <h1 className="text-lg font-medium">Nueva cita de negocio</h1>
+        <button onClick={() => router.push("/dashboard/negocio/citas")} className="text-sm text-muted hover:opacity-80">
           Cancelar
         </button>
       </div>
