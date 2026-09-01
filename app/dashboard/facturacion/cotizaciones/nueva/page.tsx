@@ -38,6 +38,7 @@ export default async function NuevaCotizacionPage() {
     .from("clients")
     .select("id, name, entity_id, ivu_exempt_reseller")
     .eq("owner_id", user.id)
+    .eq("active", true)
     .order("name", { ascending: true });
 
   if (!clients || clients.length === 0) {

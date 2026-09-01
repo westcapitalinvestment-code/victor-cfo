@@ -38,6 +38,7 @@ export default async function NuevaFacturaPage() {
     .from("clients")
     .select("id, name, entity_id, es_negocio, retention_pct, ivu_exempt_reseller, telefono")
     .eq("owner_id", user.id)
+    .eq("active", true)
     .order("name", { ascending: true });
 
   if (!clients || clients.length === 0) {

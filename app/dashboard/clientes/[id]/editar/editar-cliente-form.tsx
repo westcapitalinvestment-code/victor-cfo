@@ -15,15 +15,27 @@ type Cliente = {
   address: string | null;
   es_negocio: boolean;
   retention_pct: number;
+  active: boolean;
 };
 
-export default function EditarClienteForm({ cliente, entities, returnTo }: { cliente: Cliente; entities: Entity[]; returnTo?: string }) {
+export default function EditarClienteForm({
+  cliente,
+  entities,
+  returnTo,
+  puedeEliminar,
+}: {
+  cliente: Cliente;
+  entities: Entity[];
+  returnTo?: string;
+  puedeEliminar: boolean;
+}) {
   const destino = returnTo || "/dashboard/clientes";
   const router = useRouter();
   const supabase = createClient();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activo, setActivo] = useState(cliente.active);
 
   const [entityId, setEntityId] = useState(cliente.entity_id ?? entities[0]?.id ?? "");
   const [name, setName] = useState(cliente.name);
@@ -59,6 +71,38 @@ export default function EditarClienteForm({ cliente, entities, returnTo }: { cli
       return;
     }
 
+    router.push(destino);
+    router.refresh();
+  }
+
+  // Archivar nunca borra nada — solo esconde al cliente de la lista activa
+  // y de los selectores de "Nueva factura"/"Nueva cotización" (ver 0043).
+  // 100% reversible con "Reactivar".
+  async function alternarActivo() {
+    setLoading(true);
+    setError(null);
+    const { error: updateError } = await supabase.from("clients").update({ active: !activo }).eq("id", cliente.id);
+    setLoading(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setActivo(!activo);
+  }
+
+  // Eliminar de verdad — solo se llega aquí si puedeEliminar es true (el
+  // servidor ya confirmó que no tiene facturas ni cotizaciones), pero se
+  // pide confirmación igual porque es irreversible.
+  async function eliminar() {
+    if (!confirm(`¿Eliminar a "${cliente.name}" por completo? Esto no se puede deshacer.`)) return;
+    setLoading(true);
+    setError(null);
+    const { error: deleteError } = await supabase.from("clients").delete().eq("id", cliente.id);
+    setLoading(false);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
     router.push(destino);
     router.refresh();
   }
@@ -142,6 +186,29 @@ export default function EditarClienteForm({ cliente, entities, returnTo }: { cli
         <button className="vc-btn-primary mt-1" disabled={!name || loading} onClick={guardar}>
           {loading ? "Guardando..." : "Guardar cambios"}
         </button>
+
+        <div className="mt-2 flex items-center justify-between border-t border-border pt-3">
+          <div>
+            <p className="text-sm font-medium">{activo ? "Cliente activo" : "Cliente archivado"}</p>
+            <p className="text-xs text-muted">
+              {activo
+                ? "Archivarlo lo esconde de la lista y de \"Nueva factura\" — su historial no se toca."
+                : "No aparece en la lista ni en \"Nueva factura\". Reactívalo cuando vuelva a ser cliente."}
+            </p>
+          </div>
+          <button type="button" className="flex-shrink-0 text-xs font-medium text-muted underline hover:text-teal" disabled={loading} onClick={alternarActivo}>
+            {activo ? "Archivar" : "Reactivar"}
+          </button>
+        </div>
+
+        {puedeEliminar && (
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted">Este cliente no tiene facturas ni cotizaciones — se puede eliminar por completo.</p>
+            <button type="button" className="flex-shrink-0 text-xs font-medium text-red underline hover:opacity-80" disabled={loading} onClick={eliminar}>
+              Eliminar
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

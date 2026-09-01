@@ -22,7 +22,8 @@
     "react-plaid-link": "^5.0.0",
     "resend": "^4.4.1",
     "stripe": "^22.5.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^20.14.15",
