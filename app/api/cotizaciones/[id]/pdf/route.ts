@@ -258,26 +258,31 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // el mensaje genérico además del pie personalizado — 2 mensajes distintos
   // (bug reportado por Joel, 1 sept 2026). El genérico ahora es solo
   // respaldo cuando la entidad no configuró su propio pie de factura.
+  // Letras más grandes y "Gracias" en bold — se veía muy chiquito y muy
+  // abajo (pedido de Joel, 1 sept 2026).
   if (entidad?.invoice_footer) {
-    const lineasPie = envolverTexto(String(entidad.invoice_footer).slice(0, 300), font, 8, width - margin * 2 - 260);
-    let piePieY = 55;
+    const lineasPie = envolverTexto(String(entidad.invoice_footer).slice(0, 300), font, 10, width - margin * 2 - 260);
+    let piePieY = 60;
     for (const linea of lineasPie) {
-      texto(linea, margin, piePieY, { size: 8, color: gris });
-      piePieY -= 11;
+      texto(linea, margin, piePieY, { size: 10, color: negro });
+      piePieY -= 13;
     }
   } else {
-    textoDerecha("Cotización sujeta a cambios — ¡gracias por considerarnos!", width - margin, 40, { size: 9, color: gris });
+    // Mensaje de agradecimiento fijo pedido por Joel (1 sept 2026): primera
+    // línea en bold, segunda en texto normal.
+    textoDerecha("Gracias por confiar en nuestro trabajo.", width - margin, 52, { f: bold, size: 10, color: negro });
+    textoDerecha("Su éxito también es nuestro compromiso.", width - margin, 40, { size: 10, color: negro });
   }
 
   // Marca de VICTOR CFO al pie, centrada, en azul y clickeable — lleva a
   // victorcfo.com al tocarla (pedido de Joel, 1 sept 2026).
   const marcaTexto = "Generado con VICTOR CFO";
-  const marcaSize = 7;
-  const marcaAncho = font.widthOfTextAtSize(marcaTexto, marcaSize);
+  const marcaSize = 9;
+  const marcaAncho = bold.widthOfTextAtSize(marcaTexto, marcaSize);
   const marcaX = width / 2 - marcaAncho / 2;
   const azulLink = rgb(0.086, 0.451, 0.812);
-  texto(marcaTexto, marcaX, 20, { size: marcaSize, color: azulLink });
-  agregarLinkPDF(marcaX, 18, marcaAncho, marcaSize + 3, "https://victorcfo.com");
+  texto(marcaTexto, marcaX, 22, { f: bold, size: marcaSize, color: azulLink });
+  agregarLinkPDF(marcaX, 20, marcaAncho, marcaSize + 3, "https://victorcfo.com");
 
   const bytes = await pdf.save();
   return new NextResponse(Buffer.from(bytes), {
