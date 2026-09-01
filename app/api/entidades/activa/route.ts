@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { COOKIE_ENTIDAD_ACTIVA, VALOR_VISTA_GLOBAL } from "@/lib/entidad-activa";
+import { COOKIE_ENTIDAD_ACTIVA, VALOR_VISTA_GLOBAL } from "@/lib/entidad-activa-constantes";
 
 // Guarda en cookie cuál entidad quedó activa en el selector "Negocio" del
 // topbar (o "global" si el usuario pidió ver todas las entidades juntas).

@@ -1,13 +1,12 @@
 import { cookies } from "next/headers";
+import { COOKIE_ENTIDAD_ACTIVA, VALOR_VISTA_GLOBAL } from "./entidad-activa-constantes";
 
-// Cookie que recuerda qué entidad de negocio quedó seleccionada en el
-// dropdown "Negocio" del topbar (o si el usuario eligió "Vista global —
-// todas las entidades"). Se lee server-side en cada página que necesite
-// filtrar facturas/cotizaciones/clientes por entidad — así cada entidad
-// tiene su propia facturación separada dentro del mismo sistema, en vez de
-// mezclar todo bajo el owner_id como pasaba antes.
-export const COOKIE_ENTIDAD_ACTIVA = "victor_entidad_activa";
-export const VALOR_VISTA_GLOBAL = "global";
+// Funciones server-only (usan cookies() de next/headers) para resolver cuál
+// entidad de negocio quedó activa en el selector "Negocio" del topbar — ver
+// lib/entidad-activa-constantes.ts para las constantes compartidas con el
+// cliente. Solo se debe importar este archivo desde Server Components o
+// Route Handlers, nunca desde un "use client".
+export { COOKIE_ENTIDAD_ACTIVA, VALOR_VISTA_GLOBAL };
 
 export function leerEntidadActivaCookie(): string | null {
   return cookies().get(COOKIE_ENTIDAD_ACTIVA)?.value ?? null;

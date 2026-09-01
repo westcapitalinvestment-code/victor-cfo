@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { VALOR_VISTA_GLOBAL } from "@/lib/entidad-activa";
+import { VALOR_VISTA_GLOBAL } from "@/lib/entidad-activa-constantes";
 
 // Barra superior compartida de todo el dashboard — calcada de la
 // .topbar de VICTOR — Dashboard Core.html: logo + nombre + badge de plan,
