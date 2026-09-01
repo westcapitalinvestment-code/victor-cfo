@@ -44,6 +44,7 @@ type Factura = {
     address: string | null;
     zip: string | null;
     invoice_footer: string | null;
+    ivu_applies: boolean;
   } | null;
 };
 
@@ -297,7 +298,7 @@ export default function FacturaDetalle({
             <span className="text-muted">Subtotal</span>
             <span>{formatMoney(factura.subtotal)}</span>
           </div>
-          {factura.ivu_pct > 0 && (
+          {factura.business_entities?.ivu_applies && (
             <div className="flex justify-between py-0.5">
               <span className="text-muted">IVU ({factura.ivu_pct}%)</span>
               <span>+{formatMoney(factura.ivu_monto)}</span>

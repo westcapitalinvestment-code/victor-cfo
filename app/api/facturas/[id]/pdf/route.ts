@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data: factura, error } = await supabase
     .from("invoices")
     .select(
-      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key)"
+      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key, ivu_applies)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -43,6 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     zip: string | null;
     invoice_footer: string | null;
     logo_r2_key: string | null;
+    ivu_applies: boolean;
   } | null;
 
   const pdf = await PDFDocument.create();
@@ -216,7 +217,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   };
 
   filaTotales("Subtotal", formatMoney(Number(factura.subtotal)));
-  if (Number(factura.ivu_pct) > 0) {
+  // Siempre visible si la entidad cobra IVU, igual que FreshBooks siempre
+  // muestra "Tax" aunque sea $0.00 (pedido de Joel, 1 sept 2026).
+  if (entidad?.ivu_applies) {
     filaTotales(`IVU (${factura.ivu_pct}%)`, `+${formatMoney(Number(factura.ivu_monto))}`);
   }
   if (Number(factura.retencion_pct) > 0) {

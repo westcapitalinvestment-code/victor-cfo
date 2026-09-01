@@ -42,6 +42,7 @@ type Cotizacion = {
     address: string | null;
     zip: string | null;
     invoice_footer: string | null;
+    ivu_applies: boolean;
   } | null;
 };
 
@@ -306,7 +307,7 @@ export default function CotizacionDetalle({
             <span className="text-muted">Subtotal</span>
             <span>{formatMoney(cotizacion.subtotal)}</span>
           </div>
-          {cotizacion.ivu_pct > 0 && (
+          {cotizacion.business_entities?.ivu_applies && (
             <div className="flex justify-between py-0.5">
               <span className="text-muted">IVU ({cotizacion.ivu_pct}%)</span>
               <span>+{formatMoney(cotizacion.ivu_monto)}</span>

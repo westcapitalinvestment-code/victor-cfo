@@ -88,8 +88,12 @@ export default function NuevaFacturaForm({
     () => clients.filter((c) => !c.entity_id || c.entity_id === entityId),
     [clients, entityId]
   );
-  const [clientId, setClientId] = useState(clientesDeEntidad[0]?.id ?? "");
-  const cliente = clientesDeEntidad.find((c) => c.id === clientId) ?? clientesDeEntidad[0];
+  // Sin cliente ni servicio por defecto (pedido de Joel, 1 sept 2026) — que
+  // arranquen vacíos y el usuario escoja a propósito, en vez de asumir el
+  // primero de la lista (que podía terminar en una factura al cliente
+  // equivocado si no se fijaba en cambiarlo).
+  const [clientId, setClientId] = useState("");
+  const cliente = clientesDeEntidad.find((c) => c.id === clientId);
 
   // Toggle "Cliente te retiene" (1 sept 2026, pedido de Joel): si el
   // cliente ya tiene su propio % guardado (es_negocio + retention_pct) se
@@ -112,17 +116,18 @@ export default function NuevaFacturaForm({
   }, [clientId]);
 
   const [listaServicios, setListaServicios] = useState<ServicioCat[]>(servicios);
-  const [servicioId, setServicioId] = useState<string>(listaServicios[0]?.id ?? "personalizado");
+  const [servicioId, setServicioId] = useState<string>("");
   const servicio = listaServicios.find((s) => s.id === servicioId);
   const [descripcionPersonalizada, setDescripcionPersonalizada] = useState("");
-  const [monto, setMonto] = useState(listaServicios[0] ? String(listaServicios[0].precio) : "");
+  const [monto, setMonto] = useState("");
   const [cantidad, setCantidad] = useState("1");
 
   function elegirServicio(id: string) {
     setServicioId(id);
-    if (id === "crear_nuevo") {
+    if (id === "" || id === "crear_nuevo") {
       setNuevoServicioNombre("");
       setNuevoServicioPrecio("");
+      if (id === "") setMonto("");
       return;
     }
     const s = listaServicios.find((x) => x.id === id);
@@ -377,26 +382,31 @@ export default function NuevaFacturaForm({
           {clientesDeEntidad.length === 0 ? (
             <p className="text-xs text-amb">Esta entidad no tiene clientes todavía.</p>
           ) : (
-            <select className="vc-input" value={clientId} onChange={(e) => setClientId(e.target.value)}>
-              {clientesDeEntidad.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.es_negocio && Number(c.retention_pct) > 0 ? ` (Créd. Hacienda ${Number(c.retention_pct)}%)` : ""}
-                </option>
-              ))}
-            </select>
+            <SelectorBuscable
+              items={clientesDeEntidad}
+              valorId={clientId}
+              onSeleccionar={setClientId}
+              placeholder="Buscar cliente..."
+              etiqueta={(c) =>
+                `${c.name}${c.es_negocio && Number(c.retention_pct) > 0 ? ` (Créd. Hacienda ${Number(c.retention_pct)}%)` : ""}`
+              }
+            />
           )}
         </Field>
 
         {cliente && (
-          <div className="flex items-center justify-between rounded-lg border border-border bg-bg p-3">
-            <div className="flex-1">
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-bg p-3">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">Cliente te retiene</p>
               <p className="text-xs text-muted">Retención automática (Sección 1062.03)</p>
             </div>
             {retencionActiva && (
+              // .vc-input trae width:100% del CSS global, que le gana a
+              // clases de ancho de Tailwind (w-16) por orden de cascada —
+              // por eso el ancho fijo va en style, no en className.
               <input
-                className="vc-input mr-2 w-16 flex-shrink-0"
+                className="vc-input flex-shrink-0"
+                style={{ width: 64 }}
                 type="number"
                 min="0"
                 max="100"
@@ -421,6 +431,7 @@ export default function NuevaFacturaForm({
 
         <Field label="Servicio">
           <select className="vc-input" value={servicioId} onChange={(e) => elegirServicio(e.target.value)}>
+            <option value="">Selecciona un servicio...</option>
             {listaServicios.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.nombre} — {formatMoney(s.precio)}
@@ -555,7 +566,8 @@ export default function NuevaFacturaForm({
           {moraTipo !== "ninguno" && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <input
-                className="vc-input w-24 flex-shrink-0"
+                className="vc-input flex-shrink-0"
+                style={{ width: 96 }}
                 type="number"
                 min="0"
                 step="0.01"
@@ -565,7 +577,8 @@ export default function NuevaFacturaForm({
               />
               <span className="flex-shrink-0 text-xs text-muted">después de</span>
               <input
-                className="vc-input w-16 flex-shrink-0"
+                className="vc-input flex-shrink-0"
+                style={{ width: 64 }}
                 type="number"
                 min="0"
                 step="1"
@@ -660,7 +673,10 @@ export default function NuevaFacturaForm({
             <span className="text-muted">Subtotal</span>
             <span>{formatMoney(subtotal)}</span>
           </div>
-          {ivuMonto > 0 && (
+          {entidad?.ivu_applies && (
+            // Siempre visible si la entidad cobra IVU, aunque salga en
+            // $0.00 (ej. servicio exento) — igual que FreshBooks siempre
+            // muestra la fila de "Tax", pedido de Joel el 1 sept 2026.
             <div className="flex justify-between py-0.5">
               <span className="text-muted">IVU ({ivuPct}%)</span>
               <span>+{formatMoney(ivuMonto)}</span>
@@ -726,6 +742,79 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="flex-1">
       <label className="mb-1 block text-xs uppercase tracking-wide text-muted">{label}</label>
       {children}
+    </div>
+  );
+}
+
+// Combobox con búsqueda (1 sept 2026, pedido de Joel — con 44 clientes
+// importados de FreshBooks, un <select> normal se vuelve incómodo). Es un
+// input de texto: al hacer foco muestra la lista completa, al escribir la
+// filtra, y al perder el foco vuelve a mostrar el nombre del que quedó
+// seleccionado.
+function SelectorBuscable<T extends { id: string }>({
+  items,
+  valorId,
+  onSeleccionar,
+  etiqueta,
+  placeholder,
+}: {
+  items: T[];
+  valorId: string;
+  onSeleccionar: (id: string) => void;
+  etiqueta: (item: T) => string;
+  placeholder: string;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const seleccionado = items.find((i) => i.id === valorId);
+
+  useEffect(() => {
+    function alHacerClicFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setAbierto(false);
+        setBusqueda("");
+      }
+    }
+    document.addEventListener("mousedown", alHacerClicFuera);
+    return () => document.removeEventListener("mousedown", alHacerClicFuera);
+  }, []);
+
+  const filtrados = busqueda.trim()
+    ? items.filter((i) => etiqueta(i).toLowerCase().includes(busqueda.trim().toLowerCase()))
+    : items;
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        className="vc-input"
+        placeholder={placeholder}
+        value={abierto ? busqueda : seleccionado ? etiqueta(seleccionado) : ""}
+        onFocus={() => {
+          setAbierto(true);
+          setBusqueda("");
+        }}
+        onChange={(e) => setBusqueda(e.target.value)}
+      />
+      {abierto && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+          {filtrados.length === 0 && <p className="p-3 text-xs text-muted">Sin resultados.</p>}
+          {filtrados.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-bg"
+              onClick={() => {
+                onSeleccionar(item.id);
+                setAbierto(false);
+                setBusqueda("");
+              }}
+            >
+              {etiqueta(item)}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

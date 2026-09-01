@@ -306,25 +306,30 @@ export default function EditarFacturaForm({
         )}
 
         <Field label="Cliente">
-          <select className="vc-input" value={clientId} onChange={(e) => setClientId(e.target.value)}>
-            {clientesDeEntidad.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.es_negocio && Number(c.retention_pct) > 0 ? ` (Créd. Hacienda ${Number(c.retention_pct)}%)` : ""}
-              </option>
-            ))}
-          </select>
+          <SelectorBuscable
+            items={clientesDeEntidad}
+            valorId={clientId}
+            onSeleccionar={setClientId}
+            placeholder="Buscar cliente..."
+            etiqueta={(c) =>
+              `${c.name}${c.es_negocio && Number(c.retention_pct) > 0 ? ` (Créd. Hacienda ${Number(c.retention_pct)}%)` : ""}`
+            }
+          />
         </Field>
 
         {cliente && (
-          <div className="flex items-center justify-between rounded-lg border border-border bg-bg p-3">
-            <div className="flex-1">
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-bg p-3">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">Cliente te retiene</p>
               <p className="text-xs text-muted">Retención automática (Sección 1062.03)</p>
             </div>
             {retencionActiva && (
+              // .vc-input trae width:100% del CSS global, que le gana a
+              // clases de ancho de Tailwind (w-16) por orden de cascada —
+              // por eso el ancho fijo va en style, no en className.
               <input
-                className="vc-input mr-2 w-16 flex-shrink-0"
+                className="vc-input flex-shrink-0"
+                style={{ width: 64 }}
                 type="number"
                 min="0"
                 max="100"
@@ -427,7 +432,8 @@ export default function EditarFacturaForm({
           {moraTipo !== "ninguno" && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <input
-                className="vc-input w-24 flex-shrink-0"
+                className="vc-input flex-shrink-0"
+                style={{ width: 96 }}
                 type="number"
                 min="0"
                 step="0.01"
@@ -437,7 +443,8 @@ export default function EditarFacturaForm({
               />
               <span className="flex-shrink-0 text-xs text-muted">después de</span>
               <input
-                className="vc-input w-16 flex-shrink-0"
+                className="vc-input flex-shrink-0"
+                style={{ width: 64 }}
                 type="number"
                 min="0"
                 step="1"
@@ -482,7 +489,7 @@ export default function EditarFacturaForm({
             <span className="text-muted">Subtotal</span>
             <span>{formatMoney(subtotal)}</span>
           </div>
-          {ivuMonto > 0 && (
+          {entidad?.ivu_applies && (
             <div className="flex justify-between py-0.5">
               <span className="text-muted">IVU ({ivuPct}%)</span>
               <span>+{formatMoney(ivuMonto)}</span>
@@ -539,6 +546,75 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="flex-1">
       <label className="mb-1 block text-xs uppercase tracking-wide text-muted">{label}</label>
       {children}
+    </div>
+  );
+}
+
+// Mismo componente que en nueva-factura-form.tsx.
+function SelectorBuscable<T extends { id: string }>({
+  items,
+  valorId,
+  onSeleccionar,
+  etiqueta,
+  placeholder,
+}: {
+  items: T[];
+  valorId: string;
+  onSeleccionar: (id: string) => void;
+  etiqueta: (item: T) => string;
+  placeholder: string;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const seleccionado = items.find((i) => i.id === valorId);
+
+  useEffect(() => {
+    function alHacerClicFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setAbierto(false);
+        setBusqueda("");
+      }
+    }
+    document.addEventListener("mousedown", alHacerClicFuera);
+    return () => document.removeEventListener("mousedown", alHacerClicFuera);
+  }, []);
+
+  const filtrados = busqueda.trim()
+    ? items.filter((i) => etiqueta(i).toLowerCase().includes(busqueda.trim().toLowerCase()))
+    : items;
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        className="vc-input"
+        placeholder={placeholder}
+        value={abierto ? busqueda : seleccionado ? etiqueta(seleccionado) : ""}
+        onFocus={() => {
+          setAbierto(true);
+          setBusqueda("");
+        }}
+        onChange={(e) => setBusqueda(e.target.value)}
+      />
+      {abierto && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+          {filtrados.length === 0 && <p className="p-3 text-xs text-muted">Sin resultados.</p>}
+          {filtrados.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-bg"
+              onClick={() => {
+                onSeleccionar(item.id);
+                setAbierto(false);
+                setBusqueda("");
+              }}
+            >
+              {etiqueta(item)}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
