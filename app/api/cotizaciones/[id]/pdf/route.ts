@@ -99,6 +99,20 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     page.drawText(contenido, { x: xDerecha - w, y: yPos, size, font: f, color: opts.color ?? negro });
   }
 
+  // Dibuja varios segmentos con distinta fuente (bold/normal) pegados uno
+  // detrás del otro en UNA sola línea, alineados a la derecha en conjunto —
+  // para el mensaje de agradecimiento fijo, que necesita la primera frase en
+  // bold y el resto en texto normal sin partirse en dos líneas (pedido de
+  // Joel, 1 sept 2026).
+  function textoDerechaMixto(segmentos: { texto: string; f: typeof font; color?: ReturnType<typeof rgb> }[], xDerecha: number, yPos: number, size: number) {
+    const anchoTotal = segmentos.reduce((acc, s) => acc + s.f.widthOfTextAtSize(s.texto, size), 0);
+    let x = xDerecha - anchoTotal;
+    for (const s of segmentos) {
+      page.drawText(s.texto, { x, y: yPos, size, font: s.f, color: s.color ?? negro });
+      x += s.f.widthOfTextAtSize(s.texto, size);
+    }
+  }
+
   // pdf-lib no trae un helper de "link clickeable" — se arma a mano como
   // anotación tipo Link con acción URI, y se agrega al arreglo Annots de
   // la página (pedido de Joel: la marca de VICTOR CFO debe llevar a
@@ -258,20 +272,28 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // el mensaje genérico además del pie personalizado — 2 mensajes distintos
   // (bug reportado por Joel, 1 sept 2026). El genérico ahora es solo
   // respaldo cuando la entidad no configuró su propio pie de factura.
-  // Letras más grandes y "Gracias" en bold — se veía muy chiquito y muy
-  // abajo (pedido de Joel, 1 sept 2026).
+  // Letras más grandes y todo el bloque más arriba — se veía muy chiquito y
+  // se perdía muy abajo en la factura (pedido de Joel, 1 sept 2026).
   if (entidad?.invoice_footer) {
     const lineasPie = envolverTexto(String(entidad.invoice_footer).slice(0, 300), font, 10, width - margin * 2 - 260);
-    let piePieY = 60;
+    let piePieY = 75;
     for (const linea of lineasPie) {
       texto(linea, margin, piePieY, { size: 10, color: negro });
       piePieY -= 13;
     }
   } else {
-    // Mensaje de agradecimiento fijo pedido por Joel (1 sept 2026): primera
-    // línea en bold, segunda en texto normal.
-    textoDerecha("Gracias por confiar en nuestro trabajo.", width - margin, 52, { f: bold, size: 10, color: negro });
-    textoDerecha("Su éxito también es nuestro compromiso.", width - margin, 40, { size: 10, color: negro });
+    // Mensaje de agradecimiento fijo pedido por Joel (1 sept 2026): una sola
+    // línea, con la primera frase en bold y el resto en texto normal (antes
+    // se partía en dos líneas y se veía cortado).
+    textoDerechaMixto(
+      [
+        { texto: "Gracias por confiar en nuestro trabajo. ", f: bold },
+        { texto: "Su éxito también es nuestro compromiso.", f: font },
+      ],
+      width - margin,
+      58,
+      10
+    );
   }
 
   // Marca de VICTOR CFO al pie, centrada, en azul y clickeable — lleva a
@@ -281,8 +303,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const marcaAncho = bold.widthOfTextAtSize(marcaTexto, marcaSize);
   const marcaX = width / 2 - marcaAncho / 2;
   const azulLink = rgb(0.086, 0.451, 0.812);
-  texto(marcaTexto, marcaX, 22, { f: bold, size: marcaSize, color: azulLink });
-  agregarLinkPDF(marcaX, 20, marcaAncho, marcaSize + 3, "https://victorcfo.com");
+  texto(marcaTexto, marcaX, 38, { f: bold, size: marcaSize, color: azulLink });
+  agregarLinkPDF(marcaX, 36, marcaAncho, marcaSize + 3, "https://victorcfo.com");
 
   const bytes = await pdf.save();
   return new NextResponse(Buffer.from(bytes), {
