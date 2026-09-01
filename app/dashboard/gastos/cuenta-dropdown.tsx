@@ -22,7 +22,18 @@ type Opcion = { clave: string; nombre: string };
 // TODO: si ya están todas marcadas, lo desmarca todo; si no, las marca
 // todas — antes ese botón solo borraba el filtro (?cuentas= fuera) sin
 // tocar los checkboxes, así que parecía que "no hacía nada" visualmente.
-export default function CuentaDropdown({ opciones, seleccionadas }: { opciones: Opcion[]; seleccionadas: string[] }) {
+// basePath (1 sept 2026) — reusado por Gastos de negocio, que necesita
+// navegar a /dashboard/negocio/gastos en vez de /dashboard/gastos. Default
+// conserva el comportamiento de siempre para Personal.
+export default function CuentaDropdown({
+  opciones,
+  seleccionadas,
+  basePath = "/dashboard/gastos",
+}: {
+  opciones: Opcion[];
+  seleccionadas: string[];
+  basePath?: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -47,7 +58,7 @@ export default function CuentaDropdown({ opciones, seleccionadas }: { opciones: 
     else params.delete("cuentas");
     params.delete("categoria");
     const qs = params.toString();
-    router.push(`/dashboard/gastos${qs ? `?${qs}` : ""}`);
+    router.push(`${basePath}${qs ? `?${qs}` : ""}`);
   }
 
   function toggle(clave: string) {

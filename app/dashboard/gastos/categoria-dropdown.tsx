@@ -11,7 +11,9 @@ type Opcion = { catKey: string | null; nombre: string; href: string; activa: boo
 // categoría era tocar una barra dentro del reporte de arriba, y la ÚNICA
 // forma de crear una categoría nueva era pedírselo a VICTOR por chat. Esto
 // da las dos cosas directo en la pantalla, sin scroll y sin chat.
-export default function CategoriaDropdown({ opciones }: { opciones: Opcion[] }) {
+// basePath (1 sept 2026) — reusado por Gastos de negocio, ver mismo
+// comentario en cuenta-dropdown.tsx.
+export default function CategoriaDropdown({ opciones, basePath = "/dashboard/gastos" }: { opciones: Opcion[]; basePath?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -57,7 +59,7 @@ export default function CategoriaDropdown({ opciones }: { opciones: Opcion[] }) 
     // en la URL), solo cambia ?categoria= al id nuevo que acaba de volver.
     const params = new URLSearchParams(searchParams.toString());
     params.set("categoria", String(data.categoria.id));
-    router.push(`/dashboard/gastos?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
     router.refresh();
   }
 

@@ -10,7 +10,9 @@ type Rango = { label: string; desde?: string; hasta?: string };
 // tu contable ▾" — Joel pidió esto explícitamente para despejar la
 // pantalla, con el reporte del BPPR como referencia (ellos también
 // esconden las opciones de descarga detrás de un solo control).
-export default function ReporteContableDropdown({ rangos }: { rangos: Rango[] }) {
+// entityId (1 sept 2026) — reusado por Gastos de negocio, para que el CSV
+// salga filtrado a esa entidad en vez del historial personal.
+export default function ReporteContableDropdown({ rangos, entityId }: { rangos: Rango[]; entityId?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -38,6 +40,7 @@ export default function ReporteContableDropdown({ rangos }: { rangos: Rango[] })
             const params = new URLSearchParams();
             if (r.desde) params.set("desde", r.desde);
             if (r.hasta) params.set("hasta", r.hasta);
+            if (entityId) params.set("entityId", entityId);
             const qs = params.toString();
             return (
               <a
@@ -51,6 +54,7 @@ export default function ReporteContableDropdown({ rangos }: { rangos: Rango[] })
           })}
           <div className="my-1 h-px bg-border" />
           <form method="GET" action="/api/transacciones/exportar" className="flex flex-col gap-2 px-2 pb-1">
+            {entityId && <input type="hidden" name="entityId" value={entityId} />}
             <p className="text-xs uppercase tracking-wide text-muted">Rango personalizado</p>
             <div>
               <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Desde</label>

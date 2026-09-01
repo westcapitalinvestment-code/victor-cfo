@@ -29,13 +29,30 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const desde = searchParams.get("desde");
   const hasta = searchParams.get("hasta");
+  const entityId = searchParams.get("entityId");
+
+  // entityId (1 sept 2026) — el mismo reporte se usa desde Gastos de
+  // negocio, para que el usuario pueda bajarle el CSV a su contador
+  // filtrado por entidad. Se valida que la entidad sea suya antes de
+  // confiar en el id que viene por query string.
+  if (entityId) {
+    const { data: entidad } = await supabase
+      .from("business_entities")
+      .select("id")
+      .eq("id", entityId)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (!entidad) {
+      return NextResponse.json({ error: "Entidad inválida." }, { status: 400 });
+    }
+  }
 
   let query = supabase
     .from("transactions")
     .select("fecha, description_raw, amount, hacienda_category_id, tipo_flujo")
     .eq("owner_id", user.id)
-    .is("entity_id", null)
     .order("fecha", { ascending: true });
+  query = entityId ? query.eq("entity_id", entityId) : query.is("entity_id", null);
 
   if (desde) query = query.gte("fecha", desde);
   if (hasta) query = query.lte("fecha", hasta);
