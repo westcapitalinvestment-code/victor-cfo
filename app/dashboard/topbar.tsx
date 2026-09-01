@@ -210,7 +210,7 @@ export default function Topbar({
 
           {esPro && entidadesNegocio.length === 0 && (
             <Link href="/dashboard/entidades/nueva" className={`vc-ctxtab ${enNegocio ? "on" : ""}`}>
-              + Negocio
+              Crea tu negocio
             </Link>
           )}
 

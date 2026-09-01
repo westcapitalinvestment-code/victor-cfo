@@ -72,7 +72,7 @@ export default async function ConfigPage() {
               className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0"
             >
               <span>{e.name}</span>
-              <span className="text-xs text-teal">{e.logo_r2_key ? "Editar logo" : "Añadir logo"} →</span>
+              <span className="text-xs text-teal">Editar negocio →</span>
             </Link>
           ))}
         </div>
