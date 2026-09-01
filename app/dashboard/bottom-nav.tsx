@@ -17,6 +17,20 @@ const TABS_PERSONAL = [
   { href: "/dashboard/cuentas", label: "Cuentas", icon: "ti-credit-card" },
 ];
 
+// Mismos 5 íconos pero apuntando a las versiones de negocio (1 sept 2026) —
+// se usan en vez de TABS_PERSONAL cuando ya estás navegando dentro de
+// /dashboard/negocio/..., para que Inicio/Gastos/Metas/Bóveda/Cuentas se
+// queden en el contexto de la entidad activa en vez de regresarte a
+// Personal. La entidad misma vive en la cookie (lib/entidad-activa.ts), no
+// en la URL, así que estos hrefs no cambian por entidad.
+const TABS_NEGOCIO_INICIO = [
+  { href: "/dashboard/negocio", label: "Inicio", icon: "ti-home" },
+  { href: "/dashboard/negocio/gastos", label: "Gastos", icon: "ti-chart-bar" },
+  { href: "/dashboard/negocio/metas", label: "Metas", icon: "ti-target" },
+  { href: "/dashboard/negocio/documentos", label: "Bóveda", icon: "ti-file-text" },
+  { href: "/dashboard/negocio/cuentas", label: "Cuentas", icon: "ti-credit-card" },
+];
+
 // Orden y nombres calcados de VICTOR Pro — Producto Completo_FINAL.html
 // (30-31 agosto 2026, corrección de Joel): "Cobros" no es un ícono propio
 // del nav — vive DENTRO del portal de Facturación como pestaña. El segundo
@@ -43,12 +57,25 @@ function NavLink({ tab, active }: { tab: { href: string; label: string; icon: st
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const isActive = (href: string) => (href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href));
+  // "/dashboard" y "/dashboard/negocio" son los dos "Inicio" (Personal y de
+  // negocio) — necesitan comparación exacta, si no "/dashboard/negocio"
+  // quedaría marcado "on" en CUALQUIER subpágina de negocio (Gastos, Metas,
+  // etc.), porque todas empiezan con ese mismo prefijo.
+  const isActive = (href: string) =>
+    href === "/dashboard" || href === "/dashboard/negocio" ? pathname === href : pathname.startsWith(href);
+
+  // /dashboard/facturacion, /dashboard/clientes y /dashboard/entidades
+  // también son "negocio", pero no cuelgan de /dashboard/negocio — por eso
+  // el swap de Inicio/Gastos/Metas/Bóveda/Cuentas solo pasa cuando el
+  // pathname empieza exactamente con /dashboard/negocio (donde sí existen
+  // esas 5 páginas hermanas de Personal).
+  const enNegocio = pathname.startsWith("/dashboard/negocio");
+  const tabsPrimerGrupo = enNegocio ? TABS_NEGOCIO_INICIO : TABS_PERSONAL;
 
   return (
     <div className="vc-bnav">
       <div className="vc-bnav-scroll">
-        {TABS_PERSONAL.map((tab) => (
+        {tabsPrimerGrupo.map((tab) => (
           <NavLink key={tab.href} tab={tab} active={isActive(tab.href)} />
         ))}
         <div style={{ width: 2, background: "#1D9E75", margin: "4px 6px", opacity: 0.7, borderRadius: 2, flexShrink: 0 }} />

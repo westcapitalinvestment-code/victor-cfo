@@ -79,6 +79,7 @@ export default function Topbar({
   const pathname = usePathname();
   const router = useRouter();
   const enNegocio =
+    pathname.startsWith("/dashboard/negocio") ||
     pathname.startsWith("/dashboard/facturacion") ||
     pathname.startsWith("/dashboard/clientes") ||
     pathname.startsWith("/dashboard/entidades");
@@ -113,7 +114,7 @@ export default function Topbar({
     }
     setOpenNegocio(false);
     setCambiando(false);
-    router.push("/dashboard/facturacion");
+    router.push("/dashboard/negocio");
     router.refresh();
   }
 
@@ -217,7 +218,7 @@ export default function Topbar({
           {esPro && entidadesNegocio.length > 0 && (
             <div ref={negocioRef} className={`vc-ctxtab-negocio-wrap ${enNegocio ? "on" : ""}`}>
               <Link
-                href="/dashboard/facturacion"
+                href="/dashboard/negocio"
                 className="vc-ctxtab-negocio-label"
                 onClick={() => setOpenNegocio(false)}
                 title={etiquetaNegocio}

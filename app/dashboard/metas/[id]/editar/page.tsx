@@ -7,6 +7,17 @@ import { createClient } from "@/lib/supabase/client";
 // Editar/eliminar una meta existente — mismo patrón que nueva/page.tsx
 // (cliente de Supabase del navegador, RLS aplica normal), pero cargando
 // la fila primero y con un botón de borrar aparte con confirmación.
+//
+// Compartida entre Metas personal y Metas de negocio (1 sept 2026) — el
+// ?volver= le dice a dónde regresar (default /dashboard/metas). No se usa
+// useSearchParams a propósito: ese hook obliga a envolver la página en
+// <Suspense> o el build de Next puede fallar — como esta página ya es
+// "use client" sin wrapper de servidor, es más simple y seguro leer el
+// query string directo del navegador.
+function volverDestino(): string {
+  if (typeof window === "undefined") return "/dashboard/metas";
+  return new URLSearchParams(window.location.search).get("volver") || "/dashboard/metas";
+}
 
 export default function EditarMetaPage() {
   const params = useParams<{ id: string }>();
@@ -77,7 +88,7 @@ export default function EditarMetaPage() {
       return;
     }
 
-    router.push("/dashboard/metas");
+    router.push(volverDestino());
     router.refresh();
   }
 
@@ -99,7 +110,7 @@ export default function EditarMetaPage() {
       return;
     }
 
-    router.push("/dashboard/metas");
+    router.push(volverDestino());
     router.refresh();
   }
 
@@ -115,7 +126,7 @@ export default function EditarMetaPage() {
     <div className="mx-auto max-w-lg px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium">Editar meta</h1>
-        <button onClick={() => router.push("/dashboard/metas")} className="text-sm text-muted hover:opacity-80">
+        <button onClick={() => router.push(volverDestino())} className="text-sm text-muted hover:opacity-80">
           Cancelar
         </button>
       </div>

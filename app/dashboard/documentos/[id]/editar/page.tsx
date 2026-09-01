@@ -11,6 +11,14 @@ type ArchivoPendiente = { localId: string; file: File; etiqueta: string };
 // metas/[id]/editar/page.tsx. Además permite ver, agregar y eliminar
 // archivos (Cloudflare R2) individualmente — un documento puede tener
 // varios (ej. frente/atrás de una licencia), cada uno con su etiqueta.
+//
+// Compartida entre Bóveda personal y Bóveda de negocio (1 sept 2026) — ver
+// el mismo comentario sobre ?volver= en metas/[id]/editar/page.tsx.
+function volverDestino(): string {
+  if (typeof window === "undefined") return "/dashboard/documentos";
+  return new URLSearchParams(window.location.search).get("volver") || "/dashboard/documentos";
+}
+
 export default function EditarDocumentoPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -156,7 +164,7 @@ export default function EditarDocumentoPage() {
     }
 
     setLoading(false);
-    router.push("/dashboard/documentos");
+    router.push(volverDestino());
     router.refresh();
   }
 
@@ -178,7 +186,7 @@ export default function EditarDocumentoPage() {
       return;
     }
 
-    router.push("/dashboard/documentos");
+    router.push(volverDestino());
     router.refresh();
   }
 
@@ -194,7 +202,7 @@ export default function EditarDocumentoPage() {
     <div className="mx-auto max-w-lg px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium">Editar documento</h1>
-        <button onClick={() => router.push("/dashboard/documentos")} className="text-sm text-muted hover:opacity-80">
+        <button onClick={() => router.push(volverDestino())} className="text-sm text-muted hover:opacity-80">
           Cancelar
         </button>
       </div>
