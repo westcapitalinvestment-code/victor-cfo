@@ -35,9 +35,15 @@ type Factura = {
   late_fee_tipo: string | null;
   late_fee_monto: number;
   late_fee_dias_gracia: number;
-  clients: { name: string; email: string | null; telefono: string | null } | null;
-  business_entities: { name: string } | null;
+  clients: { name: string; email: string | null; telefono: string | null; tax_id: string | null } | null;
+  business_entities: { name: string; ein: string | null; municipio: string | null } | null;
 };
+
+const EXTENSIONES_IMAGEN = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"];
+function esImagen(nombre: string): boolean {
+  const n = nombre.toLowerCase();
+  return EXTENSIONES_IMAGEN.some((ext) => n.endsWith(ext));
+}
 
 const METODOS_PAGO = ["ATH Móvil", "Transferencia", "Cheque", "Efectivo", "Tarjeta", "Otro"];
 
@@ -58,10 +64,12 @@ export default function FacturaDetalle({
   factura,
   items,
   adjuntosIniciales,
+  negocioNombre,
 }: {
   factura: Factura;
   items: Item[];
   adjuntosIniciales: Adjunto[];
+  negocioNombre: string;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -69,6 +77,8 @@ export default function FacturaDetalle({
   const [error, setError] = useState<string | null>(null);
   const [metodoPago, setMetodoPago] = useState(METODOS_PAGO[0]);
   const [confirmandoPago, setConfirmandoPago] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false);
 
   const [adjuntos, setAdjuntos] = useState(adjuntosIniciales);
   const [subiendo, setSubiendo] = useState(false);
@@ -147,16 +157,70 @@ export default function FacturaDetalle({
     window.open(url, "_blank");
   }
 
+  // "PDF" real requeriría una librería nueva — por ahora usamos el diálogo
+  // de impresión del navegador con estilos @media print (ver abajo), que
+  // deja "Guardar como PDF" como una de las impresoras. Cero dependencias
+  // nuevas y funciona igual en celular y computadora.
+  function descargarPDF() {
+    window.print();
+  }
+
+  async function eliminarFactura() {
+    if (!confirmarEliminar) {
+      setConfirmarEliminar(true);
+      return;
+    }
+    setEliminando(true);
+    setError(null);
+    const { error: deleteError } = await supabase.from("invoices").delete().eq("id", factura.id);
+    setEliminando(false);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+    router.push("/dashboard/facturacion");
+    router.refresh();
+  }
+
   return (
     <div className="mx-auto max-w-2xl px-6 py-8">
-      <div className="mb-6 flex items-center justify-between">
+      {/* Estilos de impresión — "Enviar a impresora > Guardar como PDF" en
+          el navegador queda como una forma gratis de exportar la factura
+          sin añadir ninguna librería nueva. Solo se ve la tarjeta de la
+          factura; se esconde todo lo demás (nav, botones, subida de
+          archivos, etc). */}
+      <style>{`
+        @media print {
+          .no-imprimir { display: none !important; }
+          .factura-imprimible {
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+          }
+        }
+      `}</style>
+
+      <div className="no-imprimir mb-6 flex items-center justify-between">
         <button onClick={() => router.push("/dashboard/facturacion")} className="text-sm text-muted hover:opacity-80">
           ← Facturas
         </button>
       </div>
 
-      <div className="vc-card flex flex-col gap-3">
-        {error && <p className="text-xs text-red">{error}</p>}
+      <div className="vc-card factura-imprimible flex flex-col gap-3">
+        {error && <p className="no-imprimir text-xs text-red">{error}</p>}
+
+        <div className="border-b border-border pb-3">
+          <p className="text-sm font-medium">{negocioNombre || entidadNombre}</p>
+          {entidadNombre && negocioNombre && entidadNombre !== negocioNombre && (
+            <p className="text-xs text-muted">{entidadNombre}</p>
+          )}
+          {factura.business_entities?.ein && (
+            <p className="text-xs text-muted">RUC/EIN: {factura.business_entities.ein}</p>
+          )}
+          {factura.business_entities?.municipio && (
+            <p className="text-xs text-muted">{factura.business_entities.municipio}, PR</p>
+          )}
+        </div>
 
         <div className="flex items-start justify-between">
           <div>
@@ -165,6 +229,7 @@ export default function FacturaDetalle({
               {clienteNombre} {entidadNombre && `· ${entidadNombre}`}
             </p>
             {factura.clients?.email && <p className="text-xs text-muted">{factura.clients.email}</p>}
+            {factura.clients?.tax_id && <p className="text-xs text-muted">RUC: {factura.clients.tax_id}</p>}
           </div>
           <span
             className={`rounded px-2 py-1 text-xs font-medium ${
@@ -259,37 +324,45 @@ export default function FacturaDetalle({
           </p>
         )}
 
-        <div>
-          <p className="mb-1 text-xs uppercase tracking-wide text-muted">Evidencia del trabajo</p>
-
-          {adjuntos.length > 0 && (
-            <ul className="mb-2 flex flex-col gap-1">
+        {adjuntos.length > 0 && (
+          <div>
+            <p className="mb-1 text-xs uppercase tracking-wide text-muted">Evidencia del trabajo</p>
+            <div className="grid grid-cols-3 gap-2">
               {adjuntos.map((a) => (
-                <li key={a.id} className="flex items-center justify-between rounded-lg border border-border p-2 text-sm">
-                  <span className="truncate">{a.nombre_archivo}</span>
-                  <span className="flex flex-shrink-0 items-center gap-3 text-xs">
-                    <a
-                      href={`/api/facturas/adjuntos/${a.id}/ver`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-teal underline"
-                    >
-                      Ver
-                    </a>
-                    <button
-                      type="button"
-                      className="font-medium text-red underline disabled:opacity-50"
-                      disabled={borrandoId === a.id}
-                      onClick={() => borrarEvidencia(a.id)}
-                    >
-                      {borrandoId === a.id ? "..." : "Eliminar"}
-                    </button>
-                  </span>
-                </li>
+                <div key={a.id} className="relative overflow-hidden rounded-lg border border-border">
+                  <a href={`/api/facturas/adjuntos/${a.id}/ver`} target="_blank" rel="noopener noreferrer" className="block">
+                    {esImagen(a.nombre_archivo) ? (
+                      <img
+                        src={`/api/facturas/adjuntos/${a.id}/ver`}
+                        alt={a.nombre_archivo}
+                        className="h-20 w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-20 w-full items-center justify-center bg-bg">
+                        <i className="ti ti-file-text text-2xl text-muted" />
+                      </div>
+                    )}
+                    <p className="truncate border-t border-border bg-card px-1.5 py-1 text-[10px] text-muted">
+                      {a.nombre_archivo}
+                    </p>
+                  </a>
+                  <button
+                    type="button"
+                    className="no-imprimir absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white disabled:opacity-50"
+                    disabled={borrandoId === a.id}
+                    onClick={() => borrarEvidencia(a.id)}
+                    title="Eliminar"
+                  >
+                    <i className="ti ti-x" style={{ fontSize: 12 }} />
+                  </button>
+                </div>
               ))}
-            </ul>
-          )}
+            </div>
+          </div>
+        )}
 
+        <div className="no-imprimir">
+          {adjuntos.length === 0 && <p className="mb-1 text-xs uppercase tracking-wide text-muted">Evidencia del trabajo</p>}
           <input ref={inputCamaraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={subirEvidencia} />
           <input ref={inputArchivoRef} type="file" accept="image/*,.pdf" multiple className="hidden" onChange={subirEvidencia} />
 
@@ -317,22 +390,42 @@ export default function FacturaDetalle({
           <p className="text-xs text-muted">Pagada vía {factura.metodo_pago}</p>
         )}
 
-        <div className="flex gap-2 border-t border-border pt-3">
-          <button onClick={enviarPorWhatsapp} className="vc-btn-secondary flex-1">
-            <i className="ti ti-brand-whatsapp" /> Enviar por WhatsApp
+        <div className="no-imprimir grid grid-cols-4 gap-2 border-t border-border pt-3">
+          <button
+            onClick={descargarPDF}
+            className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+          >
+            <i className="ti ti-file-download text-base" /> PDF
           </button>
-          {factura.estado !== "pagada" && (
+          <button
+            onClick={enviarPorWhatsapp}
+            className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+          >
+            <i className="ti ti-brand-whatsapp text-base" /> Reenviar
+          </button>
+          {factura.estado !== "pagada" ? (
             <Link
               href={`/dashboard/facturacion/${factura.id}/editar`}
-              className="flex flex-shrink-0 items-center justify-center gap-1 rounded-pill border border-border px-4 text-sm font-medium hover:opacity-80"
+              className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
             >
-              <i className="ti ti-edit" /> Editar
+              <i className="ti ti-edit text-base" /> Editar
             </Link>
+          ) : (
+            <span className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium text-muted opacity-40">
+              <i className="ti ti-edit text-base" /> Editar
+            </span>
           )}
+          <button
+            onClick={eliminarFactura}
+            disabled={eliminando}
+            className="flex flex-col items-center gap-1 rounded-lg border border-red py-2 text-xs font-medium text-red hover:opacity-80 disabled:opacity-50"
+          >
+            <i className="ti ti-trash text-base" /> {eliminando ? "..." : confirmarEliminar ? "¿Seguro?" : "Eliminar"}
+          </button>
         </div>
 
         {factura.estado !== "pagada" && (
-          <div className="flex flex-col gap-2 border-t border-border pt-3">
+          <div className="no-imprimir flex flex-col gap-2 border-t border-border pt-3">
             {factura.estado === "borrador" && (
               <button className="vc-btn-secondary" disabled={loading} onClick={() => actualizarEstado("enviada")}>
                 Marcar como enviada
