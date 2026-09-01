@@ -43,7 +43,23 @@ export type EntidadCompleta = {
   payment_methods: string[] | null;
   invoice_footer: string | null;
   logo_r2_key: string | null;
+  brand_color: string | null;
 };
+
+// Paleta de colores de marca (pedido de Joel, 1 sept 2026): para que la
+// factura vaya acorde con el logo del negocio en vez de salir siempre en
+// el verde de VICTOR por default. Se aplica en el PDF (línea del
+// encabezado + total grande) — ver /api/facturas/[id]/pdf.
+const COLORES_MARCA: { hex: string; nombre: string }[] = [
+  { hex: "#1D9E75", nombre: "Verde VICTOR" },
+  { hex: "#1677D9", nombre: "Azul" },
+  { hex: "#7C3AED", nombre: "Morado" },
+  { hex: "#DC2626", nombre: "Rojo" },
+  { hex: "#EA580C", nombre: "Naranja" },
+  { hex: "#0891B2", nombre: "Turquesa" },
+  { hex: "#BE185D", nombre: "Fucsia" },
+  { hex: "#0F172A", nombre: "Negro" },
+];
 
 const TIPOS_CONTRIBUYENTE = ["Individuo", "LLC de un miembro", "Corporación", "Profesional independiente (Licencia / Colegio)"];
 
@@ -95,6 +111,7 @@ export default function EntidadForm({
   const [zip, setZip] = useState(entidad?.zip ?? "");
   const [email, setEmail] = useState(entidad?.email ?? "");
   const [website, setWebsite] = useState(entidad?.website ?? "");
+  const [brandColor, setBrandColor] = useState(entidad?.brand_color ?? "#1D9E75");
 
   // Fiscal
   const [taxRegime, setTaxRegime] = useState(entidad?.tax_regime ?? "ordinaria");
@@ -152,6 +169,7 @@ export default function EntidadForm({
       zip: zip || null,
       email: email || null,
       website: website || null,
+      brand_color: brandColor || "#1D9E75",
       tax_regime: taxRegime,
       ivu_applies: ivuApplies,
       ivu_rate_estatal: ivuApplies ? Number(ivuEstatal) || 0 : 0,
@@ -262,6 +280,8 @@ export default function EntidadForm({
       {tab === "perfil" && (
         <div className="vc-card flex flex-col gap-3">
           {modo === "editar" && entidad && <LogoUploader entidad={entidad} />}
+
+          <SelectorColorFactura color={brandColor} onChange={setBrandColor} />
 
           <Field label="Nombre del negocio o profesional">
             <input className="vc-input" value={name} onChange={(e) => setName(e.target.value)} />
@@ -535,6 +555,56 @@ function LogoUploader({ entidad }: { entidad: EntidadCompleta }) {
       <button type="button" disabled={subiendo} className="text-xs font-medium text-teal hover:opacity-80" onClick={() => inputRef.current?.click()}>
         {subiendo ? "Subiendo..." : tieneLogo ? "Cambiar logo" : "Añadir logo · PNG, JPG · Máx 5MB"}
       </button>
+    </div>
+  );
+}
+
+// Debajo de dónde subes el logo va el color de marca — con paleta rápida +
+// personalizado, y un preview en vivo calcado del encabezado real del PDF
+// (línea + "Total a pagar" grande) para que Joel vea el efecto antes de
+// guardar (pedido de Joel, 1 sept 2026).
+function SelectorColorFactura({ color, onChange }: { color: string; onChange: (hex: string) => void }) {
+  const colorValido = /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#1D9E75";
+  return (
+    <div className="rounded-lg border border-border bg-bg p-3">
+      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Color de tus facturas</p>
+      <p className="mb-2.5 text-xs text-muted">Se usa en el total y la línea del encabezado — para que vaya acorde con tu logo.</p>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {COLORES_MARCA.map((c) => (
+          <button
+            key={c.hex}
+            type="button"
+            title={c.nombre}
+            onClick={() => onChange(c.hex)}
+            className="h-8 w-8 flex-shrink-0 rounded-full border-2"
+            style={{ background: c.hex, borderColor: colorValido.toLowerCase() === c.hex.toLowerCase() ? "var(--text)" : "transparent" }}
+          />
+        ))}
+        <label
+          className="relative flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-border text-muted"
+          title="Color personalizado"
+        >
+          <i className="ti ti-color-picker" style={{ fontSize: 14 }} />
+          <input
+            type="color"
+            value={colorValido}
+            onChange={(e) => onChange(e.target.value)}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+        </label>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-border bg-white p-3">
+        <div className="mb-2 h-[2px] w-full" style={{ background: colorValido }} />
+        <div className="flex items-end justify-between">
+          <p className="text-[9px] uppercase tracking-wide" style={{ color: "#8a8a8a" }}>
+            Total a pagar
+          </p>
+          <p className="text-lg font-bold" style={{ color: colorValido }}>
+            $1,410.00
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

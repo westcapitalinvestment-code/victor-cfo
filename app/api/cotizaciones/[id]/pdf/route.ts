@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data: cotizacion, error } = await supabase
     .from("cotizaciones")
     .select(
-      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, total, estado, fecha_emision, fecha_vencimiento, notas, clients(name, email, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key, ivu_applies)"
+      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, total, estado, fecha_emision, fecha_vencimiento, notas, clients(name, email, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key, ivu_applies, brand_color)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -44,6 +44,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     invoice_footer: string | null;
     logo_r2_key: string | null;
     ivu_applies: boolean;
+    brand_color: string | null;
   } | null;
 
   const pdf = await PDFDocument.create();
@@ -71,6 +72,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const gris = rgb(0.45, 0.45, 0.45);
   const negro = rgb(0.1, 0.1, 0.1);
   const lineaGris = rgb(0.85, 0.85, 0.85);
+
+  // Color de marca de la entidad (pedido de Joel, 1 sept 2026) — mismo
+  // patrón que /api/facturas: línea del encabezado y totales van en el
+  // color que el negocio escogió, con el verde de VICTOR como respaldo.
+  function hexToRgb(hex: string | null | undefined): ReturnType<typeof rgb> {
+    if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return teal;
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    return rgb(r, g, b);
+  }
+  const marca = hexToRgb(entidad?.brand_color);
 
   function envolverTexto(contenido: string, f: typeof font, size: number, anchoMax: number): string[] {
     const palabras = contenido.split(/\s+/);
@@ -167,7 +180,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const yLogoAbajo = logoImg ? yLogo - logoDims.height - 24 : yLogo;
   let y = Math.min(yLogoAbajo, yNeg) - 14;
 
-  page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1.5, color: teal });
+  page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1.5, color: marca });
   y -= 26;
 
   const yFila = y;
@@ -199,7 +212,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   yDer -= 8;
   textoDerecha("TOTAL COTIZADO", width - margin, yDer, { f: bold, size: 8, color: gris });
   yDer -= 22;
-  textoDerecha(formatMoney(Number(cotizacion.total)), width - margin, yDer, { f: bold, size: 22, color: teal });
+  textoDerecha(formatMoney(Number(cotizacion.total)), width - margin, yDer, { f: bold, size: 22, color: marca });
 
   y = Math.min(yIzq, yDer) - 20;
 
@@ -241,7 +254,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
   page.drawLine({ start: { x: colPrecio - 10, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 1, color: lineaGris });
   y -= 4;
-  filaTotales("TOTAL", formatMoney(Number(cotizacion.total)), { bold: true, color: teal });
+  filaTotales("TOTAL", formatMoney(Number(cotizacion.total)), { bold: true, color: marca });
 
   y -= 15;
 
