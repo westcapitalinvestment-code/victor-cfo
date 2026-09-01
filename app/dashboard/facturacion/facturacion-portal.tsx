@@ -901,18 +901,26 @@ function ReportesTab({ facturas }: { facturas: Factura[] }) {
   const supabase = createClient();
   const [periodo, setPeriodo] = useState<(typeof PERIODOS)[number]["value"]>("mes");
   const [itemsFacturados, setItemsFacturados] = useState<
-    { descripcion: string; subtotal_linea: number; estado: string; fecha_emision: string }[] | null
+    { descripcion: string; serviceId: string | null; servicioNombre: string | null; subtotal_linea: number; estado: string; fecha_emision: string }[] | null
   >(null);
 
   useEffect(() => {
     let activo = true;
     supabase
+      // service_id (1 sept 2026) — referencia real al catálogo, para
+      // agrupar "Ingresos por servicio" por producto de verdad y no por
+      // el texto exacto de la descripción (ver migración 0044). Se trae
+      // el nombre ACTUAL del servicio (services.nombre) para el label,
+      // en vez del texto guardado en la línea, así una línea vieja sigue
+      // agrupando bien aunque el catálogo se haya renombrado después.
       .from("invoice_items")
-      .select("descripcion, subtotal_linea, cantidad, precio_unitario, invoices(estado, fecha_emision)")
+      .select("descripcion, service_id, subtotal_linea, cantidad, precio_unitario, services(nombre), invoices(estado, fecha_emision)")
       .then(({ data }) => {
         if (!activo) return;
         const filas = (data ?? []).map((it: any) => ({
           descripcion: it.descripcion as string,
+          serviceId: it.service_id ?? null,
+          servicioNombre: it.services?.nombre ?? null,
           subtotal_linea: Number(it.subtotal_linea ?? it.cantidad * it.precio_unitario),
           estado: it.invoices?.estado ?? "borrador",
           fecha_emision: it.invoices?.fecha_emision ?? "",
@@ -950,10 +958,16 @@ function ReportesTab({ facturas }: { facturas: Factura[] }) {
     const mapa = new Map<string, { descripcion: string; total: number; count: number }>();
     for (const it of itemsFacturados) {
       if (it.estado === "borrador" || it.fecha_emision < desde) continue;
-      const actual = mapa.get(it.descripcion) ?? { descripcion: it.descripcion, total: 0, count: 0 };
+      // Agrupa por service_id cuando existe (línea real del catálogo) —
+      // así "Consulta inicial" y "consulta Inicial" cuentan como el mismo
+      // producto. Las líneas libres (sin catálogo) siguen agrupando por
+      // su texto exacto, que es lo único que tienen.
+      const key = it.serviceId ?? `desc:${it.descripcion}`;
+      const nombre = it.servicioNombre ?? it.descripcion;
+      const actual = mapa.get(key) ?? { descripcion: nombre, total: 0, count: 0 };
       actual.total += it.subtotal_linea;
       actual.count += 1;
-      mapa.set(it.descripcion, actual);
+      mapa.set(key, actual);
     }
     return [...mapa.values()].sort((a, b) => b.total - a.total).slice(0, 10);
   }, [itemsFacturados, desde]);

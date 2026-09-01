@@ -8,7 +8,12 @@ import { formatMoney } from "@/lib/format";
 type Entity = { id: string; name: string; ivu_applies: boolean; ivu_rate_estatal: number; ivu_rate_municipal: number };
 type Client = { id: string; name: string; entity_id: string | null; ivu_exempt_reseller: boolean };
 type ServicioCat = { id: string; nombre: string; tipo: string; precio: number; ivu_exento: boolean };
-type Linea = { descripcion: string; cantidad: string; precioUnitario: string };
+// servicioId (1 sept 2026): referencia real al catálogo cuando la línea
+// viene de "Elegir un servicio guardado" — se pierde (queda null) si el
+// usuario edita la descripción a mano o añade una línea libre con "+
+// Añadir línea". Es lo que permite que el reporte "Ingresos por servicio"
+// agrupe de verdad en vez de por el texto exacto de la descripción.
+type Linea = { descripcion: string; cantidad: string; precioUnitario: string; servicioId: string | null };
 
 function sumaLinea(l: Linea): number {
   const cant = Number(l.cantidad) || 0;
@@ -47,15 +52,25 @@ export default function NuevaCotizacionForm({
     return d.toISOString().slice(0, 10);
   });
   const [notas, setNotas] = useState("");
-  const [lineas, setLineas] = useState<Linea[]>([{ descripcion: "", cantidad: "1", precioUnitario: "" }]);
+  const [lineas, setLineas] = useState<Linea[]>([{ descripcion: "", cantidad: "1", precioUnitario: "", servicioId: null }]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function actualizarLinea(i: number, campo: keyof Linea, valor: string) {
-    setLineas((prev) => prev.map((l, idx) => (idx === i ? { ...l, [campo]: valor } : l)));
+    setLineas((prev) =>
+      prev.map((l, idx) => {
+        if (idx !== i) return l;
+        // Editar la descripción a mano desengancha la línea del catálogo
+        // — ya no representa exactamente ese servicio, así que se trata
+        // como una línea libre (servicioId null) para no contarla mal en
+        // "Ingresos por servicio".
+        if (campo === "descripcion") return { ...l, descripcion: valor, servicioId: null };
+        return { ...l, [campo]: valor };
+      })
+    );
   }
   function agregarLinea() {
-    setLineas((prev) => [...prev, { descripcion: "", cantidad: "1", precioUnitario: "" }]);
+    setLineas((prev) => [...prev, { descripcion: "", cantidad: "1", precioUnitario: "", servicioId: null }]);
   }
   function quitarLinea(i: number) {
     setLineas((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
@@ -65,7 +80,7 @@ export default function NuevaCotizacionForm({
     if (!s) return;
     setLineas((prev) => {
       const vacias = prev.filter((l) => !l.descripcion.trim());
-      const nueva = { descripcion: s.nombre, cantidad: "1", precioUnitario: String(s.precio) };
+      const nueva = { descripcion: s.nombre, cantidad: "1", precioUnitario: String(s.precio), servicioId: s.id };
       return vacias.length === prev.length ? [nueva] : [...prev.filter((l) => l.descripcion.trim()), nueva];
     });
   }
@@ -126,6 +141,7 @@ export default function NuevaCotizacionForm({
     const { error: itemsError } = await supabase.from("cotizacion_items").insert(
       lineasValidas.map((l) => ({
         cotizacion_id: cotizacion.id,
+        service_id: l.servicioId,
         descripcion: l.descripcion,
         cantidad: Number(l.cantidad) || 1,
         precio_unitario: Number(l.precioUnitario) || 0,

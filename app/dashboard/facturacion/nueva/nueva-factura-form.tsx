@@ -262,6 +262,10 @@ export default function NuevaFacturaForm({
 
     const { error: itemsError } = await supabase.from("invoice_items").insert({
       invoice_id: factura.id,
+      // service_id (1 sept 2026) — igual que invoices.servicio_id arriba,
+      // es la referencia real al catálogo que usa el reporte "Ingresos
+      // por servicio" para agrupar de verdad en vez de por texto suelto.
+      service_id: servicioId !== "personalizado" ? servicioId : null,
       descripcion: descripcionFinal,
       cantidad: cantidadNum,
       precio_unitario: precioUnitarioNum,

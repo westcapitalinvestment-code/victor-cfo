@@ -39,7 +39,7 @@ export default async function EditarCotizacionPage({ params }: { params: { id: s
 
   const { data: items } = await supabase
     .from("cotizacion_items")
-    .select("id, descripcion, cantidad, precio_unitario")
+    .select("id, descripcion, cantidad, precio_unitario, service_id")
     .eq("cotizacion_id", params.id)
     .order("created_at", { ascending: true });
 

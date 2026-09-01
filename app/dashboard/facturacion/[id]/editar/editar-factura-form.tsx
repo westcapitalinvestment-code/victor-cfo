@@ -175,10 +175,18 @@ export default function EditarFacturaForm({
       return;
     }
 
+    const serviceIdFinal = servicioId !== "personalizado" ? servicioId : null;
+
     if (itemInicial.id) {
       const { error: itemError } = await supabase
         .from("invoice_items")
-        .update({ descripcion: descripcionFinal, cantidad: cantidadNum, precio_unitario: precioUnitarioNum, subtotal_linea: montoNum })
+        .update({
+          descripcion: descripcionFinal,
+          cantidad: cantidadNum,
+          precio_unitario: precioUnitarioNum,
+          subtotal_linea: montoNum,
+          service_id: serviceIdFinal,
+        })
         .eq("id", itemInicial.id);
       if (itemError) {
         setLoading(false);
@@ -192,6 +200,7 @@ export default function EditarFacturaForm({
         cantidad: cantidadNum,
         precio_unitario: precioUnitarioNum,
         subtotal_linea: montoNum,
+        service_id: serviceIdFinal,
       });
       if (itemError) {
         setLoading(false);
