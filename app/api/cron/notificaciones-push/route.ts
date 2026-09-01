@@ -76,6 +76,7 @@ export async function GET(req: NextRequest) {
           .eq("owner_id", ownerId)
           .is("entity_id", null)
           .is("hacienda_category_id", null)
+          .eq("es_duplicada", false)
           // No contar pendientes — pueden reemplazarse por otro ID al postear.
           .eq("pending", false),
         supabase

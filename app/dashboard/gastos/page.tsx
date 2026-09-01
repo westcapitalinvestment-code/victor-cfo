@@ -129,7 +129,20 @@ export default async function GastosPage({
     .order("name");
   if (!esPro) manualesQuery = manualesQuery.eq("es_negocio", false);
 
-  const [{ data: cuentasPlaid }, { data: cuentasManuales }] = await Promise.all([cuentasQuery, manualesQuery]);
+  // Conteo de "posibles duplicados" (manual↔Plaid, ver lib/duplicados.ts)
+  // para el link de arriba — solo se pinta si hay algo que revisar.
+  const conteoDuplicadasQuery = supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", user.id)
+    .is("entity_id", null)
+    .eq("es_duplicada", true);
+
+  const [{ data: cuentasPlaid }, { data: cuentasManuales }, { count: totalDuplicadas }] = await Promise.all([
+    cuentasQuery,
+    manualesQuery,
+    conteoDuplicadasQuery,
+  ]);
 
   const cuentasSeleccionadas = parsearCuentasSeleccionadas(searchParams.cuentas);
   const categoriaSeleccionada = parsearCategoriaSeleccionada(searchParams.categoria);
@@ -162,6 +175,7 @@ export default async function GastosPage({
     .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo, pending")
     .eq("owner_id", user.id)
     .is("entity_id", null)
+    .eq("es_duplicada", false)
     .order("fecha", { ascending: false })
     .limit(LIMITE_TRANSACCIONES);
   // Multi-select: si hay más de una cuenta marcada, hace falta un OR real
@@ -416,6 +430,11 @@ export default async function GastosPage({
     <div className="vc-shell">
       <div className="mb-3 flex items-center justify-between">
         <h1 className="text-lg font-medium">Gastos</h1>
+        {!!totalDuplicadas && (
+          <Link href="/dashboard/gastos/duplicados" className="text-xs font-medium text-amb hover:opacity-80">
+            {totalDuplicadas} posible{totalDuplicadas === 1 ? "" : "s"} duplicado{totalDuplicadas === 1 ? "" : "s"} →
+          </Link>
+        )}
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">

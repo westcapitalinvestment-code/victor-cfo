@@ -134,6 +134,7 @@ export default async function GastosNegocioPage({
     .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo, pending")
     .eq("owner_id", user.id)
     .eq("entity_id", entidadId)
+    .eq("es_duplicada", false)
     .order("fecha", { ascending: false })
     .limit(LIMITE_TRANSACCIONES);
   if (cuentasSeleccionadas.length > 0) {

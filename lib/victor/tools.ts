@@ -1080,7 +1080,8 @@ export async function executeVictorTool(
         .select("id", { count: "exact", head: true })
         .eq("owner_id", ownerId)
         .is("entity_id", null)
-        .is("hacienda_category_id", null);
+        .is("hacienda_category_id", null)
+        .eq("es_duplicada", false);
 
       if (countError) return { ok: false, message: `No se pudo contar las transacciones pendientes: ${countError.message}` };
 
@@ -1097,6 +1098,7 @@ export async function executeVictorTool(
         .eq("owner_id", ownerId)
         .is("entity_id", null)
         .is("hacienda_category_id", null)
+        .eq("es_duplicada", false)
         .order("fecha", { ascending: false })
         .limit(limite);
 
@@ -1608,6 +1610,7 @@ export async function executeVictorTool(
         .eq("owner_id", ownerId)
         .is("entity_id", null)
         .eq("hacienda_category_id", categoria.id)
+        .eq("es_duplicada", false)
         .gte("fecha", desde)
         .lte("fecha", hasta)
         .order("fecha", { ascending: false });

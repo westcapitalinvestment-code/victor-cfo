@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
     .from("transactions")
     .select("fecha, description_raw, amount, hacienda_category_id, tipo_flujo")
     .eq("owner_id", user.id)
+    .eq("es_duplicada", false)
     .order("fecha", { ascending: true });
   query = entityId ? query.eq("entity_id", entityId) : query.is("entity_id", null);
 

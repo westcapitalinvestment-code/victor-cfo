@@ -90,6 +90,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     .select("amount, tipo_flujo")
     .eq("owner_id", user.id)
     .is("entity_id", null)
+    .eq("es_duplicada", false)
     .gte("fecha", inicioMesSel)
     .lt("fecha", finMesSel);
 
@@ -284,6 +285,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .is("hacienda_category_id", null)
+      .eq("es_duplicada", false)
       // Mientras está pendiente, el banco todavía puede reemplazarla por una
       // versión posteada con otro plaid_transaction_id (ver lib/plaid-sync.ts,
       // fix del 23 de agosto) — pedirle al usuario que categorice algo que
@@ -298,6 +300,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .is("hacienda_category_id", null)
+      .eq("es_duplicada", false)
       .eq("pending", false),
     supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
   ]);

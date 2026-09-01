@@ -95,6 +95,7 @@ export default async function ResumenPage({
     .from("transactions")
     .select("amount, hacienda_category_id, tipo_flujo, entity_id")
     .eq("owner_id", user.id)
+    .eq("es_duplicada", false)
     .gte("fecha", inicio)
     .lte("fecha", fin);
 
@@ -178,6 +179,7 @@ export default async function ResumenPage({
       .from("transactions")
       .select("amount, tipo_flujo, entity_id")
       .eq("owner_id", user.id)
+      .eq("es_duplicada", false)
       .gte("fecha", anterior.inicio)
       .lte("fecha", anterior.fin);
     const filas = transAnterior ?? [];

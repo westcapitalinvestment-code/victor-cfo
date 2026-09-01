@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { plaidConfigurado } from "@/lib/plaid";
 import { sincronizarPlaidDeUsuario } from "@/lib/plaid-sync";
+import { detectarYMarcarDuplicados } from "@/lib/duplicados";
 
 // Trae transacciones nuevas/modificadas de TODOS los bancos conectados del
 // usuario, disparado a mano desde el botón "Sincronizar transacciones" en
@@ -27,5 +28,17 @@ export async function POST() {
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
 
   const resultado = await sincronizarPlaidDeUsuario(supabase, user.id, esPro);
-  return NextResponse.json(resultado);
+
+  // Después de traer lo nuevo de Plaid, revisamos si alguna coincide con
+  // una transacción manual ya existente (caso Free→Core: CSV a mano +
+  // luego conectar el banco de verdad) — ver lib/duplicados.ts.
+  let duplicadas = 0;
+  try {
+    const r = await detectarYMarcarDuplicados(supabase, user.id);
+    duplicadas = r.marcadas;
+  } catch (err) {
+    console.error("No se pudo correr la detección de duplicados:", err);
+  }
+
+  return NextResponse.json({ ...resultado, duplicadasDetectadas: duplicadas });
 }

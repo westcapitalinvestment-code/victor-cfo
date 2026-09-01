@@ -25,6 +25,7 @@ export async function GET() {
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .is("hacienda_category_id", null)
+      .eq("es_duplicada", false)
       // No contar pendientes — el banco puede reemplazarlas por una versión
       // posteada con otro ID antes de que el usuario llegue a categorizarlas.
       .eq("pending", false),
