@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
@@ -316,10 +317,18 @@ export default function FacturaDetalle({
           <p className="text-xs text-muted">Pagada vía {factura.metodo_pago}</p>
         )}
 
-        <div className="border-t border-border pt-3">
-          <button onClick={enviarPorWhatsapp} className="vc-btn-secondary w-full">
+        <div className="flex gap-2 border-t border-border pt-3">
+          <button onClick={enviarPorWhatsapp} className="vc-btn-secondary flex-1">
             <i className="ti ti-brand-whatsapp" /> Enviar por WhatsApp
           </button>
+          {factura.estado !== "pagada" && (
+            <Link
+              href={`/dashboard/facturacion/${factura.id}/editar`}
+              className="flex flex-shrink-0 items-center justify-center gap-1 rounded-pill border border-border px-4 text-sm font-medium hover:opacity-80"
+            >
+              <i className="ti ti-edit" /> Editar
+            </Link>
+          )}
         </div>
 
         {factura.estado !== "pagada" && (

@@ -5,17 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
 
-type Entity = {
-  id: string;
-  name: string;
-  ivu_applies: boolean;
-  ivu_rate_estatal: number;
-  ivu_rate_municipal: number;
-  invoice_prefix: string;
-  invoice_start_number: number;
-  default_payment_terms: string;
-};
-
+type Entity = { id: string; name: string; ivu_applies: boolean; ivu_rate_estatal: number; ivu_rate_municipal: number };
 type Client = {
   id: string;
   name: string;
@@ -25,62 +15,66 @@ type Client = {
   ivu_exempt_reseller: boolean;
   telefono: string | null;
 };
-
 type ServicioCat = { id: string; nombre: string; tipo: string; precio: number; ivu_exento: boolean };
 
-const METODOS_COBRO = ["ATH Móvil", "Transferencia / ACH", "Cheque", "Efectivo"];
+type Factura = {
+  id: string;
+  entity_id: string | null;
+  client_id: string | null;
+  servicio_id: string | null;
+  numero: string;
+  estado: string;
+  fecha_emision: string;
+  fecha_vencimiento: string | null;
+  notas: string | null;
+  metodos_cobro_aceptados: string[] | null;
+  late_fee_habilitado: boolean;
+  late_fee_tipo: string | null;
+  late_fee_monto: number;
+  late_fee_dias_gracia: number;
+  es_recurrente: boolean;
+  frecuencia_recurrente: string | null;
+};
 
-// Fee real de Stripe en PR: 2.9% + $0.30 por transacción de tarjeta. Es
-// solo un estimado informativo — no procesamos el cobro todavía, es para
-// que Joel (o cualquier dueño) sepa qué le quedaría neto si decide cobrar
-// con un link de pago de Stripe por su cuenta.
+const METODOS_COBRO = ["ATH Móvil", "Transferencia / ACH", "Cheque", "Efectivo"];
 const STRIPE_FEE_PCT = 0.029;
 const STRIPE_FEE_FIJO = 0.3;
 
-function diasDeTermino(term: string): number {
-  const m = term.match(/(\d+)/);
-  return m ? Number(m[1]) : 30;
-}
-
-// Misma lógica que /api/cron/facturas-recurrentes — calcula cuándo debe
-// generarse el próximo ciclo de una factura recurrente a partir de HOY,
-// para dejarlo listo desde que se crea la plantilla.
-function avanzarFecha(fechaISO: string, frecuencia: string): string {
-  const d = new Date(`${fechaISO}T00:00:00Z`);
-  if (frecuencia === "semanal") d.setUTCDate(d.getUTCDate() + 7);
-  else if (frecuencia === "quincenal") d.setUTCDate(d.getUTCDate() + 15);
-  else d.setUTCMonth(d.getUTCMonth() + 1); // mensual (default)
-  return d.toISOString().slice(0, 10);
-}
-
-export default function NuevaFacturaForm({
+export default function EditarFacturaForm({
+  factura,
+  itemInicial,
   entities,
   clients,
   servicios,
-  conteosPorEntidad,
 }: {
+  factura: Factura;
+  itemInicial: { id: string; descripcion: string; precio_unitario: number };
   entities: Entity[];
   clients: Client[];
   servicios: ServicioCat[];
-  conteosPorEntidad: Record<string, number>;
 }) {
   const router = useRouter();
   const supabase = createClient();
 
-  const [entityId, setEntityId] = useState(entities[0]?.id ?? "");
+  const [entityId, setEntityId] = useState(factura.entity_id ?? entities[0]?.id ?? "");
   const entidad = entities.find((e) => e.id === entityId) ?? entities[0];
 
   const clientesDeEntidad = useMemo(
     () => clients.filter((c) => !c.entity_id || c.entity_id === entityId),
     [clients, entityId]
   );
-  const [clientId, setClientId] = useState(clientesDeEntidad[0]?.id ?? "");
+  const [clientId, setClientId] = useState(factura.client_id ?? clientesDeEntidad[0]?.id ?? "");
   const cliente = clientesDeEntidad.find((c) => c.id === clientId) ?? clientesDeEntidad[0];
 
-  const [servicioId, setServicioId] = useState<string>(servicios[0]?.id ?? "personalizado");
+  const servicioOriginalSigueActivo = factura.servicio_id && servicios.some((s) => s.id === factura.servicio_id);
+  const [servicioId, setServicioId] = useState<string>(
+    servicioOriginalSigueActivo ? (factura.servicio_id as string) : "personalizado"
+  );
   const servicio = servicios.find((s) => s.id === servicioId);
-  const [descripcionPersonalizada, setDescripcionPersonalizada] = useState("");
-  const [monto, setMonto] = useState(servicios[0] ? String(servicios[0].precio) : "");
+  const [descripcionPersonalizada, setDescripcionPersonalizada] = useState(
+    servicioOriginalSigueActivo ? "" : itemInicial.descripcion
+  );
+  const [monto, setMonto] = useState(String(itemInicial.precio_unitario));
 
   function elegirServicio(id: string) {
     setServicioId(id);
@@ -88,26 +82,27 @@ export default function NuevaFacturaForm({
     if (s) setMonto(String(s.precio));
   }
 
-  const [metodosCobro, setMetodosCobro] = useState<string[]>(["ATH Móvil", "Transferencia / ACH"]);
+  const [metodosCobro, setMetodosCobro] = useState<string[]>(factura.metodos_cobro_aceptados ?? []);
   function toggleMetodo(m: string) {
     setMetodosCobro((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
   }
 
-  const [moraTipo, setMoraTipo] = useState<"ninguno" | "fijo" | "porcentaje">("ninguno");
-  const [moraMonto, setMoraMonto] = useState("");
-  const [moraDias, setMoraDias] = useState("10");
+  const [moraTipo, setMoraTipo] = useState<"ninguno" | "fijo" | "porcentaje">(
+    factura.late_fee_habilitado ? ((factura.late_fee_tipo as "fijo" | "porcentaje") ?? "fijo") : "ninguno"
+  );
+  const [moraMonto, setMoraMonto] = useState(String(factura.late_fee_monto ?? ""));
+  const [moraDias, setMoraDias] = useState(String(factura.late_fee_dias_gracia ?? "10"));
 
-  const [recurrencia, setRecurrencia] = useState<"unica" | "semanal" | "quincenal" | "mensual">("unica");
+  const [recurrencia, setRecurrencia] = useState<"unica" | "semanal" | "quincenal" | "mensual">(
+    factura.es_recurrente ? ((factura.frecuencia_recurrente as "semanal" | "quincenal" | "mensual") ?? "mensual") : "unica"
+  );
 
-  const hoy = new Date().toISOString().slice(0, 10);
-  const [fechaFactura, setFechaFactura] = useState(hoy);
-  const [fechaVencimiento, setFechaVencimiento] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + diasDeTermino(entidad?.default_payment_terms ?? "Net 30"));
-    return d.toISOString().slice(0, 10);
-  });
-  const [notas, setNotas] = useState("");
+  const [fechaFactura, setFechaFactura] = useState(factura.fecha_emision);
+  const [fechaVencimiento, setFechaVencimiento] = useState(factura.fecha_vencimiento ?? factura.fecha_emision);
+  const [notas, setNotas] = useState(factura.notas ?? "");
   const [loading, setLoading] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const descripcionFinal = servicioId === "personalizado" ? descripcionPersonalizada : servicio?.nombre ?? "";
@@ -123,15 +118,17 @@ export default function NuevaFacturaForm({
   const retencionPct = cliente?.es_negocio ? Number(cliente.retention_pct || 0) : 0;
   const retencionMonto = subtotal * (retencionPct / 100);
   const total = subtotal + ivuMonto - retencionMonto;
-
-  // Cobro en línea real (que el cliente pague con tarjeta directo en la
-  // app) todavía no está activo — este fee es solo un estimado informativo.
   const feeStripeEstimado = (subtotal + ivuMonto) * STRIPE_FEE_PCT + STRIPE_FEE_FIJO;
-  const recibirasConTarjeta = total - feeStripeEstimado;
 
-  const numeroPreview = entidad ? `${entidad.invoice_prefix}-${entidad.invoice_start_number + (conteosPorEntidad[entidad.id] ?? 0)}` : "";
+  function avanzarFecha(fechaISO: string, frecuencia: string): string {
+    const d = new Date(`${fechaISO}T00:00:00Z`);
+    if (frecuencia === "semanal") d.setUTCDate(d.getUTCDate() + 7);
+    else if (frecuencia === "quincenal") d.setUTCDate(d.getUTCDate() + 15);
+    else d.setUTCMonth(d.getUTCMonth() + 1);
+    return d.toISOString().slice(0, 10);
+  }
 
-  async function guardar(estadoInicial: "borrador" | "enviada") {
+  async function guardar() {
     if (!entidad || !cliente) return;
     if (!descripcionFinal.trim() || montoNum <= 0) {
       setError("Elige un servicio (o describe uno personalizado) y pon un monto mayor a $0.");
@@ -141,30 +138,18 @@ export default function NuevaFacturaForm({
     setLoading(true);
     setError(null);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setError("Sesión expirada — vuelve a entrar.");
-      setLoading(false);
-      return;
-    }
-
-    const { data: factura, error: insertError } = await supabase
+    const { error: updateError } = await supabase
       .from("invoices")
-      .insert({
-        owner_id: user.id,
+      .update({
         entity_id: entidad.id,
         client_id: cliente.id,
         servicio_id: servicioId !== "personalizado" ? servicioId : null,
-        numero: numeroPreview,
         subtotal,
         ivu_pct: ivuPct,
         ivu_monto: ivuMonto,
         retencion_pct: retencionPct,
         retencion_monto: retencionMonto,
         total,
-        estado: estadoInicial,
         fecha_emision: fechaFactura,
         fecha_vencimiento: fechaVencimiento,
         notas: notas || null,
@@ -177,49 +162,72 @@ export default function NuevaFacturaForm({
         frecuencia_recurrente: recurrencia !== "unica" ? recurrencia : null,
         fecha_proxima_generacion: recurrencia !== "unica" ? avanzarFecha(fechaFactura, recurrencia) : null,
       })
-      .select("id")
-      .maybeSingle();
+      .eq("id", factura.id);
 
-    if (insertError || !factura) {
-      setError(insertError?.message || "No se pudo crear la factura.");
+    if (updateError) {
+      setError(updateError.message);
       setLoading(false);
       return;
     }
 
-    const { error: itemsError } = await supabase.from("invoice_items").insert({
-      invoice_id: factura.id,
-      descripcion: descripcionFinal,
-      cantidad: 1,
-      precio_unitario: montoNum,
-      subtotal_linea: montoNum,
-    });
-
-    setLoading(false);
-
-    if (itemsError) {
-      setError(itemsError.message);
-      return;
+    if (itemInicial.id) {
+      const { error: itemError } = await supabase
+        .from("invoice_items")
+        .update({ descripcion: descripcionFinal, cantidad: 1, precio_unitario: montoNum, subtotal_linea: montoNum })
+        .eq("id", itemInicial.id);
+      if (itemError) {
+        setLoading(false);
+        setError(itemError.message);
+        return;
+      }
+    } else {
+      const { error: itemError } = await supabase.from("invoice_items").insert({
+        invoice_id: factura.id,
+        descripcion: descripcionFinal,
+        cantidad: 1,
+        precio_unitario: montoNum,
+        subtotal_linea: montoNum,
+      });
+      if (itemError) {
+        setLoading(false);
+        setError(itemError.message);
+        return;
+      }
     }
 
+    setLoading(false);
     router.push(`/dashboard/facturacion/${factura.id}`);
+    router.refresh();
+  }
+
+  async function eliminar() {
+    if (!confirmarEliminar) {
+      setConfirmarEliminar(true);
+      return;
+    }
+    setEliminando(true);
+    setError(null);
+    const { error: deleteError } = await supabase.from("invoices").delete().eq("id", factura.id);
+    setEliminando(false);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+    router.push("/dashboard/facturacion");
     router.refresh();
   }
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-lg font-medium">Nueva factura</h1>
-        <button onClick={() => router.push("/dashboard/facturacion")} className="text-sm text-muted hover:opacity-80">
+        <h1 className="text-lg font-medium">Editar factura {factura.numero}</h1>
+        <button onClick={() => router.push(`/dashboard/facturacion/${factura.id}`)} className="text-sm text-muted hover:opacity-80">
           Cancelar
         </button>
       </div>
 
       <div className="vc-card flex flex-col gap-3">
         {error && <p className="text-xs text-red">{error}</p>}
-
-        <p className="text-xs text-muted">
-          Número de factura: <span className="font-medium text-text">{numeroPreview}</span>
-        </p>
 
         {entities.length > 1 && (
           <Field label="Entidad">
@@ -234,18 +242,14 @@ export default function NuevaFacturaForm({
         )}
 
         <Field label="Cliente">
-          {clientesDeEntidad.length === 0 ? (
-            <p className="text-xs text-amb">Esta entidad no tiene clientes todavía.</p>
-          ) : (
-            <select className="vc-input" value={clientId} onChange={(e) => setClientId(e.target.value)}>
-              {clientesDeEntidad.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.es_negocio && Number(c.retention_pct) > 0 ? ` (Créd. Hacienda ${Number(c.retention_pct)}%)` : ""}
-                </option>
-              ))}
-            </select>
-          )}
+          <select className="vc-input" value={clientId} onChange={(e) => setClientId(e.target.value)}>
+            {clientesDeEntidad.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.es_negocio && Number(c.retention_pct) > 0 ? ` (Créd. Hacienda ${Number(c.retention_pct)}%)` : ""}
+              </option>
+            ))}
+          </select>
         </Field>
 
         <Field label="Servicio">
@@ -276,7 +280,6 @@ export default function NuevaFacturaForm({
             type="number"
             min="0"
             step="0.01"
-            placeholder="0.00"
             value={monto}
             onChange={(e) => setMonto(e.target.value)}
           />
@@ -300,15 +303,6 @@ export default function NuevaFacturaForm({
                 {m}
               </button>
             ))}
-            <button
-              type="button"
-              disabled
-              title="Próximamente — todavía no procesamos cobros en línea"
-              className="rounded-lg border px-2.5 py-1.5 text-xs font-medium opacity-40"
-              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
-            >
-              Stripe (tarjeta) — próximamente
-            </button>
           </div>
         </Field>
 
@@ -326,7 +320,6 @@ export default function NuevaFacturaForm({
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder={moraTipo === "porcentaje" ? "%" : "$"}
                   value={moraMonto}
                   onChange={(e) => setMoraMonto(e.target.value)}
                 />
@@ -345,11 +338,6 @@ export default function NuevaFacturaForm({
               </>
             )}
           </div>
-          {moraTipo !== "ninguno" && (
-            <p className="mt-1 text-xs text-muted">
-              El recargo se muestra en la factura como referencia — todavía no se suma solo al total si se vence.
-            </p>
-          )}
         </Field>
 
         <div className="flex gap-2">
@@ -373,22 +361,10 @@ export default function NuevaFacturaForm({
             <option value="quincenal">Sí — se genera cada quincena</option>
             <option value="mensual">Sí — se genera cada mes</option>
           </select>
-          {recurrencia !== "unica" && (
-            <p className="mt-1 text-xs text-muted">
-              Cuando envíes esta factura, VICTOR va a crear la siguiente automáticamente (como borrador, para que la
-              revises) cuando llegue el próximo ciclo.
-            </p>
-          )}
         </Field>
 
         <Field label="Notas para el cliente (opcional)">
-          <textarea
-            className="vc-input"
-            rows={2}
-            value={notas}
-            onChange={(e) => setNotas(e.target.value)}
-            placeholder="Ej: Servicios julio 2026 — período 1-31 jul"
-          />
+          <textarea className="vc-input" rows={2} value={notas} onChange={(e) => setNotas(e.target.value)} />
         </Field>
 
         <div className="rounded-lg border border-teal bg-teal/[.04] p-3 text-sm">
@@ -413,11 +389,6 @@ export default function NuevaFacturaForm({
             <span>Total a pagar</span>
             <span className="text-teal">{formatMoney(total)}</span>
           </div>
-          {retencionMonto > 0 && (
-            <p className="mt-1 text-[11px] text-muted">
-              Los {formatMoney(retencionMonto)} de retención los deposita el cliente a Hacienda PR según la Sección 1062.03.
-            </p>
-          )}
         </div>
 
         <div className="rounded-lg border border-border bg-bg p-3 text-sm">
@@ -434,20 +405,20 @@ export default function NuevaFacturaForm({
           </div>
           <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-medium">
             <span>Recibirías si el cliente paga con tarjeta</span>
-            <span>{formatMoney(recibirasConTarjeta)}</span>
+            <span>{formatMoney(total - feeStripeEstimado)}</span>
           </div>
-          <p className="mt-1 text-[11px] text-muted">Estimado — todavía no procesamos cobros con tarjeta directamente en la app.</p>
         </div>
 
-        <button className="vc-btn-primary mt-1" disabled={loading || !cliente} onClick={() => guardar("enviada")}>
-          {loading ? "Guardando..." : "Enviar factura"}
+        <button className="vc-btn-primary mt-1" disabled={loading || !cliente} onClick={guardar}>
+          {loading ? "Guardando..." : "Guardar cambios"}
         </button>
+
         <button
-          className="vc-btn-secondary"
-          disabled={loading || !cliente}
-          onClick={() => guardar("borrador")}
+          className="mt-1 rounded-pill border border-red py-2 text-sm font-medium text-red disabled:opacity-50"
+          disabled={eliminando}
+          onClick={eliminar}
         >
-          {loading ? "Guardando..." : "Guardar como borrador"}
+          {eliminando ? "Eliminando..." : confirmarEliminar ? "¿Seguro? Toca de nuevo para eliminar" : "Eliminar factura"}
         </button>
       </div>
     </div>
