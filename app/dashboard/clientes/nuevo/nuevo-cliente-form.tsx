@@ -23,6 +23,7 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [telefono, setTelefono] = useState("");
+  const [taxId, setTaxId] = useState("");
   const [esNegocio, setEsNegocio] = useState(false);
   const [retentionPct, setRetentionPct] = useState("10.00");
 
@@ -46,6 +47,7 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
       name,
       email: email || null,
       telefono: telefono || null,
+      tax_id: taxId || null,
       es_negocio: esNegocio,
       retention_pct: esNegocio ? Number(retentionPct) : 0,
     });
@@ -111,6 +113,15 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
             placeholder="787-555-0123"
             value={telefono}
             onChange={(e) => setTelefono(e.target.value)}
+          />
+        </Field>
+
+        <Field label="RUC / Seguro Social patronal (opcional)">
+          <input
+            className="vc-input"
+            placeholder="Para mostrar en la factura"
+            value={taxId}
+            onChange={(e) => setTaxId(e.target.value)}
           />
         </Field>
 
