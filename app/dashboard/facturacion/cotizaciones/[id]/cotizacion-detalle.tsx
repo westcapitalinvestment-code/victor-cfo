@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatFecha } from "@/lib/format";
 
 type Item = {
   id: string;
@@ -120,12 +120,13 @@ export default function CotizacionDetalle({
   }
 
   function enviarPorWhatsapp() {
+    // Sin el monto en el mensaje a propósito — que lo vea al abrir el PDF,
+    // que ya explica el detalle de lo cotizado.
     const linkPDF = `${window.location.origin}/api/cotizaciones/${cotizacion.id}/pdf`;
-    const mensaje = `Hola ${clienteNombre}, aquí tienes tu cotización ${cotizacion.numero}${
+    const validaPart = cotizacion.fecha_vencimiento ? ` Válida hasta el ${formatFecha(cotizacion.fecha_vencimiento)}.` : "";
+    const mensaje = `Hola ${clienteNombre}, preparé tu cotización ${cotizacion.numero}${
       entidadNombre ? ` de ${entidadNombre}` : ""
-    } por ${formatMoney(cotizacion.total)}.${
-      cotizacion.fecha_vencimiento ? ` Válida hasta el ${cotizacion.fecha_vencimiento}.` : ""
-    } Aquí puedes verla: ${linkPDF}`;
+    } con todo lo que conversamos.${validaPart} Aquí la puedes ver: ${linkPDF} Cualquier pregunta, aquí estoy.`;
     const destino = cotizacion.clients?.telefono ? telefonoWhatsapp(cotizacion.clients.telefono) : "";
     const url = `https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`;
     window.open(url, "_blank");
@@ -249,8 +250,8 @@ export default function CotizacionDetalle({
         </div>
 
         <div className="flex justify-between text-xs text-muted">
-          <span>Emitida: {cotizacion.fecha_emision}</span>
-          {cotizacion.fecha_vencimiento && <span>Válida hasta: {cotizacion.fecha_vencimiento}</span>}
+          <span>Emitida: {formatFecha(cotizacion.fecha_emision)}</span>
+          {cotizacion.fecha_vencimiento && <span>Válida hasta: {formatFecha(cotizacion.fecha_vencimiento)}</span>}
         </div>
 
         <div className="rounded-lg border border-border">

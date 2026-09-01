@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatMoney } from "@/lib/format";
+import { descargarBytesR2 } from "@/lib/r2";
+import { formatMoney, formatFecha } from "@/lib/format";
 
 // PDF de una cotización — mismo patrón que /api/facturas/[id]/pdf: público
 // por UUID (para compartir por WhatsApp sin que el cliente inicie sesión).
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data: cotizacion, error } = await supabase
     .from("cotizaciones")
     .select(
-      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, total, estado, fecha_emision, fecha_vencimiento, notas, clients(name, email, tax_id), business_entities(name, ein, municipio)"
+      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, total, estado, fecha_emision, fecha_vencimiento, notas, clients(name, email, tax_id), business_entities(name, ein, municipio, logo_r2_key)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -33,12 +34,30 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .maybeSingle();
 
   const cliente = (cotizacion as any).clients as { name: string; email: string | null; tax_id: string | null } | null;
-  const entidad = (cotizacion as any).business_entities as { name: string; ein: string | null; municipio: string | null } | null;
+  const entidad = (cotizacion as any).business_entities as {
+    name: string;
+    ein: string | null;
+    municipio: string | null;
+    logo_r2_key: string | null;
+  } | null;
 
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([612, 792]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+
+  let logoImg = null;
+  let logoDims = { width: 0, height: 0 };
+  if (entidad?.logo_r2_key) {
+    try {
+      const bytes = await descargarBytesR2(entidad.logo_r2_key);
+      logoImg = entidad.logo_r2_key.endsWith(".png") ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
+      const escala = Math.min(140 / logoImg.width, 50 / logoImg.height, 1);
+      logoDims = { width: logoImg.width * escala, height: logoImg.height * escala };
+    } catch (err) {
+      console.error("No se pudo incrustar el logo en el PDF:", err);
+    }
+  }
 
   const margin = 50;
   const width = 612;
@@ -48,6 +67,23 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const gris = rgb(0.45, 0.45, 0.45);
   const negro = rgb(0.1, 0.1, 0.1);
   const lineaGris = rgb(0.85, 0.85, 0.85);
+
+  function envolverTexto(contenido: string, f: typeof font, size: number, anchoMax: number): string[] {
+    const palabras = contenido.split(/\s+/);
+    const lineas: string[] = [];
+    let actual = "";
+    for (const palabra of palabras) {
+      const prueba = actual ? `${actual} ${palabra}` : palabra;
+      if (f.widthOfTextAtSize(prueba, size) > anchoMax && actual) {
+        lineas.push(actual);
+        actual = palabra;
+      } else {
+        actual = prueba;
+      }
+    }
+    if (actual) lineas.push(actual);
+    return lineas.slice(0, 6);
+  }
 
   function texto(contenido: string, x: number, yPos: number, opts: { f?: typeof font; size?: number; color?: ReturnType<typeof rgb> } = {}) {
     page.drawText(contenido, { x, y: yPos, size: opts.size ?? 10, font: opts.f ?? font, color: opts.color ?? negro });
@@ -59,6 +95,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     page.drawText(contenido, { x: xDerecha - w, y: yPos, size, font: f, color: opts.color ?? negro });
   }
 
+  if (logoImg) {
+    page.drawImage(logoImg, { x: margin, y: y - logoDims.height, width: logoDims.width, height: logoDims.height });
+    y -= logoDims.height + 10;
+  }
   texto(entidad?.name || owner?.full_name || "VICTOR CFO", margin, y, { f: bold, size: 15 });
   y -= 16;
   if (owner?.full_name && entidad?.name && owner.full_name !== entidad.name) {
@@ -76,9 +116,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   textoDerecha("COTIZACIÓN", width - margin, 792 - margin, { f: bold, size: 18, color: teal });
   textoDerecha(`# ${cotizacion.numero}`, width - margin, 792 - margin - 20, { size: 11 });
-  textoDerecha(`Emitida: ${cotizacion.fecha_emision}`, width - margin, 792 - margin - 35, { size: 9, color: gris });
+  textoDerecha(`Emitida: ${formatFecha(cotizacion.fecha_emision)}`, width - margin, 792 - margin - 35, { size: 9, color: gris });
   if (cotizacion.fecha_vencimiento) {
-    textoDerecha(`Válida hasta: ${cotizacion.fecha_vencimiento}`, width - margin, 792 - margin - 47, { size: 9, color: gris });
+    textoDerecha(`Válida hasta: ${formatFecha(cotizacion.fecha_vencimiento)}`, width - margin, 792 - margin - 47, {
+      size: 9,
+      color: gris,
+    });
   }
 
   y -= 14;
@@ -141,10 +184,25 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   y -= 15;
 
   if (cotizacion.notas) {
-    texto("Notas", margin, y, { f: bold, size: 8, color: gris });
+    const notaTexto = String(cotizacion.notas).slice(0, 220);
+    const lineas = envolverTexto(notaTexto, font, 9, width - margin * 2 - 20);
+    const alturaCaja = 16 + lineas.length * 12 + 6;
+    page.drawRectangle({
+      x: margin,
+      y: y - alturaCaja + 10,
+      width: width - margin * 2,
+      height: alturaCaja,
+      color: rgb(0.97, 0.98, 0.97),
+      borderColor: lineaGris,
+      borderWidth: 0.5,
+    });
+    texto("NOTAS", margin + 10, y, { f: bold, size: 7, color: teal });
     y -= 13;
-    texto(String(cotizacion.notas).slice(0, 100), margin, y, { size: 9, color: gris });
-    y -= 20;
+    for (const linea of lineas) {
+      texto(linea, margin + 10, y, { size: 9, color: negro });
+      y -= 12;
+    }
+    y -= 14;
   }
 
   textoDerecha("Cotización sujeta a cambios — ¡gracias por considerarnos!", width - margin, 40, { size: 9, color: gris });

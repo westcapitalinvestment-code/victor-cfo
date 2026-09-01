@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import LogoutButton from "../logout-button";
 import NotificacionesToggle from "../notificaciones-toggle";
 import GestionarPlan from "../gestionar-plan";
@@ -24,6 +25,12 @@ export default async function ConfigPage() {
     .select("full_name, plan, plan_status")
     .eq("id", user.id)
     .maybeSingle();
+
+  const { data: entities } = await supabase
+    .from("business_entities")
+    .select("id, name, logo_r2_key")
+    .eq("owner_id", user.id)
+    .eq("active", true);
 
   return (
     <div className="vc-shell">
@@ -54,6 +61,22 @@ export default async function ConfigPage() {
           Escríbenos
         </a>
       </div>
+
+      {entities && entities.length > 0 && (
+        <div className="vc-card mb-4">
+          <p className="mb-2 text-xs uppercase tracking-wide text-muted">Negocio</p>
+          {entities.map((e) => (
+            <Link
+              key={e.id}
+              href={`/dashboard/entidades/${e.id}/editar`}
+              className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0"
+            >
+              <span>{e.name}</span>
+              <span className="text-xs text-teal">{e.logo_r2_key ? "Editar logo" : "Añadir logo"} →</span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       <ReferralLink userId={user.id} />
 

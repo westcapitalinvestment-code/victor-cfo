@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatMoney } from "@/lib/format";
+import { descargarBytesR2 } from "@/lib/r2";
+import { formatMoney, formatFecha } from "@/lib/format";
 
 // Genera el PDF de una factura al vuelo (no se guarda nada — se arma cada
 // vez que se pide). Esta ruta es PÚBLICA a propósito: el id de la factura
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data: factura, error } = await supabase
     .from("invoices")
     .select(
-      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio)"
+      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, logo_r2_key)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -33,12 +34,32 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data: owner } = await supabase.from("users").select("full_name").eq("id", (factura as any).owner_id).maybeSingle();
 
   const cliente = (factura as any).clients as { name: string; email: string | null; telefono: string | null; tax_id: string | null } | null;
-  const entidad = (factura as any).business_entities as { name: string; ein: string | null; municipio: string | null } | null;
+  const entidad = (factura as any).business_entities as {
+    name: string;
+    ein: string | null;
+    municipio: string | null;
+    logo_r2_key: string | null;
+  } | null;
 
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([612, 792]); // carta
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+
+  // Logo del negocio (opcional) — si todavía no lo ha subido, simplemente
+  // no se dibuja nada y el encabezado se queda como estaba.
+  let logoImg = null;
+  let logoDims = { width: 0, height: 0 };
+  if (entidad?.logo_r2_key) {
+    try {
+      const bytes = await descargarBytesR2(entidad.logo_r2_key);
+      logoImg = entidad.logo_r2_key.endsWith(".png") ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
+      const escala = Math.min(140 / logoImg.width, 50 / logoImg.height, 1);
+      logoDims = { width: logoImg.width * escala, height: logoImg.height * escala };
+    } catch (err) {
+      console.error("No se pudo incrustar el logo en el PDF:", err);
+    }
+  }
 
   const margin = 50;
   const width = 612;
@@ -48,6 +69,26 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const gris = rgb(0.45, 0.45, 0.45);
   const negro = rgb(0.1, 0.1, 0.1);
   const lineaGris = rgb(0.85, 0.85, 0.85);
+
+  // Parte un texto largo en líneas que quepan dentro de anchoMax, para las
+  // notas — que ahora pueden ser bastante más largas que el resumen de una
+  // sola línea que había antes.
+  function envolverTexto(contenido: string, f: typeof font, size: number, anchoMax: number): string[] {
+    const palabras = contenido.split(/\s+/);
+    const lineas: string[] = [];
+    let actual = "";
+    for (const palabra of palabras) {
+      const prueba = actual ? `${actual} ${palabra}` : palabra;
+      if (f.widthOfTextAtSize(prueba, size) > anchoMax && actual) {
+        lineas.push(actual);
+        actual = palabra;
+      } else {
+        actual = prueba;
+      }
+    }
+    if (actual) lineas.push(actual);
+    return lineas.slice(0, 6); // tope razonable para que no se salga de la página
+  }
 
   function texto(
     contenido: string,
@@ -70,7 +111,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     page.drawText(contenido, { x: xDerecha - w, y: yPos, size, font: f, color: opts.color ?? negro });
   }
 
-  // --- Encabezado: negocio a la izquierda, "FACTURA" + número a la derecha ---
+  // --- Encabezado: logo (si hay) + negocio a la izquierda, "FACTURA" + número a la derecha ---
+  if (logoImg) {
+    page.drawImage(logoImg, { x: margin, y: y - logoDims.height, width: logoDims.width, height: logoDims.height });
+    y -= logoDims.height + 10;
+  }
   texto(entidad?.name || owner?.full_name || "VICTOR CFO", margin, y, { f: bold, size: 15 });
   y -= 16;
   if (owner?.full_name && entidad?.name && owner.full_name !== entidad.name) {
@@ -88,9 +133,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   textoDerecha("FACTURA", width - margin, 792 - margin, { f: bold, size: 20, color: teal });
   textoDerecha(`# ${factura.numero}`, width - margin, 792 - margin - 20, { size: 11 });
-  textoDerecha(`Emitida: ${factura.fecha_emision}`, width - margin, 792 - margin - 35, { size: 9, color: gris });
+  textoDerecha(`Emitida: ${formatFecha(factura.fecha_emision)}`, width - margin, 792 - margin - 35, { size: 9, color: gris });
   if (factura.fecha_vencimiento) {
-    textoDerecha(`Vence: ${factura.fecha_vencimiento}`, width - margin, 792 - margin - 47, { size: 9, color: gris });
+    textoDerecha(`Vence: ${formatFecha(factura.fecha_vencimiento)}`, width - margin, 792 - margin - 47, { size: 9, color: gris });
   }
 
   y -= 14;
@@ -163,10 +208,25 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   y -= 15;
 
   if (factura.notas) {
-    texto("Notas", margin, y, { f: bold, size: 8, color: gris });
+    const notaTexto = String(factura.notas).slice(0, 220);
+    const lineas = envolverTexto(notaTexto, font, 9, width - margin * 2 - 20);
+    const alturaCaja = 16 + lineas.length * 12 + 6;
+    page.drawRectangle({
+      x: margin,
+      y: y - alturaCaja + 10,
+      width: width - margin * 2,
+      height: alturaCaja,
+      color: rgb(0.97, 0.98, 0.97),
+      borderColor: lineaGris,
+      borderWidth: 0.5,
+    });
+    texto("NOTAS PARA EL CLIENTE", margin + 10, y, { f: bold, size: 7, color: teal });
     y -= 13;
-    texto(String(factura.notas).slice(0, 100), margin, y, { size: 9, color: gris });
-    y -= 20;
+    for (const linea of lineas) {
+      texto(linea, margin + 10, y, { size: 9, color: negro });
+      y -= 12;
+    }
+    y -= 14;
   }
 
   if (factura.metodos_cobro_aceptados && factura.metodos_cobro_aceptados.length > 0) {

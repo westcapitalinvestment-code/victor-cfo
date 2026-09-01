@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatFecha } from "@/lib/format";
 
 type Item = {
   id: string;
@@ -149,11 +149,15 @@ export default function FacturaDetalle({
     if (factura.estado === "borrador") {
       await actualizarEstado("enviada");
     }
-    const mensaje = `Hola ${clienteNombre}, aquí tienes tu factura ${factura.numero}${
-      entidadNombre ? ` de ${entidadNombre}` : ""
-    } por ${formatMoney(factura.total)}.${factura.fecha_vencimiento ? ` Vence el ${factura.fecha_vencimiento}.` : ""} ¡Gracias!`;
+    // Sin el monto en el mensaje a propósito (pedido de Joel) — que el
+    // cliente lo descubra al abrir el documento, no antes. El link manda
+    // directo al PDF, que ya trae el detalle completo de lo que justifica
+    // el precio.
     const linkPDF = `${window.location.origin}/api/facturas/${factura.id}/pdf`;
-    const mensajeConLink = `${mensaje} Aquí puedes verla: ${linkPDF}`;
+    const vencePart = factura.fecha_vencimiento ? ` Vence el ${formatFecha(factura.fecha_vencimiento)}.` : "";
+    const mensajeConLink = `Hola ${clienteNombre}, aquí tienes tu factura ${factura.numero}${
+      entidadNombre ? ` de ${entidadNombre}` : ""
+    }.${vencePart} Aquí la puedes ver: ${linkPDF} ¡Gracias por tu confianza!`;
     const destino = factura.clients?.telefono ? telefonoWhatsapp(factura.clients.telefono) : "";
     const url = `https://wa.me/${destino}?text=${encodeURIComponent(mensajeConLink)}`;
     window.open(url, "_blank");
@@ -258,8 +262,8 @@ export default function FacturaDetalle({
         </div>
 
         <div className="flex justify-between text-xs text-muted">
-          <span>Emitida: {factura.fecha_emision}</span>
-          {factura.fecha_vencimiento && <span>Vence: {factura.fecha_vencimiento}</span>}
+          <span>Emitida: {formatFecha(factura.fecha_emision)}</span>
+          {factura.fecha_vencimiento && <span>Vence: {formatFecha(factura.fecha_vencimiento)}</span>}
         </div>
 
         <div className="rounded-lg border border-border">

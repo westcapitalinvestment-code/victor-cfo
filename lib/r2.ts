@@ -50,6 +50,17 @@ export async function urlDescargaR2(key: string): Promise<string> {
   return getSignedUrl(getR2(), new GetObjectCommand({ Bucket: bucket(), Key: key }), { expiresIn: 300 });
 }
 
+// Trae los bytes crudos de un archivo (a diferencia de urlDescargaR2, que
+// da un link temporal) — para cuando el servidor necesita el contenido
+// directamente, como al incrustar el logo del negocio dentro de un PDF
+// generado con pdf-lib.
+export async function descargarBytesR2(key: string): Promise<Buffer> {
+  const res = await getR2().send(new GetObjectCommand({ Bucket: bucket(), Key: key }));
+  const bytes = await res.Body?.transformToByteArray();
+  if (!bytes) throw new Error("Archivo vacío o no encontrado en R2.");
+  return Buffer.from(bytes);
+}
+
 // Borra un archivo de R2 cuando el usuario elimina esa foto/PDF específico
 // de un documento (o el documento entero). Si el archivo ya no existe en
 // R2 por lo que sea, R2 simplemente no hace nada — no lanza error.

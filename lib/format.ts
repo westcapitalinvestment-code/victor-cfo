@@ -10,3 +10,16 @@ export function formatMoney(amount: number, decimals: 0 | 2 = 2): string {
     maximumFractionDigits: decimals,
   }).format(amount);
 }
+
+// Las fechas se guardan en la base de datos como "YYYY-MM-DD" (ISO, para
+// que ordenen bien y no den problemas de zona horaria), pero a Joel no le
+// gusta verlas así en pantalla ni en los documentos — las convierte a
+// MM/DD/YYYY, el formato que se usa normalmente en PR. Puro string
+// slicing (no Date()) para evitar el clásico bug de que el navegador
+// interprete la fecha en otra zona horaria y se corra un día.
+export function formatFecha(fechaISO: string | null | undefined): string {
+  if (!fechaISO) return "";
+  const [anio, mes, dia] = fechaISO.slice(0, 10).split("-");
+  if (!anio || !mes || !dia) return fechaISO;
+  return `${mes}/${dia}/${anio}`;
+}

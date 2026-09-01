@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatFecha } from "@/lib/format";
 
 type Cliente = {
   id: string;
@@ -297,7 +297,7 @@ function FilaFactura({ factura }: { factura: Factura }) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm">{nombre}</p>
         <p className="truncate text-xs text-muted">
-          #{factura.numero} · {factura.fecha_emision}
+          #{factura.numero} · {formatFecha(factura.fecha_emision)}
         </p>
       </div>
       <div className="flex flex-shrink-0 flex-col items-end gap-1">
@@ -382,7 +382,11 @@ function CobrosTab({ facturasIniciales }: { facturasIniciales: Factura[] }) {
                 <Link href={`/dashboard/facturacion/${f.id}`} className="min-w-0 flex-1">
                   <p className="truncate font-medium">#{f.numero} · {nombre}</p>
                   <p className="truncate text-xs text-muted">
-                    {vencida ? <span className="text-red">venció {f.fecha_vencimiento}</span> : <span>vence {f.fecha_vencimiento}</span>}
+                    {vencida ? (
+                      <span className="text-red">venció {formatFecha(f.fecha_vencimiento)}</span>
+                    ) : (
+                      <span>vence {formatFecha(f.fecha_vencimiento)}</span>
+                    )}
                   </p>
                 </Link>
                 <div className="flex flex-shrink-0 items-center gap-2">
@@ -852,7 +856,7 @@ function CotizacionesTab({ cotizaciones }: { cotizaciones: Cotizacion[] }) {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm">{nombre}</p>
                 <p className="truncate text-xs text-muted">
-                  #{c.numero} · {c.fecha_emision}
+                  #{c.numero} · {formatFecha(c.fecha_emision)}
                 </p>
               </div>
               <div className="flex flex-shrink-0 flex-col items-end gap-1">
