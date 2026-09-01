@@ -499,8 +499,14 @@ export default function FacturaDetalle({
                       </option>
                     ))}
                   </select>
+                  {/* .vc-btn-primary trae width:100% en globals.css — dentro
+                      de este flex row eso gana como flex-basis y aplasta el
+                      <select> flex-1 al lado (mismo bug de fondo que el de
+                      vc-input; pedido de Joel, 1 sept 2026). El estilo en
+                      línea gana siempre sobre la hoja de estilos. */}
                   <button
                     className="vc-btn-primary flex-shrink-0"
+                    style={{ width: "auto" }}
                     disabled={loading}
                     onClick={() => actualizarEstado("pagada", { metodo_pago: metodoPago })}
                   >

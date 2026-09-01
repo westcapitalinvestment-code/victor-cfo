@@ -447,7 +447,16 @@ function CobrosTab({ facturasIniciales }: { facturasIniciales: Factura[] }) {
                         </option>
                       ))}
                     </select>
-                    <button className="vc-btn-primary flex-shrink-0" disabled={loading} onClick={() => marcarPagada(f.id)}>
+                    {/* .vc-btn-primary trae width:100% en globals.css — en
+                        este flex row eso gana como flex-basis y aplasta el
+                        <select> flex-1 al lado (mismo bug de fondo que el de
+                        vc-input; pedido de Joel, 1 sept 2026). */}
+                    <button
+                      className="vc-btn-primary flex-shrink-0"
+                      style={{ width: "auto" }}
+                      disabled={loading}
+                      onClick={() => marcarPagada(f.id)}
+                    >
                       {loading ? "..." : "Está correcto"}
                     </button>
                     <button className="flex-shrink-0 text-xs text-muted hover:opacity-80" onClick={() => setPagando(null)}>
