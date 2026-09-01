@@ -116,9 +116,19 @@ export async function sincronizarPlaidDeUsuario(
 
       const { data: cuentasDelItem } = await supabase
         .from("plaid_accounts")
-        .select("plaid_account_id, es_negocio")
+        .select("plaid_account_id, es_negocio, entity_id")
         .eq("plaid_item_id", item.id);
       const negocioPorCuenta = new Map((cuentasDelItem ?? []).map((c) => [c.plaid_account_id, c.es_negocio]));
+      // BUG REAL (1 sept 2026, reportado por Joel): su login de BPPR trae
+      // cuentas personales y de negocio juntas bajo un mismo Item. Antes,
+      // entity_id se guardaba NULL sin importar nada — eso equivale a
+      // "Personal" en el resto de la app (ver gastos/page.tsx, que filtra
+      // transacciones con .is("entity_id", null)), así que las
+      // transacciones de la cuenta de negocio terminaban mezcladas con
+      // Personal en vez de quedar bajo su entidad. Ahora se resuelve por
+      // cuenta, usando la asignación que el usuario hace en /dashboard/cuentas
+      // (columna plaid_accounts.entity_id, migración 0040).
+      const entidadPorCuenta = new Map((cuentasDelItem ?? []).map((c) => [c.plaid_account_id, c.entity_id]));
 
       let cursor: string | undefined = item.cursor ?? undefined;
       let hasMore = true;
@@ -158,7 +168,7 @@ export async function sincronizarPlaidDeUsuario(
         })
         .map((t) => ({
           owner_id: ownerId,
-          entity_id: null,
+          entity_id: entidadPorCuenta.get(t.account_id) ?? null,
           plaid_transaction_id: t.transaction_id,
           plaid_account_id: t.account_id,
           description_raw: t.merchant_name || t.name || "Transacción sin descripción",

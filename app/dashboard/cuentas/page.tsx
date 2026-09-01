@@ -18,6 +18,7 @@ type CuentaPlaid = {
   current_balance: number | null;
   iso_currency_code: string | null;
   es_negocio: boolean;
+  entity_id: string | null;
 };
 function esPasivo(type: string | null): boolean {
   return type === "credit" || type === "loan";
@@ -27,6 +28,7 @@ type BancoPlaid = {
   institution_name: string | null;
   status: string;
 };
+type EntidadNegocio = { id: string; name: string };
 export default function CuentasPage() {
   const supabase = createClient();
   const [linkToken, setLinkToken] = useState<string | null>(null);
@@ -53,6 +55,12 @@ export default function CuentasPage() {
   const [renombrandoId, setRenombrandoId] = useState<string | null>(null);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [guardandoNombre, setGuardandoNombre] = useState(false);
+  // Asignar cuenta a una entidad de negocio (1 sept 2026, bug real de Joel:
+  // login de BPPR trae cuenta personal + de negocio juntas — sin esto, las
+  // transacciones de la cuenta de negocio se mezclaban con Personal porque
+  // no había dónde ponerlas). Solo aplica si es Pro y ya tiene entidades.
+  const [entidadesNegocio, setEntidadesNegocio] = useState<EntidadNegocio[]>([]);
+  const [asignandoEntidadId, setAsignandoEntidadId] = useState<string | null>(null);
   // Gate del plan gratis (30 agosto 2026, migración 0031): conectar banco
   // es una de las dos cosas caras (~$2/usuario/mes de Plaid) que requieren
   // Core — un usuario 'gratis' ve el mismo upsell que en el chat de
@@ -77,7 +85,7 @@ export default function CuentasPage() {
     setEsReferido(!!perfil?.referred_by);
     const { data } = await supabase
       .from("plaid_accounts")
-      .select("id, plaid_account_id, name, nickname, mask, type, subtype, current_balance, iso_currency_code, es_negocio")
+      .select("id, plaid_account_id, name, nickname, mask, type, subtype, current_balance, iso_currency_code, es_negocio, entity_id")
       .eq("owner_id", user.id)
       .order("name", { ascending: true });
     const todas = data ?? [];
@@ -89,8 +97,38 @@ export default function CuentasPage() {
       .eq("owner_id", user.id)
       .order("institution_name", { ascending: true });
     setBancos(bancosData ?? []);
+    if (pro) {
+      const { data: entidadesData } = await supabase
+        .from("business_entities")
+        .select("id, name")
+        .eq("owner_id", user.id)
+        .eq("active", true)
+        .order("name", { ascending: true });
+      setEntidadesNegocio(entidadesData ?? []);
+    } else {
+      setEntidadesNegocio([]);
+    }
     setLoading(false);
   }, [supabase]);
+
+  async function asignarEntidad(accountId: string, entityId: string | null) {
+    setAsignandoEntidadId(accountId);
+    setError(null);
+    try {
+      const res = await fetch("/api/plaid/asignar-entidad-cuenta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId, entityId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "No se pudo asignar la entidad.");
+      await cargarCuentas();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo asignar la entidad.");
+    } finally {
+      setAsignandoEntidadId(null);
+    }
+  }
   useEffect(() => {
     cargarCuentas();
   }, [cargarCuentas]);
@@ -448,6 +486,25 @@ export default function CuentasPage() {
                     >
                       ✓
                     </button>
+                  </div>
+                )}
+
+                {entidadesNegocio.length > 0 && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-[11px] text-muted">Pertenece a:</span>
+                    <select
+                      className="vc-input !w-auto !py-1 !text-xs"
+                      value={c.entity_id ?? ""}
+                      disabled={asignandoEntidadId === c.id}
+                      onChange={(e) => asignarEntidad(c.id, e.target.value || null)}
+                    >
+                      <option value="">Personal</option>
+                      {entidadesNegocio.map((ent) => (
+                        <option key={ent.id} value={ent.id}>
+                          {ent.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
 
