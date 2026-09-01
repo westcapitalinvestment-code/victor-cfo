@@ -116,7 +116,7 @@ export async function sincronizarPlaidDeUsuario(
 
       const { data: cuentasDelItem } = await supabase
         .from("plaid_accounts")
-        .select("plaid_account_id, es_negocio, entity_id")
+        .select("plaid_account_id, es_negocio, entity_id, name, nickname")
         .eq("plaid_item_id", item.id);
       const negocioPorCuenta = new Map((cuentasDelItem ?? []).map((c) => [c.plaid_account_id, c.es_negocio]));
       // BUG REAL (1 sept 2026, reportado por Joel): su login de BPPR trae
@@ -151,6 +151,27 @@ export async function sincronizarPlaidDeUsuario(
       totalPlaidAdded += added.length;
       totalPlaidModified += modified.length;
       let huboErrorEnEsteItem = false;
+
+      // Diagnóstico por cuenta (1 sept 2026, caso real de Joel: Flexicuenta
+      // de Negocios tiene actividad real y pesada — nómina, pagos — pero
+      // transactionsSync le devolvía 0 "added" para esa cuenta puntual
+      // mientras sus hermanas del mismo Item (mismo cursor) sí traían
+      // datos. Sin esto no había forma de saber, sin acceso a los logs de
+      // Vercel, si el hueco viene de Plaid (no manda nada para esa cuenta)
+      // o de un filtro nuestro — ahora queda visible en el mensaje de
+      // "Sincronizar" mismo.
+      const nombrePorCuentaId = new Map(
+        (cuentasDelItem ?? []).map((c) => [c.plaid_account_id, c.nickname || c.name || c.plaid_account_id.slice(-6)])
+      );
+      if (cuentasDelItem && cuentasDelItem.length > 1) {
+        const conteoPorCuenta = new Map<string, number>();
+        for (const c of cuentasDelItem) conteoPorCuenta.set(c.plaid_account_id, 0);
+        for (const t of added) conteoPorCuenta.set(t.account_id, (conteoPorCuenta.get(t.account_id) ?? 0) + 1);
+        const desglose = Array.from(conteoPorCuenta.entries())
+          .map(([accId, n]) => `${nombrePorCuentaId.get(accId) ?? accId}: ${n}`)
+          .join(", ");
+        refreshInfo.push(`${item.id}: Plaid trajo ${added.length} nueva(s) en total — por cuenta: ${desglose}`);
+      }
 
       const esDeNegocioYNoEsPro = (accountId: string) => !esPro && negocioPorCuenta.get(accountId) === true;
       // Respeta lo que el usuario eligió al conectar este banco: año
