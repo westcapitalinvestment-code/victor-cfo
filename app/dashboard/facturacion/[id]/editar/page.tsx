@@ -41,7 +41,7 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
 
   const { data: item } = await supabase
     .from("invoice_items")
-    .select("id, descripcion, precio_unitario")
+    .select("id, descripcion, precio_unitario, cantidad")
     .eq("invoice_id", params.id)
     .order("created_at", { ascending: true })
     .limit(1)
@@ -69,7 +69,7 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
   return (
     <EditarFacturaForm
       factura={factura}
-      itemInicial={item ?? { id: "", descripcion: "", precio_unitario: 0 }}
+      itemInicial={item ?? { id: "", descripcion: "", precio_unitario: 0, cantidad: 1 }}
       entities={entities ?? []}
       clients={clients ?? []}
       servicios={servicios ?? []}

@@ -36,6 +36,8 @@ type Factura = {
   frecuencia_recurrente: string | null;
 };
 
+
+
 const METODOS_COBRO = ["ATH Móvil", "Transferencia / ACH", "Cheque", "Efectivo"];
 const STRIPE_FEE_PCT = 0.029;
 const STRIPE_FEE_FIJO = 0.3;
@@ -48,7 +50,7 @@ export default function EditarFacturaForm({
   servicios,
 }: {
   factura: Factura;
-  itemInicial: { id: string; descripcion: string; precio_unitario: number };
+  itemInicial: { id: string; descripcion: string; precio_unitario: number; cantidad: number };
   entities: Entity[];
   clients: Client[];
   servicios: ServicioCat[];
@@ -75,6 +77,7 @@ export default function EditarFacturaForm({
     servicioOriginalSigueActivo ? "" : itemInicial.descripcion
   );
   const [monto, setMonto] = useState(String(itemInicial.precio_unitario));
+  const [cantidad, setCantidad] = useState(String(itemInicial.cantidad || 1));
 
   function elegirServicio(id: string) {
     setServicioId(id);
@@ -106,7 +109,9 @@ export default function EditarFacturaForm({
   const [error, setError] = useState<string | null>(null);
 
   const descripcionFinal = servicioId === "personalizado" ? descripcionPersonalizada : servicio?.nombre ?? "";
-  const montoNum = Number(monto) || 0;
+  const precioUnitarioNum = Number(monto) || 0;
+  const cantidadNum = Number(cantidad) || 1;
+  const montoNum = precioUnitarioNum * cantidadNum;
 
   const ivuExentoServicio = servicioId !== "personalizado" && servicio ? servicio.ivu_exento : true;
   const ivuPct =
@@ -173,7 +178,7 @@ export default function EditarFacturaForm({
     if (itemInicial.id) {
       const { error: itemError } = await supabase
         .from("invoice_items")
-        .update({ descripcion: descripcionFinal, cantidad: 1, precio_unitario: montoNum, subtotal_linea: montoNum })
+        .update({ descripcion: descripcionFinal, cantidad: cantidadNum, precio_unitario: precioUnitarioNum, subtotal_linea: montoNum })
         .eq("id", itemInicial.id);
       if (itemError) {
         setLoading(false);
@@ -184,8 +189,8 @@ export default function EditarFacturaForm({
       const { error: itemError } = await supabase.from("invoice_items").insert({
         invoice_id: factura.id,
         descripcion: descripcionFinal,
-        cantidad: 1,
-        precio_unitario: montoNum,
+        cantidad: cantidadNum,
+        precio_unitario: precioUnitarioNum,
         subtotal_linea: montoNum,
       });
       if (itemError) {
@@ -274,16 +279,33 @@ export default function EditarFacturaForm({
           </Field>
         )}
 
-        <Field label="Monto">
-          <input
-            className="vc-input"
-            type="number"
-            min="0"
-            step="0.01"
-            value={monto}
-            onChange={(e) => setMonto(e.target.value)}
-          />
-        </Field>
+        <div className="flex gap-2">
+          <Field label="Cantidad">
+            <input
+              className="vc-input"
+              type="number"
+              min="1"
+              step="1"
+              value={cantidad}
+              onChange={(e) => setCantidad(e.target.value)}
+            />
+          </Field>
+          <Field label="Precio unitario">
+            <input
+              className="vc-input"
+              type="number"
+              min="0"
+              step="0.01"
+              value={monto}
+              onChange={(e) => setMonto(e.target.value)}
+            />
+          </Field>
+        </div>
+        {cantidadNum > 1 && (
+          <p className="-mt-2 text-xs text-muted">
+            Subtotal de esta línea: {cantidadNum} × {formatMoney(precioUnitarioNum)} = {formatMoney(montoNum)}
+          </p>
+        )}
 
         <Field label="Métodos de cobro aceptados">
           <div className="flex flex-wrap gap-2">
