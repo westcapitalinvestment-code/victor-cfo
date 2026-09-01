@@ -734,6 +734,9 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
                   {formatMoney(Number(s.precio))}
                   <span className="text-xs font-normal text-muted">{sufijoTipo(s.tipo)}</span>
                 </span>
+                <button onClick={() => abrirEditar(s)} className="text-muted hover:text-teal">
+                  <i className="ti ti-edit" style={{ fontSize: 15 }} />
+                </button>
                 <button onClick={() => eliminar(s.id)} className="text-muted hover:text-red">
                   <i className="ti ti-trash" style={{ fontSize: 15 }} />
                 </button>
