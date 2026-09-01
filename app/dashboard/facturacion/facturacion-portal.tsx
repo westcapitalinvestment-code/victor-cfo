@@ -486,12 +486,20 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
           <p className="text-xs uppercase tracking-wide text-muted">
             Directorio <span className="normal-case text-muted">· {clients.length} cliente{clients.length === 1 ? "" : "s"}</span>
           </p>
-          <Link
-            href="/dashboard/clientes/nuevo?returnTo=/dashboard/facturacion"
-            className="text-xs font-medium text-teal hover:opacity-80"
-          >
-            + Nuevo cliente
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/dashboard/clientes/importar?returnTo=/dashboard/facturacion"
+              className="text-xs font-medium text-muted hover:text-teal"
+            >
+              Importar CSV
+            </Link>
+            <Link
+              href="/dashboard/clientes/nuevo?returnTo=/dashboard/facturacion"
+              className="text-xs font-medium text-teal hover:opacity-80"
+            >
+              + Nuevo cliente
+            </Link>
+          </div>
         </div>
 
       {clients.length === 0 && (

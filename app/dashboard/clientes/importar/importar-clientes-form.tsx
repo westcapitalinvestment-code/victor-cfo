@@ -65,7 +65,8 @@ function indicesDeDireccion(columnas: string[]): number[] {
 
 type Paso = "elegir_archivo" | "mapear" | "resultado";
 
-export default function ImportarClientesForm({ entities }: { entities: Entity[] }) {
+export default function ImportarClientesForm({ entities, returnTo }: { entities: Entity[]; returnTo?: string }) {
+  const destino = returnTo || "/dashboard/clientes";
   const router = useRouter();
 
   const [entityId, setEntityId] = useState(entities[0]?.id ?? "");
@@ -185,7 +186,7 @@ export default function ImportarClientesForm({ entities }: { entities: Entity[] 
     <div className="mx-auto max-w-lg px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium">Importar clientes (CSV)</h1>
-        <button onClick={() => router.push("/dashboard/clientes")} className="text-sm text-muted hover:opacity-80">
+        <button onClick={() => router.push(destino)} className="text-sm text-muted hover:opacity-80">
           Cancelar
         </button>
       </div>
@@ -373,8 +374,8 @@ export default function ImportarClientesForm({ entities }: { entities: Entity[] 
               {resultado.duplicados > 0 && ` ${resultado.duplicados} ya existían (omitidos).`}
               {resultado.errores > 0 && ` ${resultado.errores} fila(s) sin nombre, no se pudieron importar.`}
             </p>
-            <button className="mt-3 vc-btn-primary" onClick={() => router.push("/dashboard/clientes")}>
-              Ver clientes
+            <button className="mt-3 vc-btn-primary" onClick={() => router.push(destino)}>
+              {returnTo ? "Volver" : "Ver clientes"}
             </button>
           </div>
         )}

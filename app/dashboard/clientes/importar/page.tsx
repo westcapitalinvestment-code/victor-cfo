@@ -6,7 +6,7 @@ import ImportarClientesForm from "./importar-clientes-form";
 // Importar clientes desde CSV (ej. exportado de FreshBooks) — mismo
 // requisito que /clientes/nuevo: hace falta al menos una entidad de
 // negocio, porque clients siempre cuelga de una (ver 0001).
-export default async function ImportarClientesPage() {
+export default async function ImportarClientesPage({ searchParams }: { searchParams: { returnTo?: string } }) {
   const supabase = createClient();
   const {
     data: { user },
@@ -33,5 +33,5 @@ export default async function ImportarClientesPage() {
     );
   }
 
-  return <ImportarClientesForm entities={entities} />;
+  return <ImportarClientesForm entities={entities} returnTo={searchParams?.returnTo} />;
 }

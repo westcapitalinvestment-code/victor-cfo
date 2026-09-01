@@ -56,6 +56,7 @@ export default async function FacturacionPage({
     .from("clients")
     .select("id, name, email, es_negocio, retention_pct, entity_id")
     .eq("owner_id", user.id)
+    .eq("active", true)
     .order("name", { ascending: true });
   let facturasQuery = supabase
     .from("invoices")
