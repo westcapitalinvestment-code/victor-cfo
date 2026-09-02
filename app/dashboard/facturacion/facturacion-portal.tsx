@@ -54,6 +54,17 @@ type Cotizacion = {
   clients: { name: string } | null;
 };
 
+// returnTo del portal (1 sept 2026, fix pedido por Joel: "si borro un
+// cliente se sale y cae en la pantalla de facturas"). El bug era que
+// returnTo apuntaba a "/dashboard/facturacion" a secas — sin el ?tab=, la
+// página vuelve a caer en la pestaña por defecto (Facturas) en vez de
+// quedarse en Clientes, que es donde el usuario estaba trabajando.
+// encodeURIComponent porque returnTo en sí es un query param — sin esto,
+// el "?tab=clientes" se lee como un query param SUELTO de la página de
+// destino (importar/nuevo/editar cliente) en vez de quedar pegado dentro
+// del valor de returnTo.
+const RETURN_TO_TAB_CLIENTES = encodeURIComponent("/dashboard/facturacion?tab=clientes");
+
 const TABS = [
   { id: "facturas", label: "Facturas", icon: "ti-file-invoice" },
   { id: "cotizaciones", label: "Cotizaciones", icon: "ti-file-description" },
@@ -528,13 +539,13 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
           </p>
           <div className="flex items-center gap-3">
             <Link
-              href="/dashboard/clientes/importar?returnTo=/dashboard/facturacion"
+              href={`/dashboard/clientes/importar?returnTo=${RETURN_TO_TAB_CLIENTES}`}
               className="text-xs font-medium text-muted hover:text-teal"
             >
               Importar CSV
             </Link>
             <Link
-              href="/dashboard/clientes/nuevo?returnTo=/dashboard/facturacion"
+              href={`/dashboard/clientes/nuevo?returnTo=${RETURN_TO_TAB_CLIENTES}`}
               className="text-xs font-medium text-teal hover:opacity-80"
             >
               + Nuevo cliente
@@ -569,7 +580,7 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
             <span className="flex-shrink-0 text-xs text-muted">Individual</span>
           )}
           <Link
-            href={`/dashboard/clientes/${c.id}/editar?returnTo=/dashboard/facturacion`}
+            href={`/dashboard/clientes/${c.id}/editar?returnTo=${RETURN_TO_TAB_CLIENTES}`}
             className="flex-shrink-0 text-muted hover:text-teal"
             title="Editar cliente"
           >

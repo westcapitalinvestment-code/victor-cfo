@@ -23,6 +23,8 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [telefono, setTelefono] = useState("");
+  const [email2, setEmail2] = useState("");
+  const [telefono2, setTelefono2] = useState("");
   const [taxId, setTaxId] = useState("");
   const [direccion, setDireccion] = useState("");
   const [esNegocio, setEsNegocio] = useState(false);
@@ -48,6 +50,8 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
       name,
       email: email || null,
       telefono: telefono || null,
+      email_2: email2 || null,
+      telefono_2: telefono2 || null,
       tax_id: taxId || null,
       address: direccion || null,
       es_negocio: esNegocio,
@@ -99,6 +103,18 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
 
         <Field label="Teléfono (opcional — para enviar facturas por WhatsApp)">
           <input className="vc-input" type="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+        </Field>
+
+        {/* 2do contacto (1 sept 2026, pedido de Joel): en FreshBooks, para
+            mandarle la factura a 2 correos había que duplicar el cliente
+            entero — con esto un solo cliente guarda ambos contactos. Por
+            ahora es solo de referencia (copiar/pegar al enviar). */}
+        <Field label="Email secundario (opcional)">
+          <input className="vc-input" type="email" value={email2} onChange={(e) => setEmail2(e.target.value)} />
+        </Field>
+
+        <Field label="Teléfono secundario (opcional)">
+          <input className="vc-input" type="tel" value={telefono2} onChange={(e) => setTelefono2(e.target.value)} />
         </Field>
 
         <Field label="RUC / Seguro Social patronal (opcional)">
