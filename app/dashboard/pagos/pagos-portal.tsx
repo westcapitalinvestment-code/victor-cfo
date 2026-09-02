@@ -331,20 +331,23 @@ function PagosTab({ vendors, retenciones, entidadId }: { vendors: Vendor[]; rete
                   {iniciales(v.name)}
                 </div>
                 <p className="min-w-0 flex-1 truncate text-sm">{v.name}</p>
-                <input
-                  className="vc-input flex-shrink-0"
-                  style={{ width: 90 }}
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="Bruto"
-                  value={bruto}
-                  onChange={(e) => setMontos((prev) => ({ ...prev, [v.id]: e.target.value }))}
-                />
-                <div className="flex flex-shrink-0 items-center gap-0.5">
+                <div className="relative flex-shrink-0">
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted">$</span>
+                  <input
+                    className="vc-input"
+                    style={{ width: 128, paddingLeft: 22 }}
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={bruto}
+                    onChange={(e) => setMontos((prev) => ({ ...prev, [v.id]: e.target.value }))}
+                  />
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-1">
                   <input
                     className="vc-input flex-shrink-0"
-                    style={{ width: 46 }}
+                    style={{ width: 68 }}
                     type="number"
                     step="0.1"
                     min="0"
