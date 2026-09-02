@@ -117,7 +117,7 @@ export default function EntidadForm({
   const [taxRegime, setTaxRegime] = useState(entidad?.tax_regime ?? "ordinaria");
   const [ivuApplies, setIvuApplies] = useState(entidad?.ivu_applies ?? false);
   const [ivuEstatal, setIvuEstatal] = useState(String(entidad?.ivu_rate_estatal ?? 10.5));
-  const [ivuMunicipal, setIvuMunicipal] = useState(String(entidad?.ivu_rate_municipal ?? 0));
+  const [ivuMunicipal, setIvuMunicipal] = useState(String(entidad?.ivu_rate_municipal ?? 1));
   const [retencion, setRetencion] = useState(entidad?.client_retention_situation ?? "no");
   const [relevoVencimiento, setRelevoVencimiento] = useState(entidad?.relevo_certificate_expiry ?? "");
 
