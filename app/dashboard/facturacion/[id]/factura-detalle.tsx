@@ -104,11 +104,20 @@ export default function FacturaDetalle({
   items,
   adjuntosIniciales,
   negocioNombre,
+  basePath = "/dashboard/facturacion",
+  modoAdmin = false,
 }: {
   factura: Factura;
   items: Item[];
   adjuntosIniciales: Adjunto[];
   negocioNombre: string;
+  basePath?: string;
+  // Editar/Eliminar factura no están en el acceso base que Joel definió
+  // para Admin/Secretaria ("Ver y crear facturas/cotizaciones, Registrar
+  // pagos y cobros") — se esconden en modoAdmin en vez de dejar un link
+  // roto (la ruta /editar todavía no existe bajo /admin) o exponer un
+  // borrado que no le corresponde a un admin.
+  modoAdmin?: boolean;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -229,7 +238,7 @@ export default function FacturaDetalle({
       setError(deleteError.message);
       return;
     }
-    router.push("/dashboard/facturacion");
+    router.push(basePath);
     router.refresh();
   }
 
@@ -252,7 +261,7 @@ export default function FacturaDetalle({
       `}</style>
 
       <div className="no-imprimir mb-6 flex items-center justify-between">
-        <button onClick={() => router.push("/dashboard/facturacion")} className="text-sm text-muted hover:opacity-80">
+        <button onClick={() => router.push(basePath)} className="text-sm text-muted hover:opacity-80">
           ← Facturas
         </button>
       </div>
@@ -489,7 +498,7 @@ export default function FacturaDetalle({
           </div>
         </div>
 
-        <div className="no-imprimir grid grid-cols-4 gap-2 border-t border-border pt-3">
+        <div className={`no-imprimir grid gap-2 border-t border-border pt-3 ${modoAdmin ? "grid-cols-2" : "grid-cols-4"}`}>
           <a
             href={`/api/facturas/${factura.id}/pdf`}
             target="_blank"
@@ -504,25 +513,28 @@ export default function FacturaDetalle({
           >
             <i className="ti ti-brand-whatsapp text-base" /> Reenviar
           </button>
-          {factura.estado !== "pagada" ? (
+          {!modoAdmin && factura.estado !== "pagada" && (
             <Link
-              href={`/dashboard/facturacion/${factura.id}/editar`}
+              href={`${basePath}/${factura.id}/editar`}
               className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
             >
               <i className="ti ti-edit text-base" /> Editar
             </Link>
-          ) : (
+          )}
+          {!modoAdmin && factura.estado === "pagada" && (
             <span className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium text-muted opacity-40">
               <i className="ti ti-edit text-base" /> Editar
             </span>
           )}
-          <button
-            onClick={eliminarFactura}
-            disabled={eliminando}
-            className="flex flex-col items-center gap-1 rounded-lg border border-red py-2 text-xs font-medium text-red hover:opacity-80 disabled:opacity-50"
-          >
-            <i className="ti ti-trash text-base" /> {eliminando ? "..." : confirmarEliminar ? "¿Seguro?" : "Eliminar"}
-          </button>
+          {!modoAdmin && (
+            <button
+              onClick={eliminarFactura}
+              disabled={eliminando}
+              className="flex flex-col items-center gap-1 rounded-lg border border-red py-2 text-xs font-medium text-red hover:opacity-80 disabled:opacity-50"
+            >
+              <i className="ti ti-trash text-base" /> {eliminando ? "..." : confirmarEliminar ? "¿Seguro?" : "Eliminar"}
+            </button>
+          )}
         </div>
 
         {factura.estado !== "pagada" && (
@@ -565,13 +577,15 @@ export default function FacturaDetalle({
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-muted">
-                  Si lo que recibiste no coincide con esto (el cliente no retuvo, o retuvo mal), no la marques pagada así —{" "}
-                  <Link href={`/dashboard/facturacion/${factura.id}/editar`} className="font-medium text-teal underline">
-                    ajústala primero
-                  </Link>
-                  .
-                </p>
+                {!modoAdmin && (
+                  <p className="text-xs text-muted">
+                    Si lo que recibiste no coincide con esto (el cliente no retuvo, o retuvo mal), no la marques pagada así —{" "}
+                    <Link href={`${basePath}/${factura.id}/editar`} className="font-medium text-teal underline">
+                      ajústala primero
+                    </Link>
+                    .
+                  </p>
+                )}
                 <div className="flex items-center gap-2">
                   <select className="vc-input flex-1" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
                     {METODOS_PAGO.map((m) => (

@@ -193,8 +193,12 @@ export default function AceptarInvitacionAdminPage() {
               Ya puedes entrar con tu correo y contraseña — solo vas a ver facturación de{" "}
               {invite.entityName || "este negocio"}, nunca finanzas personales.
             </p>
-            <button className="vc-btn-primary mt-3" onClick={() => router.push("/login")}>
-              Ir a iniciar sesión
+            {/* La sesión que se creó al aceptar (signUp/signIn arriba) sigue
+                activa aquí mismo — ya no hace falta mandarlo de vuelta a
+                /login para entrar dos veces (2 sept 2026, ahora que el
+                portal real de /admin existe). */}
+            <button className="vc-btn-primary mt-3" onClick={() => router.push("/admin")}>
+              Ir a tu portal
             </button>
           </div>
         </div>

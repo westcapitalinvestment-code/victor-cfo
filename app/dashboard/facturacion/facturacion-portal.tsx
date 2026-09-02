@@ -120,8 +120,6 @@ type Cotizacion = {
 // el "?tab=clientes" se lee como un query param SUELTO de la página de
 // destino (importar/nuevo/editar cliente) en vez de quedar pegado dentro
 // del valor de returnTo.
-const RETURN_TO_TAB_CLIENTES = encodeURIComponent("/dashboard/facturacion?tab=clientes");
-
 const TABS = [
   { id: "facturas", label: "Facturas", icon: "ti-file-invoice" },
   { id: "cotizaciones", label: "Cotizaciones", icon: "ti-file-description" },
@@ -191,6 +189,12 @@ export default function FacturacionPortal({
   entidadId,
   entidadesConAth,
   tabInicial,
+  basePath = "/dashboard/facturacion",
+  clientesBasePath = "/dashboard/clientes",
+  volverHref = "/dashboard",
+  volverLabel = "← VICTOR",
+  ownerIdEfectivo,
+  modoAdmin = false,
 }: {
   clients: Cliente[];
   facturas: Factura[];
@@ -199,17 +203,44 @@ export default function FacturacionPortal({
   entidadId: string | null;
   entidadesConAth: string[];
   tabInicial?: string;
+  // Portal real de Admin/Secretaria (2 sept 2026) — este componente ya lo
+  // usaba solo el dueño desde /dashboard/facturacion, con TODOS sus links
+  // internos hardcoded a esa ruta. Para reusarlo también en el portal de
+  // admin (/admin/[entityId]) sin duplicar la lógica de IVU/retención/ATH
+  // (arriesgado reimplementarla desde cero), se parametrizan basePath (raíz
+  // de las rutas hijas: nueva, [id], cotizaciones/...) y volverHref/Label
+  // (el link "← VICTOR" no aplica para un admin, que no tiene finanzas
+  // personales). ownerIdEfectivo es el owner_id REAL a usar en los pocos
+  // inserts que hace este archivo (Servicios) — un admin logueado tiene su
+  // PROPIO user.id, nunca el del dueño. Sin ownerIdEfectivo, se usa
+  // user.id normal (comportamiento del dueño, sin cambios).
+  basePath?: string;
+  clientesBasePath?: string;
+  volverHref?: string;
+  volverLabel?: string;
+  ownerIdEfectivo?: string;
+  // modoAdmin reduce las pestañas a solo Facturas + Clientes (el acceso
+  // base que Joel definió para Admin/Secretaria) — Cotizaciones, Servicios
+  // y Reportes todavía no tienen su propia ruta bajo /admin (quedan para
+  // la próxima ronda), así que en vez de dejar links rotos, esas pestañas
+  // ni aparecen en modo admin.
+  modoAdmin?: boolean;
 }) {
-  const tabValido = TABS.some((t) => t.id === tabInicial);
+  const tabsVisibles = modoAdmin ? TABS.filter((t) => t.id === "facturas" || t.id === "clientes") : TABS;
+  const tabValido = tabsVisibles.some((t) => t.id === tabInicial);
   const [tab, setTab] = useState<TabId>(tabValido ? (tabInicial as TabId) : "facturas");
   const entidadesConAthSet = useMemo(() => new Set(entidadesConAth), [entidadesConAth]);
 
   return (
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
-        <Link href="/dashboard" className="text-sm text-muted hover:opacity-80">
-          ← VICTOR
-        </Link>
+        {modoAdmin ? (
+          <CerrarSesionAdmin />
+        ) : (
+          <Link href={volverHref} className="text-sm text-muted hover:opacity-80">
+            {volverLabel}
+          </Link>
+        )}
       </div>
 
       <div className="mb-4 rounded-2xl border border-teal bg-teal/[.04] p-3.5">
@@ -218,7 +249,7 @@ export default function FacturacionPortal({
             <p className="text-lg font-medium">Facturación</p>
             <p className="text-xs text-muted">Portal completo</p>
           </div>
-          {entidadId && (
+          {entidadId && !modoAdmin && (
             <Link
               href={`/dashboard/entidades/${entidadId}/editar`}
               className="flex flex-shrink-0 items-center gap-1 text-xs font-medium text-teal hover:opacity-80"
@@ -232,7 +263,7 @@ export default function FacturacionPortal({
           className="flex"
           style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 4, gap: 3 }}
         >
-          {TABS.map((t) => (
+          {tabsVisibles.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -255,11 +286,15 @@ export default function FacturacionPortal({
         </div>
       </div>
 
-      {tab === "facturas" && <FacturasTab facturas={facturas} entidadesConAth={entidadesConAthSet} />}
-      {tab === "clientes" && <ClientesTab clients={clients} />}
-      {tab === "cotizaciones" && <CotizacionesTab cotizaciones={cotizaciones} />}
-      {tab === "servicios" && <ServiciosTab servicios={servicios} entidadId={entidadId} />}
-      {tab === "reportes" && (
+      {tab === "facturas" && <FacturasTab facturas={facturas} entidadesConAth={entidadesConAthSet} basePath={basePath} />}
+      {tab === "clientes" && (
+        <ClientesTab clients={clients} basePath={clientesBasePath} volverTab={`${basePath}?tab=clientes`} modoAdmin={modoAdmin} />
+      )}
+      {!modoAdmin && tab === "cotizaciones" && <CotizacionesTab cotizaciones={cotizaciones} />}
+      {!modoAdmin && tab === "servicios" && (
+        <ServiciosTab servicios={servicios} entidadId={entidadId} ownerIdEfectivo={ownerIdEfectivo} />
+      )}
+      {!modoAdmin && tab === "reportes" && (
         <ReportesTab facturas={facturas} clients={clients} servicios={servicios} entidadId={entidadId} entidadesConAth={entidadesConAthSet} />
       )}
     </div>
@@ -277,7 +312,15 @@ function Proximamente({ icono, titulo, texto }: { icono: string; titulo: string;
   );
 }
 
-function FacturasTab({ facturas, entidadesConAth }: { facturas: Factura[]; entidadesConAth: Set<string> }) {
+function FacturasTab({
+  facturas,
+  entidadesConAth,
+  basePath,
+}: {
+  facturas: Factura[];
+  entidadesConAth: Set<string>;
+  basePath: string;
+}) {
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todas");
 
@@ -362,7 +405,7 @@ function FacturasTab({ facturas, entidadesConAth }: { facturas: Factura[]; entid
           <option value="borradores">Borradores</option>
         </select>
         <Link
-          href="/dashboard/facturacion/nueva"
+          href={`${basePath}/nueva`}
           className="flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-2.5 text-xs font-medium text-white hover:opacity-90"
           style={{ background: "#1D9E75", width: "auto" }}
         >
@@ -374,7 +417,7 @@ function FacturasTab({ facturas, entidadesConAth }: { facturas: Factura[]; entid
         <p className="mb-2 text-xs uppercase tracking-wide text-muted">Todas las facturas</p>
         {filtradas.length === 0 && <p className="text-xs text-muted">No hay facturas que coincidan.</p>}
         {filtradas.map((f) => (
-          <FilaFactura key={f.id} factura={f} />
+          <FilaFactura key={f.id} factura={f} basePath={basePath} />
         ))}
       </div>
     </>
@@ -389,7 +432,28 @@ function FacturasTab({ facturas, entidadesConAth }: { facturas: Factura[]; entid
 // añadió un hover al nombre/fila (cambio de color + fondo) para que se
 // note que es clickeable, ya que ahora el Link solo envuelve esa parte y
 // no toda la fila (el botón de pago necesita vivir fuera del <a>).
-function FilaFactura({ factura }: { factura: Factura }) {
+// Botón de cerrar sesión para el portal de Admin/Secretaria (2 sept 2026) —
+// un admin no tiene "VICTOR" personal al que regresar (nunca ve finanzas
+// personales), así que en vez del link "← VICTOR" del dueño, aquí va la
+// única acción de navegación que tiene sentido: salir.
+function CerrarSesionAdmin() {
+  const router = useRouter();
+  const supabase = createClient();
+  const [saliendo, setSaliendo] = useState(false);
+  async function salir() {
+    setSaliendo(true);
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+  return (
+    <button onClick={salir} disabled={saliendo} className="text-sm text-muted hover:opacity-80">
+      {saliendo ? "Saliendo..." : "Cerrar sesión"}
+    </button>
+  );
+}
+
+function FilaFactura({ factura, basePath }: { factura: Factura; basePath: string }) {
   const supabase = createClient();
   const router = useRouter();
   const nombre = factura.clients?.name ?? "Sin cliente";
@@ -425,7 +489,7 @@ function FilaFactura({ factura }: { factura: Factura }) {
     <div className="border-b border-border py-2.5 last:border-0">
       <div className="flex items-center gap-2.5">
         <Link
-          href={`/dashboard/facturacion/${factura.id}`}
+          href={`${basePath}/${factura.id}`}
           className="group flex min-w-0 flex-1 items-center gap-2.5 rounded-lg -m-1 p-1 transition-colors hover:bg-bg"
         >
           <div
@@ -488,7 +552,7 @@ function FilaFactura({ factura }: { factura: Factura }) {
               )}
               <p className="mt-1 text-muted">
                 ¿No coincide con lo que recibiste?{" "}
-                <Link href={`/dashboard/facturacion/${factura.id}/editar`} className="font-medium text-teal underline">
+                <Link href={`${basePath}/${factura.id}/editar`} className="font-medium text-teal underline">
                   Ajústala primero
                 </Link>
                 .
@@ -548,7 +612,18 @@ function StatCard({ label, valor, sub, tono }: { label: string; valor: string; s
 // (sin fee), "ATH Móvil Business" = cobrado por el pATH (con fee).
 const METODOS_PAGO = ["ATH Móvil", "ATH Móvil Business", "Transferencia", "Cheque", "Efectivo", "Tarjeta", "Otro"];
 
-function ClientesTab({ clients }: { clients: Cliente[] }) {
+function ClientesTab({
+  clients,
+  basePath,
+  volverTab,
+  modoAdmin,
+}: {
+  clients: Cliente[];
+  basePath: string;
+  volverTab: string;
+  modoAdmin: boolean;
+}) {
+  const returnTo = encodeURIComponent(volverTab);
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todos");
 
@@ -611,16 +686,12 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
             </span>
           </p>
           <div className="flex items-center gap-3">
-            <Link
-              href={`/dashboard/clientes/importar?returnTo=${RETURN_TO_TAB_CLIENTES}`}
-              className="text-xs font-medium text-muted hover:text-teal"
-            >
-              Importar CSV
-            </Link>
-            <Link
-              href={`/dashboard/clientes/nuevo?returnTo=${RETURN_TO_TAB_CLIENTES}`}
-              className="text-xs font-medium text-teal hover:opacity-80"
-            >
+            {!modoAdmin && (
+              <Link href={`/dashboard/clientes/importar?returnTo=${returnTo}`} className="text-xs font-medium text-muted hover:text-teal">
+                Importar CSV
+              </Link>
+            )}
+            <Link href={`${basePath}/nuevo?returnTo=${returnTo}`} className="text-xs font-medium text-teal hover:opacity-80">
               + Nuevo cliente
             </Link>
           </div>
@@ -652,13 +723,15 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
           ) : (
             <span className="flex-shrink-0 text-xs text-muted">Individual</span>
           )}
-          <Link
-            href={`/dashboard/clientes/${c.id}/editar?returnTo=${RETURN_TO_TAB_CLIENTES}`}
-            className="flex-shrink-0 text-muted hover:text-teal"
-            title="Editar cliente"
-          >
-            <i className="ti ti-edit" style={{ fontSize: 15 }} />
-          </Link>
+          {!modoAdmin && (
+            <Link
+              href={`/dashboard/clientes/${c.id}/editar?returnTo=${returnTo}`}
+              className="flex-shrink-0 text-muted hover:text-teal"
+              title="Editar cliente"
+            >
+              <i className="ti ti-edit" style={{ fontSize: 15 }} />
+            </Link>
+          )}
         </div>
       ))}
       </div>
@@ -681,7 +754,15 @@ function sufijoTipo(tipo: string): string {
   return TIPOS_SERVICIO.find((t) => t.value === tipo)?.sufijo ?? "";
 }
 
-function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidadId: string | null }) {
+function ServiciosTab({
+  servicios,
+  entidadId,
+  ownerIdEfectivo,
+}: {
+  servicios: Servicio[];
+  entidadId: string | null;
+  ownerIdEfectivo?: string;
+}) {
   const supabase = createClient();
   const [lista, setLista] = useState(servicios);
   const [busqueda, setBusqueda] = useState("");
@@ -738,7 +819,7 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
       const { data, error: insertError } = await supabase
         .from("services")
         .insert({
-          owner_id: user.id,
+          owner_id: ownerIdEfectivo ?? user.id,
           entity_id: entidadId,
           nombre: nombre.trim(),
           descripcion: descripcion.trim() || null,

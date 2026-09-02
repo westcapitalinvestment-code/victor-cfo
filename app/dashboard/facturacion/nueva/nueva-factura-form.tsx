@@ -104,6 +104,8 @@ export default function NuevaFacturaForm({
   conteosPorEntidad,
   tecnicos,
   addonTecnicosActivo,
+  basePath = "/dashboard/facturacion",
+  ownerIdEfectivo,
 }: {
   entities: Entity[];
   clients: Client[];
@@ -111,6 +113,13 @@ export default function NuevaFacturaForm({
   conteosPorEntidad: Record<string, number>;
   tecnicos: TecnicoOpcion[];
   addonTecnicosActivo: boolean;
+  // Portal de Admin/Secretaria (2 sept 2026) — ver el comentario largo en
+  // facturacion-portal.tsx. basePath cambia a dónde regresan los botones
+  // Cancelar/Guardar; ownerIdEfectivo es el owner_id real a guardar en la
+  // factura (y en el cliente, si se crea uno nuevo desde aquí) cuando quien
+  // está logueado es un admin, no el dueño.
+  basePath?: string;
+  ownerIdEfectivo?: string;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -240,7 +249,7 @@ export default function NuevaFacturaForm({
     const { data: nuevo, error: insertError } = await supabase
       .from("services")
       .insert({
-        owner_id: user.id,
+        owner_id: ownerIdEfectivo ?? user.id,
         entity_id: entidad?.id ?? null,
         nombre: nuevoServicioNombre.trim(),
         descripcion: nuevoServicioDescripcion.trim() || null,
@@ -397,7 +406,7 @@ export default function NuevaFacturaForm({
     const { data: factura, error: insertError } = await supabase
       .from("invoices")
       .insert({
-        owner_id: user.id,
+        owner_id: ownerIdEfectivo ?? user.id,
         entity_id: entidad.id,
         client_id: cliente.id,
         servicio_id: primerServicioId,
@@ -466,14 +475,14 @@ export default function NuevaFacturaForm({
         const data = await res.json().catch(() => ({}));
         setLoading(false);
         setError(data.error ?? "La factura se guardó, pero algún archivo no se pudo subir. Puedes intentar de nuevo desde Editar.");
-        router.push(`/dashboard/facturacion/${factura.id}`);
+        router.push(`${basePath}/${factura.id}`);
         router.refresh();
         return;
       }
     }
 
     setLoading(false);
-    router.push(`/dashboard/facturacion/${factura.id}`);
+    router.push(`${basePath}/${factura.id}`);
     router.refresh();
   }
 
@@ -481,7 +490,7 @@ export default function NuevaFacturaForm({
     <div className="mx-auto max-w-2xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium">Nueva factura</h1>
-        <button onClick={() => router.push("/dashboard/facturacion")} className="text-sm text-muted hover:opacity-80">
+        <button onClick={() => router.push(basePath)} className="text-sm text-muted hover:opacity-80">
           Cancelar
         </button>
       </div>

@@ -63,21 +63,33 @@ function LoginForm() {
       return;
     }
 
-    // Un CPA invitado entra por el mismo /login (un solo login para todo
-    // VICTOR — ver nota en account_members, migración 0001), así que hay
-    // que revisar si este correo es un CPA para mandarlo a /cpa en vez de
-    // /dashboard. Simplificación consciente: si alguien es dueño Y CPA de
-    // otros a la vez (caso raro), esto lo manda al portal CPA primero.
-    const { data: membresiaCpa } = await supabase
-      .from("account_members")
-      .select("id")
-      .eq("member_email", email)
-      .eq("role", "cpa")
-      .eq("active", true)
-      .limit(1)
-      .maybeSingle();
+    // Un CPA o un Admin/Secretaria invitado entran por el mismo /login (un
+    // solo login para todo VICTOR — ver nota en account_members, migración
+    // 0001), así que hay que revisar el rol de este correo para mandarlo al
+    // portal correcto en vez de /dashboard. Simplificación consciente: si
+    // alguien es dueño Y invitado de otros a la vez (caso raro), esto lo
+    // manda al portal de invitado primero — Admin/Secretaria antes que CPA
+    // porque es el rol más común de los dos.
+    const [{ data: membresiaAdmin }, { data: membresiaCpa }] = await Promise.all([
+      supabase
+        .from("account_members")
+        .select("id")
+        .eq("member_email", email)
+        .eq("role", "admin")
+        .eq("active", true)
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("account_members")
+        .select("id")
+        .eq("member_email", email)
+        .eq("role", "cpa")
+        .eq("active", true)
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
-    router.push(membresiaCpa ? "/cpa" : "/dashboard");
+    router.push(membresiaAdmin ? "/admin" : membresiaCpa ? "/cpa" : "/dashboard");
     router.refresh();
   }
 

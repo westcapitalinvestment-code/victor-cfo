@@ -11,7 +11,18 @@ import { createClient } from "@/lib/supabase/client";
 
 type Entity = { id: string; name: string };
 
-export default function NuevoClienteForm({ entities, returnTo }: { entities: Entity[]; returnTo?: string }) {
+export default function NuevoClienteForm({
+  entities,
+  returnTo,
+  ownerIdEfectivo,
+}: {
+  entities: Entity[];
+  returnTo?: string;
+  // Portal de Admin/Secretaria (2 sept 2026) — ver comentario largo en
+  // facturacion-portal.tsx. Sin esto, un admin creando un cliente lo
+  // guardaría bajo su PROPIO user.id en vez del owner_id del dueño.
+  ownerIdEfectivo?: string;
+}) {
   const destino = returnTo || "/dashboard/clientes";
   const router = useRouter();
   const supabase = createClient();
@@ -45,7 +56,7 @@ export default function NuevoClienteForm({ entities, returnTo }: { entities: Ent
     }
 
     const { error: insertError } = await supabase.from("clients").insert({
-      owner_id: user.id,
+      owner_id: ownerIdEfectivo ?? user.id,
       entity_id: entityId,
       name,
       email: email || null,
