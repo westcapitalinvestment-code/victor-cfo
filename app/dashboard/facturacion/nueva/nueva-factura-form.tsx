@@ -353,7 +353,15 @@ export default function NuevaFacturaForm({
   async function guardar(estadoInicial: "borrador" | "enviada") {
     if (!entidad || !cliente) return;
     const lineasValidas = lineas.filter((l) => l.descripcion.trim() && sumaLinea(l) > 0);
-    if (lineasValidas.length === 0) {
+    // Excepción: un borrador ASIGNADO A TÉCNICO puede guardarse sin líneas —
+    // esa es justo la idea de "asignar una tarea" (2 sept 2026, Joel: "en
+    // ese portal del técnico dice tareas asignadas 0, como yo asigno una
+    // tarea?" — el bloqueo de abajo se lo impedía sin que él supiera por
+    // qué). El técnico añade sus propios ítems en el campo desde su app.
+    // Fuera de ese caso (factura normal, o "Enviar" directo al cliente)
+    // sigue exigiendo al menos una línea real.
+    const esTareaVaciaParaTecnico = estadoInicial === "borrador" && !!technicianId;
+    if (lineasValidas.length === 0 && !esTareaVaciaParaTecnico) {
       setError("Añade al menos un servicio con descripción y precio mayor a $0.");
       return;
     }

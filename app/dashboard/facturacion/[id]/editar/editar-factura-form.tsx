@@ -315,7 +315,11 @@ export default function EditarFacturaForm({
   async function guardar() {
     if (!entidad || !cliente) return;
     const lineasValidas = lineas.filter((l) => l.descripcion.trim() && sumaLinea(l) > 0);
-    if (lineasValidas.length === 0) {
+    // Misma excepción que en nueva-factura-form.tsx: un borrador asignado a
+    // técnico puede quedarse sin líneas — es una "tarea" que el técnico
+    // completa en su app, no una factura lista para enviar.
+    const esTareaVaciaParaTecnico = factura.estado === "borrador" && !!technicianId;
+    if (lineasValidas.length === 0 && !esTareaVaciaParaTecnico) {
       setError("Añade al menos un servicio con descripción y precio mayor a $0.");
       return;
     }

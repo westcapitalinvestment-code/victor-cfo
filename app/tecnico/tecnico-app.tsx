@@ -175,14 +175,20 @@ export default function TecnicoApp({ token }: { token: string }) {
 // factura (crear/completar una).
 // ============================================================================
 function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: () => void; onRecargar: () => void }) {
-  const [vista, setVista] = useState<"home" | "cliente_nueva" | "cliente_cobrar" | "factura">("home");
+  const [vista, setVista] = useState<"home" | "cliente_nueva" | "cliente_cobrar" | "factura" | "cliente_cotizar" | "cotizacion">("home");
   const [facturaId, setFacturaId] = useState<string | null>(null);
+  const [cotizacionId, setCotizacionId] = useState<string | null>(null);
   const [convirtiendoId, setConvirtiendoId] = useState<string | null>(null);
   const [errorConvertir, setErrorConvertir] = useState<string | null>(null);
 
   function abrirFactura(id: string) {
     setFacturaId(id);
     setVista("factura");
+  }
+
+  function abrirCotizacion(id: string) {
+    setCotizacionId(id);
+    setVista("cotizacion");
   }
 
   async function crearFacturaParaCliente(clientId: string) {
@@ -194,6 +200,22 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
     const data = await res.json().catch(() => null);
     if (res.ok && data?.ok) {
       abrirFactura(data.id);
+    }
+  }
+
+  // Cotización nueva desde cero (2 sept 2026, pedido de Joel) — mismo patrón
+  // que crearFacturaParaCliente, pero cae en PantallaCotizacion en vez de
+  // PantallaFactura porque nunca sale directo al cliente sin que el dueño
+  // la vea primero.
+  async function crearCotizacionParaCliente(clientId: string) {
+    const res = await fetch("/api/tecnico/cotizaciones", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, items: [] }),
+    });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.ok) {
+      abrirCotizacion(data.id);
     }
   }
 
@@ -236,10 +258,34 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
     );
   }
 
+  if (vista === "cliente_cotizar") {
+    return (
+      <SelectorCliente
+        titulo="¿Para qué cliente es la cotización?"
+        permiteCrear={sesion.permisos.anadeClientes}
+        onCancelar={() => setVista("home")}
+        onSeleccionar={crearCotizacionParaCliente}
+      />
+    );
+  }
+
   if (vista === "factura" && facturaId) {
     return (
       <PantallaFactura
         facturaId={facturaId}
+        sesion={sesion}
+        onVolver={() => {
+          setVista("home");
+          onRecargar();
+        }}
+      />
+    );
+  }
+
+  if (vista === "cotizacion" && cotizacionId) {
+    return (
+      <PantallaCotizacion
+        cotizacionId={cotizacionId}
         sesion={sesion}
         onVolver={() => {
           setVista("home");
@@ -267,7 +313,7 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
         </div>
       )}
 
-      <div className="mb-3 flex gap-2">
+      <div className="mb-2 flex gap-2">
         <button className="vc-btn-primary flex-1" onClick={() => setVista("cliente_nueva")}>
           <i className="ti ti-plus" style={{ marginRight: 4 }} /> Nueva factura
         </button>
@@ -279,6 +325,17 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
             <i className="ti ti-cash" /> Cobrar
           </button>
         )}
+      </div>
+      {/* Cotizar algo nuevo (2 sept 2026, pedido de Joel) — separado del
+          botón de factura porque el resultado es distinto: esto NUNCA sale
+          directo, siempre pasa primero por tu aprobación. */}
+      <div className="mb-3">
+        <button
+          className="flex w-full items-center justify-center gap-1 rounded-lg border border-border py-2.5 text-sm font-medium text-muted"
+          onClick={() => setVista("cliente_cotizar")}
+        >
+          <i className="ti ti-file-description" /> Cotizar algo nuevo
+        </button>
       </div>
 
       {errorConvertir && <p className="mb-3 text-xs text-red">{errorConvertir}</p>}
@@ -931,6 +988,245 @@ function PantallaFactura({ facturaId, sesion, onVolver }: { facturaId: string; s
           {finalizando ? "Enviando..." : sesion.approvalMode === "manual" ? "Enviar para aprobación" : "Finalizar y enviar al cliente"}
         </button>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// Pantalla de una cotización nueva (2 sept 2026, pedido de Joel: "si un
+// cliente quiere algo nuevo el empleado pudiera cotizarlo y guardarlo para
+// que el jefe lo apruebe y se lo envía como trabajo") — mismo patrón de
+// añadir ítems que PantallaFactura, pero sin evidencia/firma/cobro (todavía
+// no es un trabajo, es solo un precio que el dueño tiene que aprobar
+// primero) y SIEMPRE termina "pendiente de aprobación", nunca se manda
+// directo a un cliente real.
+// ============================================================================
+type ItemCotizacion = { id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal_linea: number };
+type CotizacionDetalle = {
+  id: string;
+  numero: string;
+  total: number;
+  subtotal: number;
+  ivu_monto: number;
+  estado: string;
+  pendiente_revision_tecnico: boolean;
+  client_id: string;
+  clients: { name: string; phone: string | null } | null;
+};
+
+function PantallaCotizacion({ cotizacionId, sesion, onVolver }: { cotizacionId: string; sesion: Sesion; onVolver: () => void }) {
+  const [cotizacion, setCotizacion] = useState<CotizacionDetalle | null>(null);
+  const [items, setItems] = useState<ItemCotizacion[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [catalogItemId, setCatalogItemId] = useState("__libre__");
+  const [descripcion, setDescripcion] = useState("");
+  const [cantidad, setCantidad] = useState("1");
+  const [precioUnitario, setPrecioUnitario] = useState("");
+  const [guardandoItem, setGuardandoItem] = useState(false);
+
+  const [finalizando, setFinalizando] = useState(false);
+  const [enviada, setEnviada] = useState(false);
+
+  async function cargar() {
+    setCargando(true);
+    const res = await fetch(`/api/tecnico/cotizaciones/${cotizacionId}`);
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.ok) {
+      setCotizacion(data.cotizacion);
+      setItems(data.items ?? []);
+    } else {
+      setError(data?.error ?? "No se pudo cargar la cotización.");
+    }
+    setCargando(false);
+  }
+
+  useEffect(() => {
+    cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cotizacionId]);
+
+  function alEscogerCatalogo(id: string) {
+    setCatalogItemId(id);
+    if (id === "__libre__") {
+      setDescripcion("");
+      setPrecioUnitario("");
+      return;
+    }
+    const item = sesion.catalogo.find((c) => c.id === id);
+    if (item) {
+      setDescripcion(item.nombre);
+      setPrecioUnitario(String(item.precio));
+    }
+  }
+
+  async function anadirItem() {
+    if (!descripcion.trim()) {
+      setError("Escribe una descripción para el ítem antes de añadirlo.");
+      return;
+    }
+    if (precioUnitario.trim() === "" || Number(precioUnitario) < 0) {
+      setError("Escribe un precio (puede ser $0, pero no puede quedar vacío).");
+      return;
+    }
+    setError(null);
+    setGuardandoItem(true);
+    const res = await fetch(`/api/tecnico/cotizaciones/${cotizacionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: [
+          {
+            descripcion: descripcion.trim(),
+            cantidad: Number(cantidad) > 0 ? Number(cantidad) : 1,
+            precioUnitario: Number(precioUnitario) || 0,
+            servicioId: catalogItemId === "__libre__" ? null : catalogItemId,
+          },
+        ],
+      }),
+    });
+    setGuardandoItem(false);
+    if (!res.ok) {
+      const d = await res.json().catch(() => null);
+      setError(d?.error ?? "No se pudo añadir el ítem.");
+      return;
+    }
+    setCatalogItemId("__libre__");
+    setDescripcion("");
+    setCantidad("1");
+    setPrecioUnitario("");
+    cargar();
+  }
+
+  async function finalizar() {
+    setFinalizando(true);
+    setError(null);
+    const res = await fetch(`/api/tecnico/cotizaciones/${cotizacionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ finalizar: true }),
+    });
+    const data = await res.json().catch(() => null);
+    setFinalizando(false);
+    if (!res.ok || !data?.ok) {
+      setError(data?.error ?? "No se pudo enviar la cotización.");
+      return;
+    }
+    setEnviada(true);
+  }
+
+  if (cargando) return <div className="min-h-screen bg-bg" />;
+  if (!cotizacion) {
+    return (
+      <div className="vc-shell pb-10 pt-4">
+        <button onClick={onVolver} className="mb-4 text-xs text-muted hover:opacity-80">
+          ← Volver
+        </button>
+        <p className="text-xs text-red">{error ?? "Cotización no encontrada."}</p>
+      </div>
+    );
+  }
+
+  if (enviada) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-bg px-6 text-center">
+        <i className="ti ti-circle-check mb-2 text-3xl text-teal" />
+        <p className="mb-1 text-sm font-medium">{cotizacion.numero}</p>
+        <p className="mb-1 text-lg font-medium">{formatMoney(cotizacion.total)}</p>
+        <p className="mb-6 max-w-xs text-xs text-muted">Enviada al dueño — pendiente de que la apruebe antes de mandarla al cliente.</p>
+        <button className="rounded-pill border border-teal px-4 py-2 text-sm font-medium text-teal" onClick={onVolver}>
+          Volver al inicio
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="vc-shell pb-10">
+      <div className="mb-4 flex items-center justify-between pt-4">
+        <button onClick={onVolver} className="text-xs text-muted hover:opacity-80">
+          ← Volver
+        </button>
+        <p className="text-xs text-muted">{cotizacion.numero}</p>
+      </div>
+
+      <div className="vc-card mb-3">
+        <p className="text-xs uppercase tracking-wide text-muted">Cliente</p>
+        <p className="text-sm">{cotizacion.clients?.name ?? "—"}</p>
+        {cotizacion.clients?.phone && <p className="text-xs text-muted">{cotizacion.clients.phone}</p>}
+      </div>
+
+      {items.length > 0 && (
+        <div className="vc-card mb-3">
+          <p className="mb-2 text-xs uppercase tracking-wide text-muted">Ítems</p>
+          {items.map((it) => (
+            <div key={it.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
+              <div className="min-w-0">
+                <p className="truncate">{it.descripcion}</p>
+                {sesion.permisos.vePrecios && (
+                  <p className="text-xs text-muted">
+                    {it.cantidad} × {formatMoney(it.precio_unitario)}
+                  </p>
+                )}
+              </div>
+              {sesion.permisos.vePrecios && <p className="flex-shrink-0 font-medium">{formatMoney(it.subtotal_linea)}</p>}
+            </div>
+          ))}
+          {sesion.permisos.vePrecios && (
+            <div className="flex items-center justify-between pt-2 text-sm font-medium">
+              <span>Total</span>
+              <span>{formatMoney(cotizacion.total)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="vc-card mb-3">
+        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Añadir ítem</p>
+        {sesion.catalogo.length > 0 && (
+          <select className="vc-input mb-2" value={catalogItemId} onChange={(e) => alEscogerCatalogo(e.target.value)}>
+            <option value="__libre__">Personalizado (escribe abajo)</option>
+            {sesion.catalogo.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+                {sesion.permisos.vePrecios ? ` — ${formatMoney(c.precio)}` : ""}
+              </option>
+            ))}
+          </select>
+        )}
+        <input className="vc-input mb-2" placeholder="Descripción" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
+        <div className="mb-2 flex gap-2">
+          <input className="vc-input" style={{ width: 90 }} type="number" min="1" placeholder="Cant." value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
+          <div className="relative flex-1">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted">$</span>
+            <input
+              className="vc-input w-full"
+              style={{ paddingLeft: 18 }}
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Precio"
+              value={precioUnitario}
+              onChange={(e) => setPrecioUnitario(e.target.value)}
+            />
+          </div>
+        </div>
+        <button
+          className="flex w-full items-center justify-center gap-1 rounded-lg border border-teal py-2 text-xs font-medium text-teal"
+          disabled={guardandoItem}
+          onClick={anadirItem}
+        >
+          <i className="ti ti-plus" /> {guardandoItem ? "Añadiendo..." : "Añadir ítem"}
+        </button>
+      </div>
+
+      {error && <p className="mb-3 text-xs text-red">{error}</p>}
+
+      {items.length === 0 && <p className="mb-2 text-xs text-muted">Añade al menos un ítem arriba para poder enviarla.</p>}
+      <button className="vc-btn-primary" disabled={finalizando || items.length === 0} onClick={finalizar}>
+        {finalizando ? "Enviando..." : "Enviar al dueño para aprobación"}
+      </button>
     </div>
   );
 }

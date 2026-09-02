@@ -52,6 +52,15 @@ type CotizacionAsignada = {
   clients: { name: string } | null;
 };
 
+type CotizacionPendienteRevision = {
+  id: string;
+  numero: string;
+  total: number;
+  technician_id: string;
+  clients: { name: string } | null;
+  technicians: { name: string } | null;
+};
+
 type Entidad = {
   id: string;
   name: string;
@@ -94,6 +103,7 @@ export default function EquipoPortal({
   facturas,
   items,
   cotizacionesAsignadas,
+  cotizacionesPendientesRevision,
   entidad,
   vistaGlobalActiva,
   cantidadEntidades,
@@ -104,6 +114,7 @@ export default function EquipoPortal({
   facturas: Factura[];
   items: ItemFactura[];
   cotizacionesAsignadas: CotizacionAsignada[];
+  cotizacionesPendientesRevision: CotizacionPendienteRevision[];
   entidad: Entidad;
   vistaGlobalActiva: boolean;
   cantidadEntidades: number;
@@ -163,7 +174,14 @@ export default function EquipoPortal({
         </div>
       )}
 
-      {tab === "panel" && <PanelTab facturas={facturas} tecnicos={tecnicos} cotizacionesAsignadas={cotizacionesAsignadas} />}
+      {tab === "panel" && (
+        <PanelTab
+          facturas={facturas}
+          tecnicos={tecnicos}
+          cotizacionesAsignadas={cotizacionesAsignadas}
+          cotizacionesPendientesRevision={cotizacionesPendientesRevision}
+        />
+      )}
       {tab === "tecnicos" && (
         <TecnicosTab tecnicos={tecnicos} vendors={vendors} entidad={entidad} addonTecnicosActivo={addonTecnicosActivo} />
       )}
@@ -180,10 +198,12 @@ function PanelTab({
   facturas,
   tecnicos,
   cotizacionesAsignadas,
+  cotizacionesPendientesRevision,
 }: {
   facturas: Factura[];
   tecnicos: Tecnico[];
   cotizacionesAsignadas: CotizacionAsignada[];
+  cotizacionesPendientesRevision: CotizacionPendienteRevision[];
 }) {
   const supabase = createClient();
   const router = useRouter();
@@ -191,6 +211,8 @@ function PanelTab({
   const [filtroTecnico, setFiltroTecnico] = useState<string>("todos");
   const [procesando, setProcesando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [listaCotizPendientes, setListaCotizPendientes] = useState(cotizacionesPendientesRevision);
+  const [procesandoCotiz, setProcesandoCotiz] = useState<string | null>(null);
 
   const nombrePorTecnico = useMemo(() => {
     const m = new Map<string, string>();
@@ -225,6 +247,40 @@ function PanelTab({
       return;
     }
     setLista((prev) => prev.map((x) => (x.id === f.id ? { ...x, estado: "enviada", pendiente_revision_tecnico: false } : x)));
+    router.refresh();
+  }
+
+  // Aprobar/rechazar una cotización que el TÉCNICO armó desde cero (2 sept
+  // 2026) — a diferencia de "aprobar" (factura), aquí sí puede rechazarse
+  // porque el técnico le puso precio a algo que tú no pediste.
+  async function aprobarCotizacion(c: CotizacionPendienteRevision) {
+    setProcesandoCotiz(c.id);
+    const { error: updateError } = await supabase
+      .from("cotizaciones")
+      .update({ estado: "enviada", pendiente_revision_tecnico: false })
+      .eq("id", c.id);
+    setProcesandoCotiz(null);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setListaCotizPendientes((prev) => prev.filter((x) => x.id !== c.id));
+    router.refresh();
+  }
+
+  async function rechazarCotizacion(c: CotizacionPendienteRevision) {
+    if (!window.confirm(`¿Rechazar la cotización ${c.numero} de ${nombrePorTecnico.get(c.technician_id) ?? "el técnico"}? No se le va a mandar al cliente.`)) return;
+    setProcesandoCotiz(c.id);
+    const { error: updateError } = await supabase
+      .from("cotizaciones")
+      .update({ estado: "rechazada", pendiente_revision_tecnico: false })
+      .eq("id", c.id);
+    setProcesandoCotiz(null);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setListaCotizPendientes((prev) => prev.filter((x) => x.id !== c.id));
     router.refresh();
   }
 
@@ -293,6 +349,51 @@ function PanelTab({
               </div>
               <p className="flex-shrink-0 font-medium">{formatMoney(c.total)}</p>
             </Link>
+          ))}
+        </div>
+      )}
+
+      {listaCotizPendientes.length > 0 && (
+        <div className="vc-card mb-3" style={{ borderColor: "#F5A623" }}>
+          <p className="mb-2 text-xs uppercase tracking-wide text-amb">
+            Cotizaciones nuevas, pendientes de tu aprobación <span className="normal-case text-muted">· {listaCotizPendientes.length}</span>
+          </p>
+          <p className="mb-2 text-xs text-muted">El técnico le cotizó algo nuevo a un cliente en campo — revísalo antes de que le llegue.</p>
+          {listaCotizPendientes.map((c) => (
+            <div key={c.id} className="border-b border-border py-2.5 text-sm last:border-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate">
+                    {c.technicians?.name ?? "Técnico"} → {c.clients?.name ?? "Sin cliente"}
+                  </p>
+                  <p className="truncate text-xs text-muted">{c.numero}</p>
+                </div>
+                <p className="flex-shrink-0 font-medium">{formatMoney(c.total)}</p>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <button
+                  className="vc-btn-primary flex-1"
+                  style={{ width: "auto" }}
+                  disabled={procesandoCotiz === c.id}
+                  onClick={() => aprobarCotizacion(c)}
+                >
+                  {procesandoCotiz === c.id ? "..." : "Aprobar y enviar"}
+                </button>
+                <Link
+                  href={`/dashboard/facturacion/cotizaciones/${c.id}`}
+                  className="flex flex-1 items-center justify-center rounded-lg border border-border py-2 text-xs font-medium"
+                >
+                  Ver detalle
+                </Link>
+                <button
+                  className="flex-shrink-0 rounded-lg border border-red/40 px-3 py-2 text-xs font-medium text-red"
+                  disabled={procesandoCotiz === c.id}
+                  onClick={() => rechazarCotizacion(c)}
+                >
+                  Rechazar
+                </button>
+              </div>
+            </div>
           ))}
         </div>
       )}

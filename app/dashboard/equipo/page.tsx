@@ -104,6 +104,18 @@ export default async function EquipoPage() {
     .eq("estado", "aprobada")
     .order("fecha_emision", { ascending: false });
 
+  // Cotizaciones que el TÉCNICO armó desde cero (cliente pidió algo nuevo)
+  // y ya finalizó — están en 'borrador' pero pendientes de que el dueño
+  // las apruebe antes de que le lleguen al cliente (Equipo v2, 2 sept
+  // 2026, pedido de Joel).
+  const { data: cotizacionesPendientesRevision } = await supabase
+    .from("cotizaciones")
+    .select("id, numero, total, technician_id, clients(name), technicians(name)")
+    .eq("entity_id", entidadIdEfectiva)
+    .not("technician_id", "is", null)
+    .eq("pendiente_revision_tecnico", true)
+    .order("created_at", { ascending: false });
+
   return (
     <EquipoPortal
       tecnicos={tecnicos ?? []}
@@ -111,6 +123,7 @@ export default async function EquipoPage() {
       facturas={(facturas ?? []) as any}
       items={(items ?? []) as any}
       cotizacionesAsignadas={(cotizacionesAsignadas ?? []) as any}
+      cotizacionesPendientesRevision={(cotizacionesPendientesRevision ?? []) as any}
       entidad={entidadEfectiva}
       vistaGlobalActiva={vistaGlobal}
       cantidadEntidades={entities.length}
