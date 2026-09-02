@@ -30,9 +30,31 @@ type Factura = {
   // fecha_emision. Nula en facturas marcadas pagadas antes de este campo
   // existir; el código hace fallback a fecha_emision en esos casos.
   fecha_pago: string | null;
+  // Método real con que se cobró (2 sept 2026) — es lo único que dice de
+  // verdad si una factura pagada pasó por ATH Móvil Business o tarjeta
+  // (Stripe), para poder estimar el gasto de procesamiento de pagos real,
+  // no solo hipotético.
+  metodo_pago: string | null;
   client_id: string | null;
   clients: { name: string } | null;
 };
+
+// ATH Móvil Business: 2.25% por pago recibido, mínimo $0.06 (confirmado en
+// ath.business/preguntas). Stripe: ~2.9% + $0.30 por transacción de
+// tarjeta. Mismos datos que en Nueva/Editar Factura — aquí se usan para
+// sumar, sobre facturas YA PAGADAS y marcadas con ese método real, cuánto
+// se fue en procesamiento (gasto deducible), pedido de Joel el 2 sept 2026:
+// "para deducir esa partida de ATH Movil Negocio y Stripe en su momento".
+const ATH_FEE_PCT = 0.0225;
+const ATH_FEE_MINIMO = 0.06;
+const STRIPE_FEE_PCT = 0.029;
+const STRIPE_FEE_FIJO = 0.3;
+
+function feeProcesamiento(f: Factura): number {
+  if (f.metodo_pago === "ATH Móvil") return Math.max(Number(f.total) * ATH_FEE_PCT, ATH_FEE_MINIMO);
+  if (f.metodo_pago === "Tarjeta") return Number(f.total) * STRIPE_FEE_PCT + STRIPE_FEE_FIJO;
+  return 0;
+}
 
 type Servicio = {
   id: string;
@@ -235,6 +257,7 @@ function FacturasTab({ facturas }: { facturas: Factura[] }) {
   const vencida = vencidas.reduce((s, f) => s + Number(f.total), 0);
   const pctCobrado = facturado > 0 ? Math.round((cobrado / facturado) * 100) : 0;
   const creditosHacienda = cobradas.reduce((s, f) => s + Number(f.retencion_monto || 0), 0);
+  const gastoProcesamiento = cobradas.reduce((s, f) => s + feeProcesamiento(f), 0);
 
   const filtradas = useMemo(() => {
     return facturas.filter((f) => {
@@ -269,6 +292,17 @@ function FacturasTab({ facturas }: { facturas: Factura[] }) {
         </div>
         <span className="text-sm font-medium text-teal">{formatMoney(creditosHacienda)}</span>
       </div>
+
+      {gastoProcesamiento > 0 && (
+        <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-border bg-card p-3">
+          <i className="ti ti-credit-card flex-shrink-0 text-lg text-red" />
+          <div className="flex-1">
+            <p className="text-xs font-medium">Gasto procesamiento de pagos</p>
+            <p className="text-xs text-muted">ATH Móvil Business + Stripe, sobre facturas ya pagadas — deducible</p>
+          </div>
+          <span className="text-sm font-medium text-red">-{formatMoney(gastoProcesamiento)}</span>
+        </div>
+      )}
 
       <div className="mb-3 flex gap-1.5">
         <div className="relative min-w-0 flex-1">
@@ -1333,6 +1367,15 @@ function ReportesTab({
   }, [facturasFiltradas]);
   const totalRetenido = porRetencion.reduce((s, c) => s + c.retenido, 0);
 
+  // Gasto de procesamiento de pagos del período (2 sept 2026, pedido de
+  // Joel) — mismo cálculo que en FacturasTab, pero acotado a las facturas
+  // del período/filtros activos de Reportes, para que cuadre con lo que
+  // esté viendo en pantalla al declarar.
+  const gastoProcesamientoPeriodo = facturasFiltradas.reduce(
+    (s, f) => (f.estado === "pagada" ? s + feeProcesamiento(f) : s),
+    0
+  );
+
   const porServicio = useMemo(() => {
     const mapa = new Map<string, { descripcion: string; total: number; count: number }>();
     for (const it of itemsEnRango) {
@@ -1677,6 +1720,16 @@ function ReportesTab({
           Lo que tus clientes retuvieron y depositaron a Hacienda a tu nombre en este período.
         </p>
       </div>
+
+      {gastoProcesamientoPeriodo > 0 && (
+        <div className="mb-3 rounded-2xl border border-border bg-card p-4">
+          <p className="text-[11px] text-muted">Gasto procesamiento de pagos (deducible)</p>
+          <p className="mt-1 text-2xl font-medium text-red">-{formatMoney(gastoProcesamientoPeriodo)}</p>
+          <p className="mt-1 text-[11px] text-muted">
+            Lo que se fue en fees de ATH Móvil Business y Stripe sobre las facturas pagadas de este período.
+          </p>
+        </div>
+      )}
 
       <div className="flex gap-2">
         <a href={pdfHref} target="_blank" rel="noreferrer" className="vc-btn-primary flex-1 text-center">
