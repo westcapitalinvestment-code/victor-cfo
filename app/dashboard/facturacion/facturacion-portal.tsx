@@ -51,6 +51,18 @@ const ATH_FEE_MINIMO = 0.06;
 const STRIPE_FEE_PCT = 0.029;
 const STRIPE_FEE_FIJO = 0.3;
 
+// Preview en vivo del fee al momento de registrar el pago (2 sept 2026,
+// pedido de Joel: "debe cambiar arriba y añadir esos $[fee] de fee pq no
+// hay manera de ajustarlo"). A diferencia de feeProcesamiento() de abajo,
+// aquí no hace falta el gate de entidadesConAth: el usuario ya está
+// escogiendo el método a mano, así que si elige "ATH Móvil Business" es
+// porque ese pago sí fue por el pATH.
+function feeEstimadoPago(total: number, metodo: string): number {
+  if (metodo === "ATH Móvil Business") return Math.max(total * ATH_FEE_PCT, ATH_FEE_MINIMO);
+  if (metodo === "Tarjeta") return total * STRIPE_FEE_PCT + STRIPE_FEE_FIJO;
+  return 0;
+}
+
 // El fee de 2.25% SOLO es real cuando el cliente pagó al pATH de la entidad
 // (ATH Móvil Business) — un ATH Móvil personal (transferencia normal entre
 // personas) no cobra fee ninguno. El primer intento de este gate (2 sept
@@ -449,16 +461,31 @@ function FilaFactura({ factura }: { factura: Factura }) {
       {pagando && (
         <div className="mt-2 flex flex-col gap-2 pl-[42px]">
           {error && <p className="text-xs text-red">{error}</p>}
-          {Number(factura.retencion_pct) > 0 && (
+          {(Number(factura.retencion_pct) > 0 || feeEstimadoPago(Number(factura.total), metodoPago) > 0) && (
             <div className="rounded-lg border border-border bg-bg p-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted">Total que debía cobrar</span>
                 <span className="font-medium">{formatMoney(Number(factura.total))}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-amb">Retención ({factura.retencion_pct}%) que el cliente debía depositar</span>
-                <span className="font-medium text-amb">{formatMoney(Number(factura.retencion_monto))}</span>
-              </div>
+              {Number(factura.retencion_pct) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-amb">Retención ({factura.retencion_pct}%) que el cliente debía depositar</span>
+                  <span className="font-medium text-amb">{formatMoney(Number(factura.retencion_monto))}</span>
+                </div>
+              )}
+              {/* Fee de procesamiento en vivo según el método elegido (2 sept
+                  2026, pedido de Joel: "debe cambiar arriba y añadir esos
+                  $[fee] de fee pq no hay manera de ajustarlo") — antes solo
+                  aparecía después, en el reporte, sin avisar al momento de
+                  registrar el pago. */}
+              {feeEstimadoPago(Number(factura.total), metodoPago) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-red">
+                    Fee {metodoPago} ({metodoPago === "Tarjeta" ? "2.9% + $0.30" : "2.25%, mín. $0.06"})
+                  </span>
+                  <span className="font-medium text-red">-{formatMoney(feeEstimadoPago(Number(factura.total), metodoPago))}</span>
+                </div>
+              )}
               <p className="mt-1 text-muted">
                 ¿No coincide con lo que recibiste?{" "}
                 <Link href={`/dashboard/facturacion/${factura.id}/editar`} className="font-medium text-teal underline">

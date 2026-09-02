@@ -67,6 +67,21 @@ function esImagen(nombre: string): boolean {
 // pagos ATH que en realidad fueron personales.
 const METODOS_PAGO = ["ATH Móvil", "ATH Móvil Business", "Transferencia", "Cheque", "Efectivo", "Tarjeta", "Otro"];
 
+// Mismos datos que en Nueva/Editar Factura y en "Gasto procesamiento de
+// pagos" — al registrar el pago aquí (2 sept 2026, pedido de Joel: "debe
+// cambiar arriba y añadir esos $[fee] de fee pq no hay manera de
+// ajustarlo") se muestra de una vez cuánto se va a descontar según el
+// método elegido, para que no sea sorpresa después en Reportes.
+const ATH_FEE_PCT = 0.0225;
+const ATH_FEE_MINIMO = 0.06;
+const STRIPE_FEE_PCT = 0.029;
+const STRIPE_FEE_FIJO = 0.3;
+function feeEstimadoPago(total: number, metodo: string): number {
+  if (metodo === "ATH Móvil Business") return Math.max(total * ATH_FEE_PCT, ATH_FEE_MINIMO);
+  if (metodo === "Tarjeta") return total * STRIPE_FEE_PCT + STRIPE_FEE_FIJO;
+  return 0;
+}
+
 function hoyVencida(f: Factura): boolean {
   return f.estado !== "pagada" && f.estado !== "borrador" && !!f.fecha_vencimiento && f.fecha_vencimiento < new Date().toISOString().slice(0, 10);
 }
@@ -539,6 +554,14 @@ export default function FacturaDetalle({
                     <div className="flex justify-between py-0.5">
                       <span className="text-amb">Retención ({factura.retencion_pct}%) que el cliente debía depositar</span>
                       <span className="font-medium text-amb">{formatMoney(factura.retencion_monto)}</span>
+                    </div>
+                  )}
+                  {feeEstimadoPago(Number(factura.total), metodoPago) > 0 && (
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-red">
+                        Fee {metodoPago} ({metodoPago === "Tarjeta" ? "2.9% + $0.30" : "2.25%, mín. $0.06"})
+                      </span>
+                      <span className="font-medium text-red">-{formatMoney(feeEstimadoPago(Number(factura.total), metodoPago))}</span>
                     </div>
                   )}
                 </div>
