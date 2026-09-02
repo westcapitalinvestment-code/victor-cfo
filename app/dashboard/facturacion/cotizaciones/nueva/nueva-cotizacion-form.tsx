@@ -7,13 +7,15 @@ import { formatMoney } from "@/lib/format";
 
 type Entity = { id: string; name: string; ivu_applies: boolean; ivu_rate_estatal: number; ivu_rate_municipal: number };
 type Client = { id: string; name: string; entity_id: string | null; ivu_exempt_reseller: boolean };
-type ServicioCat = { id: string; nombre: string; tipo: string; precio: number; ivu_exento: boolean };
+type ServicioCat = { id: string; nombre: string; descripcion: string | null; tipo: string; precio: number; ivu_exento: boolean };
 // servicioId (1 sept 2026): referencia real al catálogo cuando la línea
 // viene de "Elegir un servicio guardado" — se pierde (queda null) si el
 // usuario edita la descripción a mano o añade una línea libre con "+
 // Añadir línea". Es lo que permite que el reporte "Ingresos por servicio"
 // agrupe de verdad en vez de por el texto exacto de la descripción.
-type Linea = { descripcion: string; cantidad: string; precioUnitario: string; servicioId: string | null };
+// detalle: descripción corta debajo del nombre, calcado de FreshBooks (ej.
+// "AHA" / "Annual evaluation") — pedido de Joel, 1 sept 2026.
+type Linea = { descripcion: string; detalle: string; cantidad: string; precioUnitario: string; servicioId: string | null };
 
 function sumaLinea(l: Linea): number {
   const cant = Number(l.cantidad) || 0;
@@ -52,7 +54,9 @@ export default function NuevaCotizacionForm({
   const hoy = new Date().toISOString().slice(0, 10);
   const [fechaVencimiento, setFechaVencimiento] = useState("");
   const [notas, setNotas] = useState("");
-  const [lineas, setLineas] = useState<Linea[]>([{ descripcion: "", cantidad: "1", precioUnitario: "", servicioId: null }]);
+  const [lineas, setLineas] = useState<Linea[]>([
+    { descripcion: "", detalle: "", cantidad: "1", precioUnitario: "", servicioId: null },
+  ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,7 +74,7 @@ export default function NuevaCotizacionForm({
     );
   }
   function agregarLinea() {
-    setLineas((prev) => [...prev, { descripcion: "", cantidad: "1", precioUnitario: "", servicioId: null }]);
+    setLineas((prev) => [...prev, { descripcion: "", detalle: "", cantidad: "1", precioUnitario: "", servicioId: null }]);
   }
   function quitarLinea(i: number) {
     setLineas((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
@@ -80,7 +84,7 @@ export default function NuevaCotizacionForm({
     if (!s) return;
     setLineas((prev) => {
       const vacias = prev.filter((l) => !l.descripcion.trim());
-      const nueva = { descripcion: s.nombre, cantidad: "1", precioUnitario: String(s.precio), servicioId: s.id };
+      const nueva = { descripcion: s.nombre, detalle: s.descripcion ?? "", cantidad: "1", precioUnitario: String(s.precio), servicioId: s.id };
       return vacias.length === prev.length ? [nueva] : [...prev.filter((l) => l.descripcion.trim()), nueva];
     });
   }
@@ -160,6 +164,7 @@ export default function NuevaCotizacionForm({
         cotizacion_id: cotizacion.id,
         service_id: l.servicioId,
         descripcion: l.descripcion,
+        detalle: l.detalle.trim() || null,
         cantidad: Number(l.cantidad) || 1,
         precio_unitario: Number(l.precioUnitario) || 0,
         subtotal_linea: sumaLinea(l),
@@ -243,17 +248,29 @@ export default function NuevaCotizacionForm({
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Líneas</label>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {lineas.map((l, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="flex items-start gap-2">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <input
+                    className="vc-input"
+                    placeholder="Nombre del servicio"
+                    value={l.descripcion}
+                    onChange={(e) => actualizarLinea(i, "descripcion", e.target.value)}
+                  />
+                  {/* Descripción chiquita debajo del nombre — calcado de
+                      FreshBooks (ej. "AHA" / "Annual evaluation"), pedido
+                      de Joel el 1 sept 2026. */}
+                  <input
+                    className="vc-input"
+                    style={{ fontSize: 12 }}
+                    placeholder="Descripción (opcional)"
+                    value={l.detalle}
+                    onChange={(e) => actualizarLinea(i, "detalle", e.target.value)}
+                  />
+                </div>
                 <input
-                  className="vc-input flex-1"
-                  placeholder="Descripción del servicio"
-                  value={l.descripcion}
-                  onChange={(e) => actualizarLinea(i, "descripcion", e.target.value)}
-                />
-                <input
-                  className="vc-input w-16"
+                  className="vc-input w-16 flex-shrink-0"
                   type="number"
                   min="0"
                   step="1"
@@ -262,7 +279,7 @@ export default function NuevaCotizacionForm({
                   onChange={(e) => actualizarLinea(i, "cantidad", e.target.value)}
                 />
                 <input
-                  className="vc-input w-24"
+                  className="vc-input w-24 flex-shrink-0"
                   type="number"
                   min="0"
                   step="0.01"
@@ -273,7 +290,7 @@ export default function NuevaCotizacionForm({
                 <button
                   type="button"
                   onClick={() => quitarLinea(i)}
-                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg"
+                  className="mt-1.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg"
                   title="Quitar línea"
                 >
                   <i className="ti ti-trash" style={{ fontSize: 14 }} />

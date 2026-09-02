@@ -27,7 +27,7 @@ export default async function CotizacionDetallePage({ params }: { params: { id: 
 
   const { data: items } = await supabase
     .from("cotizacion_items")
-    .select("id, descripcion, cantidad, precio_unitario, subtotal_linea")
+    .select("id, descripcion, detalle, cantidad, precio_unitario, subtotal_linea, service_id")
     .eq("cotizacion_id", params.id)
     .order("created_at", { ascending: true });
 

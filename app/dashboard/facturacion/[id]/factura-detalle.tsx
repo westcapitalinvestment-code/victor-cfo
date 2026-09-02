@@ -9,6 +9,7 @@ import { formatMoney, formatFecha } from "@/lib/format";
 type Item = {
   id: string;
   descripcion: string;
+  detalle: string | null;
   cantidad: number;
   precio_unitario: number;
   subtotal_linea: number | null;
@@ -284,6 +285,7 @@ export default function FacturaDetalle({
             <div key={it.id} className="flex items-center justify-between border-b border-border p-2.5 text-sm last:border-0">
               <div>
                 <p>{it.descripcion}</p>
+                {it.detalle && <p className="text-xs text-muted">{it.detalle}</p>}
                 <p className="text-xs text-muted">
                   {it.cantidad} × {formatMoney(it.precio_unitario)}
                 </p>

@@ -31,6 +31,11 @@ type Factura = {
 type Servicio = {
   id: string;
   nombre: string;
+  // Descripción corta opcional (1 sept 2026, pedido de Joel — calcado de
+  // FreshBooks: el nombre sale en negrita y la descripción debajo, más
+  // pequeña, ej. "AHA" / "Annual evaluation"). Se copia a cada línea de
+  // factura/cotización cuando se elige el servicio del catálogo.
+  descripcion: string | null;
   tipo: string;
   precio: number;
   ivu_exento: boolean;
@@ -602,6 +607,7 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
   const [error, setError] = useState<string | null>(null);
 
   const [nombre, setNombre] = useState("");
+  const [descripcion, setDescripcion] = useState("");
   const [tipo, setTipo] = useState<(typeof TIPOS_SERVICIO)[number]["value"]>("fijo");
   const [precio, setPrecio] = useState("");
   // Default cambiado a "sí aplica IVU" (false = no exento) — pedido de
@@ -613,6 +619,7 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
   function abrirNuevo() {
     setFormAbierto("nuevo");
     setNombre("");
+    setDescripcion("");
     setTipo("fijo");
     setPrecio("");
     setIvuExento(true);
@@ -622,6 +629,7 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
   function abrirEditar(s: Servicio) {
     setFormAbierto(s.id);
     setNombre(s.nombre);
+    setDescripcion(s.descripcion ?? "");
     setTipo(s.tipo as (typeof TIPOS_SERVICIO)[number]["value"]);
     setPrecio(String(s.precio));
     setIvuExento(s.ivu_exento);
@@ -649,11 +657,12 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
           owner_id: user.id,
           entity_id: entidadId,
           nombre: nombre.trim(),
+          descripcion: descripcion.trim() || null,
           tipo,
           precio: Number(precio),
           ivu_exento: ivuExento,
         })
-        .select("id, nombre, tipo, precio, ivu_exento, activo, entity_id")
+        .select("id, nombre, descripcion, tipo, precio, ivu_exento, activo, entity_id")
         .single();
       setGuardando(false);
       if (insertError || !data) {
@@ -665,7 +674,7 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
     } else if (formAbierto) {
       const { error: updateError } = await supabase
         .from("services")
-        .update({ nombre: nombre.trim(), tipo, precio: Number(precio), ivu_exento: ivuExento })
+        .update({ nombre: nombre.trim(), descripcion: descripcion.trim() || null, tipo, precio: Number(precio), ivu_exento: ivuExento })
         .eq("id", formAbierto);
       setGuardando(false);
       if (updateError) {
@@ -673,7 +682,11 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
         return;
       }
       setLista((prev) =>
-        prev.map((s) => (s.id === formAbierto ? { ...s, nombre: nombre.trim(), tipo, precio: Number(precio), ivu_exento: ivuExento } : s))
+        prev.map((s) =>
+          s.id === formAbierto
+            ? { ...s, nombre: nombre.trim(), descripcion: descripcion.trim() || null, tipo, precio: Number(precio), ivu_exento: ivuExento }
+            : s
+        )
       );
       setFormAbierto(null);
     }
@@ -740,6 +753,12 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
           </p>
           {error && <p className="text-xs text-red">{error}</p>}
           <input className="vc-input" placeholder="Nombre del servicio" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+          <input
+            className="vc-input"
+            placeholder="Descripción (opcional)"
+            value={descripcion}
+            onChange={(e) => setDescripcion(e.target.value)}
+          />
           <div className="flex gap-2">
             <select className="vc-input flex-1" value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)}>
               {TIPOS_SERVICIO.map((t) => (
@@ -794,6 +813,7 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
               </div>
               <button className="min-w-0 flex-1 text-left" onClick={() => abrirEditar(s)}>
                 <p className="truncate">{s.nombre}</p>
+                {s.descripcion && <p className="truncate text-xs text-muted">{s.descripcion}</p>}
                 <p className="truncate text-xs text-muted">
                   {labelTipo(s.tipo)} · {s.ivu_exento ? "No aplica IVU" : "Aplica IVU"}
                 </p>

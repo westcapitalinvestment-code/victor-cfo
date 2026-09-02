@@ -44,7 +44,7 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
   // servicios; 1 sept 2026, pedido de Joel).
   const { data: items } = await supabase
     .from("invoice_items")
-    .select("id, descripcion, precio_unitario, cantidad, service_id")
+    .select("id, descripcion, detalle, precio_unitario, cantidad, service_id")
     .eq("invoice_id", params.id)
     .order("created_at", { ascending: true });
 
@@ -62,7 +62,7 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
 
   const { data: servicios } = await supabase
     .from("services")
-    .select("id, nombre, tipo, precio, ivu_exento")
+    .select("id, nombre, descripcion, tipo, precio, ivu_exento")
     .eq("owner_id", user.id)
     .eq("activo", true)
     .order("nombre", { ascending: true });

@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data: items } = await supabase
     .from("invoice_items")
-    .select("descripcion, cantidad, precio_unitario, subtotal_linea")
+    .select("descripcion, detalle, cantidad, precio_unitario, subtotal_linea")
     .eq("invoice_id", params.id)
     .order("created_at", { ascending: true });
 
@@ -257,7 +257,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     texto(formatMoney(Number(it.precio_unitario)), colPrecio, y, { size: 10 });
     texto(String(it.cantidad), colCant, y, { size: 10 });
     textoDerecha(formatMoney(subtotalLinea), colSubtotal - 5, y, { size: 10 });
-    y -= 18;
+    // Descripción corta debajo del nombre, en gris — calcado de FreshBooks
+    // (Invoice 0001540.pdf, ej. "AHA" / "Annual evaluation"), pedido de
+    // Joel el 1 sept 2026. Cada renglón crece si tiene descripción.
+    if (it.detalle) {
+      texto(String(it.detalle).slice(0, 60), colDesc + 5, y - 11, { size: 8, color: gris });
+      y -= 29;
+    } else {
+      y -= 18;
+    }
     page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: width - margin, y: y + 6 }, thickness: 0.5, color: lineaGris });
   }
 

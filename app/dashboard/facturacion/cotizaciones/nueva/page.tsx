@@ -59,7 +59,7 @@ export default async function NuevaCotizacionPage() {
 
   const { data: servicios } = await supabase
     .from("services")
-    .select("id, nombre, tipo, precio, ivu_exento")
+    .select("id, nombre, descripcion, tipo, precio, ivu_exento")
     .eq("owner_id", user.id)
     .eq("activo", true)
     .order("nombre", { ascending: true });

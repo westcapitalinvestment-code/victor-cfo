@@ -39,7 +39,7 @@ export default async function EditarCotizacionPage({ params }: { params: { id: s
 
   const { data: items } = await supabase
     .from("cotizacion_items")
-    .select("id, descripcion, cantidad, precio_unitario, service_id")
+    .select("id, descripcion, detalle, cantidad, precio_unitario, service_id")
     .eq("cotizacion_id", params.id)
     .order("created_at", { ascending: true });
 
@@ -57,7 +57,7 @@ export default async function EditarCotizacionPage({ params }: { params: { id: s
 
   const { data: servicios } = await supabase
     .from("services")
-    .select("id, nombre, tipo, precio, ivu_exento")
+    .select("id, nombre, descripcion, tipo, precio, ivu_exento")
     .eq("owner_id", user.id)
     .eq("activo", true)
     .order("nombre", { ascending: true });

@@ -27,7 +27,7 @@ export default async function FacturaDetallePage({ params }: { params: { id: str
 
   const { data: items } = await supabase
     .from("invoice_items")
-    .select("id, descripcion, cantidad, precio_unitario, subtotal_linea")
+    .select("id, descripcion, detalle, cantidad, precio_unitario, subtotal_linea")
     .eq("invoice_id", params.id)
     .order("created_at", { ascending: true });
 

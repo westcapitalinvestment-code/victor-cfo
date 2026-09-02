@@ -30,11 +30,12 @@ type Client = {
   ivu_exempt_reseller: boolean;
   telefono: string | null;
 };
-type ServicioCat = { id: string; nombre: string; tipo: string; precio: number; ivu_exento: boolean };
+type ServicioCat = { id: string; nombre: string; descripcion: string | null; tipo: string; precio: number; ivu_exento: boolean };
 
 // Varias líneas por factura (1 sept 2026) — mismo modelo que
-// nueva-factura-form.tsx y que Cotización.
-type Linea = { descripcion: string; cantidad: string; precioUnitario: string; servicioId: string | null };
+// nueva-factura-form.tsx y que Cotización. detalle: descripción corta
+// debajo del nombre, calcado de FreshBooks (Invoice 0001540.pdf).
+type Linea = { descripcion: string; detalle: string; cantidad: string; precioUnitario: string; servicioId: string | null };
 
 function sumaLinea(l: Linea): number {
   const cant = Number(l.cantidad) || 0;
@@ -73,7 +74,14 @@ export default function EditarFacturaForm({
   servicios,
 }: {
   factura: Factura;
-  itemsIniciales: { id: string; descripcion: string; precio_unitario: number; cantidad: number; service_id: string | null }[];
+  itemsIniciales: {
+    id: string;
+    descripcion: string;
+    detalle: string | null;
+    precio_unitario: number;
+    cantidad: number;
+    service_id: string | null;
+  }[];
   entities: Entity[];
   clients: Client[];
   servicios: ServicioCat[];
@@ -121,11 +129,12 @@ export default function EditarFacturaForm({
     itemsIniciales.length > 0
       ? itemsIniciales.map((it) => ({
           descripcion: it.descripcion,
+          detalle: it.detalle ?? "",
           cantidad: String(it.cantidad || 1),
           precioUnitario: String(it.precio_unitario),
           servicioId: it.service_id,
         }))
-      : [{ descripcion: "", cantidad: "1", precioUnitario: "", servicioId: null }]
+      : [{ descripcion: "", detalle: "", cantidad: "1", precioUnitario: "", servicioId: null }]
   );
 
   function actualizarLinea(i: number, campo: keyof Linea, valor: string) {
@@ -138,7 +147,7 @@ export default function EditarFacturaForm({
     );
   }
   function agregarLinea() {
-    setLineas((prev) => [...prev, { descripcion: "", cantidad: "1", precioUnitario: "", servicioId: null }]);
+    setLineas((prev) => [...prev, { descripcion: "", detalle: "", cantidad: "1", precioUnitario: "", servicioId: null }]);
   }
   function quitarLinea(i: number) {
     setLineas((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
@@ -148,13 +157,14 @@ export default function EditarFacturaForm({
     if (!s) return;
     setLineas((prev) => {
       const vacias = prev.filter((l) => !l.descripcion.trim());
-      const nueva = { descripcion: s.nombre, cantidad: "1", precioUnitario: String(s.precio), servicioId: s.id };
+      const nueva = { descripcion: s.nombre, detalle: s.descripcion ?? "", cantidad: "1", precioUnitario: String(s.precio), servicioId: s.id };
       return vacias.length === prev.length ? [nueva] : [...prev.filter((l) => l.descripcion.trim()), nueva];
     });
   }
 
   const [mostrarNuevoServicio, setMostrarNuevoServicio] = useState(false);
   const [nuevoServicioNombre, setNuevoServicioNombre] = useState("");
+  const [nuevoServicioDescripcion, setNuevoServicioDescripcion] = useState("");
   const [nuevoServicioTipo, setNuevoServicioTipo] = useState<"fijo" | "hora" | "proyecto" | "recurrente">("fijo");
   const [nuevoServicioPrecio, setNuevoServicioPrecio] = useState("");
   const [nuevoServicioIvuExento, setNuevoServicioIvuExento] = useState(false);
@@ -180,11 +190,12 @@ export default function EditarFacturaForm({
         owner_id: user.id,
         entity_id: entidad?.id ?? null,
         nombre: nuevoServicioNombre.trim(),
+        descripcion: nuevoServicioDescripcion.trim() || null,
         tipo: nuevoServicioTipo,
         precio: Number(nuevoServicioPrecio),
         ivu_exento: nuevoServicioIvuExento,
       })
-      .select("id, nombre, tipo, precio, ivu_exento")
+      .select("id, nombre, descripcion, tipo, precio, ivu_exento")
       .single();
 
     setGuardandoServicio(false);
@@ -198,6 +209,7 @@ export default function EditarFacturaForm({
     setListaServicios(catalogoActualizado);
     agregarDesdeServicio(nuevo.id, catalogoActualizado);
     setNuevoServicioNombre("");
+    setNuevoServicioDescripcion("");
     setNuevoServicioPrecio("");
     setNuevoServicioIvuExento(false);
     setMostrarNuevoServicio(false);
@@ -323,6 +335,7 @@ export default function EditarFacturaForm({
         invoice_id: factura.id,
         service_id: l.servicioId,
         descripcion: l.descripcion,
+        detalle: l.detalle.trim() || null,
         cantidad: Number(l.cantidad) || 1,
         precio_unitario: Number(l.precioUnitario) || 0,
         subtotal_linea: sumaLinea(l),
@@ -455,6 +468,12 @@ export default function EditarFacturaForm({
               value={nuevoServicioNombre}
               onChange={(e) => setNuevoServicioNombre(e.target.value)}
             />
+            <input
+              className="vc-input"
+              placeholder="Descripción (opcional)"
+              value={nuevoServicioDescripcion}
+              onChange={(e) => setNuevoServicioDescripcion(e.target.value)}
+            />
             <div className="flex gap-2">
               <select
                 className="vc-input flex-1"
@@ -494,17 +513,26 @@ export default function EditarFacturaForm({
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Servicios de esta factura</label>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {lineas.map((l, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="flex items-start gap-2">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <input
+                    className="vc-input"
+                    placeholder="Nombre del servicio"
+                    value={l.descripcion}
+                    onChange={(e) => actualizarLinea(i, "descripcion", e.target.value)}
+                  />
+                  <input
+                    className="vc-input"
+                    style={{ fontSize: 12 }}
+                    placeholder="Descripción (opcional)"
+                    value={l.detalle}
+                    onChange={(e) => actualizarLinea(i, "detalle", e.target.value)}
+                  />
+                </div>
                 <input
-                  className="vc-input flex-1"
-                  placeholder="Descripción del servicio"
-                  value={l.descripcion}
-                  onChange={(e) => actualizarLinea(i, "descripcion", e.target.value)}
-                />
-                <input
-                  className="vc-input w-16"
+                  className="vc-input w-16 flex-shrink-0"
                   type="number"
                   min="0"
                   step="1"
@@ -513,7 +541,7 @@ export default function EditarFacturaForm({
                   onChange={(e) => actualizarLinea(i, "cantidad", e.target.value)}
                 />
                 <input
-                  className="vc-input w-24"
+                  className="vc-input w-24 flex-shrink-0"
                   type="number"
                   min="0"
                   step="0.01"
@@ -524,7 +552,7 @@ export default function EditarFacturaForm({
                 <button
                   type="button"
                   onClick={() => quitarLinea(i)}
-                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg"
+                  className="mt-1.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg"
                   title="Quitar línea"
                 >
                   <i className="ti ti-trash" style={{ fontSize: 14 }} />

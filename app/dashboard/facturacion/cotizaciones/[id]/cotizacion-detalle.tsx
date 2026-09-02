@@ -9,9 +9,11 @@ import { formatMoney, formatFecha } from "@/lib/format";
 type Item = {
   id: string;
   descripcion: string;
+  detalle: string | null;
   cantidad: number;
   precio_unitario: number;
   subtotal_linea: number | null;
+  service_id: string | null;
 };
 
 type Adjunto = { id: string; nombre_archivo: string };
@@ -208,7 +210,9 @@ export default function CotizacionDetalle({
     const { error: itemsError } = await supabase.from("invoice_items").insert(
       items.map((it) => ({
         invoice_id: factura.id,
+        service_id: it.service_id,
         descripcion: it.descripcion,
+        detalle: it.detalle,
         cantidad: it.cantidad,
         precio_unitario: it.precio_unitario,
         subtotal_linea: it.subtotal_linea ?? it.cantidad * it.precio_unitario,
@@ -293,6 +297,7 @@ export default function CotizacionDetalle({
             <div key={it.id} className="flex items-center justify-between border-b border-border p-2.5 text-sm last:border-0">
               <div>
                 <p>{it.descripcion}</p>
+                {it.detalle && <p className="text-xs text-muted">{it.detalle}</p>}
                 <p className="text-xs text-muted">
                   {it.cantidad} × {formatMoney(it.precio_unitario)}
                 </p>
