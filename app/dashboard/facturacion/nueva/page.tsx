@@ -82,12 +82,23 @@ export default async function NuevaFacturaPage() {
     .eq("activo", true)
     .order("nombre", { ascending: true });
 
+  // Técnicos activos (Equipo) — para "Asignar a técnico" opcional, pedido
+  // de Joel: el dueño pre-crea la tarea/factura y el técnico la completa
+  // en campo (añade ítems, evidencia, la manda).
+  const { data: tecnicos } = await supabase
+    .from("technicians")
+    .select("id, name, entity_id")
+    .eq("owner_id", user.id)
+    .eq("active", true)
+    .order("name", { ascending: true });
+
   return (
     <NuevaFacturaForm
       entities={entities}
       clients={clients}
       servicios={servicios ?? []}
       conteosPorEntidad={conteosPorEntidad}
+      tecnicos={tecnicos ?? []}
     />
   );
 }

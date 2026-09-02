@@ -42,6 +42,8 @@ type Client = {
 
 type ServicioCat = { id: string; nombre: string; descripcion: string | null; tipo: string; precio: number; ivu_exento: boolean };
 
+type TecnicoOpcion = { id: string; name: string; entity_id: string | null };
+
 // Varias líneas por factura (1 sept 2026, pedido de Joel — antes solo se
 // podía facturar un servicio a la vez, igual que Cotización ya permitía).
 // servicioId: referencia real al catálogo cuando la línea viene de "Añadir
@@ -89,11 +91,13 @@ export default function NuevaFacturaForm({
   clients,
   servicios,
   conteosPorEntidad,
+  tecnicos,
 }: {
   entities: Entity[];
   clients: Client[];
   servicios: ServicioCat[];
   conteosPorEntidad: Record<string, number>;
+  tecnicos: TecnicoOpcion[];
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -111,6 +115,16 @@ export default function NuevaFacturaForm({
   // no se fijaba en cambiarlo).
   const [clientId, setClientId] = useState("");
   const cliente = clientesDeEntidad.find((c) => c.id === clientId);
+
+  // "Asignar a técnico" (Equipo, 2 sept 2026, pedido de Joel): el dueño
+  // pre-crea la factura/tarea y la deja asignada — el técnico la ve en su
+  // app, añade lo que hizo (o vende algo más) y la manda. Opcional; si se
+  // deja en blanco la factura queda "de la casa" como siempre.
+  const tecnicosDeEntidad = useMemo(
+    () => tecnicos.filter((t) => !t.entity_id || t.entity_id === entityId),
+    [tecnicos, entityId]
+  );
+  const [technicianId, setTechnicianId] = useState("");
 
   // Toggle "Cliente te retiene" (1 sept 2026, pedido de Joel): si el
   // cliente ya tiene su propio % guardado (es_negocio + retention_pct) se
@@ -349,6 +363,7 @@ export default function NuevaFacturaForm({
         entity_id: entidad.id,
         client_id: cliente.id,
         servicio_id: primerServicioId,
+        technician_id: technicianId || null,
         numero: numeroPreview,
         subtotal,
         ivu_pct: ivuPct,
@@ -500,6 +515,25 @@ export default function NuevaFacturaForm({
               />
             </button>
           </div>
+        )}
+
+        {tecnicosDeEntidad.length > 0 && (
+          <Field label="Asignar a técnico (opcional)">
+            <select className="vc-input" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>
+              <option value="">Sin asignar — la manejas tú</option>
+              {tecnicosDeEntidad.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            {technicianId && (
+              <p className="mt-1 text-xs text-muted">
+                {tecnicosDeEntidad.find((t) => t.id === technicianId)?.name} va a ver esta tarea en su app y puede añadir más
+                servicios antes de mandarla.
+              </p>
+            )}
+          </Field>
         )}
 
         <button

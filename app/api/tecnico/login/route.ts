@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hashPin } from "@/lib/pin";
 import { crearSesionTecnico, COOKIE_SESION_TECNICO, MAX_AGE_SESION_TECNICO } from "@/lib/tecnico-session";
+import { contextoDesdeTechnicianId, construirRespuestaSesion } from "@/lib/tecnico-contexto";
 
 // Login del técnico — NO usa Supabase Auth (ver nota grande en migración
 // 0003). Entra con el access_token de su link (victorcfo.com/tecnico?t=...)
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
   const { data: tecnico } = await admin
     .from("technicians")
-    .select("id, name, entity_id, pin_hash, active, approval_mode, max_discount_pct")
+    .select("id, pin_hash, active")
     .eq("access_token", token)
     .maybeSingle();
 
@@ -32,20 +33,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "PIN incorrecto." }, { status: 401 });
   }
 
-  const { data: catalogo } = await admin
-    .from("technician_service_catalog")
-    .select("id, nombre, descripcion, precio")
-    .eq("entity_id", tecnico.entity_id)
-    .eq("activo", true)
-    .order("nombre", { ascending: true });
+  const ctx = await contextoDesdeTechnicianId(tecnico.id);
+  if (!ctx) return NextResponse.json({ error: "No se pudo cargar tu cuenta — contacta al dueño del negocio." }, { status: 500 });
 
-  const res = NextResponse.json({
-    ok: true,
-    tecnico: { id: tecnico.id, name: tecnico.name },
-    catalogo: catalogo ?? [],
-    approvalMode: tecnico.approval_mode,
-    maxDescuentoPct: Number(tecnico.max_discount_pct ?? 0),
-  });
+  const res = NextResponse.json(await construirRespuestaSesion(ctx));
 
   res.cookies.set(COOKIE_SESION_TECNICO, crearSesionTecnico(tecnico.id), {
     httpOnly: true,

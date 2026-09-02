@@ -5,14 +5,13 @@ import ProPaywall from "../pro-paywall";
 import EquipoPortal from "./equipo-portal";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 
-// Portal de Equipo (2 sept 2026) — reemplaza el placeholder "en
-// construcción". Primera parte construida: Técnicos (el flujo "técnico
-// visita cliente → cobra el servicio → queda registrado"), usando las
-// tablas que ya existían desde la migración 0003 pero nunca tuvieron UI:
-// technicians, technician_service_catalog, technician_visits,
-// technician_visit_items. La otra mitad de Equipo (invitar miembros
-// admin/secretaria vía account_members) queda para después — Joel pidió
-// empezar por técnicos.
+// Portal de Equipo v2 (2 sept 2026) — reescrito sobre el mockup real de
+// Joel: el técnico crea FACTURAS de verdad (tabla invoices), no un
+// registro aparte. Este archivo trae todo lo que necesita el portal:
+// técnicos, la config de Equipo de la entidad (aprobación/permisos
+// default), los contratistas de Pagos (para el vínculo "¿también le
+// pagas?"), y las facturas con technician_id de esta entidad (para el
+// Panel del día y Reportes).
 export default async function EquipoPage() {
   const supabase = createClient();
   const {
@@ -26,7 +25,9 @@ export default async function EquipoPage() {
 
   const { data: entities } = await supabase
     .from("business_entities")
-    .select("id, name")
+    .select(
+      "id, name, equipo_aprobacion_default, equipo_tecnico_ve_precios, equipo_tecnico_cobra_vencidas, equipo_tecnico_anade_clientes, equipo_tecnico_aplica_descuento, equipo_tecnico_descuento_max_pct"
+    )
     .eq("owner_id", user.id)
     .eq("active", true);
 
@@ -45,44 +46,55 @@ export default async function EquipoPage() {
 
   const { entidadId: entidadActivaId, vistaGlobal } = resolverEntidadActiva(entities, leerEntidadActivaCookie());
   const entidadActiva = entities.find((e) => e.id === entidadActivaId) ?? entities[0];
-  const entidadId = vistaGlobal ? null : entidadActiva?.id ?? entities[0].id;
 
-  // A diferencia de Facturación/Pagos, Equipo (técnicos) NO tiene una vista
-  // global útil entre entidades — un técnico y su catálogo de servicios
-  // pertenecen a UNA entidad específica (así lo asume el schema:
-  // technician_service_catalog.entity_id es NOT NULL). Si el selector del
-  // topbar está en "Todas", forzamos la primera entidad activa en vez de
-  // mostrar una pantalla vacía o mezclada.
-  const entidadIdEfectiva = entidadId ?? entities[0].id;
+  // Equipo (igual que antes) no tiene vista global entre entidades — un
+  // técnico y sus facturas viven en UNA entidad. Si el topbar está en
+  // "Todas", se fuerza la primera.
+  const entidadIdEfectiva = vistaGlobal ? entities[0].id : entidadActiva?.id ?? entities[0].id;
   const entidadEfectiva = entities.find((e) => e.id === entidadIdEfectiva) ?? entities[0];
 
-  const [{ data: tecnicos }, { data: catalogo }, { data: visitas }] = await Promise.all([
+  const [{ data: tecnicos }, { data: vendors }, { data: facturas }] = await Promise.all([
     supabase
       .from("technicians")
-      .select("id, name, phone, access_token, approval_mode, max_discount_pct, active, entity_id")
+      .select("id, name, phone, access_token, approval_mode, max_discount_pct, active, entity_id, vendor_id")
       .eq("owner_id", user.id)
       .eq("entity_id", entidadIdEfectiva)
       .order("created_at", { ascending: false }),
     supabase
-      .from("technician_service_catalog")
-      .select("id, nombre, descripcion, precio, activo, entity_id")
+      .from("vendors")
+      .select("id, name, active")
+      .eq("owner_id", user.id)
       .eq("entity_id", entidadIdEfectiva)
-      .order("nombre", { ascending: true }),
+      .eq("active", true)
+      .order("name", { ascending: true }),
     supabase
-      .from("technician_visits")
-      .select("id, technician_id, client_name_raw, estado, total, metodo_cobro, monto_cobrado, cobrado_at, requiere_aprobacion, created_at, entity_id")
+      .from("invoices")
+      .select(
+        "id, numero, technician_id, client_id, clients(name), estado, total, pendiente_revision_tecnico, fecha_emision, fecha_pago, metodo_pago, created_at"
+      )
       .eq("entity_id", entidadIdEfectiva)
+      .not("technician_id", "is", null)
       .order("created_at", { ascending: false })
-      .limit(100),
+      .limit(300),
   ]);
+
+  // Ítems de esas facturas (para el desglose "por servicio" en Reportes) —
+  // en una segunda consulta porque depende de los ids que salieron arriba.
+  const facturaIds = (facturas ?? []).map((f) => f.id);
+  const { data: items } = facturaIds.length
+    ? await supabase
+        .from("invoice_items")
+        .select("invoice_id, descripcion, cantidad, subtotal_linea, service_id, services(nombre)")
+        .in("invoice_id", facturaIds)
+    : { data: [] as any[] };
 
   return (
     <EquipoPortal
       tecnicos={tecnicos ?? []}
-      catalogo={catalogo ?? []}
-      visitas={visitas ?? []}
-      entidadId={entidadIdEfectiva}
-      entidadNombre={entidadEfectiva.name}
+      vendors={vendors ?? []}
+      facturas={(facturas ?? []) as any}
+      items={(items ?? []) as any}
+      entidad={entidadEfectiva}
       vistaGlobalActiva={vistaGlobal}
       cantidadEntidades={entities.length}
     />

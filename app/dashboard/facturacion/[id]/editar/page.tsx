@@ -18,7 +18,7 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
   const { data: factura } = await supabase
     .from("invoices")
     .select(
-      "id, entity_id, client_id, servicio_id, numero, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, retencion_pct, late_fee_habilitado, late_fee_tipo, late_fee_monto, late_fee_dias_gracia, es_recurrente, frecuencia_recurrente"
+      "id, entity_id, client_id, servicio_id, technician_id, numero, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, retencion_pct, late_fee_habilitado, late_fee_tipo, late_fee_monto, late_fee_dias_gracia, es_recurrente, frecuencia_recurrente"
     )
     .eq("id", params.id)
     .eq("owner_id", user.id)
@@ -67,6 +67,13 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
     .eq("activo", true)
     .order("nombre", { ascending: true });
 
+  const { data: tecnicos } = await supabase
+    .from("technicians")
+    .select("id, name, entity_id")
+    .eq("owner_id", user.id)
+    .eq("active", true)
+    .order("name", { ascending: true });
+
   return (
     <EditarFacturaForm
       factura={factura}
@@ -74,6 +81,7 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
       entities={entities ?? []}
       clients={clients ?? []}
       servicios={servicios ?? []}
+      tecnicos={tecnicos ?? []}
     />
   );
 }

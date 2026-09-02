@@ -32,6 +32,8 @@ type Client = {
 };
 type ServicioCat = { id: string; nombre: string; descripcion: string | null; tipo: string; precio: number; ivu_exento: boolean };
 
+type TecnicoOpcion = { id: string; name: string; entity_id: string | null };
+
 // Varias líneas por factura (1 sept 2026) — mismo modelo que
 // nueva-factura-form.tsx y que Cotización. detalle: descripción corta
 // debajo del nombre, calcado de FreshBooks (Invoice 0001540.pdf).
@@ -47,6 +49,7 @@ type Factura = {
   id: string;
   entity_id: string | null;
   client_id: string | null;
+  technician_id: string | null;
   numero: string;
   estado: string;
   fecha_emision: string;
@@ -72,6 +75,7 @@ export default function EditarFacturaForm({
   entities,
   clients,
   servicios,
+  tecnicos,
 }: {
   factura: Factura;
   itemsIniciales: {
@@ -85,6 +89,7 @@ export default function EditarFacturaForm({
   entities: Entity[];
   clients: Client[];
   servicios: ServicioCat[];
+  tecnicos: TecnicoOpcion[];
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -98,6 +103,13 @@ export default function EditarFacturaForm({
   );
   const [clientId, setClientId] = useState(factura.client_id ?? clientesDeEntidad[0]?.id ?? "");
   const cliente = clientesDeEntidad.find((c) => c.id === clientId) ?? clientesDeEntidad[0];
+
+  // "Asignar a técnico" (Equipo, 2 sept 2026) — igual que en Nueva Factura.
+  const tecnicosDeEntidad = useMemo(
+    () => tecnicos.filter((t) => !t.entity_id || t.entity_id === entityId),
+    [tecnicos, entityId]
+  );
+  const [technicianId, setTechnicianId] = useState(factura.technician_id ?? "");
 
   // Toggle "Cliente te retiene" (1 sept 2026) — arranca con lo que ya tenía
   // guardado ESTA factura (no lo que el cliente tenga hoy, que pudo haber
@@ -308,6 +320,7 @@ export default function EditarFacturaForm({
         entity_id: entidad.id,
         client_id: cliente.id,
         servicio_id: primerServicioId,
+        technician_id: technicianId || null,
         subtotal,
         ivu_pct: ivuPct,
         ivu_monto: ivuMonto,
@@ -450,6 +463,19 @@ export default function EditarFacturaForm({
               />
             </button>
           </div>
+        )}
+
+        {tecnicosDeEntidad.length > 0 && (
+          <Field label="Asignar a técnico (opcional)">
+            <select className="vc-input" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>
+              <option value="">Sin asignar — la manejas tú</option>
+              {tecnicosDeEntidad.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </Field>
         )}
 
         <button
