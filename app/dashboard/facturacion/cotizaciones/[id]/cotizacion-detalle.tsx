@@ -27,6 +27,7 @@ type Cotizacion = {
   total: number;
   deposito_monto: number | null;
   estado: string;
+  pendiente_revision_tecnico: boolean;
   fecha_emision: string;
   fecha_vencimiento: string | null;
   notas: string | null;
@@ -149,6 +150,40 @@ export default function CotizacionDetalle({
     const destino = cotizacion.clients?.telefono ? telefonoWhatsapp(cotizacion.clients.telefono) : "";
     const url = `https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`;
     window.open(url, "_blank");
+  }
+
+  // Aprobar/rechazar una cotización que el TÉCNICO armó desde cero, desde
+  // el detalle mismo (2 sept 2026) — atajo equivalente al que ya existe en
+  // el Panel de Equipo, para cuando entras directo desde el link.
+  async function aprobarDeTecnico() {
+    setLoading(true);
+    setError(null);
+    const { error: updateError } = await supabase
+      .from("cotizaciones")
+      .update({ estado: "enviada", pendiente_revision_tecnico: false })
+      .eq("id", cotizacion.id);
+    setLoading(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function rechazarDeTecnico() {
+    if (!window.confirm(`¿Rechazar esta cotización de ${cotizacion.technicians?.name ?? "el técnico"}? No se le va a mandar al cliente.`)) return;
+    setLoading(true);
+    setError(null);
+    const { error: updateError } = await supabase
+      .from("cotizaciones")
+      .update({ estado: "rechazada", pendiente_revision_tecnico: false })
+      .eq("id", cotizacion.id);
+    setLoading(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    router.refresh();
   }
 
   async function actualizarEstado(nuevoEstado: string) {
@@ -332,12 +367,35 @@ export default function CotizacionDetalle({
           {cotizacion.fecha_vencimiento && <span>Válida hasta: {formatFecha(cotizacion.fecha_vencimiento)}</span>}
         </div>
 
-        {cotizacion.technicians && cotizacion.estado !== "convertida" && (
-          <div className="rounded-lg border border-teal/30 bg-teal/[.05] p-2.5 text-xs">
-            <i className="ti ti-user-check text-teal" style={{ marginRight: 4 }} />
-            Asignada a <strong>{cotizacion.technicians.name}</strong>
-            {cotizacion.estado === "aprobada" && " — la puede convertir él mismo en factura desde su app cuando la haga."}
+        {cotizacion.pendiente_revision_tecnico ? (
+          <div className="rounded-lg border p-2.5 text-xs" style={{ borderColor: "#F5A623", background: "rgba(245,166,35,.06)" }}>
+            <p className="mb-2">
+              <i className="ti ti-clock-hour-4 text-amb" style={{ marginRight: 4 }} />
+              <strong>{cotizacion.technicians?.name ?? "El técnico"}</strong> cotizó esto en campo — pendiente de que la
+              apruebes antes de que le llegue al cliente.
+            </p>
+            <div className="flex gap-2">
+              <button className="vc-btn-primary flex-1" style={{ width: "auto" }} disabled={loading} onClick={aprobarDeTecnico}>
+                {loading ? "..." : "Aprobar y enviar"}
+              </button>
+              <button
+                className="flex-shrink-0 rounded-lg border border-red/40 px-3 py-2 text-xs font-medium text-red"
+                disabled={loading}
+                onClick={rechazarDeTecnico}
+              >
+                Rechazar
+              </button>
+            </div>
           </div>
+        ) : (
+          cotizacion.technicians &&
+          cotizacion.estado !== "convertida" && (
+            <div className="rounded-lg border border-teal/30 bg-teal/[.05] p-2.5 text-xs">
+              <i className="ti ti-user-check text-teal" style={{ marginRight: 4 }} />
+              Asignada a <strong>{cotizacion.technicians.name}</strong>
+              {cotizacion.estado === "aprobada" && " — la puede convertir él mismo en factura desde su app cuando la haga."}
+            </div>
+          )
         )}
 
         <div className="rounded-lg border border-border">
