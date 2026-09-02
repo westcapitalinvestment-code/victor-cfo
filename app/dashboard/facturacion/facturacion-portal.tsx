@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -1035,6 +1035,94 @@ function BarraProgreso({ pct, color }: { pct: number; color: string }) {
   );
 }
 
+// Combobox con búsqueda + fila fija "Todos" arriba (2 sept 2026, pedido de
+// Joel: con muchos clientes/servicios un <select> nativo se vuelve
+// incómodo — calca el patrón SelectorBuscable ya usado en Nueva Factura,
+// pero como aquí el filtro también tiene un valor "vacío" = todos, esa
+// opción se deja fija arriba del resultado de la búsqueda en vez de ser
+// solo el primer <option>).
+function ComboBuscable<T extends { id: string }>({
+  items,
+  valorId,
+  onSeleccionar,
+  etiqueta,
+  etiquetaTodos,
+  placeholder,
+}: {
+  items: T[];
+  valorId: string;
+  onSeleccionar: (id: string) => void;
+  etiqueta: (item: T) => string;
+  etiquetaTodos: string;
+  placeholder: string;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const seleccionado = items.find((i) => i.id === valorId);
+
+  useEffect(() => {
+    function alHacerClicFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setAbierto(false);
+        setBusqueda("");
+      }
+    }
+    document.addEventListener("mousedown", alHacerClicFuera);
+    return () => document.removeEventListener("mousedown", alHacerClicFuera);
+  }, []);
+
+  const filtrados = busqueda.trim()
+    ? items.filter((i) => etiqueta(i).toLowerCase().includes(busqueda.trim().toLowerCase()))
+    : items;
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        className="vc-input"
+        style={{ fontSize: 12 }}
+        placeholder={placeholder}
+        value={abierto ? busqueda : seleccionado ? etiqueta(seleccionado) : etiquetaTodos}
+        onFocus={() => {
+          setAbierto(true);
+          setBusqueda("");
+        }}
+        onChange={(e) => setBusqueda(e.target.value)}
+      />
+      {abierto && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+          <button
+            type="button"
+            className="block w-full border-b border-border px-3 py-2 text-left text-sm font-medium text-teal hover:bg-bg"
+            onClick={() => {
+              onSeleccionar("");
+              setAbierto(false);
+              setBusqueda("");
+            }}
+          >
+            {etiquetaTodos}
+          </button>
+          {filtrados.length === 0 && <p className="p-3 text-xs text-muted">Sin resultados.</p>}
+          {filtrados.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-bg"
+              onClick={() => {
+                onSeleccionar(item.id);
+                setAbierto(false);
+                setBusqueda("");
+              }}
+            >
+              {etiqueta(item)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type ItemFacturado = {
   facturaId: string;
   descripcion: string;
@@ -1323,24 +1411,24 @@ function ReportesTab({
         <p className="mb-2.5 text-xs uppercase tracking-wide text-muted">Filtrar por</p>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Cliente">
-            <select className="vc-input" style={{ fontSize: 12 }} value={draftCliente} onChange={(e) => setDraftCliente(e.target.value)}>
-              <option value="">Todos los clientes</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <ComboBuscable
+              items={clients}
+              valorId={draftCliente}
+              onSeleccionar={setDraftCliente}
+              etiqueta={(c) => c.name}
+              etiquetaTodos="Todos los clientes"
+              placeholder="Buscar cliente..."
+            />
           </Field>
           <Field label="Servicio">
-            <select className="vc-input" style={{ fontSize: 12 }} value={draftServicio} onChange={(e) => setDraftServicio(e.target.value)}>
-              <option value="">Todos los servicios</option>
-              {servicios.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nombre}
-                </option>
-              ))}
-            </select>
+            <ComboBuscable
+              items={servicios}
+              valorId={draftServicio}
+              onSeleccionar={setDraftServicio}
+              etiqueta={(s) => s.nombre}
+              etiquetaTodos="Todos los servicios"
+              placeholder="Buscar servicio..."
+            />
           </Field>
           <Field label="Categoría">
             <select className="vc-input" style={{ fontSize: 12 }} value={draftCategoria} onChange={(e) => setDraftCategoria(e.target.value)}>

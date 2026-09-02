@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
@@ -20,6 +20,69 @@ type Transaccion = {
 type Categoria = { id: number; nombre: string };
 
 type CambioTransaccion = { descripcionAnterior: string | null; montoAnterior: number | null; fecha: string };
+
+// Combobox con búsqueda (2 sept 2026, pedido de Joel: con muchas categorías
+// el <select> nativo se vuelve incómodo — el usuario escribe y ve la lista
+// filtrarse, calcado del mismo patrón que ya se usa para elegir cliente en
+// Nueva Factura). Vive a nivel de módulo (no adentro de GastosList) para
+// que React no lo desmonte/remonte en cada render del padre — si estuviera
+// anidado, cada vez que cambia "guardando" o "errorPorFila" se perdería el
+// texto que el usuario ya había escrito en la búsqueda.
+function CategoriaComboBox({
+  categorias,
+  disabled,
+  onSeleccionar,
+  onCerrar,
+}: {
+  categorias: Categoria[];
+  disabled?: boolean;
+  onSeleccionar: (id: number) => void;
+  onCerrar: () => void;
+}) {
+  const [busqueda, setBusqueda] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function alHacerClicFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onCerrar();
+      }
+    }
+    document.addEventListener("mousedown", alHacerClicFuera);
+    return () => document.removeEventListener("mousedown", alHacerClicFuera);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filtradas = busqueda.trim()
+    ? categorias.filter((c) => c.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()))
+    : categorias;
+
+  return (
+    <div className="relative mt-1" ref={ref}>
+      <input
+        autoFocus
+        className="vc-input !py-1 !text-xs"
+        placeholder="Buscar categoría..."
+        disabled={disabled}
+        value={busqueda}
+        onChange={(e) => setBusqueda(e.target.value)}
+      />
+      <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+        {filtradas.length === 0 && <p className="p-2 text-xs text-muted">Sin resultados.</p>}
+        {filtradas.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className="block w-full px-2.5 py-1.5 text-left text-xs hover:bg-bg"
+            onClick={() => onSeleccionar(c.id)}
+          >
+            {c.nombre}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function GastosList({
   transaccionesIniciales,
@@ -87,23 +150,12 @@ export default function GastosList({
             <p className="truncate">{t.description_raw}</p>
             {editando === t.id ? (
               <>
-                <select
-                  autoFocus
-                  className="vc-input mt-1 !py-1 !text-xs"
-                  defaultValue={t.hacienda_category_id ?? ""}
+                <CategoriaComboBox
+                  categorias={categorias}
                   disabled={guardando === t.id}
-                  onChange={(e) => guardarCategoria(t.id, Number(e.target.value))}
-                  onBlur={() => setEditando(null)}
-                >
-                  <option value="" disabled>
-                    Elige categoría...
-                  </option>
-                  {categorias.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
+                  onSeleccionar={(id) => guardarCategoria(t.id, id)}
+                  onCerrar={() => setEditando(null)}
+                />
                 {errorPorFila[t.id] && <p className="mt-1 text-xs text-amb">⚠ {errorPorFila[t.id]}</p>}
               </>
             ) : errorPorFila[t.id] ? (
