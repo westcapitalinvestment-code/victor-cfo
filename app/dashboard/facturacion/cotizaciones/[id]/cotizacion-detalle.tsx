@@ -91,6 +91,8 @@ export default function CotizacionDetalle({
   const [adjuntos, setAdjuntos] = useState(adjuntosIniciales);
   const [subiendo, setSubiendo] = useState(false);
   const [borrandoId, setBorrandoId] = useState<string | null>(null);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
   const inputCamaraRef = useRef<HTMLInputElement>(null);
   const inputArchivoRef = useRef<HTMLInputElement>(null);
 
@@ -252,6 +254,30 @@ export default function CotizacionDetalle({
     }
 
     router.push(`/dashboard/facturacion/${factura.id}`);
+    router.refresh();
+  }
+
+  // Eliminar cotización (2 sept 2026, pedido de Joel: "estoy en modo de
+  // prueba e hice algo y no puedo borrarlo") — bloqueado si ya se convirtió
+  // en factura (tiene invoice_id), porque esa factura real ya vive
+  // independiente y borrar la cotización dejaría la nota "Convertida de
+  // cotización X" apuntando a un registro que ya no existe. En ese caso hay
+  // que borrar la factura, no la cotización.
+  async function eliminarCotizacion() {
+    if (cotizacion.invoice_id) return;
+    if (!confirmarEliminar) {
+      setConfirmarEliminar(true);
+      return;
+    }
+    setEliminando(true);
+    setError(null);
+    const { error: deleteError } = await supabase.from("cotizaciones").delete().eq("id", cotizacion.id);
+    setEliminando(false);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+    router.push("/dashboard/facturacion?tab=cotizaciones");
     router.refresh();
   }
 
@@ -450,6 +476,19 @@ export default function CotizacionDetalle({
             </span>
           )}
         </div>
+
+        {!cotizacion.invoice_id && (
+          <button
+            onClick={eliminarCotizacion}
+            disabled={eliminando}
+            title="Eliminar"
+            className={`flex items-center justify-center gap-1 rounded-lg border py-2 text-xs font-medium hover:opacity-80 ${
+              confirmarEliminar ? "border-red bg-red/[.06] text-red" : "border-border text-muted"
+            }`}
+          >
+            <i className="ti ti-trash text-base" /> {eliminando ? "..." : confirmarEliminar ? "¿Seguro? Confirmar eliminar" : "Eliminar cotización"}
+          </button>
+        )}
 
         {cotizacion.estado === "enviada" && (
           <div className="flex gap-2 border-t border-border pt-3">

@@ -640,9 +640,22 @@ function PantallaFactura({ facturaId, sesion, onVolver }: { facturaId: string; s
   }
 
   async function anadirItem() {
-    if (!descripcion.trim() || Number(precioUnitario) < 0) return;
-    setGuardandoItem(true);
+    // Antes esto salía en silencio sin decir nada si faltaba la descripción
+    // o el precio era inválido (2 sept 2026, bug reportado por Joel: "hice
+    // una factura como técnico y no me dejaba guardarla, solo se creó en
+    // $0" — pasaba porque el ítem nunca se añadía y el botón de abajo sigue
+    // deshabilitado mientras items.length === 0, sin que el técnico
+    // entendiera por qué). Ahora avisa qué falta.
+    if (!descripcion.trim()) {
+      setError("Escribe una descripción para el ítem antes de añadirlo.");
+      return;
+    }
+    if (precioUnitario.trim() === "" || Number(precioUnitario) < 0) {
+      setError("Escribe un precio (puede ser $0 si es gratis, pero no puede quedar vacío).");
+      return;
+    }
     setError(null);
+    setGuardandoItem(true);
     const res = await fetch(`/api/tecnico/facturas/${facturaId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -910,6 +923,9 @@ function PantallaFactura({ facturaId, sesion, onVolver }: { facturaId: string; s
 
       {error && <p className="mb-3 text-xs text-red">{error}</p>}
 
+      {puedeEditar && items.length === 0 && (
+        <p className="mb-2 text-xs text-muted">Añade al menos un ítem arriba para poder enviar la factura.</p>
+      )}
       {puedeEditar && (
         <button className="vc-btn-primary" disabled={finalizando || items.length === 0} onClick={finalizar}>
           {finalizando ? "Enviando..." : sesion.approvalMode === "manual" ? "Enviar para aprobación" : "Finalizar y enviar al cliente"}
