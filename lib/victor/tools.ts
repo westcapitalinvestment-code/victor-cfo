@@ -443,6 +443,129 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["nombre_cuenta"],
     },
   },
+  // ---------------------------------------------------------------------
+  // Facturación (Pro) — 1 sept 2026, pedido de Joel: "victor tiene la
+  // capacidad de que si le dicto creame un cliente o una factura con tal
+  // monto... la crea?". crear_factura NUNCA se llama directo — siempre va
+  // precedida de previsualizar_factura en el mismo hilo de la conversación,
+  // con el usuario confirmando el resumen antes de guardar de verdad (así
+  // lo pidió Joel explícitamente, para no arriesgarse a que un mal-entendido
+  // del dictado cree una factura equivocada).
+  // ---------------------------------------------------------------------
+  {
+    name: "crear_cliente",
+    description:
+      "Crea un cliente nuevo en el catálogo de Clientes de facturación (Pro) — para poder facturarle después. " +
+      "Úsala cuando el usuario diga 'créame un cliente...', 'añade un cliente nuevo...', etc. Si el usuario " +
+      "tiene más de una entidad de negocio, pregúntale para cuál es antes de llamar esta herramienta y manda " +
+      "su nombre en 'entidad_nombre' — si solo tiene una, no hace falta preguntarle, se usa esa automáticamente. " +
+      "Esta herramienta SOLO existe para facturación (Pro) — si el usuario no tiene ninguna entidad de negocio " +
+      "configurada, la herramienta te lo va a decir; explícaselo en vez de intentar de nuevo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre: { type: "string", description: "Nombre del cliente (persona o negocio)." },
+        telefono: { type: "string", description: "Teléfono del cliente, si lo dio." },
+        email: { type: "string", description: "Correo del cliente, si lo dio." },
+        direccion: { type: "string", description: "Dirección del cliente, si la dio." },
+        es_negocio: {
+          type: "boolean",
+          description: "true si el cliente es un negocio que le retiene al usuario bajo la Sección 1062.03 — si no está seguro, usa false.",
+        },
+        retencion_pct: {
+          type: "number",
+          description: "Porcentaje de retención (6 ó 10), SOLO si es_negocio es true y el usuario lo mencionó — si no lo da, se usa 0 y se puede ajustar luego desde la pantalla.",
+        },
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio a la que pertenece este cliente, SOLO si el usuario tiene más de una entidad — si tiene una sola, omite este campo.",
+        },
+      },
+      required: ["nombre"],
+    },
+  },
+  {
+    name: "previsualizar_factura",
+    description:
+      "Calcula (SIN guardar nada todavía) el desglose completo de una factura nueva — subtotal, IVU y " +
+      "retención por línea (igual que la pantalla de Nueva Factura), y el total final — para que puedas " +
+      "mostrárselo al usuario ANTES de crearla de verdad. SIEMPRE llama esta herramienta primero cuando el " +
+      "usuario pida crear una factura por chat, muéstrale el resumen que te devuelve tal cual (cliente, " +
+      "líneas, subtotal, IVU, retención si aplica, total, fecha de vencimiento — no lo resumas de más ni " +
+      "cambies los números), y espera su confirmación explícita ('sí', 'dale', 'correcto') antes de llamar " +
+      "crear_factura con exactamente los mismos datos. Si el usuario corrige algo (monto, cliente, línea), " +
+      "vuelve a llamar esta herramienta con los datos corregidos — nunca asumas que el cambio ya quedó " +
+      "guardado sin volver a previsualizar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cliente_nombre: {
+          type: "string",
+          description: "Nombre (o parte) del cliente a facturar — debe ya existir en Clientes; si no existe, créalo primero con crear_cliente.",
+        },
+        lineas: {
+          type: "array",
+          description: "Una o más líneas de la factura.",
+          items: {
+            type: "object",
+            properties: {
+              descripcion: { type: "string", description: "Nombre del servicio o producto de esta línea." },
+              cantidad: { type: "number", description: "Cantidad/unidades. Si no se menciona, usa 1." },
+              precio_unitario: { type: "number", description: "Precio por unidad de esta línea." },
+              servicio_nombre: {
+                type: "string",
+                description: "Nombre (o parte) del servicio del catálogo, SOLO si esta línea corresponde a un servicio ya guardado — así hereda su descripción y si aplica IVU. Si es un cargo libre/nuevo, omite este campo.",
+              },
+            },
+            required: ["descripcion", "precio_unitario"],
+          },
+        },
+        fecha_vencimiento: {
+          type: "string",
+          description: "Fecha de vencimiento en formato YYYY-MM-DD, si el usuario la dio — si no, se calcula sola con los términos de pago de la entidad.",
+        },
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio, SOLO si el usuario tiene más de una — si tiene una sola, omite este campo.",
+        },
+      },
+      required: ["cliente_nombre", "lineas"],
+    },
+  },
+  {
+    name: "crear_factura",
+    description:
+      "Guarda de verdad una factura nueva (como borrador, visible en /dashboard/facturacion) — con el mismo " +
+      "cálculo de subtotal, IVU y retención que ya viste con previsualizar_factura. IMPORTANTE: NUNCA llames " +
+      "esta herramienta directo — SIEMPRE llama primero previsualizar_factura con los mismos datos, muéstrale " +
+      "el resumen al usuario, y solo llama esta herramienta DESPUÉS de que el usuario confirme explícitamente " +
+      "que sí. Nunca la llames en el mismo turno donde el usuario apenas menciona por primera vez que quiere " +
+      "facturar algo. Queda guardada como borrador (no se envía sola al cliente) para que el usuario la " +
+      "revise y la mande él mismo desde la pantalla.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cliente_nombre: { type: "string", description: "Igual que en previsualizar_factura." },
+        lineas: {
+          type: "array",
+          description: "Igual que en previsualizar_factura — deben ser EXACTAMENTE las mismas líneas que confirmó el usuario.",
+          items: {
+            type: "object",
+            properties: {
+              descripcion: { type: "string" },
+              cantidad: { type: "number" },
+              precio_unitario: { type: "number" },
+              servicio_nombre: { type: "string" },
+            },
+            required: ["descripcion", "precio_unitario"],
+          },
+        },
+        fecha_vencimiento: { type: "string", description: "Igual que en previsualizar_factura." },
+        entidad_nombre: { type: "string", description: "Igual que en previsualizar_factura." },
+      },
+      required: ["cliente_nombre", "lineas"],
+    },
+  },
   {
     name: "crear_categoria_personal",
     description:
@@ -559,6 +682,267 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
 ];
 
 type ToolResult = { ok: boolean; message: string };
+
+// ---------------------------------------------------------------------
+// Facturación (Pro) — helpers compartidos por crear_cliente,
+// previsualizar_factura y crear_factura. El cálculo de calcularFactura()
+// replica EXACTAMENTE la lógica de nueva-factura-form.tsx (subtotal, IVU
+// por línea respetando la exención del servicio del catálogo, retención
+// por defecto de la entidad si el cliente no tiene su propio % guardado)
+// para que una factura creada por chat dé el mismo total que si Joel la
+// hubiera armado a mano en pantalla.
+// ---------------------------------------------------------------------
+
+type EntidadFacturacion = {
+  id: string;
+  name: string;
+  ivu_applies: boolean;
+  ivu_rate_estatal: number;
+  ivu_rate_municipal: number;
+  invoice_prefix: string;
+  invoice_start_number: number;
+  default_payment_terms: string;
+  client_retention_situation: string | null;
+};
+
+async function resolverEntidadFacturacion(
+  supabase: ReturnType<typeof createClient>,
+  ownerId: string,
+  nombrePista?: string | null
+): Promise<{ ok: true; entidad: EntidadFacturacion } | { ok: false; message: string }> {
+  const { data: entidades, error } = await supabase
+    .from("business_entities")
+    .select(
+      "id, name, ivu_applies, ivu_rate_estatal, ivu_rate_municipal, invoice_prefix, invoice_start_number, default_payment_terms, client_retention_situation"
+    )
+    .eq("owner_id", ownerId)
+    .eq("active", true);
+
+  if (error) return { ok: false, message: `No se pudo buscar la entidad de negocio: ${error.message}` };
+  if (!entidades || entidades.length === 0) {
+    return {
+      ok: false,
+      message:
+        "El usuario no tiene ninguna entidad de negocio configurada todavía — la facturación es solo para " +
+        "plan Pro con al menos una entidad creada (Entidades → Crear). Explícaselo en vez de intentar de nuevo.",
+    };
+  }
+  if (entidades.length === 1) return { ok: true, entidad: entidades[0] as EntidadFacturacion };
+
+  if (nombrePista) {
+    const match = entidades.filter((e) => e.name.toLowerCase().includes(nombrePista.toLowerCase()));
+    if (match.length === 1) return { ok: true, entidad: match[0] as EntidadFacturacion };
+  }
+  return {
+    ok: false,
+    message: `El usuario tiene varias entidades de negocio (${entidades.map((e) => e.name).join(", ")}) — pregúntale para cuál es esto, y vuelve a llamar mandando su nombre en "entidad_nombre".`,
+  };
+}
+
+type LineaFacturaInput = {
+  descripcion: string;
+  cantidad?: number;
+  precio_unitario: number;
+  servicio_nombre?: string | null;
+};
+
+type LineaFacturaCalculada = {
+  descripcion: string;
+  detalle: string | null;
+  cantidad: number;
+  precioUnitario: number;
+  servicioId: string | null;
+  subtotalLinea: number;
+  exenta: boolean;
+};
+
+type CalculoFactura = {
+  ok: true;
+  entidad: EntidadFacturacion;
+  cliente: { id: string; name: string };
+  lineas: LineaFacturaCalculada[];
+  numeroPreview: string;
+  subtotal: number;
+  ivuPct: number;
+  ivuMonto: number;
+  retencionPct: number;
+  retencionMonto: number;
+  total: number;
+  fechaEmision: string;
+  fechaVencimiento: string;
+  resumenTexto: string;
+};
+
+async function calcularFactura(
+  supabase: ReturnType<typeof createClient>,
+  ownerId: string,
+  input: {
+    cliente_nombre: string;
+    lineas: LineaFacturaInput[];
+    entidad_nombre?: string | null;
+    fecha_vencimiento?: string | null;
+  }
+): Promise<CalculoFactura | { ok: false; message: string }> {
+  const entidadResult = await resolverEntidadFacturacion(supabase, ownerId, input.entidad_nombre);
+  if (!entidadResult.ok) return entidadResult;
+  const entidad = entidadResult.entidad;
+
+  const nombreCliente = (input.cliente_nombre ?? "").trim();
+  if (!nombreCliente) return { ok: false, message: "Falta el nombre del cliente para la factura." };
+
+  // Mismo criterio que clientesDeEntidad en nueva-factura-form.tsx: un
+  // cliente sin entity_id (null) cuenta para cualquier entidad.
+  const { data: clientesMatch, error: clienteError } = await supabase
+    .from("clients")
+    .select("id, name, es_negocio, retention_pct, ivu_exempt_reseller")
+    .eq("owner_id", ownerId)
+    .eq("active", true)
+    .or(`entity_id.is.null,entity_id.eq.${entidad.id}`)
+    .ilike("name", `%${nombreCliente}%`);
+
+  if (clienteError) return { ok: false, message: `No se pudo buscar el cliente: ${clienteError.message}` };
+  if (!clientesMatch || clientesMatch.length === 0) {
+    return {
+      ok: false,
+      message: `No encontré ningún cliente activo parecido a "${nombreCliente}" en ${entidad.name}. Si es nuevo, créalo primero con crear_cliente y luego vuelve a intentar la factura.`,
+    };
+  }
+  if (clientesMatch.length > 1) {
+    return {
+      ok: false,
+      message: `Hay varios clientes parecidos a "${nombreCliente}" (${clientesMatch.map((c) => c.name).join(", ")}). Pídele al usuario que aclare cuál.`,
+    };
+  }
+  const cliente = clientesMatch[0];
+
+  const lineasRaw = Array.isArray(input.lineas) ? input.lineas : [];
+  if (lineasRaw.length === 0) {
+    return { ok: false, message: "Faltan las líneas de la factura (al menos una con descripción y precio)." };
+  }
+
+  // Catálogo por owner_id + activo, SIN filtrar por entidad — se comparte
+  // entre entidades de un mismo usuario (mismo criterio que
+  // /dashboard/facturacion/nueva/page.tsx).
+  const { data: catalogo, error: catalogoError } = await supabase
+    .from("services")
+    .select("id, nombre, descripcion, ivu_exento")
+    .eq("owner_id", ownerId)
+    .eq("activo", true);
+  if (catalogoError) return { ok: false, message: `No se pudo consultar el catálogo de servicios: ${catalogoError.message}` };
+
+  const lineas: LineaFacturaCalculada[] = [];
+  for (const l of lineasRaw) {
+    const descripcion = String(l.descripcion ?? "").trim();
+    const precioUnitario = Number(l.precio_unitario);
+    if (!descripcion || !Number.isFinite(precioUnitario) || precioUnitario < 0) {
+      return { ok: false, message: `Línea inválida (falta descripción o precio válido): ${JSON.stringify(l)}.` };
+    }
+    const cantidad = Number.isFinite(Number(l.cantidad)) && Number(l.cantidad) > 0 ? Number(l.cantidad) : 1;
+
+    let servicioId: string | null = null;
+    let detalle: string | null = null;
+    let exenta = false;
+    if (l.servicio_nombre) {
+      const match = (catalogo ?? []).filter((s) =>
+        s.nombre.toLowerCase().includes(String(l.servicio_nombre).toLowerCase())
+      );
+      // Si hay 0 o varias coincidencias, sigue como línea libre (sin
+      // servicioId) — no bloquea la factura por un nombre que no calzó
+      // exacto, mismo criterio permisivo que el formulario.
+      if (match.length === 1) {
+        servicioId = match[0].id;
+        detalle = match[0].descripcion ?? null;
+        exenta = match[0].ivu_exento;
+      }
+    }
+
+    lineas.push({
+      descripcion,
+      detalle,
+      cantidad,
+      precioUnitario,
+      servicioId,
+      subtotalLinea: cantidad * precioUnitario,
+      exenta,
+    });
+  }
+
+  const subtotal = lineas.reduce((sum, l) => sum + l.subtotalLinea, 0);
+  const subtotalGravable = lineas.reduce((sum, l) => sum + (l.exenta ? 0 : l.subtotalLinea), 0);
+  const ivuPct =
+    entidad.ivu_applies && !cliente.ivu_exempt_reseller
+      ? Number(entidad.ivu_rate_estatal || 0) + Number(entidad.ivu_rate_municipal || 0)
+      : 0;
+  const ivuMonto = subtotalGravable * (ivuPct / 100);
+
+  // Mismo default que defaultRetencion() en nueva-factura-form.tsx: el %
+  // propio del cliente si ya lo tiene guardado, si no el relevo por
+  // defecto de la entidad (client_retention_situation: "10" | "6" | "no").
+  let retencionPct = 0;
+  if (cliente.es_negocio && Number(cliente.retention_pct) > 0) {
+    retencionPct = Number(cliente.retention_pct);
+  } else if (entidad.client_retention_situation === "10") {
+    retencionPct = 10;
+  } else if (entidad.client_retention_situation === "6") {
+    retencionPct = 6;
+  }
+  const retencionMonto = subtotal * (retencionPct / 100);
+  const total = subtotal + ivuMonto - retencionMonto;
+
+  // Número consecutivo por entidad — mismo cálculo (no 100% a prueba de
+  // carreras, ver la nota igual en /dashboard/facturacion/nueva/page.tsx)
+  // que la pantalla real, para que el número que VICTOR muestra en la
+  // previsualización sea el mismo que termina guardado.
+  const { count } = await supabase
+    .from("invoices")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", ownerId)
+    .eq("entity_id", entidad.id);
+  const numeroPreview = `${entidad.invoice_prefix}-${entidad.invoice_start_number + (count ?? 0)}`;
+
+  const hoyStr = fechaHoyPR();
+  const diasTermino = (() => {
+    const m = (entidad.default_payment_terms ?? "").match(/(\d+)/);
+    return m ? Number(m[1]) : 30;
+  })();
+  const fechaVencimiento =
+    typeof input.fecha_vencimiento === "string" && input.fecha_vencimiento.trim()
+      ? input.fecha_vencimiento.trim()
+      : new Date(new Date(`${hoyStr}T00:00:00Z`).getTime() + diasTermino * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .slice(0, 10);
+
+  const detalleLineas = lineas
+    .map(
+      (l) =>
+        `- ${l.descripcion} · ${l.cantidad} × $${l.precioUnitario.toFixed(2)} = $${l.subtotalLinea.toFixed(2)}${l.exenta ? " (exenta de IVU)" : ""}`
+    )
+    .join("\n");
+
+  const resumenTexto =
+    `Factura ${numeroPreview} para ${cliente.name} (${entidad.name}):\n${detalleLineas}\n` +
+    `Subtotal: $${subtotal.toFixed(2)}` +
+    (entidad.ivu_applies ? `\nIVU (${ivuPct}%): $${ivuMonto.toFixed(2)}` : "") +
+    (retencionMonto > 0 ? `\nRetención ${retencionPct}% (cliente retiene): -$${retencionMonto.toFixed(2)}` : "") +
+    `\nTotal: $${total.toFixed(2)}\nFecha de vencimiento: ${fechaVencimiento}`;
+
+  return {
+    ok: true,
+    entidad,
+    cliente,
+    lineas,
+    numeroPreview,
+    subtotal,
+    ivuPct,
+    ivuMonto,
+    retencionPct,
+    retencionMonto,
+    total,
+    fechaEmision: hoyStr,
+    fechaVencimiento,
+    resumenTexto,
+  };
+}
 
 // Lógica real de "buscar la transacción + asignarle categoría", compartida
 // entre categorizar_transaccion (una sola, para correcciones puntuales del
@@ -1538,6 +1922,130 @@ export async function executeVictorTool(
       if (deleteError) return { ok: false, message: `No se pudo eliminar la cuenta: ${deleteError.message}` };
 
       return { ok: true, message: `Eliminé la cuenta manual "${cuenta.name}" y sus transacciones importadas.` };
+    }
+
+    case "crear_cliente": {
+      const nombre = String(input.nombre ?? "").trim();
+      if (!nombre) return { ok: false, message: "Falta el nombre del cliente." };
+
+      const entidadResult = await resolverEntidadFacturacion(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!entidadResult.ok) return entidadResult;
+      const entidad = entidadResult.entidad;
+
+      const telefono = typeof input.telefono === "string" && input.telefono.trim() ? input.telefono.trim() : null;
+      const email = typeof input.email === "string" && input.email.trim() ? input.email.trim() : null;
+      const direccion = typeof input.direccion === "string" && input.direccion.trim() ? input.direccion.trim() : null;
+      const esNegocio = input.es_negocio === true;
+      const retencionPct = esNegocio && Number.isFinite(Number(input.retencion_pct)) ? Number(input.retencion_pct) : 0;
+
+      const { error } = await supabase.from("clients").insert({
+        owner_id: ownerId,
+        entity_id: entidad.id,
+        name: nombre,
+        telefono,
+        email,
+        address: direccion,
+        es_negocio: esNegocio,
+        retention_pct: retencionPct,
+      });
+
+      if (error) return { ok: false, message: `No se pudo crear el cliente: ${error.message}` };
+      return {
+        ok: true,
+        message: `Cliente "${nombre}" creado en ${entidad.name}${telefono ? `, tel. ${telefono}` : ""}. Ya se puede facturar.`,
+      };
+    }
+
+    case "previsualizar_factura": {
+      const resultado = await calcularFactura(supabase, ownerId, {
+        cliente_nombre: String(input.cliente_nombre ?? ""),
+        lineas: (Array.isArray(input.lineas) ? input.lineas : []) as LineaFacturaInput[],
+        entidad_nombre: typeof input.entidad_nombre === "string" ? input.entidad_nombre : null,
+        fecha_vencimiento: typeof input.fecha_vencimiento === "string" ? input.fecha_vencimiento : null,
+      });
+      if (!resultado.ok) return resultado;
+
+      return {
+        ok: true,
+        message:
+          `${resultado.resumenTexto}\n\nMuéstrale este desglose EXACTO al usuario (no lo redondees ni lo ` +
+          `cambies) y espera su confirmación explícita antes de llamar crear_factura con los mismos datos.`,
+      };
+    }
+
+    case "crear_factura": {
+      const resultado = await calcularFactura(supabase, ownerId, {
+        cliente_nombre: String(input.cliente_nombre ?? ""),
+        lineas: (Array.isArray(input.lineas) ? input.lineas : []) as LineaFacturaInput[],
+        entidad_nombre: typeof input.entidad_nombre === "string" ? input.entidad_nombre : null,
+        fecha_vencimiento: typeof input.fecha_vencimiento === "string" ? input.fecha_vencimiento : null,
+      });
+      if (!resultado.ok) return resultado;
+
+      // servicio_id de la factura (compatibilidad con vistas viejas) apunta
+      // al servicio de la primera línea del catálogo, si hay alguna — mismo
+      // criterio que guardar() en nueva-factura-form.tsx.
+      const primerServicioId = resultado.lineas.find((l) => l.servicioId)?.servicioId ?? null;
+
+      const { data: factura, error: insertError } = await supabase
+        .from("invoices")
+        .insert({
+          owner_id: ownerId,
+          entity_id: resultado.entidad.id,
+          client_id: resultado.cliente.id,
+          servicio_id: primerServicioId,
+          numero: resultado.numeroPreview,
+          subtotal: resultado.subtotal,
+          ivu_pct: resultado.ivuPct,
+          ivu_monto: resultado.ivuMonto,
+          retencion_pct: resultado.retencionPct,
+          retencion_monto: resultado.retencionMonto,
+          total: resultado.total,
+          // Siempre "borrador" — nunca "enviada" — aunque el usuario haya
+          // confirmado el resumen: así la revisa en pantalla y la manda él
+          // mismo (WhatsApp/PDF), en vez de que VICTOR decida por él que ya
+          // salió del lado de la app.
+          estado: "borrador",
+          fecha_emision: resultado.fechaEmision,
+          fecha_vencimiento: resultado.fechaVencimiento,
+        })
+        .select("id")
+        .maybeSingle();
+
+      if (insertError || !factura) {
+        return { ok: false, message: `No se pudo crear la factura: ${insertError?.message ?? "error desconocido"}.` };
+      }
+
+      const { error: itemsError } = await supabase.from("invoice_items").insert(
+        resultado.lineas.map((l) => ({
+          invoice_id: factura.id,
+          service_id: l.servicioId,
+          descripcion: l.descripcion,
+          detalle: l.detalle,
+          cantidad: l.cantidad,
+          precio_unitario: l.precioUnitario,
+          subtotal_linea: l.subtotalLinea,
+        }))
+      );
+
+      if (itemsError) {
+        return {
+          ok: false,
+          message: `La factura ${resultado.numeroPreview} se creó pero hubo un problema guardando las líneas: ${itemsError.message}. Dile al usuario que la revise en Facturación.`,
+        };
+      }
+
+      return {
+        ok: true,
+        message:
+          `Factura ${resultado.numeroPreview} creada como BORRADOR para ${resultado.cliente.name} — total ` +
+          `$${resultado.total.toFixed(2)}. Queda en la pantalla de Facturación para que el usuario la revise y ` +
+          `la envíe él mismo (WhatsApp/PDF) cuando quiera.`,
+      };
     }
 
     case "crear_categoria_personal": {
