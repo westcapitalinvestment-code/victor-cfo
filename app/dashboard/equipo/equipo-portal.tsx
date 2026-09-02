@@ -402,7 +402,25 @@ function PanelTab({
         <p className="mb-2 text-xs uppercase tracking-wide text-muted">
           Trabajos de hoy <span className="normal-case text-muted">· {filtrados.length}</span>
         </p>
-        {filtrados.length === 0 && <p className="text-xs text-muted">Nada registrado hoy todavía.</p>}
+        {filtrados.length === 0 && (
+          <div>
+            <p className="mb-2 text-xs text-muted">Nada registrado hoy todavía.</p>
+            <div className="flex gap-2">
+              <Link
+                href="/dashboard/facturacion/nueva"
+                className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+              >
+                <i className="ti ti-file-invoice" /> Nueva factura
+              </Link>
+              <Link
+                href="/dashboard/facturacion/cotizaciones/nueva"
+                className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+              >
+                <i className="ti ti-file-description" /> Nueva cotización
+              </Link>
+            </div>
+          </div>
+        )}
         {filtrados.map((f) => {
           const estado = f.pendiente_revision_tecnico
             ? { texto: "Revisión", clase: "text-amb" }
