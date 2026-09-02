@@ -893,47 +893,65 @@ function ReportesTab({
 
   return (
     <>
-      <div className="mb-3 flex gap-1.5">
-        {PERIODOS_PAGOS.map((p) => (
-          <button
-            key={p.value}
-            onClick={() => setPeriodo(p.value)}
-            className="flex-1 rounded-lg px-2 py-2 text-xs font-medium"
-            style={
-              periodo === p.value
-                ? { background: "#1D9E75", color: "#fff" }
-                : { background: "var(--card)", color: "var(--muted)", border: "1px solid var(--border)" }
-            }
-          >
-            {p.label}
-          </button>
-        ))}
+      {/* El bloque entero (botones + lo que se despliega) vive dentro de UN
+          mismo contenedor con borde/fondo teal — así "Trimestre"/"Rango" se
+          ven visualmente pegados al Q1-Q4 o las fechas que abren debajo, en
+          vez de sentirse como una caja suelta aparte (pedido de Joel, 2 sept
+          2026: "delimitar con color lo que abre abajo... lo mismo en
+          Facturas"). La flechita (ti-chevron-down) en el botón activo marca
+          cuál opción es la que tiene algo desplegado. */}
+      <div className="mb-3 rounded-xl border border-teal/30 bg-teal/[.05] p-2">
+        <div className="flex gap-1.5">
+          {PERIODOS_PAGOS.map((p) => {
+            const tieneDesplegable = p.value === "trimestre" || p.value === "rango";
+            return (
+              <button
+                key={p.value}
+                onClick={() => setPeriodo(p.value)}
+                className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-medium"
+                style={
+                  periodo === p.value
+                    ? { background: "#1D9E75", color: "#fff" }
+                    : { background: "var(--card)", color: "var(--muted)", border: "1px solid var(--border)" }
+                }
+              >
+                {p.label}
+                {tieneDesplegable && (
+                  <i
+                    className={`ti ti-chevron-down`}
+                    style={{ fontSize: 12, transform: periodo === p.value ? "rotate(180deg)" : "none", transition: "transform .15s" }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {periodo === "trimestre" && (
+          <div className="mt-2 flex gap-1.5 border-t border-teal/20 pt-2">
+            <select className="vc-input flex-1" value={trimestre} onChange={(e) => setTrimestre(Number(e.target.value))}>
+              <option value={1}>Q1 — Ene a Mar</option>
+              <option value={2}>Q2 — Abr a Jun</option>
+              <option value={3}>Q3 — Jul a Sep</option>
+              <option value={4}>Q4 — Oct a Dic</option>
+            </select>
+            <input
+              className="vc-input flex-shrink-0"
+              style={{ width: 90 }}
+              type="number"
+              value={anioTrimestre}
+              onChange={(e) => setAnioTrimestre(Number(e.target.value))}
+            />
+          </div>
+        )}
+
+        {periodo === "rango" && (
+          <div className="mt-2 flex gap-1.5 border-t border-teal/20 pt-2">
+            <input type="date" className="vc-input flex-1" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} />
+            <input type="date" className="vc-input flex-1" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} />
+          </div>
+        )}
       </div>
-
-      {periodo === "trimestre" && (
-        <div className="mb-3 flex gap-1.5">
-          <select className="vc-input flex-1" value={trimestre} onChange={(e) => setTrimestre(Number(e.target.value))}>
-            <option value={1}>Q1 — Ene a Mar</option>
-            <option value={2}>Q2 — Abr a Jun</option>
-            <option value={3}>Q3 — Jul a Sep</option>
-            <option value={4}>Q4 — Oct a Dic</option>
-          </select>
-          <input
-            className="vc-input flex-shrink-0"
-            style={{ width: 90 }}
-            type="number"
-            value={anioTrimestre}
-            onChange={(e) => setAnioTrimestre(Number(e.target.value))}
-          />
-        </div>
-      )}
-
-      {periodo === "rango" && (
-        <div className="mb-3 flex gap-1.5">
-          <input type="date" className="vc-input flex-1" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} />
-          <input type="date" className="vc-input flex-1" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} />
-        </div>
-      )}
 
       <div className="vc-card mb-3">
         <p className="mb-1 text-xs uppercase tracking-wide text-muted">Contratista</p>
