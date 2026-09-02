@@ -60,7 +60,12 @@ function esImagen(nombre: string): boolean {
   return EXTENSIONES_IMAGEN.some((ext) => n.endsWith(ext));
 }
 
-const METODOS_PAGO = ["ATH Móvil", "Transferencia", "Cheque", "Efectivo", "Tarjeta", "Otro"];
+// "ATH Móvil" = transferencia personal normal, sin fee. "ATH Móvil Business"
+// = cobrado por el pATH de la entidad, con fee de 2.25% (mín. $0.06). Antes
+// de esta separación (2 sept 2026) no había forma de distinguir un pago real
+// entre los dos, y "Gasto procesamiento de pagos" le inventaba un fee a
+// pagos ATH que en realidad fueron personales.
+const METODOS_PAGO = ["ATH Móvil", "ATH Móvil Business", "Transferencia", "Cheque", "Efectivo", "Tarjeta", "Otro"];
 
 function hoyVencida(f: Factura): boolean {
   return f.estado !== "pagada" && f.estado !== "borrador" && !!f.fecha_vencimiento && f.fecha_vencimiento < new Date().toISOString().slice(0, 10);

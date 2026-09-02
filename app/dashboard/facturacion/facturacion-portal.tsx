@@ -51,14 +51,21 @@ const ATH_FEE_MINIMO = 0.06;
 const STRIPE_FEE_PCT = 0.029;
 const STRIPE_FEE_FIJO = 0.3;
 
-// entidadesConAth: IDs de entidad con pATH de ATH Móvil Business configurado
-// (Config → Facturas). El fee de 2.25% SOLO es real cuando el cliente pagó
-// al pATH de la entidad — un ATH Móvil personal (el 99% de los pagos hasta
-// que Joel active su pATH) no cobra fee ninguno. Sin este gate, cualquier
-// factura marcada "ATH Móvil" salía con un fee inventado (bug reportado
-// por Joel, 2 sept 2026: "ninguna cobro fees, no se de dnd saca esos fees").
+// El fee de 2.25% SOLO es real cuando el cliente pagó al pATH de la entidad
+// (ATH Móvil Business) — un ATH Móvil personal (transferencia normal entre
+// personas) no cobra fee ninguno. El primer intento de este gate (2 sept
+// 2026) asumía que CUALQUIER pago marcado "ATH Móvil" en una entidad con
+// pATH configurado pasó por el pATH, pero eso seguía siendo falso: Joel
+// tiene su pATH configurado y aun así su único pago por ATH fue personal,
+// no por el pATH (bug reportado 2 sept: "ninguna cobro fees, no se de dnd
+// saca esos fees"). El dato real solo lo sabe Joel al marcar la factura
+// pagada, así que ahora "ATH Móvil" y "ATH Móvil Business" son dos métodos
+// de pago distintos en el dropdown — el fee solo aplica al segundo. El
+// chequeo de entidadesConAth se mantiene como salvaguarda extra (no debería
+// poder pasar, pero si por error queda marcada "ATH Móvil Business" en una
+// entidad sin pATH, no se le inventa un fee).
 function feeProcesamiento(f: Factura, entidadesConAth: Set<string>): number {
-  if (f.metodo_pago === "ATH Móvil") {
+  if (f.metodo_pago === "ATH Móvil Business") {
     if (!f.entity_id || !entidadesConAth.has(f.entity_id)) return 0;
     return Math.max(Number(f.total) * ATH_FEE_PCT, ATH_FEE_MINIMO);
   }
@@ -510,7 +517,9 @@ function StatCard({ label, valor, sub, tono }: { label: string; valor: string; s
   );
 }
 
-const METODOS_PAGO = ["ATH Móvil", "Transferencia", "Cheque", "Efectivo", "Tarjeta", "Otro"];
+// Ver nota junto a feeProcesamiento: "ATH Móvil" = transferencia personal
+// (sin fee), "ATH Móvil Business" = cobrado por el pATH (con fee).
+const METODOS_PAGO = ["ATH Móvil", "ATH Móvil Business", "Transferencia", "Cheque", "Efectivo", "Tarjeta", "Otro"];
 
 function ClientesTab({ clients }: { clients: Cliente[] }) {
   const [busqueda, setBusqueda] = useState("");
