@@ -604,7 +604,11 @@ function ServiciosTab({ servicios, entidadId }: { servicios: Servicio[]; entidad
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState<(typeof TIPOS_SERVICIO)[number]["value"]>("fijo");
   const [precio, setPrecio] = useState("");
-  const [ivuExento, setIvuExento] = useState(true);
+  // Default cambiado a "sí aplica IVU" (false = no exento) — pedido de
+  // Joel (1 sept 2026): la mayoría de servicios sí cobran IVU, la exención
+  // es la excepción, no la regla. Antes cualquier servicio nuevo salía
+  // exento por default aunque la entidad tuviera IVU activo.
+  const [ivuExento, setIvuExento] = useState(false);
 
   function abrirNuevo() {
     setFormAbierto("nuevo");

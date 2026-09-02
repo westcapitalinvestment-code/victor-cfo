@@ -96,12 +96,22 @@ export default function EditarCotizacionForm({
     });
   }
 
+  // Misma lógica que nueva-cotizacion-form.tsx (1 sept 2026, pedido de
+  // Joel): el IVU se calcula por línea, respetando la exención del
+  // servicio del catálogo, no sobre todo el subtotal de una vez.
+  function lineaEsIvuExenta(l: Linea): boolean {
+    if (!l.servicioId) return false;
+    const s = servicios.find((x) => x.id === l.servicioId);
+    return s ? s.ivu_exento : false;
+  }
+
   const subtotal = lineas.reduce((sum, l) => sum + sumaLinea(l), 0);
+  const subtotalGravable = lineas.reduce((sum, l) => sum + (lineaEsIvuExenta(l) ? 0 : sumaLinea(l)), 0);
   const ivuPct =
     entidad?.ivu_applies && !cliente?.ivu_exempt_reseller
       ? Number(entidad.ivu_rate_estatal || 0) + Number(entidad.ivu_rate_municipal || 0)
       : 0;
-  const ivuMonto = subtotal * (ivuPct / 100);
+  const ivuMonto = subtotalGravable * (ivuPct / 100);
   const total = subtotal + ivuMonto;
 
   async function guardar() {
@@ -271,7 +281,7 @@ export default function EditarCotizacionForm({
             <span className="text-muted">Subtotal</span>
             <span>{formatMoney(subtotal)}</span>
           </div>
-          {ivuPct > 0 && (
+          {entidad?.ivu_applies && (
             <div className="flex justify-between py-0.5">
               <span className="text-muted">IVU ({ivuPct}%)</span>
               <span>+{formatMoney(ivuMonto)}</span>

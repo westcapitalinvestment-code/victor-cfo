@@ -42,6 +42,20 @@ type Client = {
 
 type ServicioCat = { id: string; nombre: string; tipo: string; precio: number; ivu_exento: boolean };
 
+// Varias líneas por factura (1 sept 2026, pedido de Joel — antes solo se
+// podía facturar un servicio a la vez, igual que Cotización ya permitía).
+// servicioId: referencia real al catálogo cuando la línea viene de "Añadir
+// desde el catálogo" — se pierde (null) si el usuario escribe la
+// descripción a mano, y es lo que permite calcular el IVU por línea y que
+// el reporte "Ingresos por servicio" agrupe de verdad.
+type Linea = { descripcion: string; cantidad: string; precioUnitario: string; servicioId: string | null };
+
+function sumaLinea(l: Linea): number {
+  const cant = Number(l.cantidad) || 0;
+  const precio = Number(l.precioUnitario) || 0;
+  return cant * precio;
+}
+
 const METODOS_COBRO = ["ATH Móvil", "Transferencia / ACH", "Cheque", "Efectivo"];
 
 // Fee real de Stripe en PR: 2.9% + $0.30 por transacción de tarjeta. Es
@@ -88,10 +102,10 @@ export default function NuevaFacturaForm({
     () => clients.filter((c) => !c.entity_id || c.entity_id === entityId),
     [clients, entityId]
   );
-  // Sin cliente ni servicio por defecto (pedido de Joel, 1 sept 2026) — que
-  // arranquen vacíos y el usuario escoja a propósito, en vez de asumir el
-  // primero de la lista (que podía terminar en una factura al cliente
-  // equivocado si no se fijaba en cambiarlo).
+  // Sin cliente por defecto (pedido de Joel, 1 sept 2026) — que arranque
+  // vacío y el usuario escoja a propósito, en vez de asumir el primero de
+  // la lista (que podía terminar en una factura al cliente equivocado si
+  // no se fijaba en cambiarlo).
   const [clientId, setClientId] = useState("");
   const cliente = clientesDeEntidad.find((c) => c.id === clientId);
 
@@ -116,32 +130,49 @@ export default function NuevaFacturaForm({
   }, [clientId]);
 
   const [listaServicios, setListaServicios] = useState<ServicioCat[]>(servicios);
-  const [servicioId, setServicioId] = useState<string>("");
-  const servicio = listaServicios.find((s) => s.id === servicioId);
-  const [descripcionPersonalizada, setDescripcionPersonalizada] = useState("");
-  const [monto, setMonto] = useState("");
-  const [cantidad, setCantidad] = useState("1");
+  const [lineas, setLineas] = useState<Linea[]>([{ descripcion: "", cantidad: "1", precioUnitario: "", servicioId: null }]);
 
-  function elegirServicio(id: string) {
-    setServicioId(id);
-    if (id === "" || id === "crear_nuevo") {
-      setNuevoServicioNombre("");
-      setNuevoServicioPrecio("");
-      if (id === "") setMonto("");
-      return;
-    }
-    const s = listaServicios.find((x) => x.id === id);
-    if (s) setMonto(String(s.precio));
-    setCantidad("1");
+  function actualizarLinea(i: number, campo: keyof Linea, valor: string) {
+    setLineas((prev) =>
+      prev.map((l, idx) => {
+        if (idx !== i) return l;
+        // Editar la descripción a mano desengancha la línea del catálogo
+        // — ya no representa exactamente ese servicio, así que se trata
+        // como una línea libre (servicioId null) para no contarla mal en
+        // "Ingresos por servicio" ni en la exención de IVU del servicio.
+        if (campo === "descripcion") return { ...l, descripcion: valor, servicioId: null };
+        return { ...l, [campo]: valor };
+      })
+    );
+  }
+  function agregarLinea() {
+    setLineas((prev) => [...prev, { descripcion: "", cantidad: "1", precioUnitario: "", servicioId: null }]);
+  }
+  function quitarLinea(i: number) {
+    setLineas((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+  }
+  function agregarDesdeServicio(servicioId: string, catalogo: ServicioCat[] = listaServicios) {
+    const s = catalogo.find((x) => x.id === servicioId);
+    if (!s) return;
+    setLineas((prev) => {
+      const vacias = prev.filter((l) => !l.descripcion.trim());
+      const nueva = { descripcion: s.nombre, cantidad: "1", precioUnitario: String(s.precio), servicioId: s.id };
+      return vacias.length === prev.length ? [nueva] : [...prev.filter((l) => l.descripcion.trim()), nueva];
+    });
   }
 
-  // "+ Crear nuevo servicio..." en el dropdown de Servicio — para que Joel
-  // no tenga que salirse del formulario a la pestaña de Servicios cuando
-  // factura algo que todavía no tenía guardado en el catálogo.
+  // "+ Crear nuevo servicio..." — para que Joel no tenga que salirse del
+  // formulario a la pestaña de Servicios cuando factura algo que todavía
+  // no tenía guardado en el catálogo. Al guardar, el servicio nuevo se
+  // añade como una línea más de la factura.
+  const [mostrarNuevoServicio, setMostrarNuevoServicio] = useState(false);
   const [nuevoServicioNombre, setNuevoServicioNombre] = useState("");
   const [nuevoServicioTipo, setNuevoServicioTipo] = useState<"fijo" | "hora" | "proyecto" | "recurrente">("fijo");
   const [nuevoServicioPrecio, setNuevoServicioPrecio] = useState("");
-  const [nuevoServicioIvuExento, setNuevoServicioIvuExento] = useState(true);
+  // Default cambiado a "sí aplica IVU" (false = no exento) — pedido de
+  // Joel (1 sept 2026): la mayoría de servicios sí cobran IVU, la exención
+  // es la excepción, no la regla.
+  const [nuevoServicioIvuExento, setNuevoServicioIvuExento] = useState(false);
   const [guardandoServicio, setGuardandoServicio] = useState(false);
 
   async function crearServicioDesdeFactura() {
@@ -178,9 +209,13 @@ export default function NuevaFacturaForm({
       return;
     }
 
-    setListaServicios((prev) => [...prev, nuevo as ServicioCat]);
-    setServicioId(nuevo.id);
-    setMonto(String(nuevo.precio));
+    const catalogoActualizado = [...listaServicios, nuevo as ServicioCat];
+    setListaServicios(catalogoActualizado);
+    agregarDesdeServicio(nuevo.id, catalogoActualizado);
+    setNuevoServicioNombre("");
+    setNuevoServicioPrecio("");
+    setNuevoServicioIvuExento(false);
+    setMostrarNuevoServicio(false);
   }
 
   const [metodosCobro, setMetodosCobro] = useState<string[]>(["ATH Móvil", "Transferencia / ACH"]);
@@ -219,18 +254,24 @@ export default function NuevaFacturaForm({
     setArchivosPendientes((prev) => prev.filter((a) => a.localId !== localId));
   }
 
-  const descripcionFinal = servicioId === "personalizado" ? descripcionPersonalizada : servicio?.nombre ?? "";
-  const precioUnitarioNum = Number(monto) || 0;
-  const cantidadNum = Number(cantidad) || 1;
-  const montoNum = precioUnitarioNum * cantidadNum;
+  // Exención de IVU por servicio (1 sept 2026, pedido de Joel): con varias
+  // líneas por factura, el IVU se calcula por línea (solo sobre las
+  // gravables) y se suma, en vez de un solo % sobre todo el subtotal. Una
+  // línea libre (sin servicio del catálogo) se trata como gravable por
+  // default — misma lógica que Nueva Cotización.
+  function lineaEsIvuExenta(l: Linea): boolean {
+    if (!l.servicioId) return false;
+    const s = listaServicios.find((x) => x.id === l.servicioId);
+    return s ? s.ivu_exento : false;
+  }
 
-  const ivuExentoServicio = servicioId !== "personalizado" && servicio ? servicio.ivu_exento : true;
+  const subtotal = lineas.reduce((sum, l) => sum + sumaLinea(l), 0);
+  const subtotalGravable = lineas.reduce((sum, l) => sum + (lineaEsIvuExenta(l) ? 0 : sumaLinea(l)), 0);
   const ivuPct =
-    entidad?.ivu_applies && !cliente?.ivu_exempt_reseller && !ivuExentoServicio
+    entidad?.ivu_applies && !cliente?.ivu_exempt_reseller
       ? Number(entidad.ivu_rate_estatal || 0) + Number(entidad.ivu_rate_municipal || 0)
       : 0;
-  const subtotal = montoNum;
-  const ivuMonto = subtotal * (ivuPct / 100);
+  const ivuMonto = subtotalGravable * (ivuPct / 100);
   const retencionPct = retencionActiva ? Number(retencionPctInput) || 0 : 0;
   const retencionMonto = subtotal * (retencionPct / 100);
   const total = subtotal + ivuMonto - retencionMonto;
@@ -244,8 +285,9 @@ export default function NuevaFacturaForm({
 
   async function guardar(estadoInicial: "borrador" | "enviada") {
     if (!entidad || !cliente) return;
-    if (!descripcionFinal.trim() || montoNum <= 0) {
-      setError("Elige un servicio (o describe uno personalizado) y pon un monto mayor a $0.");
+    const lineasValidas = lineas.filter((l) => l.descripcion.trim() && sumaLinea(l) > 0);
+    if (lineasValidas.length === 0) {
+      setError("Añade al menos un servicio con descripción y precio mayor a $0.");
       return;
     }
 
@@ -272,13 +314,18 @@ export default function NuevaFacturaForm({
         .eq("id", cliente.id);
     }
 
+    // servicio_id de la factura (para compatibilidad con vistas viejas que
+    // solo miran ese campo) queda apuntando al servicio de la primera
+    // línea del catálogo, si hay alguna.
+    const primerServicioId = lineasValidas.find((l) => l.servicioId)?.servicioId ?? null;
+
     const { data: factura, error: insertError } = await supabase
       .from("invoices")
       .insert({
         owner_id: user.id,
         entity_id: entidad.id,
         client_id: cliente.id,
-        servicio_id: servicioId !== "personalizado" ? servicioId : null,
+        servicio_id: primerServicioId,
         numero: numeroPreview,
         subtotal,
         ivu_pct: ivuPct,
@@ -308,17 +355,19 @@ export default function NuevaFacturaForm({
       return;
     }
 
-    const { error: itemsError } = await supabase.from("invoice_items").insert({
-      invoice_id: factura.id,
-      // service_id (1 sept 2026) — igual que invoices.servicio_id arriba,
-      // es la referencia real al catálogo que usa el reporte "Ingresos
-      // por servicio" para agrupar de verdad en vez de por texto suelto.
-      service_id: servicioId !== "personalizado" ? servicioId : null,
-      descripcion: descripcionFinal,
-      cantidad: cantidadNum,
-      precio_unitario: precioUnitarioNum,
-      subtotal_linea: montoNum,
-    });
+    const { error: itemsError } = await supabase.from("invoice_items").insert(
+      lineasValidas.map((l) => ({
+        invoice_id: factura.id,
+        // service_id (1 sept 2026) — referencia real al catálogo que usa
+        // el reporte "Ingresos por servicio" para agrupar de verdad en vez
+        // de por texto suelto.
+        service_id: l.servicioId,
+        descripcion: l.descripcion,
+        cantidad: Number(l.cantidad) || 1,
+        precio_unitario: Number(l.precioUnitario) || 0,
+        subtotal_linea: sumaLinea(l),
+      }))
+    );
 
     if (itemsError) {
       setLoading(false);
@@ -429,31 +478,28 @@ export default function NuevaFacturaForm({
           </div>
         )}
 
-        <Field label="Servicio">
-          <select className="vc-input" value={servicioId} onChange={(e) => elegirServicio(e.target.value)}>
-            <option value="">Selecciona un servicio...</option>
-            {listaServicios.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nombre} — {formatMoney(s.precio)}
-              </option>
-            ))}
-            <option value="personalizado">Personalizado (solo esta factura)...</option>
-            <option value="crear_nuevo">+ Crear nuevo servicio en el catálogo...</option>
-          </select>
-        </Field>
-
-        {servicioId === "personalizado" && (
-          <Field label="Descripción">
-            <input
-              className="vc-input"
-              placeholder="Descripción del servicio"
-              value={descripcionPersonalizada}
-              onChange={(e) => setDescripcionPersonalizada(e.target.value)}
-            />
+        {listaServicios.length > 0 && (
+          <Field label="Añadir desde el catálogo">
+            <select className="vc-input" defaultValue="" onChange={(e) => e.target.value && agregarDesdeServicio(e.target.value)}>
+              <option value="">Elegir un servicio guardado...</option>
+              {listaServicios.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre} — {formatMoney(s.precio)}
+                </option>
+              ))}
+            </select>
           </Field>
         )}
 
-        {servicioId === "crear_nuevo" && (
+        <button
+          type="button"
+          onClick={() => setMostrarNuevoServicio(!mostrarNuevoServicio)}
+          className="-mt-1 text-left text-xs font-medium text-teal hover:opacity-80"
+        >
+          + Crear nuevo servicio en el catálogo...
+        </button>
+
+        {mostrarNuevoServicio && (
           <div className="vc-card !bg-bg flex flex-col gap-2.5">
             <p className="text-xs uppercase tracking-wide text-muted">Nuevo servicio</p>
             <input
@@ -490,42 +536,59 @@ export default function NuevaFacturaForm({
             <button
               type="button"
               className="vc-btn-primary"
+              style={{ width: "auto" }}
               disabled={!nuevoServicioNombre || !nuevoServicioPrecio || guardandoServicio}
               onClick={crearServicioDesdeFactura}
             >
-              {guardandoServicio ? "Guardando..." : "Guardar servicio y usarlo aquí"}
+              {guardandoServicio ? "Guardando..." : "Guardar servicio y añadirlo aquí"}
             </button>
           </div>
         )}
 
-        <div className="flex gap-2">
-          <Field label="Cantidad">
-            <input
-              className="vc-input"
-              type="number"
-              min="1"
-              step="1"
-              value={cantidad}
-              onChange={(e) => setCantidad(e.target.value)}
-            />
-          </Field>
-          <Field label="Precio unitario">
-            <input
-              className="vc-input"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="0.00"
-              value={monto}
-              onChange={(e) => setMonto(e.target.value)}
-            />
-          </Field>
+        <div>
+          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Servicios de esta factura</label>
+          <div className="flex flex-col gap-2">
+            {lineas.map((l, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  className="vc-input flex-1"
+                  placeholder="Descripción del servicio"
+                  value={l.descripcion}
+                  onChange={(e) => actualizarLinea(i, "descripcion", e.target.value)}
+                />
+                <input
+                  className="vc-input w-16"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Cant."
+                  value={l.cantidad}
+                  onChange={(e) => actualizarLinea(i, "cantidad", e.target.value)}
+                />
+                <input
+                  className="vc-input w-24"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Precio"
+                  value={l.precioUnitario}
+                  onChange={(e) => actualizarLinea(i, "precioUnitario", e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => quitarLinea(i)}
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg"
+                  title="Quitar línea"
+                >
+                  <i className="ti ti-trash" style={{ fontSize: 14 }} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={agregarLinea} className="mt-2 text-xs font-medium text-teal hover:opacity-80">
+            + Añadir línea
+          </button>
         </div>
-        {cantidadNum > 1 && (
-          <p className="-mt-2 text-xs text-muted">
-            Subtotal de esta línea: {cantidadNum} × {formatMoney(precioUnitarioNum)} = {formatMoney(montoNum)}
-          </p>
-        )}
 
         <Field label="Métodos de cobro aceptados">
           <div className="flex flex-wrap gap-2">
@@ -675,8 +738,9 @@ export default function NuevaFacturaForm({
           </div>
           {entidad?.ivu_applies && (
             // Siempre visible si la entidad cobra IVU, aunque salga en
-            // $0.00 (ej. servicio exento) — igual que FreshBooks siempre
-            // muestra la fila de "Tax", pedido de Joel el 1 sept 2026.
+            // $0.00 (ej. todos los servicios de esta factura son exentos)
+            // — igual que FreshBooks siempre muestra la fila de "Tax",
+            // pedido de Joel el 1 sept 2026.
             <div className="flex justify-between py-0.5">
               <span className="text-muted">IVU ({ivuPct}%)</span>
               <span>+{formatMoney(ivuMonto)}</span>

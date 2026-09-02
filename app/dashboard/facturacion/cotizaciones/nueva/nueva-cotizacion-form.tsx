@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
@@ -42,15 +42,15 @@ export default function NuevaCotizacionForm({
     () => clients.filter((c) => !c.entity_id || c.entity_id === entityId),
     [clients, entityId]
   );
-  const [clientId, setClientId] = useState(clientesDeEntidad[0]?.id ?? "");
-  const cliente = clientesDeEntidad.find((c) => c.id === clientId) ?? clientesDeEntidad[0];
+  // Sin cliente ni fecha por defecto (pedido de Joel, 1 sept 2026) — que
+  // arranquen vacíos y el usuario escoja/busque a propósito, en vez de
+  // asumir el primer cliente de la lista o una fecha ya calculada (mismo
+  // criterio ya aplicado en Nueva Factura).
+  const [clientId, setClientId] = useState("");
+  const cliente = clientesDeEntidad.find((c) => c.id === clientId);
 
   const hoy = new Date().toISOString().slice(0, 10);
-  const [fechaVencimiento, setFechaVencimiento] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 15);
-    return d.toISOString().slice(0, 10);
-  });
+  const [fechaVencimiento, setFechaVencimiento] = useState("");
   const [notas, setNotas] = useState("");
   const [lineas, setLineas] = useState<Linea[]>([{ descripcion: "", cantidad: "1", precioUnitario: "", servicioId: null }]);
   const [loading, setLoading] = useState(false);
@@ -85,16 +85,33 @@ export default function NuevaCotizacionForm({
     });
   }
 
+  // Exención de IVU por servicio (1 sept 2026, pedido de Joel): antes esta
+  // cotización cobraba IVU sobre TODO el subtotal sin mirar si algún
+  // servicio del catálogo está marcado "No aplica IVU" — a diferencia de
+  // Nueva Factura, que sí lo respeta. Con varias líneas por cotización, el
+  // IVU se calcula por línea (solo sobre las gravables) y se suma, en vez
+  // de un solo % sobre todo el subtotal.
+  function lineaEsIvuExenta(l: Linea): boolean {
+    if (!l.servicioId) return false;
+    const s = servicios.find((x) => x.id === l.servicioId);
+    return s ? s.ivu_exento : false;
+  }
+
   const subtotal = lineas.reduce((sum, l) => sum + sumaLinea(l), 0);
+  const subtotalGravable = lineas.reduce((sum, l) => sum + (lineaEsIvuExenta(l) ? 0 : sumaLinea(l)), 0);
   const ivuPct =
     entidad?.ivu_applies && !cliente?.ivu_exempt_reseller
       ? Number(entidad.ivu_rate_estatal || 0) + Number(entidad.ivu_rate_municipal || 0)
       : 0;
-  const ivuMonto = subtotal * (ivuPct / 100);
+  const ivuMonto = subtotalGravable * (ivuPct / 100);
   const total = subtotal + ivuMonto;
 
   async function guardar() {
     if (!entidad || !cliente) return;
+    if (!fechaVencimiento) {
+      setError("Escoge la fecha de vencimiento de la cotización.");
+      return;
+    }
     const lineasValidas = lineas.filter((l) => l.descripcion.trim() && sumaLinea(l) > 0);
     if (lineasValidas.length === 0) {
       setError("Añade al menos una línea con descripción y precio.");
@@ -192,13 +209,13 @@ export default function NuevaCotizacionForm({
           {clientesDeEntidad.length === 0 ? (
             <p className="text-xs text-amb">Esta entidad no tiene clientes todavía.</p>
           ) : (
-            <select className="vc-input" value={clientId} onChange={(e) => setClientId(e.target.value)}>
-              {clientesDeEntidad.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <SelectorBuscable
+              items={clientesDeEntidad}
+              valorId={clientId}
+              onSeleccionar={setClientId}
+              placeholder="Buscar cliente..."
+              etiqueta={(c) => c.name}
+            />
           )}
         </Field>
 
@@ -284,7 +301,10 @@ export default function NuevaCotizacionForm({
             <span className="text-muted">Subtotal</span>
             <span>{formatMoney(subtotal)}</span>
           </div>
-          {ivuPct > 0 && (
+          {entidad?.ivu_applies && (
+            // Siempre visible si la entidad cobra IVU, aunque salga en
+            // $0.00 (ej. todas las líneas son de un servicio exento) —
+            // igual que en Nueva Factura (pedido de Joel, 1 sept 2026).
             <div className="flex justify-between py-0.5">
               <span className="text-muted">IVU ({ivuPct}%)</span>
               <span>+{formatMoney(ivuMonto)}</span>
@@ -296,7 +316,7 @@ export default function NuevaCotizacionForm({
           </div>
         </div>
 
-        <button className="vc-btn-primary mt-1" disabled={loading || !cliente} onClick={guardar}>
+        <button className="vc-btn-primary mt-1" disabled={loading || !cliente || !fechaVencimiento} onClick={guardar}>
           {loading ? "Guardando..." : "Guardar cotización"}
         </button>
       </div>
@@ -309,6 +329,79 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <label className="mb-1 block text-xs uppercase tracking-wide text-muted">{label}</label>
       {children}
+    </div>
+  );
+}
+
+// Combobox con búsqueda (mismo componente que Nueva/Editar Factura, 1 sept
+// 2026 — con muchos clientes importados de FreshBooks, un <select> normal
+// se vuelve incómodo). Es un input de texto: al hacer foco muestra la
+// lista completa, al escribir la filtra, y al perder el foco vuelve a
+// mostrar el nombre del que quedó seleccionado.
+function SelectorBuscable<T extends { id: string }>({
+  items,
+  valorId,
+  onSeleccionar,
+  etiqueta,
+  placeholder,
+}: {
+  items: T[];
+  valorId: string;
+  onSeleccionar: (id: string) => void;
+  etiqueta: (item: T) => string;
+  placeholder: string;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const seleccionado = items.find((i) => i.id === valorId);
+
+  useEffect(() => {
+    function alHacerClicFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setAbierto(false);
+        setBusqueda("");
+      }
+    }
+    document.addEventListener("mousedown", alHacerClicFuera);
+    return () => document.removeEventListener("mousedown", alHacerClicFuera);
+  }, []);
+
+  const filtrados = busqueda.trim()
+    ? items.filter((i) => etiqueta(i).toLowerCase().includes(busqueda.trim().toLowerCase()))
+    : items;
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        className="vc-input"
+        placeholder={placeholder}
+        value={abierto ? busqueda : seleccionado ? etiqueta(seleccionado) : ""}
+        onFocus={() => {
+          setAbierto(true);
+          setBusqueda("");
+        }}
+        onChange={(e) => setBusqueda(e.target.value)}
+      />
+      {abierto && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+          {filtrados.length === 0 && <p className="p-3 text-xs text-muted">Sin resultados.</p>}
+          {filtrados.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-bg"
+              onClick={() => {
+                onSeleccionar(item.id);
+                setAbierto(false);
+                setBusqueda("");
+              }}
+            >
+              {etiqueta(item)}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

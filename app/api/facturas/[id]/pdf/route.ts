@@ -322,7 +322,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // Letras más grandes y todo el bloque más arriba — se veía muy chiquito y
   // se perdía muy abajo en la factura (pedido de Joel, 1 sept 2026).
   if (entidad?.invoice_footer) {
-    const lineasPie = envolverTexto(String(entidad.invoice_footer).slice(0, 300), font, 10, width - margin * 2 - 180);
+    // Ancho casi completo (antes se reservaban 180pt de más, sobrante de
+    // cuando la marca de VICTOR CFO iba al lado del pie — ahora va centrada
+    // abajo por separado, así que el pie ya no necesita cederle espacio;
+    // esto evitaba que un pie corto como "Gracias por confiar..." se
+    // partiera en 2 líneas sin necesidad — reportado por Joel, 1 sept 2026).
+    const lineasPie = envolverTexto(String(entidad.invoice_footer).slice(0, 300), font, 10, width - margin * 2 - 20);
     let piePieY = 75;
     for (const linea of lineasPie) {
       texto(linea, margin, piePieY, { size: 10, color: negro });

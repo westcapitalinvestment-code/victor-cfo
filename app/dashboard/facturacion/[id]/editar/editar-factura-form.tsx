@@ -32,11 +32,20 @@ type Client = {
 };
 type ServicioCat = { id: string; nombre: string; tipo: string; precio: number; ivu_exento: boolean };
 
+// Varias líneas por factura (1 sept 2026) — mismo modelo que
+// nueva-factura-form.tsx y que Cotización.
+type Linea = { descripcion: string; cantidad: string; precioUnitario: string; servicioId: string | null };
+
+function sumaLinea(l: Linea): number {
+  const cant = Number(l.cantidad) || 0;
+  const precio = Number(l.precioUnitario) || 0;
+  return cant * precio;
+}
+
 type Factura = {
   id: string;
   entity_id: string | null;
   client_id: string | null;
-  servicio_id: string | null;
   numero: string;
   estado: string;
   fecha_emision: string;
@@ -52,21 +61,19 @@ type Factura = {
   frecuencia_recurrente: string | null;
 };
 
-
-
 const METODOS_COBRO = ["ATH Móvil", "Transferencia / ACH", "Cheque", "Efectivo"];
 const STRIPE_FEE_PCT = 0.029;
 const STRIPE_FEE_FIJO = 0.3;
 
 export default function EditarFacturaForm({
   factura,
-  itemInicial,
+  itemsIniciales,
   entities,
   clients,
   servicios,
 }: {
   factura: Factura;
-  itemInicial: { id: string; descripcion: string; precio_unitario: number; cantidad: number };
+  itemsIniciales: { id: string; descripcion: string; precio_unitario: number; cantidad: number; service_id: string | null }[];
   entities: Entity[];
   clients: Client[];
   servicios: ServicioCat[];
@@ -109,21 +116,91 @@ export default function EditarFacturaForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
-  const servicioOriginalSigueActivo = factura.servicio_id && servicios.some((s) => s.id === factura.servicio_id);
-  const [servicioId, setServicioId] = useState<string>(
-    servicioOriginalSigueActivo ? (factura.servicio_id as string) : "personalizado"
+  const [listaServicios, setListaServicios] = useState<ServicioCat[]>(servicios);
+  const [lineas, setLineas] = useState<Linea[]>(
+    itemsIniciales.length > 0
+      ? itemsIniciales.map((it) => ({
+          descripcion: it.descripcion,
+          cantidad: String(it.cantidad || 1),
+          precioUnitario: String(it.precio_unitario),
+          servicioId: it.service_id,
+        }))
+      : [{ descripcion: "", cantidad: "1", precioUnitario: "", servicioId: null }]
   );
-  const servicio = servicios.find((s) => s.id === servicioId);
-  const [descripcionPersonalizada, setDescripcionPersonalizada] = useState(
-    servicioOriginalSigueActivo ? "" : itemInicial.descripcion
-  );
-  const [monto, setMonto] = useState(String(itemInicial.precio_unitario));
-  const [cantidad, setCantidad] = useState(String(itemInicial.cantidad || 1));
 
-  function elegirServicio(id: string) {
-    setServicioId(id);
-    const s = servicios.find((x) => x.id === id);
-    if (s) setMonto(String(s.precio));
+  function actualizarLinea(i: number, campo: keyof Linea, valor: string) {
+    setLineas((prev) =>
+      prev.map((l, idx) => {
+        if (idx !== i) return l;
+        if (campo === "descripcion") return { ...l, descripcion: valor, servicioId: null };
+        return { ...l, [campo]: valor };
+      })
+    );
+  }
+  function agregarLinea() {
+    setLineas((prev) => [...prev, { descripcion: "", cantidad: "1", precioUnitario: "", servicioId: null }]);
+  }
+  function quitarLinea(i: number) {
+    setLineas((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+  }
+  function agregarDesdeServicio(servicioId: string, catalogo: ServicioCat[] = listaServicios) {
+    const s = catalogo.find((x) => x.id === servicioId);
+    if (!s) return;
+    setLineas((prev) => {
+      const vacias = prev.filter((l) => !l.descripcion.trim());
+      const nueva = { descripcion: s.nombre, cantidad: "1", precioUnitario: String(s.precio), servicioId: s.id };
+      return vacias.length === prev.length ? [nueva] : [...prev.filter((l) => l.descripcion.trim()), nueva];
+    });
+  }
+
+  const [mostrarNuevoServicio, setMostrarNuevoServicio] = useState(false);
+  const [nuevoServicioNombre, setNuevoServicioNombre] = useState("");
+  const [nuevoServicioTipo, setNuevoServicioTipo] = useState<"fijo" | "hora" | "proyecto" | "recurrente">("fijo");
+  const [nuevoServicioPrecio, setNuevoServicioPrecio] = useState("");
+  const [nuevoServicioIvuExento, setNuevoServicioIvuExento] = useState(false);
+  const [guardandoServicio, setGuardandoServicio] = useState(false);
+
+  async function crearServicioDesdeFactura() {
+    if (!nuevoServicioNombre.trim() || !nuevoServicioPrecio) return;
+    setGuardandoServicio(true);
+    setError(null);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setError("Sesión expirada — vuelve a entrar.");
+      setGuardandoServicio(false);
+      return;
+    }
+
+    const { data: nuevo, error: insertError } = await supabase
+      .from("services")
+      .insert({
+        owner_id: user.id,
+        entity_id: entidad?.id ?? null,
+        nombre: nuevoServicioNombre.trim(),
+        tipo: nuevoServicioTipo,
+        precio: Number(nuevoServicioPrecio),
+        ivu_exento: nuevoServicioIvuExento,
+      })
+      .select("id, nombre, tipo, precio, ivu_exento")
+      .single();
+
+    setGuardandoServicio(false);
+
+    if (insertError || !nuevo) {
+      setError(insertError?.message ?? "No se pudo crear el servicio.");
+      return;
+    }
+
+    const catalogoActualizado = [...listaServicios, nuevo as ServicioCat];
+    setListaServicios(catalogoActualizado);
+    agregarDesdeServicio(nuevo.id, catalogoActualizado);
+    setNuevoServicioNombre("");
+    setNuevoServicioPrecio("");
+    setNuevoServicioIvuExento(false);
+    setMostrarNuevoServicio(false);
   }
 
   const [metodosCobro, setMetodosCobro] = useState<string[]>(factura.metodos_cobro_aceptados ?? []);
@@ -149,18 +226,21 @@ export default function EditarFacturaForm({
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const descripcionFinal = servicioId === "personalizado" ? descripcionPersonalizada : servicio?.nombre ?? "";
-  const precioUnitarioNum = Number(monto) || 0;
-  const cantidadNum = Number(cantidad) || 1;
-  const montoNum = precioUnitarioNum * cantidadNum;
+  // Misma lógica de exención de IVU por línea que en nueva-factura-form.tsx
+  // (1 sept 2026, pedido de Joel).
+  function lineaEsIvuExenta(l: Linea): boolean {
+    if (!l.servicioId) return false;
+    const s = listaServicios.find((x) => x.id === l.servicioId);
+    return s ? s.ivu_exento : false;
+  }
 
-  const ivuExentoServicio = servicioId !== "personalizado" && servicio ? servicio.ivu_exento : true;
+  const subtotal = lineas.reduce((sum, l) => sum + sumaLinea(l), 0);
+  const subtotalGravable = lineas.reduce((sum, l) => sum + (lineaEsIvuExenta(l) ? 0 : sumaLinea(l)), 0);
   const ivuPct =
-    entidad?.ivu_applies && !cliente?.ivu_exempt_reseller && !ivuExentoServicio
+    entidad?.ivu_applies && !cliente?.ivu_exempt_reseller
       ? Number(entidad.ivu_rate_estatal || 0) + Number(entidad.ivu_rate_municipal || 0)
       : 0;
-  const subtotal = montoNum;
-  const ivuMonto = subtotal * (ivuPct / 100);
+  const ivuMonto = subtotalGravable * (ivuPct / 100);
   const retencionPct = retencionActiva ? Number(retencionPctInput) || 0 : 0;
   const retencionMonto = subtotal * (retencionPct / 100);
   const total = subtotal + ivuMonto - retencionMonto;
@@ -176,8 +256,9 @@ export default function EditarFacturaForm({
 
   async function guardar() {
     if (!entidad || !cliente) return;
-    if (!descripcionFinal.trim() || montoNum <= 0) {
-      setError("Elige un servicio (o describe uno personalizado) y pon un monto mayor a $0.");
+    const lineasValidas = lineas.filter((l) => l.descripcion.trim() && sumaLinea(l) > 0);
+    if (lineasValidas.length === 0) {
+      setError("Añade al menos un servicio con descripción y precio mayor a $0.");
       return;
     }
 
@@ -193,12 +274,14 @@ export default function EditarFacturaForm({
         .eq("id", cliente.id);
     }
 
+    const primerServicioId = lineasValidas.find((l) => l.servicioId)?.servicioId ?? null;
+
     const { error: updateError } = await supabase
       .from("invoices")
       .update({
         entity_id: entidad.id,
         client_id: cliente.id,
-        servicio_id: servicioId !== "personalizado" ? servicioId : null,
+        servicio_id: primerServicioId,
         subtotal,
         ivu_pct: ivuPct,
         ivu_monto: ivuMonto,
@@ -225,41 +308,34 @@ export default function EditarFacturaForm({
       return;
     }
 
-    const serviceIdFinal = servicioId !== "personalizado" ? servicioId : null;
-
-    if (itemInicial.id) {
-      const { error: itemError } = await supabase
-        .from("invoice_items")
-        .update({
-          descripcion: descripcionFinal,
-          cantidad: cantidadNum,
-          precio_unitario: precioUnitarioNum,
-          subtotal_linea: montoNum,
-          service_id: serviceIdFinal,
-        })
-        .eq("id", itemInicial.id);
-      if (itemError) {
-        setLoading(false);
-        setError(itemError.message);
-        return;
-      }
-    } else {
-      const { error: itemError } = await supabase.from("invoice_items").insert({
-        invoice_id: factura.id,
-        descripcion: descripcionFinal,
-        cantidad: cantidadNum,
-        precio_unitario: precioUnitarioNum,
-        subtotal_linea: montoNum,
-        service_id: serviceIdFinal,
-      });
-      if (itemError) {
-        setLoading(false);
-        setError(itemError.message);
-        return;
-      }
+    // Más simple y confiable que reconciliar línea por línea: borra las
+    // líneas viejas y mete las nuevas de una vez (mismo patrón que
+    // editar-cotizacion-form.tsx).
+    const { error: deleteError } = await supabase.from("invoice_items").delete().eq("invoice_id", factura.id);
+    if (deleteError) {
+      setLoading(false);
+      setError(deleteError.message);
+      return;
     }
 
+    const { error: itemsError } = await supabase.from("invoice_items").insert(
+      lineasValidas.map((l) => ({
+        invoice_id: factura.id,
+        service_id: l.servicioId,
+        descripcion: l.descripcion,
+        cantidad: Number(l.cantidad) || 1,
+        precio_unitario: Number(l.precioUnitario) || 0,
+        subtotal_linea: sumaLinea(l),
+      }))
+    );
+
     setLoading(false);
+
+    if (itemsError) {
+      setError(itemsError.message);
+      return;
+    }
+
     router.push(`/dashboard/facturacion/${factura.id}`);
     router.refresh();
   }
@@ -324,9 +400,6 @@ export default function EditarFacturaForm({
               <p className="text-xs text-muted">Retención automática (Sección 1062.03)</p>
             </div>
             {retencionActiva && (
-              // .vc-input trae width:100% del CSS global, que le gana a
-              // clases de ancho de Tailwind (w-16) por orden de cascada —
-              // por eso el ancho fijo va en style, no en className.
               <input
                 className="vc-input flex-shrink-0"
                 style={{ width: 64 }}
@@ -352,55 +425,117 @@ export default function EditarFacturaForm({
           </div>
         )}
 
-        <Field label="Servicio">
-          <select className="vc-input" value={servicioId} onChange={(e) => elegirServicio(e.target.value)}>
-            {servicios.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nombre} — {formatMoney(s.precio)}
-              </option>
+        {listaServicios.length > 0 && (
+          <Field label="Añadir desde el catálogo">
+            <select className="vc-input" defaultValue="" onChange={(e) => e.target.value && agregarDesdeServicio(e.target.value)}>
+              <option value="">Elegir un servicio guardado...</option>
+              {listaServicios.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre} — {formatMoney(s.precio)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setMostrarNuevoServicio(!mostrarNuevoServicio)}
+          className="-mt-1 text-left text-xs font-medium text-teal hover:opacity-80"
+        >
+          + Crear nuevo servicio en el catálogo...
+        </button>
+
+        {mostrarNuevoServicio && (
+          <div className="vc-card !bg-bg flex flex-col gap-2.5">
+            <p className="text-xs uppercase tracking-wide text-muted">Nuevo servicio</p>
+            <input
+              className="vc-input"
+              placeholder="Nombre del servicio"
+              value={nuevoServicioNombre}
+              onChange={(e) => setNuevoServicioNombre(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <select
+                className="vc-input flex-1"
+                value={nuevoServicioTipo}
+                onChange={(e) => setNuevoServicioTipo(e.target.value as typeof nuevoServicioTipo)}
+              >
+                <option value="fijo">Precio fijo</option>
+                <option value="hora">Por hora</option>
+                <option value="proyecto">Por proyecto</option>
+                <option value="recurrente">Recurrente</option>
+              </select>
+              <input
+                className="vc-input w-28 flex-shrink-0"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Precio"
+                value={nuevoServicioPrecio}
+                onChange={(e) => setNuevoServicioPrecio(e.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted">
+              <input type="checkbox" checked={nuevoServicioIvuExento} onChange={(e) => setNuevoServicioIvuExento(e.target.checked)} />
+              No aplica IVU (servicio profesional)
+            </label>
+            <button
+              type="button"
+              className="vc-btn-primary"
+              style={{ width: "auto" }}
+              disabled={!nuevoServicioNombre || !nuevoServicioPrecio || guardandoServicio}
+              onClick={crearServicioDesdeFactura}
+            >
+              {guardandoServicio ? "Guardando..." : "Guardar servicio y añadirlo aquí"}
+            </button>
+          </div>
+        )}
+
+        <div>
+          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Servicios de esta factura</label>
+          <div className="flex flex-col gap-2">
+            {lineas.map((l, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  className="vc-input flex-1"
+                  placeholder="Descripción del servicio"
+                  value={l.descripcion}
+                  onChange={(e) => actualizarLinea(i, "descripcion", e.target.value)}
+                />
+                <input
+                  className="vc-input w-16"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Cant."
+                  value={l.cantidad}
+                  onChange={(e) => actualizarLinea(i, "cantidad", e.target.value)}
+                />
+                <input
+                  className="vc-input w-24"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Precio"
+                  value={l.precioUnitario}
+                  onChange={(e) => actualizarLinea(i, "precioUnitario", e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => quitarLinea(i)}
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg"
+                  title="Quitar línea"
+                >
+                  <i className="ti ti-trash" style={{ fontSize: 14 }} />
+                </button>
+              </div>
             ))}
-            <option value="personalizado">Personalizado...</option>
-          </select>
-        </Field>
-
-        {servicioId === "personalizado" && (
-          <Field label="Descripción">
-            <input
-              className="vc-input"
-              placeholder="Descripción del servicio"
-              value={descripcionPersonalizada}
-              onChange={(e) => setDescripcionPersonalizada(e.target.value)}
-            />
-          </Field>
-        )}
-
-        <div className="flex gap-2">
-          <Field label="Cantidad">
-            <input
-              className="vc-input"
-              type="number"
-              min="1"
-              step="1"
-              value={cantidad}
-              onChange={(e) => setCantidad(e.target.value)}
-            />
-          </Field>
-          <Field label="Precio unitario">
-            <input
-              className="vc-input"
-              type="number"
-              min="0"
-              step="0.01"
-              value={monto}
-              onChange={(e) => setMonto(e.target.value)}
-            />
-          </Field>
+          </div>
+          <button type="button" onClick={agregarLinea} className="mt-2 text-xs font-medium text-teal hover:opacity-80">
+            + Añadir línea
+          </button>
         </div>
-        {cantidadNum > 1 && (
-          <p className="-mt-2 text-xs text-muted">
-            Subtotal de esta línea: {cantidadNum} × {formatMoney(precioUnitarioNum)} = {formatMoney(montoNum)}
-          </p>
-        )}
 
         <Field label="Métodos de cobro aceptados">
           <div className="flex flex-wrap gap-2">

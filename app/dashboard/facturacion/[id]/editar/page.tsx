@@ -39,13 +39,14 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
     );
   }
 
-  const { data: item } = await supabase
+  // Trae TODAS las líneas de la factura (antes solo la primera con
+  // .limit(1) — se perdían las demás al editar una factura con varios
+  // servicios; 1 sept 2026, pedido de Joel).
+  const { data: items } = await supabase
     .from("invoice_items")
-    .select("id, descripcion, precio_unitario, cantidad")
+    .select("id, descripcion, precio_unitario, cantidad, service_id")
     .eq("invoice_id", params.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
 
   const { data: entities } = await supabase
     .from("business_entities")
@@ -69,7 +70,7 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
   return (
     <EditarFacturaForm
       factura={factura}
-      itemInicial={item ?? { id: "", descripcion: "", precio_unitario: 0, cantidad: 1 }}
+      itemsIniciales={items ?? []}
       entities={entities ?? []}
       clients={clients ?? []}
       servicios={servicios ?? []}
