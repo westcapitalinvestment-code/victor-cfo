@@ -244,7 +244,7 @@ body {
 .vc-bnav-scroll { display: flex; overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; scrollbar-width: none; padding: 0 8px; gap: 2px; justify-content: center; }
 .vc-nb { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; background: none; border: none; padding: 6px 10px; border-radius: 10px; transition: all .15s; flex-shrink: 0; min-width: 60px; text-decoration: none; }
 .vc-nb:hover { background: rgba(29,158,117,.06); }
-.vc-nb i { font-size: 20px; color: var(--muted); transition: color .15s; }
+.vc-nb i { font-size: 23px; color: var(--muted); transition: color .15s; }
 .vc-nb i.on { color: #1D9E75; }
 .vc-nl { font-size: 9px; color: var(--muted); white-space: nowrap; }
 .vc-nl.on { color: #1D9E75; font-weight: 500; }

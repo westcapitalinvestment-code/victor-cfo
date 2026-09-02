@@ -36,12 +36,14 @@ const TABS_NEGOCIO_INICIO = [
 // del nav — vive DENTRO del portal de Facturación como pestaña. El segundo
 // ícono de negocio es "Pagos" (pagarle a contratistas/técnicos con
 // retención 480.6) — pantalla nueva y distinta, todavía sin construir.
+// "Técnico" se quitó del nav (1 sept 2026, pedido de Joel: en su mockup
+// solo hay un ícono "Equipo" — Técnico era un placeholder duplicado de la
+// misma idea, /dashboard/tecnico sigue existiendo pero ya no se enlaza).
 const TABS_NEGOCIO = [
   { href: "/dashboard/facturacion", label: "Facturas", icon: "ti-file-invoice" },
   { href: "/dashboard/pagos", label: "Pagos", icon: "ti-cash" },
   { href: "/dashboard/admin", label: "Admin", icon: "ti-user-cog" },
   { href: "/dashboard/equipo", label: "Equipo", icon: "ti-users" },
-  { href: "/dashboard/tecnico", label: "Técnico", icon: "ti-tool" },
 ];
 
 const TAB_CONFIG = { href: "/dashboard/config", label: "Config", icon: "ti-settings" };
