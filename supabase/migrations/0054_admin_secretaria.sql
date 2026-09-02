@@ -82,6 +82,15 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS addon_admin_status text DEFAULT 'inac
 ALTER TABLE users ADD COLUMN IF NOT EXISTS addon_admin_item_id text; -- id del subscription item en Stripe (cantidad = seats)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS addon_admin_seats integer DEFAULT 0;
 
+-- Vínculo opcional con Pagos (mockup: "¿También le pagas por sus
+-- servicios? → Activar retención") — mismo patrón que technicians.vendor_id,
+-- para cuando Joel también le paga a su secretaria/admin como contratista.
+ALTER TABLE account_members ADD COLUMN IF NOT EXISTS vendor_id uuid REFERENCES vendors(id) ON DELETE SET NULL;
+-- account_members solo guardaba member_email — le falta un nombre amigable
+-- para mostrar ("Laura Rivera" en vez del correo) en la tarjeta de gestión.
+ALTER TABLE account_members ADD COLUMN IF NOT EXISTS member_name text;
+ALTER TABLE admin_invitations ADD COLUMN IF NOT EXISTS vendor_id uuid REFERENCES vendors(id) ON DELETE SET NULL;
+
 -- ----------------------------------------------------------------------------
 -- PARTE 3 — Restringir de verdad lo que un admin/secretaria puede ver.
 -- Patrón para las tablas "opcionales" (transactions, retenciones_hacienda):

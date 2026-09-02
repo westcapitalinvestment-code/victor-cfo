@@ -81,6 +81,14 @@ export function priceIdAddonTecnicos(): string | null {
   return process.env.STRIPE_PRICE_ADDON_TECNICOS || null;
 }
 
+// Addon "Admin/Secretaria" — 2 sept 2026, pedido de Joel: $10.00/mes POR
+// SEAT (a diferencia de Técnicos, que es un precio plano hasta 3). La
+// cantidad del subscription item se sincroniza con la cantidad de admins
+// activos + invitaciones pendientes — ver /api/stripe/addon-admin/sincronizar.
+export function priceIdAddonAdmin(): string | null {
+  return process.env.STRIPE_PRICE_ADDON_ADMIN || null;
+}
+
 export function esCicloValido(valor: unknown): valor is Ciclo {
   return valor === "mensual" || valor === "anual";
 }
