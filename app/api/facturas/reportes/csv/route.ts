@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
 
   let facturasQuery = supabase
     .from("invoices")
-    .select("id, numero, subtotal, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name, email)")
+    .select("id, numero, subtotal, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, fecha_pago, client_id, clients(name, email)")
     .eq("owner_id", user.id)
     .neq("estado", "borrador")
     .gte("fecha_emision", desde)
@@ -146,8 +146,17 @@ export async function GET(req: NextRequest) {
       const mes = String(f.fecha_emision).slice(0, 7);
       const actual = mapa.get(mes) ?? { facturado: 0, cobrado: 0 };
       actual.facturado += Number(f.total);
-      if (f.estado === "pagada") actual.cobrado += Number(f.total);
       mapa.set(mes, actual);
+    }
+    // "Cobrado" por el mes real del pago (fecha_pago), no el de emisión —
+    // mismo fix que ReportesTab (2 sept 2026). Fallback a fecha_emision
+    // para facturas pagadas antes de que existiera este campo.
+    for (const f of facturas) {
+      if (f.estado !== "pagada") continue;
+      const mesCobro = String(f.fecha_pago ?? f.fecha_emision).slice(0, 7);
+      const actual = mapa.get(mesCobro) ?? { facturado: 0, cobrado: 0 };
+      actual.cobrado += Number(f.total);
+      mapa.set(mesCobro, actual);
     }
     for (const [mes, m] of [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
       filas.push([mes, m.facturado.toFixed(2), m.cobrado.toFixed(2)].join(","));

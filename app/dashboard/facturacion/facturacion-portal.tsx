@@ -26,6 +26,10 @@ type Factura = {
   estado: string;
   fecha_emision: string;
   fecha_vencimiento: string | null;
+  // Fecha real en que llegó el pago (migración 0046) — distinta de
+  // fecha_emision. Nula en facturas marcadas pagadas antes de este campo
+  // existir; el código hace fallback a fecha_emision en esos casos.
+  fecha_pago: string | null;
   client_id: string | null;
   clients: { name: string } | null;
 };
@@ -323,6 +327,11 @@ function FilaFactura({ factura }: { factura: Factura }) {
   const nombre = factura.clients?.name ?? "Sin cliente";
   const [pagando, setPagando] = useState(false);
   const [metodoPago, setMetodoPago] = useState(METODOS_PAGO[0]);
+  // Fecha real del pago (2 sept 2026, pedido de Joel: "el pago salio el dia
+  // 1 pero me pago el dia 2 y tal como esta sale que todos pagaran el dia
+  // 1") — por defecto hoy, pero editable porque el pago pudo haber llegado
+  // otro día.
+  const [fechaPago, setFechaPago] = useState(hoyISO());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -333,7 +342,7 @@ function FilaFactura({ factura }: { factura: Factura }) {
     setError(null);
     const { error: updateError } = await supabase
       .from("invoices")
-      .update({ estado: "pagada", metodo_pago: metodoPago })
+      .update({ estado: "pagada", metodo_pago: metodoPago, fecha_pago: fechaPago })
       .eq("id", factura.id);
     setLoading(false);
     if (updateError) {
@@ -411,6 +420,16 @@ function FilaFactura({ factura }: { factura: Factura }) {
                 </option>
               ))}
             </select>
+            {/* Fecha del pago, al lado del método (2 sept 2026) — ver
+                comentario en el useState de fechaPago. width:auto por el
+                mismo bug de vc-input al 100% dentro de un flex row. */}
+            <input
+              type="date"
+              className="vc-input flex-shrink-0"
+              style={{ width: "auto" }}
+              value={fechaPago}
+              onChange={(e) => setFechaPago(e.target.value)}
+            />
             {/* .vc-btn-primary trae width:100% en globals.css — en este flex
                 row eso gana como flex-basis y aplasta el <select> flex-1 al
                 lado (mismo bug de fondo documentado en varios lugares). */}
@@ -1359,8 +1378,21 @@ function ReportesTab({
       const mes = f.fecha_emision.slice(0, 7);
       const actual = mapa.get(mes) ?? { mes, facturado: 0, cobrado: 0 };
       actual.facturado += Number(f.total);
-      if (f.estado === "pagada") actual.cobrado += Number(f.total);
       mapa.set(mes, actual);
+    }
+    // "Cobrado" se agrupa por el mes real del pago (fecha_pago), no por el
+    // mes de emisión (2 sept 2026, pedido de Joel: una factura emitida el
+    // día 1 pero pagada el día 2 del mes siguiente salía "cobrada" en el
+    // mes equivocado). Puede caer en un mes que no tenga nada facturado —
+    // por eso se crea la fila si hace falta, en vez de asumir que ya existe.
+    // Facturas pagadas antes de que existiera fecha_pago no la tienen; para
+    // esas se usa fecha_emision como respaldo (mismo comportamiento de antes).
+    for (const f of facturasFiltradas) {
+      if (f.estado !== "pagada") continue;
+      const mesCobro = (f.fecha_pago ?? f.fecha_emision).slice(0, 7);
+      const actual = mapa.get(mesCobro) ?? { mes: mesCobro, facturado: 0, cobrado: 0 };
+      actual.cobrado += Number(f.total);
+      mapa.set(mesCobro, actual);
     }
     return [...mapa.values()].sort((a, b) => a.mes.localeCompare(b.mes));
   }, [facturasFiltradas]);

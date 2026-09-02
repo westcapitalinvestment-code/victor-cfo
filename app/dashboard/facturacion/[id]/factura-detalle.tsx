@@ -30,6 +30,10 @@ type Factura = {
   fecha_emision: string;
   fecha_vencimiento: string | null;
   metodo_pago: string | null;
+  // Fecha real en que llegó el pago (migración 0046) — distinta de
+  // fecha_emision. Nula en facturas marcadas pagadas antes de este campo
+  // existir.
+  fecha_pago: string | null;
   notas: string | null;
   metodos_cobro_aceptados: string[] | null;
   late_fee_habilitado: boolean;
@@ -61,6 +65,10 @@ function hoyVencida(f: Factura): boolean {
   return f.estado !== "pagada" && f.estado !== "borrador" && !!f.fecha_vencimiento && f.fecha_vencimiento < new Date().toISOString().slice(0, 10);
 }
 
+function hoyISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 // Convierte cualquier formato de teléfono guardado (787-555-0123, (787)
 // 555-0123, etc.) en solo dígitos con código de país para el link de
 // WhatsApp — si ya trae 10 dígitos (área de PR/EEUU) le antepone el "1".
@@ -86,6 +94,11 @@ export default function FacturaDetalle({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [metodoPago, setMetodoPago] = useState(METODOS_PAGO[0]);
+  // Fecha real del pago (2 sept 2026, pedido de Joel: "el pago salio el dia
+  // 1 pero me pago el dia 2 y tal como esta sale que todos pagaran el dia
+  // 1") — por defecto hoy, pero editable porque el pago pudo haber llegado
+  // otro día.
+  const [fechaPago, setFechaPago] = useState(hoyISO());
   const [confirmandoPago, setConfirmandoPago] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
@@ -101,7 +114,7 @@ export default function FacturaDetalle({
   const vencida = hoyVencida(factura);
   const estadoTexto = vencida ? "vencida" : factura.estado;
 
-  async function actualizarEstado(nuevoEstado: string, extra?: { metodo_pago?: string }) {
+  async function actualizarEstado(nuevoEstado: string, extra?: { metodo_pago?: string; fecha_pago?: string }) {
     setLoading(true);
     setError(null);
     const { error: updateError } = await supabase
@@ -415,7 +428,10 @@ export default function FacturaDetalle({
         </div>
 
         {factura.metodo_pago && (
-          <p className="text-xs text-muted">Pagada vía {factura.metodo_pago}</p>
+          <p className="text-xs text-muted">
+            Pagada vía {factura.metodo_pago}
+            {factura.fecha_pago && ` el ${formatFecha(factura.fecha_pago)}`}
+          </p>
         )}
 
         <div className="no-imprimir grid grid-cols-4 gap-2 border-t border-border pt-3">
@@ -501,6 +517,16 @@ export default function FacturaDetalle({
                       </option>
                     ))}
                   </select>
+                  {/* Fecha del pago, al lado del método (2 sept 2026) — ver
+                      comentario en el useState de fechaPago. width:auto por
+                      el mismo bug de vc-input al 100% dentro de un flex row. */}
+                  <input
+                    type="date"
+                    className="vc-input flex-shrink-0"
+                    style={{ width: "auto" }}
+                    value={fechaPago}
+                    onChange={(e) => setFechaPago(e.target.value)}
+                  />
                   {/* .vc-btn-primary trae width:100% en globals.css — dentro
                       de este flex row eso gana como flex-basis y aplasta el
                       <select> flex-1 al lado (mismo bug de fondo que el de
@@ -510,7 +536,7 @@ export default function FacturaDetalle({
                     className="vc-btn-primary flex-shrink-0"
                     style={{ width: "auto" }}
                     disabled={loading}
-                    onClick={() => actualizarEstado("pagada", { metodo_pago: metodoPago })}
+                    onClick={() => actualizarEstado("pagada", { metodo_pago: metodoPago, fecha_pago: fechaPago })}
                   >
                     {loading ? "..." : "Está correcto, confirmar"}
                   </button>
