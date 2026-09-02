@@ -201,7 +201,7 @@ export default function FacturacionPortal({
       {tab === "clientes" && <ClientesTab clients={clients} />}
       {tab === "cotizaciones" && <CotizacionesTab cotizaciones={cotizaciones} />}
       {tab === "servicios" && <ServiciosTab servicios={servicios} entidadId={entidadId} />}
-      {tab === "reportes" && <ReportesTab facturas={facturas} />}
+      {tab === "reportes" && <ReportesTab facturas={facturas} clients={clients} servicios={servicios} entidadId={entidadId} />}
     </div>
   );
 }
@@ -931,25 +931,165 @@ function CotizacionesTab({ cotizaciones }: { cotizaciones: Cotizacion[] }) {
   );
 }
 
+// Reconstruido el 2 sept 2026 calcando la sección "Reportes" del mockup
+// VICTOR Pro — Producto Completo_FINAL.html (id="pf-rep"): filtros de
+// período + filtros avanzados (cliente/servicio/categoría/estado/email) +
+// selector de "vista" que decide qué tarjeta se muestra debajo, más
+// exportar CSV/PDF. Se deja fuera la tarjeta "Retenciones para Hacienda"
+// (lo que Joel le retiene a SUS contratistas, Ley 480.6) porque depende del
+// módulo Pagos, que todavía no existe — se añade cuando se construya. La
+// tarjeta "Créditos en Hacienda" del mockup separaba Acreditado/Pendiente;
+// aquí se deja solo el total porque el sistema no rastrea si Joel ya
+// reclamó la retención en su planilla (decisión de Joel, 2 sept 2026).
 const PERIODOS = [
   { value: "mes", label: "Este mes" },
+  { value: "trimestre", label: "Trimestre" },
   { value: "anio", label: "Este año" },
   { value: "todo", label: "Todo" },
+  { value: "rango", label: "Rango" },
 ] as const;
 
-function inicioPeriodo(periodo: string): string {
+function inicioPeriodo(periodo: string, rangoDesde: string): string {
   const hoy = new Date();
   if (periodo === "mes") return new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+  if (periodo === "trimestre") {
+    const inicioTrimestre = Math.floor(hoy.getMonth() / 3) * 3;
+    return new Date(hoy.getFullYear(), inicioTrimestre, 1).toISOString().slice(0, 10);
+  }
   if (periodo === "anio") return new Date(hoy.getFullYear(), 0, 1).toISOString().slice(0, 10);
+  if (periodo === "rango") return rangoDesde || "0000-01-01";
   return "0000-01-01";
 }
 
-function ReportesTab({ facturas }: { facturas: Factura[] }) {
+function finPeriodo(periodo: string, rangoHasta: string): string {
+  if (periodo === "rango") return rangoHasta || hoyISO();
+  return hoyISO();
+}
+
+const VISTAS = [
+  { value: "cliente", label: "Por cliente" },
+  { value: "servicio", label: "Por servicio" },
+  { value: "categoria", label: "Por categoría" },
+  { value: "clienteServicio", label: "Cliente + servicio" },
+  { value: "retenciones", label: "Retenciones SURI" },
+  { value: "flujo", label: "Flujo de cobro" },
+] as const;
+type VistaReporte = (typeof VISTAS)[number]["value"];
+
+const ESTADOS_REPORTE = [
+  { value: "pagada", label: "Pagadas" },
+  { value: "enviada", label: "Pendientes" },
+  { value: "vencida", label: "Vencidas" },
+] as const;
+
+function mesLabel(yyyyMm: string): string {
+  const [anio, mes] = yyyyMm.split("-").map(Number);
+  if (!anio || !mes) return yyyyMm;
+  const fecha = new Date(anio, mes - 1, 1);
+  return fecha.toLocaleDateString("es-PR", { month: "short", year: "numeric" });
+}
+
+function SeccionColapsable({
+  titulo,
+  accionDerecha,
+  defaultAbierta = true,
+  children,
+}: {
+  titulo: string;
+  accionDerecha?: React.ReactNode;
+  defaultAbierta?: boolean;
+  children: React.ReactNode;
+}) {
+  const [abierta, setAbierta] = useState(defaultAbierta);
+  return (
+    <div className="vc-card mb-3">
+      <button type="button" className="flex w-full items-center justify-between" onClick={() => setAbierta((v) => !v)}>
+        <p className="text-xs uppercase tracking-wide text-muted">{titulo}</p>
+        <span className="flex items-center gap-2">
+          {accionDerecha}
+          <i className={`ti ${abierta ? "ti-minus" : "ti-plus"} text-muted`} style={{ fontSize: 13 }} />
+        </span>
+      </button>
+      {abierta && <div className="mt-2">{children}</div>}
+    </div>
+  );
+}
+
+function FilaResumen({ label, valor, tono, fuerte }: { label: string; valor: string; tono?: "g" | "a" | "r"; fuerte?: boolean }) {
+  const color = tono === "g" ? "var(--teal)" : tono === "a" ? "#F5A623" : tono === "r" ? "var(--red)" : undefined;
+  return (
+    <div className={`flex items-center justify-between py-1.5 text-sm ${fuerte ? "mt-1 border-t border-border pt-2 font-medium" : ""}`}>
+      <span className="text-muted">{label}</span>
+      <span className="font-medium" style={color ? { color } : undefined}>
+        {valor}
+      </span>
+    </div>
+  );
+}
+
+function BarraProgreso({ pct, color }: { pct: number; color: string }) {
+  return (
+    <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden", marginTop: 5 }}>
+      <div style={{ height: "100%", width: `${Math.max(0, Math.min(100, pct))}%`, background: color }} />
+    </div>
+  );
+}
+
+type ItemFacturado = {
+  facturaId: string;
+  descripcion: string;
+  serviceId: string | null;
+  servicioNombre: string | null;
+  servicioTipo: string | null;
+  subtotal_linea: number;
+  estado: string;
+  fecha_emision: string;
+  clientId: string | null;
+  clientNombre: string;
+  clientEmail: string | null;
+};
+
+function ReportesTab({
+  facturas,
+  clients,
+  servicios,
+  entidadId,
+}: {
+  facturas: Factura[];
+  clients: Cliente[];
+  servicios: Servicio[];
+  entidadId: string | null;
+}) {
   const supabase = createClient();
   const [periodo, setPeriodo] = useState<(typeof PERIODOS)[number]["value"]>("mes");
-  const [itemsFacturados, setItemsFacturados] = useState<
-    { descripcion: string; serviceId: string | null; servicioNombre: string | null; subtotal_linea: number; estado: string; fecha_emision: string }[] | null
-  >(null);
+  const [rangoDesde, setRangoDesde] = useState(hoyISO());
+  const [rangoHasta, setRangoHasta] = useState(hoyISO());
+  const [itemsFacturados, setItemsFacturados] = useState<ItemFacturado[] | null>(null);
+
+  // Filtros avanzados: "draft" es lo que el usuario está tecleando/eligiendo,
+  // "filtros" es lo que realmente se aplica al cálculo — solo se sincronizan
+  // al darle a "Aplicar filtros" (calcado del botón del mockup), así una
+  // búsqueda de email no recalcula todo con cada letra. "vista" es la
+  // excepción: cambia la tarjeta de abajo al instante, es solo presentación.
+  const [draftCliente, setDraftCliente] = useState("");
+  const [draftServicio, setDraftServicio] = useState("");
+  const [draftCategoria, setDraftCategoria] = useState("");
+  const [draftEstado, setDraftEstado] = useState("");
+  const [draftEmail, setDraftEmail] = useState("");
+  const [vista, setVista] = useState<VistaReporte>("cliente");
+  const [filtros, setFiltros] = useState({ cliente: "", servicio: "", categoria: "", estado: "", email: "" });
+
+  function aplicarFiltros() {
+    setFiltros({ cliente: draftCliente, servicio: draftServicio, categoria: draftCategoria, estado: draftEstado, email: draftEmail });
+  }
+  function limpiarFiltros() {
+    setDraftCliente("");
+    setDraftServicio("");
+    setDraftCategoria("");
+    setDraftEstado("");
+    setDraftEmail("");
+    setFiltros({ cliente: "", servicio: "", categoria: "", estado: "", email: "" });
+  }
 
   useEffect(() => {
     let activo = true;
@@ -960,17 +1100,27 @@ function ReportesTab({ facturas }: { facturas: Factura[] }) {
       // el nombre ACTUAL del servicio (services.nombre) para el label,
       // en vez del texto guardado en la línea, así una línea vieja sigue
       // agrupando bien aunque el catálogo se haya renombrado después.
+      // invoice_id + client_id/email (2 sept 2026) — hacen falta para que
+      // los filtros avanzados de Reportes (cliente, email, estado real
+      // incluyendo "vencida") puedan cruzar cada línea con su factura.
       .from("invoice_items")
-      .select("descripcion, service_id, subtotal_linea, cantidad, precio_unitario, services(nombre), invoices(estado, fecha_emision)")
+      .select(
+        "invoice_id, descripcion, service_id, subtotal_linea, cantidad, precio_unitario, services(nombre, tipo), invoices(estado, fecha_emision, client_id, clients(name, email))"
+      )
       .then(({ data }) => {
         if (!activo) return;
-        const filas = (data ?? []).map((it: any) => ({
+        const filas: ItemFacturado[] = (data ?? []).map((it: any) => ({
+          facturaId: it.invoice_id as string,
           descripcion: it.descripcion as string,
           serviceId: it.service_id ?? null,
           servicioNombre: it.services?.nombre ?? null,
+          servicioTipo: it.services?.tipo ?? null,
           subtotal_linea: Number(it.subtotal_linea ?? it.cantidad * it.precio_unitario),
           estado: it.invoices?.estado ?? "borrador",
           fecha_emision: it.invoices?.fecha_emision ?? "",
+          clientId: it.invoices?.client_id ?? null,
+          clientNombre: it.invoices?.clients?.name ?? "Sin cliente",
+          clientEmail: it.invoices?.clients?.email ?? null,
         }));
         setItemsFacturados(filas);
       });
@@ -980,18 +1130,64 @@ function ReportesTab({ facturas }: { facturas: Factura[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const desde = inicioPeriodo(periodo);
-  const facturasFiltradas = useMemo(
-    () => facturas.filter((f) => f.estado !== "borrador" && f.fecha_emision >= desde),
-    [facturas, desde]
-  );
+  const desde = periodo === "rango" ? inicioPeriodo(periodo, rangoDesde) : inicioPeriodo(periodo, "");
+  const hasta = finPeriodo(periodo, rangoHasta);
+
+  const clientePorId = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients]);
+  const facturaPorId = useMemo(() => new Map(facturas.map((f) => [f.id, f])), [facturas]);
+
+  const itemsEnRango = useMemo(() => {
+    if (!itemsFacturados) return [];
+    return itemsFacturados.filter((it) => {
+      if (it.estado === "borrador") return false;
+      if (it.fecha_emision < desde || it.fecha_emision > hasta) return false;
+      if (filtros.cliente && it.clientId !== filtros.cliente) return false;
+      if (filtros.servicio && it.serviceId !== filtros.servicio) return false;
+      if (filtros.categoria && it.servicioTipo !== filtros.categoria) return false;
+      if (filtros.email && !(it.clientEmail ?? "").toLowerCase().includes(filtros.email.toLowerCase())) return false;
+      if (filtros.estado) {
+        const f = facturaPorId.get(it.facturaId);
+        if (!f || estadoMostrado(f) !== filtros.estado) return false;
+      }
+      return true;
+    });
+  }, [itemsFacturados, desde, hasta, filtros, facturaPorId]);
+
+  // Cuando hay filtro de servicio/categoría, las facturas se restringen a
+  // las que tengan al menos una línea que pase ese filtro — así "Resumen" y
+  // "Por cliente" no muestran facturas que no tocan el servicio elegido.
+  const idsDesdeItems = useMemo(() => {
+    if (!filtros.servicio && !filtros.categoria) return null;
+    return new Set(itemsEnRango.map((it) => it.facturaId));
+  }, [itemsEnRango, filtros.servicio, filtros.categoria]);
+
+  const facturasFiltradas = useMemo(() => {
+    return facturas.filter((f) => {
+      if (f.estado === "borrador") return false;
+      if (f.fecha_emision < desde || f.fecha_emision > hasta) return false;
+      if (filtros.cliente && f.client_id !== filtros.cliente) return false;
+      if (filtros.estado && estadoMostrado(f) !== filtros.estado) return false;
+      if (filtros.email) {
+        const email = (f.client_id ? clientePorId.get(f.client_id)?.email : null) ?? "";
+        if (!email.toLowerCase().includes(filtros.email.toLowerCase())) return false;
+      }
+      if (idsDesdeItems && !idsDesdeItems.has(f.id)) return false;
+      return true;
+    });
+  }, [facturas, desde, hasta, filtros, idsDesdeItems, clientePorId]);
+
+  const totalFacturado = facturasFiltradas.reduce((s, f) => s + Number(f.total), 0);
+  const facturasPagadas = useMemo(() => facturasFiltradas.filter((f) => f.estado === "pagada"), [facturasFiltradas]);
+  const totalCobrado = facturasPagadas.reduce((s, f) => s + Number(f.total), 0);
+  const totalPendiente = facturasFiltradas.filter((f) => f.estado !== "pagada").reduce((s, f) => s + Number(f.total), 0);
+  const tasaCobro = totalFacturado > 0 ? Math.round((totalCobrado / totalFacturado) * 100) : 0;
 
   const porCliente = useMemo(() => {
-    const mapa = new Map<string, { nombre: string; facturado: number; cobrado: number; count: number }>();
+    const mapa = new Map<string, { id: string; nombre: string; facturado: number; cobrado: number; count: number }>();
     for (const f of facturasFiltradas) {
       const key = f.client_id ?? "sin-cliente";
       const nombre = f.clients?.name ?? "Sin cliente";
-      const actual = mapa.get(key) ?? { nombre, facturado: 0, cobrado: 0, count: 0 };
+      const actual = mapa.get(key) ?? { id: key, nombre, facturado: 0, cobrado: 0, count: 0 };
       actual.facturado += Number(f.total);
       if (f.estado === "pagada") actual.cobrado += Number(f.total);
       actual.count += 1;
@@ -999,6 +1195,7 @@ function ReportesTab({ facturas }: { facturas: Factura[] }) {
     }
     return [...mapa.values()].sort((a, b) => b.facturado - a.facturado);
   }, [facturasFiltradas]);
+  const maxPorCliente = Math.max(1, ...porCliente.map((c) => c.facturado));
 
   // Retenciones acumuladas (1 sept 2026) — pote visual pedido por Joel:
   // cuando un cliente-negocio retiene (Sección 1062.03), esa plata la
@@ -1026,10 +1223,8 @@ function ReportesTab({ facturas }: { facturas: Factura[] }) {
   const totalRetenido = porRetencion.reduce((s, c) => s + c.retenido, 0);
 
   const porServicio = useMemo(() => {
-    if (!itemsFacturados) return [];
     const mapa = new Map<string, { descripcion: string; total: number; count: number }>();
-    for (const it of itemsFacturados) {
-      if (it.estado === "borrador" || it.fecha_emision < desde) continue;
+    for (const it of itemsEnRango) {
       // Agrupa por service_id cuando existe (línea real del catálogo) —
       // así "Consulta inicial" y "consulta Inicial" cuentan como el mismo
       // producto. Las líneas libres (sin catálogo) siguen agrupando por
@@ -1041,11 +1236,62 @@ function ReportesTab({ facturas }: { facturas: Factura[] }) {
       actual.count += 1;
       mapa.set(key, actual);
     }
-    return [...mapa.values()].sort((a, b) => b.total - a.total).slice(0, 10);
-  }, [itemsFacturados, desde]);
+    return [...mapa.values()].sort((a, b) => b.total - a.total);
+  }, [itemsEnRango]);
+  const maxPorServicio = Math.max(1, ...porServicio.map((s) => s.total));
 
-  const totalFacturado = facturasFiltradas.reduce((s, f) => s + Number(f.total), 0);
-  const totalCobrado = facturasFiltradas.filter((f) => f.estado === "pagada").reduce((s, f) => s + Number(f.total), 0);
+  const porCategoria = useMemo(() => {
+    const mapa = new Map<string, { tipo: string; total: number; count: number }>();
+    for (const it of itemsEnRango) {
+      const key = it.servicioTipo ?? "sin-categoria";
+      const actual = mapa.get(key) ?? { tipo: key, total: 0, count: 0 };
+      actual.total += it.subtotal_linea;
+      actual.count += 1;
+      mapa.set(key, actual);
+    }
+    return [...mapa.values()].sort((a, b) => b.total - a.total);
+  }, [itemsEnRango]);
+  const maxPorCategoria = Math.max(1, ...porCategoria.map((c) => c.total));
+
+  const porClienteServicio = useMemo(() => {
+    const mapa = new Map<string, { cliente: string; servicio: string; total: number; count: number }>();
+    for (const it of itemsEnRango) {
+      const key = `${it.clientId ?? "sin-cliente"}::${it.serviceId ?? it.descripcion}`;
+      const actual = mapa.get(key) ?? { cliente: it.clientNombre, servicio: it.servicioNombre ?? it.descripcion, total: 0, count: 0 };
+      actual.total += it.subtotal_linea;
+      actual.count += 1;
+      mapa.set(key, actual);
+    }
+    return [...mapa.values()].sort((a, b) => b.total - a.total);
+  }, [itemsEnRango]);
+
+  const porMes = useMemo(() => {
+    const mapa = new Map<string, { mes: string; facturado: number; cobrado: number }>();
+    for (const f of facturasFiltradas) {
+      const mes = f.fecha_emision.slice(0, 7);
+      const actual = mapa.get(mes) ?? { mes, facturado: 0, cobrado: 0 };
+      actual.facturado += Number(f.total);
+      if (f.estado === "pagada") actual.cobrado += Number(f.total);
+      mapa.set(mes, actual);
+    }
+    return [...mapa.values()].sort((a, b) => a.mes.localeCompare(b.mes));
+  }, [facturasFiltradas]);
+
+  const paramsExport = useMemo(() => {
+    const p = new URLSearchParams();
+    p.set("desde", desde);
+    p.set("hasta", hasta);
+    if (filtros.cliente) p.set("clienteId", filtros.cliente);
+    if (filtros.servicio) p.set("servicioId", filtros.servicio);
+    if (filtros.categoria) p.set("categoria", filtros.categoria);
+    if (filtros.estado) p.set("estado", filtros.estado);
+    if (filtros.email) p.set("email", filtros.email);
+    if (entidadId) p.set("entityId", entidadId);
+    p.set("vista", vista);
+    return p.toString();
+  }, [desde, hasta, filtros, entidadId, vista]);
+  const csvHref = `/api/facturas/reportes/csv?${paramsExport}`;
+  const pdfHref = `/api/facturas/reportes/pdf?${paramsExport}`;
 
   return (
     <>
@@ -1066,56 +1312,189 @@ function ReportesTab({ facturas }: { facturas: Factura[] }) {
         ))}
       </div>
 
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <StatCard label="Facturado" valor={formatMoney(totalFacturado)} sub={`${facturasFiltradas.length} facturas`} />
-        <StatCard
-          label="Cobrado"
-          valor={formatMoney(totalCobrado)}
-          sub={totalFacturado > 0 ? `${Math.round((totalCobrado / totalFacturado) * 100)}%` : "0%"}
-          tono="g"
-        />
-      </div>
+      {periodo === "rango" && (
+        <div className="mb-3 flex gap-1.5">
+          <input type="date" className="vc-input flex-1" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} />
+          <input type="date" className="vc-input flex-1" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} />
+        </div>
+      )}
 
       <div className="vc-card mb-3">
-        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Ingresos por cliente</p>
-        {porCliente.length === 0 && <p className="text-xs text-muted">No hay facturas en este período.</p>}
-        {porCliente.map((c) => (
-          <div key={c.nombre} className="flex items-center gap-2.5 border-b border-border py-2.5 text-sm last:border-0">
-            <div
-              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-              style={{ background: colorAvatar(c.nombre) }}
-            >
-              {iniciales(c.nombre)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate">{c.nombre}</p>
-              <p className="truncate text-xs text-muted">
-                {c.count} factura{c.count === 1 ? "" : "s"} · {formatMoney(c.cobrado)} cobrado
-              </p>
-            </div>
-            <span className="flex-shrink-0 font-medium">{formatMoney(c.facturado)}</span>
+        <p className="mb-2.5 text-xs uppercase tracking-wide text-muted">Filtrar por</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Cliente">
+            <select className="vc-input" style={{ fontSize: 12 }} value={draftCliente} onChange={(e) => setDraftCliente(e.target.value)}>
+              <option value="">Todos los clientes</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Servicio">
+            <select className="vc-input" style={{ fontSize: 12 }} value={draftServicio} onChange={(e) => setDraftServicio(e.target.value)}>
+              <option value="">Todos los servicios</option>
+              {servicios.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Categoría">
+            <select className="vc-input" style={{ fontSize: 12 }} value={draftCategoria} onChange={(e) => setDraftCategoria(e.target.value)}>
+              <option value="">Todas las categorías</option>
+              {TIPOS_SERVICIO.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Estado">
+            <select className="vc-input" style={{ fontSize: 12 }} value={draftEstado} onChange={(e) => setDraftEstado(e.target.value)}>
+              <option value="">Todos los estados</option>
+              {ESTADOS_REPORTE.map((e) => (
+                <option key={e.value} value={e.value}>
+                  {e.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="col-span-2">
+            <Field label="Email cliente">
+              <input
+                className="vc-input"
+                style={{ fontSize: 12 }}
+                placeholder="Buscar por email..."
+                value={draftEmail}
+                onChange={(e) => setDraftEmail(e.target.value)}
+              />
+            </Field>
           </div>
-        ))}
+          <div className="col-span-2">
+            <Field label="Vista del reporte">
+              <select className="vc-input" style={{ fontSize: 12 }} value={vista} onChange={(e) => setVista(e.target.value as VistaReporte)}>
+                {VISTAS.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </div>
+        <div className="mt-2.5 flex gap-2">
+          <button className="vc-btn-primary flex-1" onClick={aplicarFiltros}>
+            <i className="ti ti-search" /> Aplicar filtros
+          </button>
+          <button
+            className="flex-shrink-0 rounded-lg border border-border px-3 text-xs text-muted hover:opacity-80"
+            style={{ width: "auto" }}
+            onClick={limpiarFiltros}
+          >
+            Limpiar
+          </button>
+          <a
+            href={csvHref}
+            className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-teal px-3 text-xs font-medium text-teal hover:opacity-80"
+          >
+            <i className="ti ti-download" /> CSV
+          </a>
+        </div>
       </div>
 
-      {porRetencion.length > 0 && (
-        <div className="vc-card mb-3">
-          <div className="mb-1 flex items-center justify-between">
-            <p className="text-xs uppercase tracking-wide text-muted">Retenciones acumuladas</p>
-            <span className="text-sm font-medium text-teal">{formatMoney(totalRetenido)}</span>
-          </div>
+      <SeccionColapsable titulo="Resumen">
+        <FilaResumen label="Facturado" valor={formatMoney(totalFacturado)} />
+        <FilaResumen label="Cobrado" valor={formatMoney(totalCobrado)} tono="g" />
+        <FilaResumen label="Pendiente" valor={formatMoney(totalPendiente)} tono="a" />
+        <FilaResumen label="Tasa de cobro" valor={`${tasaCobro}%`} tono="g" fuerte />
+      </SeccionColapsable>
+
+      {vista === "cliente" && (
+        <SeccionColapsable titulo="Por cliente">
+          {porCliente.length === 0 && <p className="text-xs text-muted">No hay datos para estos filtros.</p>}
+          {porCliente.map((c) => (
+            <div key={c.id} className="border-b border-border py-2.5 text-sm last:border-0">
+              <div className="flex items-center justify-between">
+                <span className="truncate font-medium">{c.nombre}</span>
+                <span className="flex-shrink-0 font-medium text-teal">{formatMoney(c.facturado)}</span>
+              </div>
+              <p className="text-xs text-muted">
+                {c.count} factura{c.count === 1 ? "" : "s"} · {formatMoney(c.cobrado)} cobrado
+              </p>
+              <BarraProgreso pct={(c.facturado / maxPorCliente) * 100} color="#1D9E75" />
+            </div>
+          ))}
+        </SeccionColapsable>
+      )}
+
+      {vista === "servicio" && (
+        <SeccionColapsable titulo="Por servicio">
+          {itemsFacturados === null && <p className="text-xs text-muted">Cargando...</p>}
+          {itemsFacturados !== null && porServicio.length === 0 && <p className="text-xs text-muted">No hay datos para estos filtros.</p>}
+          {porServicio.map((s) => (
+            <div key={s.descripcion} className="border-b border-border py-2.5 text-sm last:border-0">
+              <div className="flex items-center justify-between">
+                <span className="truncate font-medium">{s.descripcion}</span>
+                <span className="flex-shrink-0 font-medium">{formatMoney(s.total)}</span>
+              </div>
+              <p className="text-xs text-muted">
+                {s.count} línea{s.count === 1 ? "" : "s"}
+              </p>
+              <BarraProgreso pct={(s.total / maxPorServicio) * 100} color="#1D9E75" />
+            </div>
+          ))}
+        </SeccionColapsable>
+      )}
+
+      {vista === "categoria" && (
+        <SeccionColapsable titulo="Por categoría">
+          {itemsFacturados === null && <p className="text-xs text-muted">Cargando...</p>}
+          {itemsFacturados !== null && porCategoria.length === 0 && <p className="text-xs text-muted">No hay datos para estos filtros.</p>}
+          {porCategoria.map((c) => (
+            <div key={c.tipo} className="border-b border-border py-2.5 text-sm last:border-0">
+              <div className="flex items-center justify-between">
+                <span className="truncate font-medium">{c.tipo === "sin-categoria" ? "Sin categoría" : labelTipo(c.tipo)}</span>
+                <span className="flex-shrink-0 font-medium">{formatMoney(c.total)}</span>
+              </div>
+              <p className="text-xs text-muted">
+                {c.count} línea{c.count === 1 ? "" : "s"}
+              </p>
+              <BarraProgreso pct={(c.total / maxPorCategoria) * 100} color="#1D9E75" />
+            </div>
+          ))}
+        </SeccionColapsable>
+      )}
+
+      {vista === "clienteServicio" && (
+        <SeccionColapsable titulo="Cliente + servicio">
+          {itemsFacturados === null && <p className="text-xs text-muted">Cargando...</p>}
+          {itemsFacturados !== null && porClienteServicio.length === 0 && (
+            <p className="text-xs text-muted">No hay datos para estos filtros.</p>
+          )}
+          {porClienteServicio.map((r, i) => (
+            <div key={i} className="flex items-center justify-between border-b border-border py-2.5 text-sm last:border-0">
+              <div className="min-w-0 flex-1">
+                <p className="truncate">{r.cliente}</p>
+                <p className="truncate text-xs text-muted">{r.servicio}</p>
+              </div>
+              <span className="flex-shrink-0 font-medium">{formatMoney(r.total)}</span>
+            </div>
+          ))}
+        </SeccionColapsable>
+      )}
+
+      {vista === "retenciones" && (
+        <SeccionColapsable titulo="Retenciones SURI" accionDerecha={<span className="text-sm font-medium text-teal">{formatMoney(totalRetenido)}</span>}>
           <p className="mb-2 text-xs text-muted">
             Lo que tus clientes te retuvieron y depositaron a Hacienda a tu nombre — cuadra esto contra lo que SURI te muestre al
             declarar, factura por factura.
           </p>
+          {porRetencion.length === 0 && <p className="text-xs text-muted">No hay retenciones en este período.</p>}
           {porRetencion.map((c) => (
-            <div key={c.nombre} className="flex items-center gap-2.5 border-b border-border py-2.5 text-sm last:border-0">
-              <div
-                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-                style={{ background: colorAvatar(c.nombre) }}
-              >
-                {iniciales(c.nombre)}
-              </div>
+            <div key={c.nombre} className="flex items-center justify-between border-b border-border py-2.5 text-sm last:border-0">
               <div className="min-w-0 flex-1">
                 <p className="truncate">{c.nombre}</p>
                 <p className="truncate text-xs text-muted">
@@ -1126,27 +1505,55 @@ function ReportesTab({ facturas }: { facturas: Factura[] }) {
               <span className="flex-shrink-0 font-medium text-amb">{formatMoney(c.retenido)}</span>
             </div>
           ))}
-        </div>
+        </SeccionColapsable>
       )}
 
-      <div className="vc-card">
-        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Ingresos por servicio (top 10)</p>
-        {itemsFacturados === null && <p className="text-xs text-muted">Cargando...</p>}
-        {itemsFacturados !== null && porServicio.length === 0 && (
-          <p className="text-xs text-muted">No hay líneas de factura en este período.</p>
-        )}
-        {porServicio.map((s) => (
-          <div key={s.descripcion} className="flex items-center justify-between border-b border-border py-2.5 text-sm last:border-0">
-            <div className="min-w-0 flex-1">
-              <p className="truncate">{s.descripcion}</p>
-              <p className="text-xs text-muted">
-                {s.count} línea{s.count === 1 ? "" : "s"}
-              </p>
+      {vista === "flujo" && (
+        <SeccionColapsable titulo="Flujo de cobro">
+          {porMes.length === 0 && <p className="text-xs text-muted">No hay datos para estos filtros.</p>}
+          {porMes.map((m) => (
+            <div key={m.mes} className="border-b border-border py-2.5 text-sm last:border-0">
+              <div className="flex items-center justify-between">
+                <span className="truncate font-medium capitalize">{mesLabel(m.mes)}</span>
+                <span className="flex-shrink-0 font-medium">{formatMoney(m.facturado)}</span>
+              </div>
+              <p className="text-xs text-muted">{formatMoney(m.cobrado)} cobrado</p>
+              <BarraProgreso pct={m.facturado > 0 ? (m.cobrado / m.facturado) * 100 : 0} color="#1D9E75" />
             </div>
-            <span className="flex-shrink-0 font-medium">{formatMoney(s.total)}</span>
-          </div>
-        ))}
+          ))}
+        </SeccionColapsable>
+      )}
+
+      <div className="mb-3 rounded-2xl p-4" style={{ background: "#1D9E75" }}>
+        <p className="text-[11px]" style={{ color: "rgba(255,255,255,.75)" }}>
+          Créditos en Hacienda (retenciones acumuladas)
+        </p>
+        <p className="mt-1 text-2xl font-medium text-white">{formatMoney(totalRetenido)}</p>
+        <p className="mt-1 text-[11px]" style={{ color: "rgba(255,255,255,.75)" }}>
+          Lo que tus clientes retuvieron y depositaron a Hacienda a tu nombre en este período.
+        </p>
+      </div>
+
+      <div className="flex gap-2">
+        <a href={pdfHref} target="_blank" rel="noreferrer" className="vc-btn-primary flex-1 text-center">
+          <i className="ti ti-file-text" /> Exportar PDF
+        </a>
+        <a
+          href={csvHref}
+          className="flex-1 rounded-lg border border-border py-2.5 text-center text-xs font-medium text-muted hover:opacity-80"
+        >
+          Exportar CSV
+        </a>
       </div>
     </>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-[11px] text-muted">{label}</label>
+      {children}
+    </div>
   );
 }
