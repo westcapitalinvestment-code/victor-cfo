@@ -1171,6 +1171,10 @@ function ReportesTab({
   const [periodo, setPeriodo] = useState<(typeof PERIODOS)[number]["value"]>("mes");
   const [rangoDesde, setRangoDesde] = useState(hoyISO());
   const [rangoHasta, setRangoHasta] = useState(hoyISO());
+  // panelAbierto (2 sept 2026, pedido de Joel: "todo lo que se pueda abrir
+  // con un click debe cerrarse con otro click") — clic en el período YA
+  // activo alterna abierto/cerrado; clic en otro período cambia y abre.
+  const [panelAbierto, setPanelAbierto] = useState(true);
   const [itemsFacturados, setItemsFacturados] = useState<ItemFacturado[] | null>(null);
 
   // Filtros avanzados: "draft" es lo que el usuario está tecleando/eligiendo,
@@ -1425,7 +1429,14 @@ function ReportesTab({
           {PERIODOS.map((p) => (
             <button
               key={p.value}
-              onClick={() => setPeriodo(p.value)}
+              onClick={() => {
+                if (periodo === p.value) {
+                  setPanelAbierto((a) => !a);
+                } else {
+                  setPeriodo(p.value);
+                  setPanelAbierto(true);
+                }
+              }}
               className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-medium"
               style={
                 periodo === p.value
@@ -1437,14 +1448,14 @@ function ReportesTab({
               {p.value === "rango" && (
                 <i
                   className="ti ti-chevron-down"
-                  style={{ fontSize: 12, transform: periodo === p.value ? "rotate(180deg)" : "none", transition: "transform .15s" }}
+                  style={{ fontSize: 12, transform: periodo === p.value && panelAbierto ? "rotate(180deg)" : "none", transition: "transform .15s" }}
                 />
               )}
             </button>
           ))}
         </div>
 
-        {periodo === "rango" && (
+        {periodo === "rango" && panelAbierto && (
           <div className="mt-2 flex gap-1.5 border-t border-teal/20 pt-2">
             <input type="date" className="vc-input flex-1" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} />
             <input type="date" className="vc-input flex-1" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} />

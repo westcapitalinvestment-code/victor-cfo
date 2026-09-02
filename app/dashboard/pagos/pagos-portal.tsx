@@ -844,6 +844,12 @@ function ReportesTab({
   // Q1, Q2, Q3, Q4 como estaba").
   const [trimestre, setTrimestre] = useState(trimestreDe(hoyISO()));
   const [anioTrimestre, setAnioTrimestre] = useState(Number(hoyISO().slice(0, 4)));
+  // panelAbierto (2 sept 2026, pedido de Joel: "todo lo que se pueda abrir
+  // con un click debe cerrarse con otro click") — clic en el período YA
+  // activo alterna abierto/cerrado; clic en un período distinto cambia y
+  // abre. Sin esto el desplegable de Trimestre/Rango solo se ocultaba
+  // cambiando a otro botón, nunca haciendo clic de nuevo en el mismo.
+  const [panelAbierto, setPanelAbierto] = useState(true);
   // Filtro por contratista — combobox con búsqueda y "Todos" adentro del
   // scroll, calcado del de Cliente/Servicio en Reportes de Facturación
   // (pedido de Joel: "igual que clientes... por ejemplo si quiero saber
@@ -907,7 +913,14 @@ function ReportesTab({
             return (
               <button
                 key={p.value}
-                onClick={() => setPeriodo(p.value)}
+                onClick={() => {
+                  if (periodo === p.value) {
+                    setPanelAbierto((a) => !a);
+                  } else {
+                    setPeriodo(p.value);
+                    setPanelAbierto(true);
+                  }
+                }}
                 className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-medium"
                 style={
                   periodo === p.value
@@ -919,7 +932,7 @@ function ReportesTab({
                 {tieneDesplegable && (
                   <i
                     className={`ti ti-chevron-down`}
-                    style={{ fontSize: 12, transform: periodo === p.value ? "rotate(180deg)" : "none", transition: "transform .15s" }}
+                    style={{ fontSize: 12, transform: periodo === p.value && panelAbierto ? "rotate(180deg)" : "none", transition: "transform .15s" }}
                   />
                 )}
               </button>
@@ -927,7 +940,7 @@ function ReportesTab({
           })}
         </div>
 
-        {periodo === "trimestre" && (
+        {periodo === "trimestre" && panelAbierto && (
           <div className="mt-2 flex gap-1.5 border-t border-teal/20 pt-2">
             <select className="vc-input flex-1" value={trimestre} onChange={(e) => setTrimestre(Number(e.target.value))}>
               <option value={1}>Q1 — Ene a Mar</option>
@@ -945,7 +958,7 @@ function ReportesTab({
           </div>
         )}
 
-        {periodo === "rango" && (
+        {periodo === "rango" && panelAbierto && (
           <div className="mt-2 flex gap-1.5 border-t border-teal/20 pt-2">
             <input type="date" className="vc-input flex-1" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} />
             <input type="date" className="vc-input flex-1" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} />
