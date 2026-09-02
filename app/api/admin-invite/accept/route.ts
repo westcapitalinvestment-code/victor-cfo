@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
   const { data: invitation, error: fetchError } = await admin
     .from("admin_invitations")
-    .select("id, owner_id, entity_id, admin_email, admin_name, permissions, vendor_id, status")
+    .select("id, owner_id, entity_id, admin_email, admin_name, permissions, vendor_id, status, admin_tier")
     .eq("invitation_token", token)
     .maybeSingle();
 
@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
     role: "admin",
     permissions: invitation.permissions ?? {},
     vendor_id: invitation.vendor_id ?? null,
+    admin_tier: invitation.admin_tier ?? "secretaria",
     active: true,
     accepted_at: new Date().toISOString(),
   });

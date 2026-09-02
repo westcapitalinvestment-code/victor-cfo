@@ -38,22 +38,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "El archivo pesa más de 15MB — usa uno más pequeño." }, { status: 400 });
   }
 
-  // Confirma que el documento existe y es del usuario ANTES de subir a R2
-  // — evita gastar el upload si alguien manda un documentId ajeno o
-  // inventado.
-  const { data: doc, error: fetchError } = await supabase
-    .from("documents")
-    .select("id")
-    .eq("id", documentId)
-    .eq("owner_id", user.id)
-    .single();
+  // Confirma que el documento existe y que quien llama tiene acceso —
+  // SIN forzar owner_id = user.id, porque un admin/secretaria nivel
+  // Administrador (migración 0056) puede subir documentos a la Bóveda del
+  // DUEÑO, con su propio user.id distinto al owner_id real. RLS ya decide
+  // si esta fila es visible (dueño o admin autorizado) — aquí solo se lee
+  // el owner_id VERDADERO del documento para guardar el archivo bajo el
+  // mismo dueño, nunca bajo el user.id de quien subió.
+  const { data: doc, error: fetchError } = await supabase.from("documents").select("id, owner_id").eq("id", documentId).single();
 
   if (fetchError || !doc) {
     return NextResponse.json({ error: "Documento no encontrado." }, { status: 404 });
   }
 
   const extension = file.name.includes(".") ? file.name.split(".").pop() : "bin";
-  const key = `documentos/${user.id}/${documentId}-${randomUUID()}.${extension}`;
+  const key = `documentos/${doc.owner_id}/${documentId}-${randomUUID()}.${extension}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
   try {
@@ -68,7 +67,7 @@ export async function POST(req: NextRequest) {
 
   const { data: nuevoArchivo, error: insertError } = await supabase
     .from("document_files")
-    .insert({ document_id: documentId, owner_id: user.id, r2_key: key, etiqueta })
+    .insert({ document_id: documentId, owner_id: doc.owner_id, r2_key: key, etiqueta })
     .select("id")
     .single();
 

@@ -88,20 +88,26 @@ export default function PagosPortal({
   retenciones,
   entidadId,
   retencionDefault,
+  volverHref = "/dashboard",
+  volverLabel = "← VICTOR",
+  ownerIdEfectivo,
+  modoAdmin = false,
 }: {
   vendors: Vendor[];
   retenciones: Retencion[];
   entidadId: string | null;
   retencionDefault: number;
+  volverHref?: string;
+  volverLabel?: string;
+  ownerIdEfectivo?: string;
+  modoAdmin?: boolean;
 }) {
   const [tab, setTab] = useState<TabId>("pagos");
 
   return (
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
-        <Link href="/dashboard" className="text-sm text-muted hover:opacity-80">
-          ← VICTOR
-        </Link>
+        {modoAdmin ? <CerrarSesionAdminPagos /> : <Link href={volverHref} className="text-sm text-muted hover:opacity-80">{volverLabel}</Link>}
       </div>
 
       <div className="mb-4 rounded-2xl border border-teal bg-teal/[.04] p-3.5">
@@ -110,7 +116,7 @@ export default function PagosPortal({
             <p className="text-lg font-medium">Pagos</p>
             <p className="text-xs text-muted">Contratistas y retención 480.6</p>
           </div>
-          {entidadId && (
+          {entidadId && !modoAdmin && (
             <Link
               href={`/dashboard/entidades/${entidadId}/editar`}
               className="flex flex-shrink-0 items-center gap-1 text-xs font-medium text-teal hover:opacity-80"
@@ -147,10 +153,29 @@ export default function PagosPortal({
         </div>
       </div>
 
-      {tab === "pagos" && <PagosTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} />}
-      {tab === "contratistas" && <ContratistasTab vendors={vendors} entidadId={entidadId} retencionDefault={retencionDefault} />}
+      {tab === "pagos" && <PagosTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} ownerIdEfectivo={ownerIdEfectivo} />}
+      {tab === "contratistas" && (
+        <ContratistasTab vendors={vendors} entidadId={entidadId} retencionDefault={retencionDefault} ownerIdEfectivo={ownerIdEfectivo} />
+      )}
       {tab === "reportes" && <ReportesTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} />}
     </div>
+  );
+}
+
+// Cierre de sesión para el admin/secretaria (calcado de CerrarSesionAdmin en
+// facturacion-portal.tsx) — duplicado a propósito aquí, mismo patrón que el
+// resto del código (cada portal trae su propia copia).
+function CerrarSesionAdminPagos() {
+  const router = useRouter();
+  const supabase = createClient();
+  async function salir() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
+  return (
+    <button onClick={salir} className="text-sm text-muted hover:opacity-80">
+      Cerrar sesión
+    </button>
   );
 }
 
@@ -183,7 +208,17 @@ function SeccionColapsable({
 // hoy en Excel — un solo periodo, monto bruto por contratista, y de un tirón
 // ve bruto/retenido/neto de todos).
 // ============================================================================
-function PagosTab({ vendors, retenciones, entidadId }: { vendors: Vendor[]; retenciones: Retencion[]; entidadId: string | null }) {
+function PagosTab({
+  vendors,
+  retenciones,
+  entidadId,
+  ownerIdEfectivo,
+}: {
+  vendors: Vendor[];
+  retenciones: Retencion[];
+  entidadId: string | null;
+  ownerIdEfectivo?: string;
+}) {
   const supabase = createClient();
   const router = useRouter();
   const [fechaPago, setFechaPago] = useState(hoyISO());
@@ -242,7 +277,7 @@ function PagosTab({ vendors, retenciones, entidadId }: { vendors: Vendor[]; rete
     }
 
     const inserts = filas.map((f) => ({
-      owner_id: user.id,
+      owner_id: ownerIdEfectivo ?? user.id,
       entity_id: entidadId,
       vendor_id: f.vendor.id,
       gross_amount: f.bruto,
@@ -454,10 +489,12 @@ function ContratistasTab({
   vendors,
   entidadId,
   retencionDefault,
+  ownerIdEfectivo,
 }: {
   vendors: Vendor[];
   entidadId: string | null;
   retencionDefault: number;
+  ownerIdEfectivo?: string;
 }) {
   const supabase = createClient();
   const router = useRouter();
@@ -514,7 +551,7 @@ function ContratistasTab({
       const { data, error: insertError } = await supabase
         .from("vendors")
         .insert({
-          owner_id: user.id,
+          owner_id: ownerIdEfectivo ?? user.id,
           entity_id: entidadId,
           name: name.trim(),
           tax_id: taxId.trim() || null,

@@ -2,12 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendAdminInvitationEmail } from "@/lib/email";
 
+// Los 5 toggles "vienen todos encendidos" cuando el dueño elige el nivel
+// Administrador ($20/mes) — no tiene caso ofrecerle apagar un toggle
+// individual a alguien que ya tiene Pagos/Metas/Bóveda/Cuentas completos.
+// Se fuerza aquí, en el servidor, y no se confía en lo que mande el cliente
+// (defensa en profundidad — igual que se valida entityId contra el owner).
+const PERMISOS_ADMINISTRADOR_TOTAL: Record<string, boolean> = {
+  ver_ingresos_mes: true,
+  ver_gastos: true,
+  catalogo_precios: true,
+  ver_creditos_hacienda: true,
+  ver_reportes_historicos: true,
+};
+
 // Guarda la invitación al admin/secretaria (tabla admin_invitations) y, si
 // hay RESEND_API_KEY configurada, le manda el correo de una vez. Mismo
 // patrón que /api/cpa-invite, pero SIEMPRE con una entidad específica (el
 // admin trabaja dentro de UN negocio, ver migración 0054) y guardando de
 // una vez los permisos elegidos en el modal "Añadir admin/secretaria" —
 // se copian a account_members.permissions cuando acepte.
+//
+// admin_tier (migración 0056, 2 sept 2026): 'secretaria' ($10/mes, alcance
+// original) o 'administrador' ($20/mes, además Pagos/Metas/Bóveda/Cuentas —
+// ver 0056 para las políticas RLS que dependen de este valor).
 export async function POST(req: NextRequest) {
   const supabase = createClient();
   const {
@@ -23,7 +40,13 @@ export async function POST(req: NextRequest) {
   const adminEmail: string | undefined = body?.adminEmail;
   const adminName: string | null = body?.adminName || null;
   const vendorId: string | null = body?.vendorId || null;
-  const permisos = body?.permissions && typeof body.permissions === "object" ? body.permissions : {};
+  const adminTier: "secretaria" | "administrador" = body?.adminTier === "administrador" ? "administrador" : "secretaria";
+  const permisos =
+    adminTier === "administrador"
+      ? PERMISOS_ADMINISTRADOR_TOTAL
+      : body?.permissions && typeof body.permissions === "object"
+      ? body.permissions
+      : {};
 
   if (!entityId) {
     return NextResponse.json({ error: "Falta la entidad de negocio." }, { status: 400 });
@@ -53,6 +76,7 @@ export async function POST(req: NextRequest) {
       admin_email: adminEmail,
       permissions: permisos,
       vendor_id: vendorId,
+      admin_tier: adminTier,
     })
     .select("id, invitation_token")
     .single();

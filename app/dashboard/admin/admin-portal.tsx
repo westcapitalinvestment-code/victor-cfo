@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 
 type Vendor = { id: string; name: string; active: boolean };
 
+type AdminTier = "secretaria" | "administrador";
+
 type Miembro = {
   id: string;
   member_email: string;
@@ -16,6 +18,7 @@ type Miembro = {
   vendor_id: string | null;
   accepted_at: string | null;
   vendors: { name: string } | null;
+  admin_tier: AdminTier | null;
 };
 
 type Invitacion = {
@@ -27,6 +30,7 @@ type Invitacion = {
   status: string;
   sent_at: string;
   invitation_token: string;
+  admin_tier: AdminTier | null;
 };
 
 type Entidad = { id: string; name: string };
@@ -45,7 +49,27 @@ const PERMISOS_ADICIONALES: { key: string; label: string }[] = [
   { key: "ver_reportes_historicos", label: "Ver reportes de años anteriores" },
 ];
 
+// Nivel Administrador (migración 0056, 2 sept 2026, pedido de Joel: "tengo
+// un Dr que su esposa es la adm y lleva todo el negocio... como se trabaja
+// eso?") — $20/mes en vez de $10. Trae los 5 toggles de arriba siempre
+// encendidos (por eso no se muestran como editables para este nivel) MÁS
+// acceso a Pagos, Metas, Bóveda y Cuentas (solo ver balances) — nunca
+// finanzas personales, en ningún nivel.
+const PERMISOS_ADMINISTRADOR_TOTAL: Record<string, boolean> = {
+  ver_ingresos_mes: true,
+  ver_gastos: true,
+  catalogo_precios: true,
+  ver_creditos_hacienda: true,
+  ver_reportes_historicos: true,
+};
+
+const NIVELES: { id: AdminTier; label: string; precio: string; descripcion: string }[] = [
+  { id: "secretaria", label: "Secretaria", precio: "$10/mes", descripcion: "Facturación y clientes" },
+  { id: "administrador", label: "Administrador", precio: "$20/mes", descripcion: "Todo — Pagos, Metas, Bóveda, Cuentas" },
+];
+
 const ACCESO_BASE = ["Clientes", "Crear facturas", "Registrar cobros", "Ver pendientes"];
+const ACCESO_ADMINISTRADOR = ["Pagos a contratistas", "Metas de negocio", "Bóveda de documentos", "Cuentas (ver balances)"];
 
 function iniciales(nombre: string | null, email: string): string {
   const base = nombre?.trim() || email;
@@ -68,6 +92,7 @@ type ItemLista = {
   vendorId: string | null;
   vendorNombre: string | null;
   aceptada: boolean;
+  adminTier: AdminTier;
 };
 
 export default function AdminPortal({
@@ -105,6 +130,7 @@ export default function AdminPortal({
         vendorId: m.vendor_id,
         vendorNombre: m.vendors?.name ?? null,
         aceptada: true,
+        adminTier: (m.admin_tier as AdminTier) ?? "secretaria",
       })),
       ...invitaciones.map((inv) => ({
         key: `i-${inv.id}`,
@@ -117,6 +143,7 @@ export default function AdminPortal({
         vendorId: inv.vendor_id,
         vendorNombre: vendors.find((v) => v.id === inv.vendor_id)?.name ?? null,
         aceptada: false,
+        adminTier: (inv.admin_tier as AdminTier) ?? "secretaria",
       })),
     ],
     [miembros, invitaciones, vendors]
@@ -131,6 +158,8 @@ export default function AdminPortal({
   const [confirmarBorrar, setConfirmarBorrar] = useState<string | null>(null);
 
   const seatsActuales = items.length;
+  const seatsSecretaria = items.filter((it) => it.adminTier !== "administrador").length;
+  const seatsAdministrador = items.filter((it) => it.adminTier === "administrador").length;
 
   function marcarCambio(key: string) {
     setCambios((prev) => new Set(prev).add(key));
@@ -140,6 +169,21 @@ export default function AdminPortal({
   function togglePermiso(key: string, permKey: string) {
     setItems((prev) =>
       prev.map((it) => (it.key === key ? { ...it, permissions: { ...it.permissions, [permKey]: !it.permissions[permKey] } } : it))
+    );
+    marcarCambio(key);
+  }
+
+  // Cambiar de Secretaria a Administrador enciende los 5 toggles de una vez
+  // (no tiene caso dejarlos apagables para alguien con acceso total) — el
+  // sentido contrario (Administrador → Secretaria) deja los toggles como
+  // estaban, para que el dueño decida cuáles mantener encendidos.
+  function cambiarTier(key: string, tier: AdminTier) {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.key === key
+          ? { ...it, adminTier: tier, permissions: tier === "administrador" ? PERMISOS_ADMINISTRADOR_TOTAL : it.permissions }
+          : it
+      )
     );
     marcarCambio(key);
   }
@@ -162,13 +206,13 @@ export default function AdminPortal({
         if (it.tipo === "miembro") {
           const { error: updError } = await supabase
             .from("account_members")
-            .update({ permissions: it.permissions, active: it.active })
+            .update({ permissions: it.permissions, active: it.active, admin_tier: it.adminTier })
             .eq("id", it.id);
           if (updError) throw new Error(updError.message);
         } else {
           const { error: updError } = await supabase
             .from("admin_invitations")
-            .update({ permissions: it.permissions })
+            .update({ permissions: it.permissions, admin_tier: it.adminTier })
             .eq("id", it.id);
           if (updError) throw new Error(updError.message);
         }
@@ -176,6 +220,10 @@ export default function AdminPortal({
       setCambios(new Set());
       setGuardado(true);
       setGuardando(false);
+      // Activar/desactivar un seat o cambiarle el nivel afecta la cantidad y
+      // el precio en Stripe (Secretaria $10 vs. Administrador $20) — se
+      // sincroniza siempre al guardar, no solo al invitar/borrar.
+      await sincronizarStripe();
       router.refresh();
       setTimeout(() => setGuardado(false), 2500);
     } catch (err) {
@@ -260,17 +308,29 @@ export default function AdminPortal({
             Dale acceso a tu secretaria o administrador para crear facturas y registrar cobros — sin ver tus
             finanzas personales ni el total del negocio.
           </p>
-          <div className="mb-4 w-full max-w-xs rounded-xl border border-border p-3.5 text-left">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs text-muted">Por seat</span>
-              <span className="text-sm font-medium">
-                $10<span className="text-xs text-muted">/mes</span>
-              </span>
+          <div className="mb-4 flex w-full max-w-xs flex-col gap-2">
+            <div className="rounded-xl border border-border p-3.5 text-left">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-xs font-medium">Secretaria</span>
+                <span className="text-sm font-medium">
+                  $10<span className="text-xs text-muted">/mes</span>
+                </span>
+              </div>
+              <p className="text-xs text-muted">Facturación, clientes y cobros.</p>
             </div>
-            <ul className="flex flex-col gap-1 text-xs text-muted">
+            <div className="rounded-xl border border-teal p-3.5 text-left">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-xs font-medium text-teal">Administrador</span>
+                <span className="text-sm font-medium">
+                  $20<span className="text-xs text-muted">/mes</span>
+                </span>
+              </div>
+              <p className="text-xs text-muted">Todo lo de Secretaria + Pagos, Metas, Bóveda y Cuentas.</p>
+            </div>
+            <ul className="mt-1 flex flex-col gap-1 text-xs text-muted">
               <li>✓ Login propio — nunca tus credenciales</li>
-              <li>✓ Permisos granulares por admin</li>
-              <li>✓ Vista limitada — sin finanzas personales</li>
+              <li>✓ Permisos granulares por persona</li>
+              <li>✓ Nunca tus finanzas personales</li>
             </ul>
           </div>
           <button className="vc-btn-primary flex items-center justify-center gap-1" style={{ width: "auto" }} onClick={() => setModalAbierto(true)}>
@@ -281,7 +341,9 @@ export default function AdminPortal({
         <>
           <div className="mb-3 rounded-lg border border-border bg-bg p-2.5 text-xs text-muted">
             <i className="ti ti-info-circle" style={{ marginRight: 4 }} />
-            Admin/Secretaria activo · {seatsActuales} seat{seatsActuales === 1 ? "" : "s"} · $10.00/mes por seat
+            Admin/Secretaria activo · {seatsSecretaria} secretaria{seatsSecretaria === 1 ? "" : "s"} ($
+            {(seatsSecretaria * 10).toFixed(2)}) · {seatsAdministrador} administrador{seatsAdministrador === 1 ? "" : "es"} ($
+            {(seatsAdministrador * 20).toFixed(2)}) · {seatsActuales} seat{seatsActuales === 1 ? "" : "s"} en total
           </div>
           <div className="mb-3 rounded-lg border border-teal/30 bg-teal/[.05] p-2.5 text-xs">
             Admins / Secretarias ven solo facturación — nunca tus finanzas personales ni el total del negocio, a
@@ -308,7 +370,8 @@ export default function AdminPortal({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{item.nombre || item.email}</p>
                     <p className="truncate text-xs text-muted">
-                      {item.email} · {item.aceptada ? "Secretaria" : "Invitación pendiente"}
+                      {item.email} · {item.aceptada ? "" : "Invitación pendiente · "}
+                      {item.adminTier === "administrador" ? "Administrador" : "Secretaria"}
                     </p>
                   </div>
                 </div>
@@ -327,6 +390,26 @@ export default function AdminPortal({
                 )}
               </div>
 
+              <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">Nivel de acceso</p>
+              <div className="mb-3 flex gap-1.5">
+                {NIVELES.map((n) => (
+                  <button
+                    key={n.id}
+                    onClick={() => cambiarTier(item.key, n.id)}
+                    className="flex-1 rounded-lg border px-2 py-1.5 text-left text-xs"
+                    style={
+                      item.adminTier === n.id
+                        ? { borderColor: "#1D9E75", background: "rgba(29,158,117,.08)" }
+                        : { borderColor: "var(--border)" }
+                    }
+                  >
+                    <span className="block font-medium">
+                      {n.label} <span className="text-muted">· {n.precio}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+
               <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">Acceso base (siempre activo)</p>
               <div className="mb-3 flex flex-wrap gap-1.5">
                 {ACCESO_BASE.map((label) => (
@@ -336,14 +419,30 @@ export default function AdminPortal({
                 ))}
               </div>
 
-              <p className="mb-1.5 text-[11px] uppercase tracking-wide text-muted">Permisos adicionales — tú controlas</p>
+              {item.adminTier === "administrador" && (
+                <>
+                  <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">Incluido en Administrador</p>
+                  <div className="mb-3 flex flex-wrap gap-1.5">
+                    {ACCESO_ADMINISTRADOR.map((label) => (
+                      <span key={label} className="rounded-pill bg-teal/10 px-2.5 py-1 text-[11px] font-medium text-teal">
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <p className="mb-1.5 text-[11px] uppercase tracking-wide text-muted">
+                {item.adminTier === "administrador" ? "Permisos adicionales — todos incluidos" : "Permisos adicionales — tú controlas"}
+              </p>
               <div className="mb-3 flex flex-col gap-2">
                 {PERMISOS_ADICIONALES.map((p) => (
                   <div key={p.key} className="flex items-center justify-between gap-2">
-                    <span className="text-xs">{p.label}</span>
+                    <span className={`text-xs ${item.adminTier === "administrador" ? "text-muted" : ""}`}>{p.label}</span>
                     <button
+                      disabled={item.adminTier === "administrador"}
                       onClick={() => togglePermiso(item.key, p.key)}
-                      className="relative flex-shrink-0 rounded-pill"
+                      className="relative flex-shrink-0 rounded-pill disabled:opacity-70"
                       style={{ width: 36, height: 20, background: item.permissions[p.key] ? "#1D9E75" : "var(--border)" }}
                     >
                       <span
@@ -412,7 +511,7 @@ export default function AdminPortal({
 
           <div className="mb-3 rounded-lg border border-border bg-bg p-2.5 text-[11px] text-muted">
             Cada admin recibe un email de invitación. Entra con su propio correo y contraseña — nunca con las
-            tuyas. $10/mes por admin adicional.
+            tuyas. Secretaria $10/mes · Administrador $20/mes.
           </div>
 
           <button className="vc-btn-primary w-full" disabled={guardando || cambios.size === 0} onClick={guardarConfiguracion}>
@@ -452,6 +551,7 @@ function ModalAnadirAdmin({
   const [vendorId, setVendorId] = useState("");
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
+  const [tier, setTier] = useState<AdminTier>("secretaria");
   const [permisos, setPermisos] = useState<Record<string, boolean>>({});
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -477,7 +577,8 @@ function ModalAnadirAdmin({
         adminName: nombre.trim(),
         adminEmail: email.trim(),
         vendorId: origen === "directorio" && vendorId ? vendorId : null,
-        permissions: permisos,
+        permissions: tier === "administrador" ? PERMISOS_ADMINISTRADOR_TOTAL : permisos,
+        adminTier: tier,
       }),
     });
     const data = await res.json().catch(() => null);
@@ -492,11 +593,12 @@ function ModalAnadirAdmin({
       id: data.invitationId,
       nombre: nombre.trim(),
       email: email.trim(),
-      permissions: permisos,
+      permissions: tier === "administrador" ? PERMISOS_ADMINISTRADOR_TOTAL : permisos,
       active: true,
       vendorId: origen === "directorio" && vendorId ? vendorId : null,
       vendorNombre: vendors.find((v) => v.id === vendorId)?.name ?? null,
       aceptada: false,
+      adminTier: tier,
     });
   }
 
@@ -512,10 +614,28 @@ function ModalAnadirAdmin({
 
         <div className="mb-3 rounded-lg border border-teal/30 bg-teal/[.05] p-2.5 text-xs text-teal">
           <i className="ti ti-shield" style={{ marginRight: 4 }} />
-          Solo verá facturación. Tus finanzas personales y el total del negocio permanecen privados.
+          Tus finanzas personales nunca son visibles, en ningún nivel.
         </div>
 
         {error && <p className="mb-2 text-xs text-red">{error}</p>}
+
+        <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Nivel de acceso</label>
+        <div className="mb-3 flex gap-1.5">
+          {NIVELES.map((n) => (
+            <button
+              key={n.id}
+              type="button"
+              onClick={() => setTier(n.id)}
+              className="flex-1 rounded-lg border px-2.5 py-2 text-left"
+              style={tier === n.id ? { borderColor: "#1D9E75", background: "rgba(29,158,117,.08)" } : { borderColor: "var(--border)" }}
+            >
+              <span className="block text-xs font-medium">
+                {n.label} <span className="text-muted">· {n.precio}</span>
+              </span>
+              <span className="block text-[11px] text-muted">{n.descripcion}</span>
+            </button>
+          ))}
+        </div>
 
         {vendors.length > 0 && (
           <>
@@ -557,29 +677,39 @@ function ModalAnadirAdmin({
         />
         <p className="mb-3 text-[11px] text-muted">Recibirá una invitación a este correo para crear su contraseña.</p>
 
-        <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Rol</label>
-        <select className="vc-input mb-3" defaultValue="secretaria" disabled>
-          <option value="secretaria">Secretaria — facturación y clientes</option>
-        </select>
-
-        <p className="mb-1.5 text-[11px] uppercase tracking-wide text-muted">Permisos adicionales</p>
-        <div className="mb-4 flex flex-col gap-2">
-          {PERMISOS_ADICIONALES.map((p) => (
-            <div key={p.key} className="flex items-center justify-between gap-2">
-              <span className="text-xs">{p.label}</span>
-              <button
-                onClick={() => setPermisos((prev) => ({ ...prev, [p.key]: !prev[p.key] }))}
-                className="relative flex-shrink-0 rounded-pill"
-                style={{ width: 36, height: 20, background: permisos[p.key] ? "#1D9E75" : "var(--border)" }}
-              >
-                <span
-                  className="absolute top-0.5 rounded-full bg-white transition-all"
-                  style={{ width: 16, height: 16, left: permisos[p.key] ? 18 : 2 }}
-                />
-              </button>
+        {tier === "administrador" ? (
+          <>
+            <p className="mb-1.5 text-[11px] uppercase tracking-wide text-muted">Incluye todo</p>
+            <div className="mb-4 flex flex-wrap gap-1.5">
+              {[...ACCESO_BASE, ...ACCESO_ADMINISTRADOR].map((label) => (
+                <span key={label} className="rounded-pill bg-teal/10 px-2.5 py-1 text-[11px] font-medium text-teal">
+                  {label}
+                </span>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        ) : (
+          <>
+            <p className="mb-1.5 text-[11px] uppercase tracking-wide text-muted">Permisos adicionales</p>
+            <div className="mb-4 flex flex-col gap-2">
+              {PERMISOS_ADICIONALES.map((p) => (
+                <div key={p.key} className="flex items-center justify-between gap-2">
+                  <span className="text-xs">{p.label}</span>
+                  <button
+                    onClick={() => setPermisos((prev) => ({ ...prev, [p.key]: !prev[p.key] }))}
+                    className="relative flex-shrink-0 rounded-pill"
+                    style={{ width: 36, height: 20, background: permisos[p.key] ? "#1D9E75" : "var(--border)" }}
+                  >
+                    <span
+                      className="absolute top-0.5 rounded-full bg-white transition-all"
+                      style={{ width: 16, height: 16, left: permisos[p.key] ? 18 : 2 }}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         <button className="vc-btn-primary mb-2 flex w-full items-center justify-center gap-1" disabled={enviando} onClick={enviar}>
           <i className="ti ti-send" /> {enviando ? "Enviando..." : "Enviar invitación"}

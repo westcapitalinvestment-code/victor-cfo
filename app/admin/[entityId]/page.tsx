@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { resolverOwnerEfectivo } from "@/lib/owner-efectivo";
 import FacturacionPortal from "@/app/dashboard/facturacion/facturacion-portal";
+import AdminNav from "@/app/admin/admin-nav";
 
 // Portal de trabajo de Admin/Secretaria — mismo componente que usa el
 // dueño en /dashboard/facturacion (FacturacionPortal), pero en modoAdmin:
@@ -58,17 +59,20 @@ export default async function AdminEntidadPage({ params }: { params: { entityId:
   ]);
 
   return (
-    <FacturacionPortal
-      clients={clients ?? []}
-      facturas={(facturas ?? []) as any}
-      servicios={[]}
-      cotizaciones={[]}
-      entidadId={entityId}
-      entidadesConAth={entidad.ath_movil_business_path ? [entityId] : []}
-      basePath={`/admin/${entityId}`}
-      clientesBasePath={`/admin/${entityId}/clientes`}
-      ownerIdEfectivo={ownerId}
-      modoAdmin
-    />
+    <>
+      {efectivo.adminTier === "administrador" && <AdminNav entityId={entityId} activo="facturacion" />}
+      <FacturacionPortal
+        clients={clients ?? []}
+        facturas={(facturas ?? []) as any}
+        servicios={[]}
+        cotizaciones={[]}
+        entidadId={entityId}
+        entidadesConAth={entidad.ath_movil_business_path ? [entityId] : []}
+        basePath={`/admin/${entityId}`}
+        clientesBasePath={`/admin/${entityId}/clientes`}
+        ownerIdEfectivo={ownerId}
+        modoAdmin
+      />
+    </>
   );
 }

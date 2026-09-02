@@ -257,7 +257,25 @@ CREATE POLICY cotizacion_items_cpa_read ON cotizacion_items FOR SELECT USING (
   )
 );
 
--- cotizacion_attachments
+-- cotizacion_attachments — CREATE TABLE IF NOT EXISTS defensivo (2 sept
+-- 2026): esta tabla debía existir desde la migración 0037, pero en la base
+-- de datos real de Joel esa migración nunca se corrió (0054 falló con
+-- "relation cotizacion_attachments does not exist" al intentar tocar sus
+-- políticas). Se recrea aquí, calcada exacta de 0037, para que 0054 no
+-- dependa de que 0037 se haya corrido antes — si la tabla ya existe, este
+-- bloque no hace nada.
+CREATE TABLE IF NOT EXISTS cotizacion_attachments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  cotizacion_id uuid REFERENCES cotizaciones(id) ON DELETE CASCADE,
+  owner_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  nombre_archivo text NOT NULL,
+  tipo text,
+  r2_key text NOT NULL,
+  tamano_bytes integer,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE cotizacion_attachments ENABLE ROW LEVEL SECURITY;
+
 DROP POLICY IF EXISTS cotizacion_attachments_access ON cotizacion_attachments;
 CREATE POLICY cotizacion_attachments_owner_admin_write ON cotizacion_attachments FOR ALL USING (
   owner_id = auth.uid()

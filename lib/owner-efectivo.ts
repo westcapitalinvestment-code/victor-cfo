@@ -21,11 +21,18 @@ import { SupabaseClient } from "@supabase/supabase-js";
 // Diseño: un admin/secretaria SIEMPRE está atado a UNA sola entidad
 // (admin_invitations.entity_id / account_members.entity_id son NOT NULL) —
 // a diferencia del CPA, que puede ver "todas las entidades" de un dueño.
+export type AdminTier = "secretaria" | "administrador";
+
 export type OwnerEfectivo = {
   ownerId: string;
   esAdmin: boolean;
   entityIdForzado: string | null; // null = dueño (usa el selector normal de entidad)
   permisos: Record<string, boolean>;
+  // Nivel de acceso (migración 0056, 2 sept 2026): 'secretaria' = alcance
+  // original (Facturas/Clientes + los 5 toggles); 'administrador' = además
+  // Pagos, Metas, Bóveda y Cuentas (solo lectura) — ver 0056 para el detalle
+  // de qué políticas RLS dependen de este valor.
+  adminTier: AdminTier;
 };
 
 // Devuelve null si el usuario NO es admin/secretaria de nadie — en ese
@@ -40,7 +47,7 @@ export async function resolverOwnerEfectivo(
 ): Promise<OwnerEfectivo | null> {
   const { data: membresia } = await supabase
     .from("account_members")
-    .select("owner_id, entity_id, permissions")
+    .select("owner_id, entity_id, permissions, admin_tier")
     .eq("member_email", userEmail)
     .eq("role", "admin")
     .eq("active", true)
@@ -55,5 +62,6 @@ export async function resolverOwnerEfectivo(
     esAdmin: true,
     entityIdForzado: membresia.entity_id,
     permisos: (membresia.permissions as Record<string, boolean>) ?? {},
+    adminTier: (membresia.admin_tier as AdminTier) ?? "secretaria",
   };
 }

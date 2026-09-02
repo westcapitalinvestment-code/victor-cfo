@@ -62,14 +62,14 @@ export default async function AdminPage() {
       .order("name", { ascending: true }),
     supabase
       .from("account_members")
-      .select("id, member_email, member_name, permissions, active, vendor_id, accepted_at, vendors(name)")
+      .select("id, member_email, member_name, permissions, active, vendor_id, accepted_at, vendors(name), admin_tier")
       .eq("owner_id", user.id)
       .eq("entity_id", entidadIdEfectiva)
       .eq("role", "admin")
       .order("accepted_at", { ascending: false }),
     supabase
       .from("admin_invitations")
-      .select("id, admin_name, admin_email, permissions, vendor_id, status, sent_at, invitation_token")
+      .select("id, admin_name, admin_email, permissions, vendor_id, status, sent_at, invitation_token, admin_tier")
       .eq("owner_id", user.id)
       .eq("entity_id", entidadIdEfectiva)
       .eq("status", "pending")
