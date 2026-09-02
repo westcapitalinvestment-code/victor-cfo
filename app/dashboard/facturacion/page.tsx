@@ -28,7 +28,7 @@ export default async function FacturacionPage({
 
   const { data: entities } = await supabase
     .from("business_entities")
-    .select("id, name")
+    .select("id, name, ath_movil_business_path")
     .eq("owner_id", user.id)
     .eq("active", true);
 
@@ -63,7 +63,7 @@ export default async function FacturacionPage({
     .order("name", { ascending: true });
   let facturasQuery = supabase
     .from("invoices")
-    .select("id, numero, subtotal, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, fecha_pago, metodo_pago, client_id, clients(name)")
+    .select("id, numero, subtotal, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, fecha_pago, metodo_pago, entity_id, client_id, clients(name)")
     .eq("owner_id", user.id)
     .order("fecha_emision", { ascending: false });
   let serviciosQuery = supabase
@@ -89,6 +89,14 @@ export default async function FacturacionPage({
   const { data: servicios } = await serviciosQuery;
   const { data: cotizaciones } = await cotizacionesQuery;
 
+  // IDs de entidad con pATH de ATH Móvil Business configurado (2 sept
+  // 2026) — el fee real de 2.25% solo aplica cuando el cliente pagó al
+  // pATH de la entidad (ATH Móvil Business); un ATH Móvil personal normal
+  // no cobra fees. Sin esto, "Gasto procesamiento de pagos" asumía fee
+  // siempre que metodo_pago fuera "ATH Móvil", lo cual salía mal (Joel, 2
+  // sept 2026: "ninguna cobro fees, no se de dnd saca esos fees").
+  const entidadesConAth = (entities ?? []).filter((e) => e.ath_movil_business_path).map((e) => e.id);
+
   return (
     <FacturacionPortal
       clients={clients ?? []}
@@ -96,6 +104,7 @@ export default async function FacturacionPage({
       servicios={servicios ?? []}
       cotizaciones={(cotizaciones ?? []) as any}
       entidadId={entidadActivaId ?? entities[0]?.id ?? null}
+      entidadesConAth={entidadesConAth}
       tabInicial={searchParams?.tab}
     />
   );

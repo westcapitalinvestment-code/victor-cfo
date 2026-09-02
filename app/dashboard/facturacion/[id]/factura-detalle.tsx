@@ -330,19 +330,48 @@ export default function FacturaDetalle({
             <span>Total</span>
             <span>{formatMoney(factura.total)}</span>
           </div>
-          {Number(factura.deposito_monto) > 0 && (
+          {factura.estado === "pagada" ? (
+            // Factura pagada (2 sept 2026, pedido de Joel, calcado de
+            // FreshBooks: "Amount Paid" + "Amount Due $0.00") — en vez de
+            // seguir mostrando el total como si se debiera, se muestra lo
+            // que de verdad importa: cuánto se pagó y que el balance es
+            // $0.00. Reemplaza la ruptura de depósito, que ya no aplica una
+            // vez la factura está completamente cobrada.
             <>
               <div className="flex justify-between py-0.5">
-                <span className="text-muted">Depósito recibido</span>
-                <span>-{formatMoney(Number(factura.deposito_monto))}</span>
+                <span className="text-muted">Monto pagado</span>
+                <span className="text-teal">{formatMoney(factura.total)}</span>
               </div>
               <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-medium">
-                <span>Balance a pagar</span>
-                <span>{formatMoney(factura.total - Number(factura.deposito_monto))}</span>
+                <span>Balance</span>
+                <span className="text-teal">{formatMoney(0)}</span>
               </div>
             </>
+          ) : (
+            Number(factura.deposito_monto) > 0 && (
+              <>
+                <div className="flex justify-between py-0.5">
+                  <span className="text-muted">Depósito recibido</span>
+                  <span>-{formatMoney(Number(factura.deposito_monto))}</span>
+                </div>
+                <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-medium">
+                  <span>Balance a pagar</span>
+                  <span>{formatMoney(factura.total - Number(factura.deposito_monto))}</span>
+                </div>
+              </>
+            )
           )}
         </div>
+
+        {factura.metodo_pago && (
+          <div className="flex items-center gap-2 rounded-lg border border-teal/30 bg-teal/[.05] px-3 py-2 text-xs">
+            <i className="ti ti-check text-teal" />
+            <span>
+              Pagada vía <strong>{factura.metodo_pago}</strong>
+              {factura.fecha_pago && ` el ${formatFecha(factura.fecha_pago)}`}
+            </span>
+          </div>
+        )}
 
         {factura.notas && (
           <div>
@@ -439,13 +468,6 @@ export default function FacturaDetalle({
             </button>
           </div>
         </div>
-
-        {factura.metodo_pago && (
-          <p className="text-xs text-muted">
-            Pagada vía {factura.metodo_pago}
-            {factura.fecha_pago && ` el ${formatFecha(factura.fecha_pago)}`}
-          </p>
-        )}
 
         <div className="no-imprimir grid grid-cols-4 gap-2 border-t border-border pt-3">
           <a

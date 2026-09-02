@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data: factura, error } = await supabase
     .from("invoices")
     .select(
-      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, deposito_monto, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key, ivu_applies, brand_color)"
+      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, deposito_monto, estado, fecha_emision, fecha_vencimiento, metodo_pago, fecha_pago, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key, ivu_applies, brand_color)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -231,16 +231,35 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     textoDerecha(`Vence: ${formatFecha(factura.fecha_vencimiento)}`, width - margin, yDer, { size: 9, color: gris });
     yDer -= 12;
   }
-  const tieneDeposito = Number(factura.deposito_monto) > 0;
+  // Factura pagada (2 sept 2026, pedido de Joel, calcado de FreshBooks): el
+  // número grande del encabezado pasa a mostrar el BALANCE real ($0.00, ya
+  // no queda nada por cobrar) en vez de seguir mostrando el total original
+  // como si todavía se debiera — eso confundía. La ruptura de depósito solo
+  // aplica mientras la factura sigue sin pagar del todo.
+  const estaPagada = factura.estado === "pagada";
+  const tieneDeposito = !estaPagada && Number(factura.deposito_monto) > 0;
   yDer -= 8;
-  textoDerecha(tieneDeposito ? "BALANCE A PAGAR" : "TOTAL A PAGAR", width - margin, yDer, { f: bold, size: 8, color: gris });
+  textoDerecha(estaPagada ? "PAGADA — BALANCE" : tieneDeposito ? "BALANCE A PAGAR" : "TOTAL A PAGAR", width - margin, yDer, {
+    f: bold,
+    size: 8,
+    color: gris,
+  });
   yDer -= 22;
   textoDerecha(
-    formatMoney(tieneDeposito ? Number(factura.total) - Number(factura.deposito_monto) : Number(factura.total)),
+    formatMoney(estaPagada ? 0 : tieneDeposito ? Number(factura.total) - Number(factura.deposito_monto) : Number(factura.total)),
     width - margin,
     yDer,
-    { f: bold, size: 22, color: marca }
+    { f: bold, size: 22, color: estaPagada ? teal : marca }
   );
+  if (estaPagada && factura.metodo_pago) {
+    yDer -= 14;
+    textoDerecha(
+      `Pagada vía ${factura.metodo_pago}${factura.fecha_pago ? ` — ${formatFecha(factura.fecha_pago)}` : ""}`,
+      width - margin,
+      yDer,
+      { size: 9, color: gris }
+    );
+  }
 
   y = Math.min(yIzq, yDer) - 20;
 
@@ -297,9 +316,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   y -= 4;
   filaTotales("TOTAL", formatMoney(Number(factura.total)), { bold: true, color: marca });
 
-  // Depósito ya recibido (2 sept 2026, pedido de Joel) — se resta del total
-  // para mostrar el balance real pendiente de cobro.
-  if (Number(factura.deposito_monto) > 0) {
+  if (estaPagada) {
+    // Factura pagada (2 sept 2026, pedido de Joel, calcado de FreshBooks):
+    // en vez de la ruptura de depósito, se muestra lo que de verdad importa
+    // una vez cobrada — cuánto se pagó y que el balance quedó en $0.00.
+    filaTotales("Monto pagado", formatMoney(Number(factura.total)), { color: teal });
+    page.drawLine({ start: { x: colPrecio - 10, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 1, color: lineaGris });
+    y -= 4;
+    filaTotales("BALANCE", formatMoney(0), { bold: true, color: teal });
+  } else if (Number(factura.deposito_monto) > 0) {
+    // Depósito ya recibido (2 sept 2026, pedido de Joel) — se resta del
+    // total para mostrar el balance real pendiente de cobro, mientras la
+    // factura sigue sin pagarse del todo.
     filaTotales("Depósito recibido", `-${formatMoney(Number(factura.deposito_monto))}`);
     page.drawLine({ start: { x: colPrecio - 10, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 1, color: lineaGris });
     y -= 4;

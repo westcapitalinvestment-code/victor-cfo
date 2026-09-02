@@ -35,6 +35,7 @@ type Factura = {
   // (Stripe), para poder estimar el gasto de procesamiento de pagos real,
   // no solo hipotético.
   metodo_pago: string | null;
+  entity_id: string | null;
   client_id: string | null;
   clients: { name: string } | null;
 };
@@ -50,8 +51,17 @@ const ATH_FEE_MINIMO = 0.06;
 const STRIPE_FEE_PCT = 0.029;
 const STRIPE_FEE_FIJO = 0.3;
 
-function feeProcesamiento(f: Factura): number {
-  if (f.metodo_pago === "ATH Móvil") return Math.max(Number(f.total) * ATH_FEE_PCT, ATH_FEE_MINIMO);
+// entidadesConAth: IDs de entidad con pATH de ATH Móvil Business configurado
+// (Config → Facturas). El fee de 2.25% SOLO es real cuando el cliente pagó
+// al pATH de la entidad — un ATH Móvil personal (el 99% de los pagos hasta
+// que Joel active su pATH) no cobra fee ninguno. Sin este gate, cualquier
+// factura marcada "ATH Móvil" salía con un fee inventado (bug reportado
+// por Joel, 2 sept 2026: "ninguna cobro fees, no se de dnd saca esos fees").
+function feeProcesamiento(f: Factura, entidadesConAth: Set<string>): number {
+  if (f.metodo_pago === "ATH Móvil") {
+    if (!f.entity_id || !entidadesConAth.has(f.entity_id)) return 0;
+    return Math.max(Number(f.total) * ATH_FEE_PCT, ATH_FEE_MINIMO);
+  }
   if (f.metodo_pago === "Tarjeta") return Number(f.total) * STRIPE_FEE_PCT + STRIPE_FEE_FIJO;
   return 0;
 }
@@ -160,6 +170,7 @@ export default function FacturacionPortal({
   servicios,
   cotizaciones,
   entidadId,
+  entidadesConAth,
   tabInicial,
 }: {
   clients: Cliente[];
@@ -167,10 +178,12 @@ export default function FacturacionPortal({
   servicios: Servicio[];
   cotizaciones: Cotizacion[];
   entidadId: string | null;
+  entidadesConAth: string[];
   tabInicial?: string;
 }) {
   const tabValido = TABS.some((t) => t.id === tabInicial);
   const [tab, setTab] = useState<TabId>(tabValido ? (tabInicial as TabId) : "facturas");
+  const entidadesConAthSet = useMemo(() => new Set(entidadesConAth), [entidadesConAth]);
 
   return (
     <div className="vc-shell">
@@ -223,11 +236,13 @@ export default function FacturacionPortal({
         </div>
       </div>
 
-      {tab === "facturas" && <FacturasTab facturas={facturas} />}
+      {tab === "facturas" && <FacturasTab facturas={facturas} entidadesConAth={entidadesConAthSet} />}
       {tab === "clientes" && <ClientesTab clients={clients} />}
       {tab === "cotizaciones" && <CotizacionesTab cotizaciones={cotizaciones} />}
       {tab === "servicios" && <ServiciosTab servicios={servicios} entidadId={entidadId} />}
-      {tab === "reportes" && <ReportesTab facturas={facturas} clients={clients} servicios={servicios} entidadId={entidadId} />}
+      {tab === "reportes" && (
+        <ReportesTab facturas={facturas} clients={clients} servicios={servicios} entidadId={entidadId} entidadesConAth={entidadesConAthSet} />
+      )}
     </div>
   );
 }
@@ -243,7 +258,7 @@ function Proximamente({ icono, titulo, texto }: { icono: string; titulo: string;
   );
 }
 
-function FacturasTab({ facturas }: { facturas: Factura[] }) {
+function FacturasTab({ facturas, entidadesConAth }: { facturas: Factura[]; entidadesConAth: Set<string> }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todas");
 
@@ -257,7 +272,7 @@ function FacturasTab({ facturas }: { facturas: Factura[] }) {
   const vencida = vencidas.reduce((s, f) => s + Number(f.total), 0);
   const pctCobrado = facturado > 0 ? Math.round((cobrado / facturado) * 100) : 0;
   const creditosHacienda = cobradas.reduce((s, f) => s + Number(f.retencion_monto || 0), 0);
-  const gastoProcesamiento = cobradas.reduce((s, f) => s + feeProcesamiento(f), 0);
+  const gastoProcesamiento = cobradas.reduce((s, f) => s + feeProcesamiento(f, entidadesConAth), 0);
 
   const filtradas = useMemo(() => {
     return facturas.filter((f) => {
@@ -1195,11 +1210,13 @@ function ReportesTab({
   clients,
   servicios,
   entidadId,
+  entidadesConAth,
 }: {
   facturas: Factura[];
   clients: Cliente[];
   servicios: Servicio[];
   entidadId: string | null;
+  entidadesConAth: Set<string>;
 }) {
   const supabase = createClient();
   const [periodo, setPeriodo] = useState<(typeof PERIODOS)[number]["value"]>("mes");
@@ -1372,7 +1389,7 @@ function ReportesTab({
   // del período/filtros activos de Reportes, para que cuadre con lo que
   // esté viendo en pantalla al declarar.
   const gastoProcesamientoPeriodo = facturasFiltradas.reduce(
-    (s, f) => (f.estado === "pagada" ? s + feeProcesamiento(f) : s),
+    (s, f) => (f.estado === "pagada" ? s + feeProcesamiento(f, entidadesConAth) : s),
     0
   );
 
