@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
     for (const f of facturas) {
       const mes = String(f.fecha_emision).slice(0, 7);
       const actual = mapa.get(mes) ?? { facturado: 0, cobrado: 0 };
-      actual.facturado += Number(f.total);
+      actual.facturado += Number(f.subtotal);
       mapa.set(mes, actual);
     }
     // "Cobrado" por el mes real del pago (fecha_pago), no el de emisión —
@@ -168,7 +168,7 @@ export async function GET(req: NextRequest) {
     for (const f of facturas) {
       const nombre = f.clients?.name ?? "Sin cliente";
       const actual = mapa.get(nombre) ?? { nombre, facturado: 0, cobrado: 0, count: 0 };
-      actual.facturado += Number(f.total);
+      actual.facturado += Number(f.subtotal);
       if (f.estado === "pagada") actual.cobrado += Number(f.total);
       actual.count += 1;
       mapa.set(nombre, actual);

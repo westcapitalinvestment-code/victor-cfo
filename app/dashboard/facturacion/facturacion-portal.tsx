@@ -1374,7 +1374,16 @@ function ReportesTab({
     });
   }, [facturas, desde, hasta, filtros, idsDesdeItems, clientePorId]);
 
-  const totalFacturado = facturasFiltradas.reduce((s, f) => s + Number(f.total), 0);
+  // "Facturado" = Ingreso Bruto / Ventas Brutas real (subtotal, ANTES de
+  // retención) — no invoices.total, que ya viene neto de retención (ver
+  // nota junto a feeProcesamiento). Corrección pedida por Joel (2 sept
+  // 2026, con desglose contable): "el reporte de ventas/servicios prestados
+  // DEBE reflejar $100,000.00... ni la retención ni las comisiones de ATH
+  // reducen tus ventas brutas o lo que facturaste, reducen únicamente tu
+  // efectivo recibido en banco". invoices.total sigue siendo correcto para
+  // todo lo demás (es lo que el cliente debe pagar/pagó); solo "Facturado"
+  // como métrica de ingreso bruto necesitaba usar subtotal.
+  const totalFacturado = facturasFiltradas.reduce((s, f) => s + Number(f.subtotal), 0);
   const facturasPagadas = useMemo(() => facturasFiltradas.filter((f) => f.estado === "pagada"), [facturasFiltradas]);
   const totalCobrado = facturasPagadas.reduce((s, f) => s + Number(f.total), 0);
   const totalPendiente = facturasFiltradas.filter((f) => f.estado !== "pagada").reduce((s, f) => s + Number(f.total), 0);
@@ -1386,7 +1395,7 @@ function ReportesTab({
       const key = f.client_id ?? "sin-cliente";
       const nombre = f.clients?.name ?? "Sin cliente";
       const actual = mapa.get(key) ?? { id: key, nombre, facturado: 0, cobrado: 0, count: 0 };
-      actual.facturado += Number(f.total);
+      actual.facturado += Number(f.subtotal);
       if (f.estado === "pagada") actual.cobrado += Number(f.total);
       actual.count += 1;
       mapa.set(key, actual);
@@ -1428,6 +1437,19 @@ function ReportesTab({
     (s, f) => (f.estado === "pagada" ? s + feeProcesamiento(f, entidadesConAth) : s),
     0
   );
+
+  // Cascada de conciliación (2 sept 2026, pedido de Joel con desglose
+  // contable de experto): Facturación Bruta → Retenciones → Recaudado →
+  // Comisiones → Depósito neto en banco. A diferencia de "Facturado" de
+  // arriba (que incluye TODO el período, pagado o no), esta cascada solo
+  // usa las facturas YA PAGADAS — es una conciliación de efectivo real, no
+  // una proyección, así que solo tiene sentido sobre lo que de verdad
+  // entró. brutoCobrado = subtotal de las pagadas (antes de cualquier
+  // descuento); totalRetenido ya viene de porRetencion (solo pagadas);
+  // totalCobrado ya es bruto-retención (invoices.total); depositoNeto le
+  // resta el fee de procesamiento real.
+  const brutoCobrado = facturasPagadas.reduce((s, f) => s + Number(f.subtotal), 0);
+  const depositoNetoBanco = totalCobrado - gastoProcesamientoPeriodo;
 
   const porServicio = useMemo(() => {
     const mapa = new Map<string, { descripcion: string; total: number; count: number }>();
@@ -1477,7 +1499,7 @@ function ReportesTab({
     for (const f of facturasFiltradas) {
       const mes = f.fecha_emision.slice(0, 7);
       const actual = mapa.get(mes) ?? { mes, facturado: 0, cobrado: 0 };
-      actual.facturado += Number(f.total);
+      actual.facturado += Number(f.subtotal);
       mapa.set(mes, actual);
     }
     // "Cobrado" se agrupa por el mes real del pago (fecha_pago), no por el
@@ -1764,6 +1786,25 @@ function ReportesTab({
         </SeccionColapsable>
       )}
 
+      {/* Cuadre de recaudo (2 sept 2026, pedido de Joel con desglose contable
+          de experto): Facturación Bruta → Retenciones → Recaudado →
+          Comisiones → Depósito neto, calcado del asiento contable real.
+          "Facturado" arriba en Resumen cubre TODO el período (pagado o no);
+          esta cascada es solo sobre lo YA COBRADO, para que cuadre contra lo
+          que de verdad entró al banco. */}
+      {facturasPagadas.length > 0 && (
+        <div className="mb-3 rounded-2xl border border-border bg-card p-4">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Cuadre de recaudo (facturas cobradas)</p>
+          <FilaResumen label="Facturación bruta cobrada" valor={formatMoney(brutoCobrado)} />
+          {totalRetenido > 0 && <FilaResumen label="Retenciones en la fuente" valor={`-${formatMoney(totalRetenido)}`} tono="a" />}
+          <FilaResumen label="Recaudado (cuentas por cobrar)" valor={formatMoney(totalCobrado)} />
+          {gastoProcesamientoPeriodo > 0 && (
+            <FilaResumen label="Comisiones de pasarela (ATH/Stripe)" valor={`-${formatMoney(gastoProcesamientoPeriodo)}`} tono="a" />
+          )}
+          <FilaResumen label="Depósito neto en banco" valor={formatMoney(depositoNetoBanco)} tono="g" fuerte />
+        </div>
+      )}
+
       <div className="mb-3 rounded-2xl p-4" style={{ background: "#1D9E75" }}>
         <p className="text-[11px]" style={{ color: "rgba(255,255,255,.75)" }}>
           Créditos en Hacienda (retenciones acumuladas)
@@ -1783,6 +1824,25 @@ function ReportesTab({
           </p>
         </div>
       )}
+
+      {/* Resumen ejecutivo para Planilla/Hacienda (2 sept 2026) — lo que va
+          en cada línea de la planilla de contribuciones: el ingreso bruto
+          real facturado (subtotal, TODO el período — no solo lo cobrado,
+          porque el ingreso se reporta cuando se factura/devenga, no cuando
+          se cobra), el gasto deducible de comisiones, y el crédito
+          contributivo acumulado por retenciones. */}
+      <div className="mb-3 rounded-2xl border border-border bg-card p-4">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Resumen ejecutivo para planilla</p>
+        <FilaResumen label="Ingreso reportable (planilla)" valor={formatMoney(totalFacturado)} fuerte />
+        {gastoProcesamientoPeriodo > 0 && (
+          <FilaResumen label="Gasto deducible (merchant fees)" valor={formatMoney(gastoProcesamientoPeriodo)} tono="a" />
+        )}
+        {totalRetenido > 0 && <FilaResumen label="Crédito contributivo acumulado (SURI)" valor={formatMoney(totalRetenido)} tono="g" />}
+        <p className="mt-2 text-[11px] text-muted">
+          Tus clientes le van a informar a Hacienda cuánto te pagaron y retuvieron en las Informativas 480.6SP/480.6A — este ingreso
+          reportable debe cuadrar con eso. No sustituye asesoría de tu CPA.
+        </p>
+      </div>
 
       <div className="flex gap-2">
         <a href={pdfHref} target="_blank" rel="noreferrer" className="vc-btn-primary flex-1 text-center">

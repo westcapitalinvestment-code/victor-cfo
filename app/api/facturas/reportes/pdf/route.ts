@@ -35,7 +35,9 @@ export async function GET(req: NextRequest) {
 
   let facturasQuery = supabase
     .from("invoices")
-    .select("id, total, retencion_pct, retencion_monto, estado, fecha_emision, fecha_vencimiento, client_id, clients(name, email)")
+    .select(
+      "id, subtotal, total, retencion_pct, retencion_monto, estado, fecha_emision, fecha_vencimiento, metodo_pago, entity_id, client_id, clients(name, email)"
+    )
     .eq("owner_id", user.id)
     .neq("estado", "borrador")
     .gte("fecha_emision", desde)
@@ -52,18 +54,48 @@ export async function GET(req: NextRequest) {
     ? await supabase.from("business_entities").select("name").eq("id", entityId).eq("owner_id", user.id).maybeSingle()
     : { data: null };
 
-  const totalFacturado = facturas.reduce((s, f) => s + Number(f.total), 0);
+  // pATH de ATH Móvil Business configurado, para el mismo gate de fee que
+  // usa la pantalla (ver facturacion-portal.tsx: feeProcesamiento) — este
+  // PDF es lo que Joel le manda al CPA, así que tiene que cuadrar con lo
+  // que ve en pantalla, incluyendo el gasto de procesamiento y el ingreso
+  // bruto real (subtotal, no total neto de retención).
+  let entidadesQuery = supabase.from("business_entities").select("id, ath_movil_business_path").eq("owner_id", user.id);
+  if (entityId) entidadesQuery = entidadesQuery.eq("id", entityId);
+  const { data: entidadesData } = await entidadesQuery;
+  const entidadesConAth = new Set((entidadesData ?? []).filter((e) => e.ath_movil_business_path).map((e) => e.id));
+
+  const ATH_FEE_PCT = 0.0225;
+  const ATH_FEE_MINIMO = 0.06;
+  const STRIPE_FEE_PCT = 0.029;
+  const STRIPE_FEE_FIJO = 0.3;
+  function feeProcesamiento(f: any): number {
+    if (f.metodo_pago === "ATH Móvil Business") {
+      if (!f.entity_id || !entidadesConAth.has(f.entity_id)) return 0;
+      return Math.max(Number(f.total) * ATH_FEE_PCT, ATH_FEE_MINIMO);
+    }
+    if (f.metodo_pago === "Tarjeta") return Number(f.total) * STRIPE_FEE_PCT + STRIPE_FEE_FIJO;
+    return 0;
+  }
+
+  // "Facturado" = ingreso bruto real (subtotal, antes de retención) — no
+  // invoices.total, que ya viene neto de retención. Corrección pedida por
+  // Joel (2 sept 2026): la retención y las comisiones de pasarela no
+  // reducen las ventas brutas, solo el efectivo que llega al banco.
+  const totalFacturado = facturas.reduce((s, f) => s + Number(f.subtotal), 0);
   const facturasPagadas = facturas.filter((f) => f.estado === "pagada");
   const totalCobrado = facturasPagadas.reduce((s, f) => s + Number(f.total), 0);
   const totalPendiente = facturas.filter((f) => f.estado !== "pagada").reduce((s, f) => s + Number(f.total), 0);
   const tasaCobro = totalFacturado > 0 ? Math.round((totalCobrado / totalFacturado) * 100) : 0;
+  const brutoCobrado = facturasPagadas.reduce((s, f) => s + Number(f.subtotal), 0);
+  const gastoProcesamiento = facturasPagadas.reduce((s, f) => s + feeProcesamiento(f), 0);
+  const depositoNetoBanco = totalCobrado - gastoProcesamiento;
 
   const porCliente = (() => {
     const mapa = new Map<string, { nombre: string; facturado: number; cobrado: number; count: number }>();
     for (const f of facturas) {
       const nombre = f.clients?.name ?? "Sin cliente";
       const actual = mapa.get(nombre) ?? { nombre, facturado: 0, cobrado: 0, count: 0 };
-      actual.facturado += Number(f.total);
+      actual.facturado += Number(f.subtotal);
       if (f.estado === "pagada") actual.cobrado += Number(f.total);
       actual.count += 1;
       mapa.set(nombre, actual);
@@ -163,10 +195,24 @@ export async function GET(req: NextRequest) {
   y -= 24;
 
   encabezadoSeccion("Resumen");
-  filaTabla("Facturado", formatMoney(totalFacturado));
+  filaTabla("Facturado (ingreso bruto)", formatMoney(totalFacturado));
   filaTabla("Cobrado", formatMoney(totalCobrado), { color: teal });
   filaTabla("Pendiente", formatMoney(totalPendiente), { color: rgb(0.83, 0.62, 0.05) });
   filaTabla("Tasa de cobro", `${tasaCobro}%`, { bold: true, color: teal });
+
+  if (facturasPagadas.length > 0) {
+    encabezadoSeccion("Cuadre de recaudo (facturas cobradas)");
+    filaTabla("Facturación bruta cobrada", formatMoney(brutoCobrado));
+    if (totalRetenido > 0) filaTabla("Retenciones en la fuente", `-${formatMoney(totalRetenido)}`, { color: rgb(0.83, 0.62, 0.05) });
+    filaTabla("Recaudado (cuentas por cobrar)", formatMoney(totalCobrado));
+    if (gastoProcesamiento > 0) filaTabla("Comisiones de pasarela (ATH/Stripe)", `-${formatMoney(gastoProcesamiento)}`, { color: rgb(0.83, 0.62, 0.05) });
+    filaTabla("Depósito neto en banco", formatMoney(depositoNetoBanco), { bold: true, color: teal });
+  }
+
+  encabezadoSeccion("Resumen ejecutivo para planilla");
+  filaTabla("Ingreso reportable (planilla)", formatMoney(totalFacturado), { bold: true });
+  if (gastoProcesamiento > 0) filaTabla("Gasto deducible (merchant fees)", formatMoney(gastoProcesamiento), { color: rgb(0.83, 0.62, 0.05) });
+  if (totalRetenido > 0) filaTabla("Crédito contributivo acumulado (SURI)", formatMoney(totalRetenido), { color: teal });
 
   encabezadoSeccion("Por cliente");
   if (porCliente.length === 0) filaTabla("No hay facturas en este período.", "");
