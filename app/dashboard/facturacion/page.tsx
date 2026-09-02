@@ -52,11 +52,14 @@ export default async function FacturacionPage({
   // por entity_id cuando hay una entidad específica activa.
   const { entidadId: entidadActivaId, vistaGlobal } = resolverEntidadActiva(entities, leerEntidadActivaCookie());
 
+  // Sin filtro de "active" — a diferencia de antes, el tab Clientes del
+  // portal ahora también trae los archivados (pedido de Joel, 1 sept 2026:
+  // "no se dnd verlos"), y es ClientesTab quien decide qué mostrar según el
+  // dropdown de filtro.
   let clientsQuery = supabase
     .from("clients")
-    .select("id, name, email, es_negocio, retention_pct, entity_id")
+    .select("id, name, email, es_negocio, retention_pct, entity_id, active")
     .eq("owner_id", user.id)
-    .eq("active", true)
     .order("name", { ascending: true });
   let facturasQuery = supabase
     .from("invoices")

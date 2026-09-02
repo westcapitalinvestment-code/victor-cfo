@@ -12,6 +12,7 @@ type Cliente = {
   es_negocio: boolean;
   retention_pct: number;
   entity_id: string | null;
+  active: boolean;
 };
 
 type Factura = {
@@ -493,8 +494,16 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todos");
 
+  // "todos"/"negocio"/"individual" solo miran clientes ACTIVOS — igual que
+  // antes de este cambio. "archivados" es la excepción: es el único valor
+  // que muestra los que tienen active=false (1 sept 2026, pedido de Joel:
+  // "no se dnd verlos" — antes el portal ni siquiera traía los archivados
+  // de la base de datos, así que no había forma de verlos desde aquí sin
+  // salirse a /dashboard/clientes).
   const filtrados = useMemo(() => {
     return clients.filter((c) => {
+      if (filtro === "archivados") return !c.active;
+      if (!c.active) return false;
       if (filtro === "negocio" && !c.es_negocio) return false;
       if (filtro === "individual" && c.es_negocio) return false;
       if (busqueda.trim()) {
@@ -506,6 +515,8 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
       return true;
     });
   }, [clients, filtro, busqueda]);
+
+  const totalActivos = useMemo(() => clients.filter((c) => c.active).length, [clients]);
 
   return (
     <>
@@ -529,13 +540,17 @@ function ClientesTab({ clients }: { clients: Cliente[] }) {
           <option value="todos">Todos</option>
           <option value="negocio">Retención</option>
           <option value="individual">Individual</option>
+          <option value="archivados">Archivados</option>
         </select>
       </div>
 
       <div className="vc-card">
         <div className="mb-2 flex items-center justify-between">
           <p className="text-xs uppercase tracking-wide text-muted">
-            Directorio <span className="normal-case text-muted">· {clients.length} cliente{clients.length === 1 ? "" : "s"}</span>
+            Directorio{filtro === "archivados" ? " (archivados)" : ""}{" "}
+            <span className="normal-case text-muted">
+              · {filtro === "archivados" ? filtrados.length : totalActivos} cliente{(filtro === "archivados" ? filtrados.length : totalActivos) === 1 ? "" : "s"}
+            </span>
           </p>
           <div className="flex items-center gap-3">
             <Link
