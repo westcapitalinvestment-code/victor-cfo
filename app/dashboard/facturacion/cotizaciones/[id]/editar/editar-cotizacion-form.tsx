@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
@@ -95,14 +95,19 @@ export default function EditarCotizacionForm({
   function quitarLinea(i: number) {
     setLineas((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
   }
-  function agregarDesdeServicio(servicioId: string) {
+  // Estilo FreshBooks (1 sept 2026, pedido de Joel): el catálogo vive
+  // dentro de cada línea — al elegir un servicio del buscador de ESA línea,
+  // se llena esa línea específica (no se añade una línea nueva).
+  function elegirServicioParaLinea(i: number, servicioId: string) {
     const s = servicios.find((x) => x.id === servicioId);
     if (!s) return;
-    setLineas((prev) => {
-      const vacias = prev.filter((l) => !l.descripcion.trim());
-      const nueva = { descripcion: s.nombre, detalle: s.descripcion ?? "", cantidad: "1", precioUnitario: String(s.precio), servicioId: s.id };
-      return vacias.length === prev.length ? [nueva] : [...prev.filter((l) => l.descripcion.trim()), nueva];
-    });
+    setLineas((prev) =>
+      prev.map((l, idx) =>
+        idx === i
+          ? { descripcion: s.nombre, detalle: s.descripcion ?? "", cantidad: l.cantidad || "1", precioUnitario: String(s.precio), servicioId: s.id }
+          : l
+      )
+    );
   }
 
   // Misma lógica que nueva-cotizacion-form.tsx (1 sept 2026, pedido de
@@ -227,30 +232,18 @@ export default function EditarCotizacionForm({
           <input className="vc-input" type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} />
         </Field>
 
-        {servicios.length > 0 && (
-          <Field label="Añadir desde el catálogo (opcional)">
-            <select className="vc-input" defaultValue="" onChange={(e) => e.target.value && agregarDesdeServicio(e.target.value)}>
-              <option value="">Elegir un servicio guardado...</option>
-              {servicios.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nombre} — {formatMoney(s.precio)}
-                </option>
-              ))}
-            </select>
-          </Field>
-        )}
-
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Líneas</label>
           <div className="flex flex-col gap-3">
             {lineas.map((l, i) => (
               <div key={i} className="flex items-start gap-2">
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <input
-                    className="vc-input"
+                  <ServicioComboBox
+                    servicios={servicios}
+                    valor={l.descripcion}
+                    onCambiarTexto={(v) => actualizarLinea(i, "descripcion", v)}
+                    onElegirServicio={(servicioId) => elegirServicioParaLinea(i, servicioId)}
                     placeholder="Nombre del servicio"
-                    value={l.descripcion}
-                    onChange={(e) => actualizarLinea(i, "descripcion", e.target.value)}
                   />
                   <input
                     className="vc-input"
@@ -260,8 +253,12 @@ export default function EditarCotizacionForm({
                     onChange={(e) => actualizarLinea(i, "detalle", e.target.value)}
                   />
                 </div>
+                {/* Ancho fijo en style, no en className: .vc-input trae
+                    width:100% del CSS global que le gana a w-16/w-24 —
+                    sin esto, estos inputs se salían de la tarjeta. */}
                 <input
-                  className="vc-input w-16 flex-shrink-0"
+                  className="vc-input flex-shrink-0"
+                  style={{ width: 64 }}
                   type="number"
                   min="0"
                   step="1"
@@ -269,7 +266,8 @@ export default function EditarCotizacionForm({
                   onChange={(e) => actualizarLinea(i, "cantidad", e.target.value)}
                 />
                 <input
-                  className="vc-input w-24 flex-shrink-0"
+                  className="vc-input flex-shrink-0"
+                  style={{ width: 96 }}
                   type="number"
                   min="0"
                   step="0.01"
@@ -326,6 +324,70 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <label className="mb-1 block text-xs uppercase tracking-wide text-muted">{label}</label>
       {children}
+    </div>
+  );
+}
+
+// Buscador de servicios estilo FreshBooks (1 sept 2026, pedido de Joel —
+// mismo componente que en Nueva/Editar Factura y Nueva Cotización): deja
+// escribir texto libre — el valor del input ES la descripción de la línea,
+// y el dropdown es un atajo para llenarla desde el catálogo.
+function ServicioComboBox({
+  servicios,
+  valor,
+  onCambiarTexto,
+  onElegirServicio,
+  placeholder,
+}: {
+  servicios: ServicioCat[];
+  valor: string;
+  onCambiarTexto: (v: string) => void;
+  onElegirServicio: (servicioId: string) => void;
+  placeholder: string;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function alHacerClicFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false);
+    }
+    document.addEventListener("mousedown", alHacerClicFuera);
+    return () => document.removeEventListener("mousedown", alHacerClicFuera);
+  }, []);
+
+  const filtrados = valor.trim() ? servicios.filter((s) => s.nombre.toLowerCase().includes(valor.trim().toLowerCase())) : servicios;
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        className="vc-input"
+        placeholder={placeholder}
+        value={valor}
+        onFocus={() => setAbierto(true)}
+        onChange={(e) => {
+          onCambiarTexto(e.target.value);
+          setAbierto(true);
+        }}
+      />
+      {abierto && filtrados.length > 0 && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+          {filtrados.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-bg"
+              onClick={() => {
+                onElegirServicio(s.id);
+                setAbierto(false);
+              }}
+            >
+              <span className="truncate">{s.nombre}</span>
+              <span className="flex-shrink-0 text-xs text-muted">{formatMoney(s.precio)}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
