@@ -32,7 +32,9 @@ type Cotizacion = {
   invoice_id: string | null;
   entity_id: string | null;
   client_id: string | null;
+  technician_id: string | null;
   clients: { name: string; email: string | null; telefono: string | null; es_negocio: boolean; retention_pct: number } | null;
+  technicians: { name: string } | null;
   business_entities: {
     name: string;
     invoice_prefix: string;
@@ -193,6 +195,12 @@ export default function CotizacionDetalle({
         retencion_pct: retencionPct,
         retencion_monto: retencionMonto,
         total,
+        // Si la cotización ya tenía un técnico asignado, la factura nace
+        // con el mismo vínculo (Equipo, 2 sept 2026, pedido de Joel) — así
+        // el trabajo sigue apareciendo en su Panel/Reportes de Equipo
+        // aunque hayas hecho tú mismo la conversión en vez de que él la
+        // convirtiera desde su app.
+        technician_id: cotizacion.technician_id,
         estado: "enviada",
         fecha_emision: hoy,
         fecha_vencimiento: vencimiento.toISOString().slice(0, 10),
@@ -291,6 +299,14 @@ export default function CotizacionDetalle({
           <span>Emitida: {formatFecha(cotizacion.fecha_emision)}</span>
           {cotizacion.fecha_vencimiento && <span>Válida hasta: {formatFecha(cotizacion.fecha_vencimiento)}</span>}
         </div>
+
+        {cotizacion.technicians && cotizacion.estado !== "convertida" && (
+          <div className="rounded-lg border border-teal/30 bg-teal/[.05] p-2.5 text-xs">
+            <i className="ti ti-user-check text-teal" style={{ marginRight: 4 }} />
+            Asignada a <strong>{cotizacion.technicians.name}</strong>
+            {cotizacion.estado === "aprobada" && " — la puede convertir él mismo en factura desde su app cuando la haga."}
+          </div>
+        )}
 
         <div className="rounded-lg border border-border">
           {items.map((it) => (

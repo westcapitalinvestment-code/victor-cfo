@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/format";
 type Entity = { id: string; name: string; ivu_applies: boolean; ivu_rate_estatal: number; ivu_rate_municipal: number };
 type Client = { id: string; name: string; entity_id: string | null; ivu_exempt_reseller: boolean };
 type ServicioCat = { id: string; nombre: string; descripcion: string | null; tipo: string; precio: number; ivu_exento: boolean };
+type TecnicoOpcion = { id: string; name: string; entity_id: string | null };
 // servicioId (1 sept 2026): referencia real al catálogo cuando la línea
 // viene de "Elegir un servicio guardado" — se pierde (queda null) si el
 // usuario edita la descripción a mano o añade una línea libre con "+
@@ -28,11 +29,13 @@ export default function NuevaCotizacionForm({
   clients,
   servicios,
   numeroInicial,
+  tecnicos,
 }: {
   entities: Entity[];
   clients: Client[];
   servicios: ServicioCat[];
   numeroInicial: string;
+  tecnicos: TecnicoOpcion[];
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -50,6 +53,15 @@ export default function NuevaCotizacionForm({
   // criterio ya aplicado en Nueva Factura).
   const [clientId, setClientId] = useState("");
   const cliente = clientesDeEntidad.find((c) => c.id === clientId);
+
+  // "Asignar a técnico" (Equipo, 2 sept 2026, pedido de Joel): igual que en
+  // Nueva Factura — opcional. Cuando la cotización se apruebe, el técnico
+  // la ve en su app y él mismo la convierte a factura al terminar.
+  const tecnicosDeEntidad = useMemo(
+    () => tecnicos.filter((t) => !t.entity_id || t.entity_id === entityId),
+    [tecnicos, entityId]
+  );
+  const [technicianId, setTechnicianId] = useState("");
 
   const hoy = new Date().toISOString().slice(0, 10);
   const [fechaVencimiento, setFechaVencimiento] = useState("");
@@ -145,6 +157,7 @@ export default function NuevaCotizacionForm({
         owner_id: user.id,
         entity_id: entidad.id,
         client_id: cliente.id,
+        technician_id: technicianId || null,
         numero: numeroInicial,
         subtotal,
         ivu_pct: ivuPct,
@@ -237,6 +250,25 @@ export default function NuevaCotizacionForm({
             onChange={(e) => setFechaVencimiento(e.target.value)}
           />
         </Field>
+
+        {tecnicosDeEntidad.length > 0 && (
+          <Field label="Asignar a técnico (opcional)">
+            <select className="vc-input" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>
+              <option value="">Sin asignar — la manejas tú</option>
+              {tecnicosDeEntidad.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            {technicianId && (
+              <p className="mt-1 text-xs text-muted">
+                Cuando la apruebes, {tecnicosDeEntidad.find((t) => t.id === technicianId)?.name} la va a ver en su app y puede
+                convertirla él mismo en factura al terminar el trabajo.
+              </p>
+            )}
+          </Field>
+        )}
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Líneas</label>

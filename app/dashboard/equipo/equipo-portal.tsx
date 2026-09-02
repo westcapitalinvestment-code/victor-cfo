@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -44,6 +44,14 @@ type ItemFactura = {
   services: { nombre: string } | null;
 };
 
+type CotizacionAsignada = {
+  id: string;
+  numero: string;
+  total: number;
+  technician_id: string;
+  clients: { name: string } | null;
+};
+
 type Entidad = {
   id: string;
   name: string;
@@ -85,6 +93,7 @@ export default function EquipoPortal({
   vendors,
   facturas,
   items,
+  cotizacionesAsignadas,
   entidad,
   vistaGlobalActiva,
   cantidadEntidades,
@@ -93,6 +102,7 @@ export default function EquipoPortal({
   vendors: Vendor[];
   facturas: Factura[];
   items: ItemFactura[];
+  cotizacionesAsignadas: CotizacionAsignada[];
   entidad: Entidad;
   vistaGlobalActiva: boolean;
   cantidadEntidades: number;
@@ -151,7 +161,7 @@ export default function EquipoPortal({
         </div>
       )}
 
-      {tab === "panel" && <PanelTab facturas={facturas} tecnicos={tecnicos} />}
+      {tab === "panel" && <PanelTab facturas={facturas} tecnicos={tecnicos} cotizacionesAsignadas={cotizacionesAsignadas} />}
       {tab === "tecnicos" && <TecnicosTab tecnicos={tecnicos} vendors={vendors} entidad={entidad} />}
       {tab === "reportes" && <ReportesTab facturas={facturas} items={items} tecnicos={tecnicos} />}
     </div>
@@ -162,7 +172,15 @@ export default function EquipoPortal({
 // Tab: Panel — lo que pasa hoy (mockup de Joel): 3 métricas, chips por
 // técnico, "Trabajos de hoy" con aprobar, y un roster corto del equipo.
 // ============================================================================
-function PanelTab({ facturas, tecnicos }: { facturas: Factura[]; tecnicos: Tecnico[] }) {
+function PanelTab({
+  facturas,
+  tecnicos,
+  cotizacionesAsignadas,
+}: {
+  facturas: Factura[];
+  tecnicos: Tecnico[];
+  cotizacionesAsignadas: CotizacionAsignada[];
+}) {
   const supabase = createClient();
   const router = useRouter();
   const [lista, setLista] = useState(facturas);
@@ -250,6 +268,30 @@ function PanelTab({ facturas, tecnicos }: { facturas: Factura[]; tecnicos: Tecni
       )}
 
       {error && <p className="mb-2 text-xs text-red">{error}</p>}
+
+      {cotizacionesAsignadas.length > 0 && (
+        <div className="vc-card mb-3">
+          <p className="mb-2 text-xs uppercase tracking-wide text-muted">
+            Cotizaciones asignadas, pendientes de hacer <span className="normal-case text-muted">· {cotizacionesAsignadas.length}</span>
+          </p>
+          <p className="mb-2 text-xs text-muted">Ya tienen visto bueno del cliente — el técnico las convierte en factura cuando llega al trabajo.</p>
+          {cotizacionesAsignadas.map((c) => (
+            <Link
+              key={c.id}
+              href={`/dashboard/facturacion/cotizaciones/${c.id}`}
+              className="flex items-center justify-between border-b border-border py-2.5 text-sm last:border-0"
+            >
+              <div className="min-w-0">
+                <p className="truncate">
+                  {nombrePorTecnico.get(c.technician_id) ?? "Técnico"} → {c.clients?.name ?? "Sin cliente"}
+                </p>
+                <p className="text-xs text-muted">{c.numero}</p>
+              </div>
+              <p className="flex-shrink-0 font-medium">{formatMoney(c.total)}</p>
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="vc-card mb-3">
         <p className="mb-2 text-xs uppercase tracking-wide text-muted">
@@ -375,6 +417,19 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
   const [approvalOverride, setApprovalOverride] = useState(""); // "" = global
   const [maxDescuento, setMaxDescuento] = useState("0");
   const [vendorId, setVendorId] = useState("");
+  // "¿De mi lista de Pagos o alguien nuevo?" (2 sept 2026, pedido de Joel:
+  // "probablemente es alguien que tengo en mi lista de pagos, ahi debe
+  // aparecer es listado de abajo para escoger uno de ellos y si es otro
+  // pues lo creo") — el vínculo con Pagos ahora es el PRIMER paso, no un
+  // campo escondido al final.
+  const [origenTecnico, setOrigenTecnico] = useState<"vendor" | "nuevo">("vendor");
+  const [avanzadoAbierto, setAvanzadoAbierto] = useState(false);
+  // El PIN solo existe en texto plano en el momento en que se acaba de
+  // crear/restablecer (después queda solo el hash) — este estado guarda
+  // ESE momento para poder mostrarlo/mandarlo por WhatsApp una sola vez,
+  // en vez de perderlo (pedido de Joel: "si le asigno un PIN como el
+  // técnico lo sabe?").
+  const [pinParaCompartir, setPinParaCompartir] = useState<{ tecnico: { id: string; name: string; phone: string | null; access_token: string }; pin: string } | null>(null);
 
   function abrirNuevo() {
     setFormAbierto("nuevo");
@@ -384,6 +439,8 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
     setApprovalOverride("");
     setMaxDescuento("0");
     setVendorId("");
+    setOrigenTecnico(vendors.length > 0 ? "vendor" : "nuevo");
+    setAvanzadoAbierto(false);
     setError(null);
   }
 
@@ -395,7 +452,15 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
     setApprovalOverride(t.approval_mode ?? "");
     setMaxDescuento(String(t.max_discount_pct));
     setVendorId(t.vendor_id ?? "");
+    setOrigenTecnico(t.vendor_id ? "vendor" : "nuevo");
+    setAvanzadoAbierto(false);
     setError(null);
+  }
+
+  function seleccionarVendor(id: string) {
+    setVendorId(id);
+    const v = vendors.find((x) => x.id === id);
+    if (v) setName(v.name);
   }
 
   async function guardar() {
@@ -452,6 +517,11 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
       if (!resPin.ok) {
         const d = await resPin.json().catch(() => null);
         setError(d?.error ?? "El técnico se creó, pero no se pudo fijar el PIN. Ábrelo y usa 'Restablecer PIN'.");
+      } else {
+        // Este es el único momento en que el PIN todavía existe en texto
+        // plano — se muestra/manda por WhatsApp ahora o se pierde (queda
+        // solo el hash, como el PIN de bloqueo del dueño).
+        setPinParaCompartir({ tecnico: data as Tecnico, pin });
       }
       setLista((prev) => [data as Tecnico, ...prev]);
       setFormAbierto(null);
@@ -489,6 +559,7 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
       }
 
       setGuardando(false);
+      const actualizado = lista.find((t) => t.id === formAbierto);
       setLista((prev) =>
         prev.map((t) =>
           t.id === formAbierto
@@ -503,6 +574,9 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
             : t
         )
       );
+      if (pin && actualizado) {
+        setPinParaCompartir({ tecnico: { ...actualizado, name: name.trim(), phone: phone.trim() || null }, pin });
+      }
       setFormAbierto(null);
       router.refresh();
     }
@@ -557,7 +631,16 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
       window.alert(d?.error ?? "No se pudo cambiar el PIN.");
       return;
     }
-    window.alert(`PIN actualizado. Compárteselo a ${t.name} ahora — no se puede volver a ver después.`);
+    setPinParaCompartir({ tecnico: t, pin: nuevoPin });
+  }
+
+  function enviarPinPorWhatsapp(t: { name: string; phone: string | null; access_token: string }, pinTexto: string) {
+    if (!t.phone) {
+      window.alert(`${t.name} no tiene teléfono guardado — añádeselo editándolo, o comparte el PIN por otro medio: ${pinTexto}`);
+      return;
+    }
+    const mensaje = `Hola ${t.name}, aquí está tu acceso a VICTOR CFO: ${window.location.origin}/tecnico?t=${t.access_token} — tu PIN es ${pinTexto}`;
+    window.open(`https://wa.me/${telefonoWhatsapp(t.phone)}?text=${encodeURIComponent(mensaje)}`, "_blank");
   }
 
   return (
@@ -608,10 +691,70 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
         </button>
       </div>
 
+      {pinParaCompartir && (
+        <div className="vc-card mb-3" style={{ borderColor: "#1D9E75" }}>
+          <p className="mb-1 text-sm font-medium">PIN listo para {pinParaCompartir.tecnico.name}</p>
+          <p className="mb-2 text-xs text-muted">Compártelo ahora — por seguridad no se puede volver a mostrar después de salir de aquí.</p>
+          <div className="mb-2 flex items-center justify-between rounded-lg border border-border bg-bg p-2.5">
+            <span className="font-mono text-lg tracking-[0.3em]">{pinParaCompartir.pin}</span>
+            <button
+              onClick={() => navigator.clipboard.writeText(pinParaCompartir.pin)}
+              className="text-xs font-medium text-teal hover:opacity-80"
+            >
+              Copiar
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => enviarPinPorWhatsapp(pinParaCompartir.tecnico, pinParaCompartir.pin)}
+              className="vc-btn-primary flex flex-1 items-center justify-center gap-1"
+              style={{ width: "auto" }}
+            >
+              <i className="ti ti-brand-whatsapp" /> Enviar por WhatsApp
+            </button>
+            <button className="flex-shrink-0 px-3 text-xs text-muted hover:opacity-80" onClick={() => setPinParaCompartir(null)}>
+              Listo
+            </button>
+          </div>
+        </div>
+      )}
+
       {formAbierto && (
         <div className="vc-card mb-3 flex flex-col gap-2.5">
           <p className="text-xs uppercase tracking-wide text-muted">{formAbierto === "nuevo" ? "Nuevo técnico" : "Editar técnico"}</p>
           {error && <p className="text-xs text-red">{error}</p>}
+
+          {vendors.length > 0 && (
+            <div className="flex" style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: 3, gap: 3 }}>
+              <button
+                type="button"
+                onClick={() => setOrigenTecnico("vendor")}
+                className="flex-1 rounded-lg py-1.5 text-xs font-medium"
+                style={origenTecnico === "vendor" ? { background: "#1D9E75", color: "#fff" } : { color: "var(--muted)" }}
+              >
+                De mi lista de Pagos
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOrigenTecnico("nuevo");
+                  setVendorId("");
+                }}
+                className="flex-1 rounded-lg py-1.5 text-xs font-medium"
+                style={origenTecnico === "nuevo" ? { background: "#1D9E75", color: "#fff" } : { color: "var(--muted)" }}
+              >
+                Es alguien nuevo
+              </button>
+            </div>
+          )}
+
+          {origenTecnico === "vendor" && vendors.length > 0 && (
+            <div>
+              <label className="mb-1 block text-[11px] text-muted">Escoge de tu lista de Pagos</label>
+              <SelectorBuscable items={vendors} valorId={vendorId} onSeleccionar={seleccionarVendor} placeholder="Buscar contratista..." etiqueta={(v) => v.name} />
+            </div>
+          )}
+
           <input className="vc-input" placeholder="Nombre" value={name} onChange={(e) => setName(e.target.value)} />
           <input className="vc-input" placeholder="Teléfono (para WhatsApp)" value={phone} onChange={(e) => setPhone(e.target.value)} />
           <input
@@ -622,28 +765,33 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
             value={pin}
             onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
           />
-          <div className="flex gap-2">
-            <select className="vc-input flex-1" value={approvalOverride} onChange={(e) => setApprovalOverride(e.target.value)}>
-              <option value="">Global ({aprobacionDefault === "manual" ? "manual" : "auto"})</option>
-              <option value="auto">Forzar automático</option>
-              <option value="manual">Forzar revisión manual</option>
-            </select>
-            <div className="flex w-24 flex-shrink-0 items-center gap-1">
-              <input className="vc-input" type="number" min="0" max="100" value={maxDescuento} onChange={(e) => setMaxDescuento(e.target.value)} />
-              <span className="text-xs text-muted">% desc.</span>
+          {pin && (
+            <p className="text-[11px] text-muted">
+              Al guardar te va a ofrecer mandar el link y este PIN por WhatsApp — es el único momento en que se puede compartir.
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setAvanzadoAbierto((a) => !a)}
+            className="-mb-1 text-left text-xs font-medium text-teal hover:opacity-80"
+          >
+            {avanzadoAbierto ? "− Ocultar" : "+"} Configuración avanzada (aprobación, descuento)
+          </button>
+          {avanzadoAbierto && (
+            <div className="flex gap-2">
+              <select className="vc-input flex-1" value={approvalOverride} onChange={(e) => setApprovalOverride(e.target.value)}>
+                <option value="">Seguir la config. general del negocio ({aprobacionDefault === "manual" ? "revisión manual" : "automático"})</option>
+                <option value="auto">Siempre automático para él, aunque el negocio esté en manual</option>
+                <option value="manual">Siempre con tu revisión, aunque el negocio esté en automático</option>
+              </select>
+              <div className="flex w-24 flex-shrink-0 items-center gap-1">
+                <input className="vc-input" type="number" min="0" max="100" value={maxDescuento} onChange={(e) => setMaxDescuento(e.target.value)} />
+                <span className="text-xs text-muted">% desc.</span>
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="mb-1 block text-[11px] text-muted">¿También le pagas por sus servicios (480.6)? Vincúlalo con Pagos</label>
-            <select className="vc-input" value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
-              <option value="">Sin vincular</option>
-              {vendors.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          )}
+
           <div className="flex gap-2">
             <button className="vc-btn-primary flex-1" disabled={!name.trim() || guardando} onClick={guardar}>
               {guardando ? "Guardando..." : "Guardar"}
@@ -684,8 +832,12 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
             </div>
             <p className="mb-2 truncate text-[11px] text-teal">{linkDe(t)}</p>
             <div className="flex flex-wrap gap-1.5">
-              <button onClick={() => enviarPorWhatsapp(t)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium">
-                <i className="ti ti-brand-whatsapp text-teal" /> Enviar acceso
+              <button
+                onClick={() => enviarPorWhatsapp(t)}
+                className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium"
+                title="Manda el link — el PIN solo se puede incluir justo cuando lo creas o restableces"
+              >
+                <i className="ti ti-brand-whatsapp text-teal" /> Reenviar link
               </button>
               <button onClick={() => copiarLink(t)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium">
                 <i className={`ti ${linkCopiado === t.id ? "ti-check" : "ti-copy"}`} /> Copiar link
@@ -705,6 +857,74 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
         nuevo. El link incluye un token único por técnico.
       </p>
     </>
+  );
+}
+
+// Combobox con búsqueda — mismo patrón que en nueva-factura-form.tsx, para
+// escoger un contratista de Pagos al crear un técnico.
+function SelectorBuscable<T extends { id: string }>({
+  items,
+  valorId,
+  onSeleccionar,
+  etiqueta,
+  placeholder,
+}: {
+  items: T[];
+  valorId: string;
+  onSeleccionar: (id: string) => void;
+  etiqueta: (item: T) => string;
+  placeholder: string;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const seleccionado = items.find((i) => i.id === valorId);
+
+  useEffect(() => {
+    function alHacerClicFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setAbierto(false);
+        setBusqueda("");
+      }
+    }
+    document.addEventListener("mousedown", alHacerClicFuera);
+    return () => document.removeEventListener("mousedown", alHacerClicFuera);
+  }, []);
+
+  const filtrados = busqueda.trim() ? items.filter((i) => etiqueta(i).toLowerCase().includes(busqueda.trim().toLowerCase())) : items;
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        className="vc-input"
+        placeholder={placeholder}
+        value={abierto ? busqueda : seleccionado ? etiqueta(seleccionado) : ""}
+        onFocus={() => {
+          setAbierto(true);
+          setBusqueda("");
+        }}
+        onChange={(e) => setBusqueda(e.target.value)}
+      />
+      {abierto && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+          {filtrados.length === 0 && <p className="p-3 text-xs text-muted">Sin resultados.</p>}
+          {filtrados.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-bg"
+              onClick={() => {
+                onSeleccionar(item.id);
+                setAbierto(false);
+                setBusqueda("");
+              }}
+            >
+              {etiqueta(item)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

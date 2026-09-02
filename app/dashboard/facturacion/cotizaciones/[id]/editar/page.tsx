@@ -17,7 +17,7 @@ export default async function EditarCotizacionPage({ params }: { params: { id: s
 
   const { data: cotizacion } = await supabase
     .from("cotizaciones")
-    .select("id, numero, entity_id, client_id, estado, fecha_vencimiento, notas")
+    .select("id, numero, entity_id, client_id, technician_id, estado, fecha_vencimiento, notas")
     .eq("id", params.id)
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -62,6 +62,13 @@ export default async function EditarCotizacionPage({ params }: { params: { id: s
     .eq("activo", true)
     .order("nombre", { ascending: true });
 
+  const { data: tecnicos } = await supabase
+    .from("technicians")
+    .select("id, name, entity_id")
+    .eq("owner_id", user.id)
+    .eq("active", true)
+    .order("name", { ascending: true });
+
   return (
     <EditarCotizacionForm
       cotizacion={cotizacion}
@@ -69,6 +76,7 @@ export default async function EditarCotizacionPage({ params }: { params: { id: s
       entities={entities ?? []}
       clients={clients ?? []}
       servicios={servicios ?? []}
+      tecnicos={tecnicos ?? []}
     />
   );
 }

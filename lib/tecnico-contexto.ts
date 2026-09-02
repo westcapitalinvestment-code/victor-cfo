@@ -60,6 +60,18 @@ export async function construirRespuestaSesion(ctx: ContextoTecnico) {
     .eq("pendiente_revision_tecnico", false)
     .order("fecha_emision", { ascending: false });
 
+  // Cotizaciones que el dueño aprobó y le asignó a este técnico (Equipo v2,
+  // 2 sept 2026, pedido de Joel: "probablemente sea una cotización que le
+  // dieron visto bueno para hacerla") — todavía no son factura; el técnico
+  // las convierte él mismo desde su app cuando llega al trabajo.
+  const { data: cotizaciones } = await ctx.admin
+    .from("cotizaciones")
+    .select("id, numero, total, fecha_emision, clients(name)")
+    .eq("entity_id", ctx.tecnico.entity_id)
+    .eq("technician_id", ctx.tecnico.id)
+    .eq("estado", "aprobada")
+    .order("fecha_emision", { ascending: false });
+
   return {
     ok: true,
     tecnico: { id: ctx.tecnico.id, name: ctx.tecnico.name },
@@ -73,6 +85,13 @@ export async function construirRespuestaSesion(ctx: ContextoTecnico) {
       total: t.total,
       fechaEmision: t.fecha_emision,
       clienteNombre: t.clients?.name ?? null,
+    })),
+    cotizaciones: (cotizaciones ?? []).map((c: any) => ({
+      id: c.id,
+      numero: c.numero,
+      total: c.total,
+      fechaEmision: c.fecha_emision,
+      clienteNombre: c.clients?.name ?? null,
     })),
   };
 }

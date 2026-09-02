@@ -72,12 +72,20 @@ export default async function NuevaCotizacionPage() {
     .select("id", { count: "exact", head: true })
     .eq("owner_id", user.id);
 
+  const { data: tecnicos } = await supabase
+    .from("technicians")
+    .select("id, name, entity_id")
+    .eq("owner_id", user.id)
+    .eq("active", true)
+    .order("name", { ascending: true });
+
   return (
     <NuevaCotizacionForm
       entities={entities}
       clients={clients}
       servicios={servicios ?? []}
       numeroInicial={`COT-${1000 + (count ?? 0) + 1}`}
+      tecnicos={tecnicos ?? []}
     />
   );
 }

@@ -88,12 +88,24 @@ export default async function EquipoPage() {
         .in("invoice_id", facturaIds)
     : { data: [] as any[] };
 
+  // Cotizaciones aprobadas y asignadas a un técnico que todavía no se han
+  // convertido en factura (Equipo v2, 2 sept 2026) — para que Joel vea en
+  // el Panel qué está pendiente de que el técnico haga en campo.
+  const { data: cotizacionesAsignadas } = await supabase
+    .from("cotizaciones")
+    .select("id, numero, total, technician_id, clients(name)")
+    .eq("entity_id", entidadIdEfectiva)
+    .not("technician_id", "is", null)
+    .eq("estado", "aprobada")
+    .order("fecha_emision", { ascending: false });
+
   return (
     <EquipoPortal
       tecnicos={tecnicos ?? []}
       vendors={vendors ?? []}
       facturas={(facturas ?? []) as any}
       items={(items ?? []) as any}
+      cotizacionesAsignadas={(cotizacionesAsignadas ?? []) as any}
       entidad={entidadEfectiva}
       vistaGlobalActiva={vistaGlobal}
       cantidadEntidades={entities.length}

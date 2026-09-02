@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/format";
 type Entity = { id: string; name: string; ivu_applies: boolean; ivu_rate_estatal: number; ivu_rate_municipal: number };
 type Client = { id: string; name: string; entity_id: string | null; ivu_exempt_reseller: boolean };
 type ServicioCat = { id: string; nombre: string; descripcion: string | null; tipo: string; precio: number; ivu_exento: boolean };
+type TecnicoOpcion = { id: string; name: string; entity_id: string | null };
 // servicioId (1 sept 2026): referencia real al catálogo — ver el mismo
 // campo en nueva-cotizacion-form.tsx para el porqué (agrupar de verdad en
 // "Ingresos por servicio" en vez de por texto libre). detalle: descripción
@@ -19,6 +20,7 @@ type Cotizacion = {
   numero: string;
   entity_id: string | null;
   client_id: string | null;
+  technician_id: string | null;
   fecha_vencimiento: string | null;
   notas: string | null;
 };
@@ -35,6 +37,7 @@ export default function EditarCotizacionForm({
   entities,
   clients,
   servicios,
+  tecnicos,
 }: {
   cotizacion: Cotizacion;
   itemsIniciales: {
@@ -48,6 +51,7 @@ export default function EditarCotizacionForm({
   entities: Entity[];
   clients: Client[];
   servicios: ServicioCat[];
+  tecnicos: TecnicoOpcion[];
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -61,6 +65,13 @@ export default function EditarCotizacionForm({
   );
   const [clientId, setClientId] = useState(cotizacion.client_id ?? clientesDeEntidad[0]?.id ?? "");
   const cliente = clientesDeEntidad.find((c) => c.id === clientId) ?? clientesDeEntidad[0];
+
+  // "Asignar a técnico" — igual que en Nueva Cotización.
+  const tecnicosDeEntidad = useMemo(
+    () => tecnicos.filter((t) => !t.entity_id || t.entity_id === entityId),
+    [tecnicos, entityId]
+  );
+  const [technicianId, setTechnicianId] = useState(cotizacion.technician_id ?? "");
 
   const [fechaVencimiento, setFechaVencimiento] = useState(cotizacion.fecha_vencimiento ?? "");
   const [notas, setNotas] = useState(cotizacion.notas ?? "");
@@ -144,6 +155,7 @@ export default function EditarCotizacionForm({
       .update({
         entity_id: entidad.id,
         client_id: cliente.id,
+        technician_id: technicianId || null,
         subtotal,
         ivu_pct: ivuPct,
         ivu_monto: ivuMonto,
@@ -231,6 +243,19 @@ export default function EditarCotizacionForm({
         <Field label="Válida hasta">
           <input className="vc-input" type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} />
         </Field>
+
+        {tecnicosDeEntidad.length > 0 && (
+          <Field label="Asignar a técnico (opcional)">
+            <select className="vc-input" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>
+              <option value="">Sin asignar — la manejas tú</option>
+              {tecnicosDeEntidad.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Líneas</label>

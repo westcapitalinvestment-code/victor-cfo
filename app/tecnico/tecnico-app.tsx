@@ -12,6 +12,10 @@ import { formatMoney } from "@/lib/format";
 type Permisos = { vePrecios: boolean; cobraVencidas: boolean; anadeClientes: boolean; aplicaDescuento: boolean; descuentoMaxPct: number };
 type CatalogoItem = { id: string; nombre: string; precio: number; ivu_exento: boolean };
 type Tarea = { id: string; numero: string; total: number; fechaEmision: string; clienteNombre: string | null };
+// Cotización aprobada que el dueño le asignó (Equipo v2, 2 sept 2026) —
+// misma forma que Tarea, pero todavía no es una factura: el técnico la
+// convierte él mismo con un tap cuando llega al trabajo.
+type CotizacionAsignada = { id: string; numero: string; total: number; fechaEmision: string; clienteNombre: string | null };
 type Sesion = {
   tecnico: { id: string; name: string };
   entidad: { name: string };
@@ -19,6 +23,7 @@ type Sesion = {
   approvalMode: "auto" | "manual";
   catalogo: CatalogoItem[];
   tareas: Tarea[];
+  cotizaciones: CotizacionAsignada[];
 };
 type ClienteLite = { id: string; name: string; phone: string | null };
 type ItemFactura = { id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal_linea: number };
@@ -172,6 +177,8 @@ export default function TecnicoApp({ token }: { token: string }) {
 function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: () => void; onRecargar: () => void }) {
   const [vista, setVista] = useState<"home" | "cliente_nueva" | "cliente_cobrar" | "factura">("home");
   const [facturaId, setFacturaId] = useState<string | null>(null);
+  const [convirtiendoId, setConvirtiendoId] = useState<string | null>(null);
+  const [errorConvertir, setErrorConvertir] = useState<string | null>(null);
 
   function abrirFactura(id: string) {
     setFacturaId(id);
@@ -188,6 +195,22 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
     if (res.ok && data?.ok) {
       abrirFactura(data.id);
     }
+  }
+
+  // Convertir una cotización aprobada y asignada en la factura real que el
+  // técnico va a completar — cae en la misma pantalla de factura de
+  // siempre (evidencia, ítems, firma, finalizar).
+  async function convertirCotizacion(cotizacionId: string) {
+    setConvirtiendoId(cotizacionId);
+    setErrorConvertir(null);
+    const res = await fetch(`/api/tecnico/cotizaciones/${cotizacionId}/convertir`, { method: "POST" });
+    const data = await res.json().catch(() => null);
+    setConvirtiendoId(null);
+    if (!res.ok || !data?.ok) {
+      setErrorConvertir(data?.error ?? "No se pudo convertir la cotización.");
+      return;
+    }
+    abrirFactura(data.invoiceId);
   }
 
   if (vista === "cliente_nueva") {
@@ -257,6 +280,34 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
           </button>
         )}
       </div>
+
+      {errorConvertir && <p className="mb-3 text-xs text-red">{errorConvertir}</p>}
+
+      {sesion.cotizaciones.length > 0 && (
+        <div className="vc-card mb-3">
+          <p className="mb-2 text-xs uppercase tracking-wide text-muted">
+            Cotizaciones aprobadas <span className="normal-case text-muted">· {sesion.cotizaciones.length}</span>
+          </p>
+          <p className="mb-2 text-xs text-muted">Ya tienen visto bueno del cliente — conviértela cuando llegues a hacer el trabajo.</p>
+          {sesion.cotizaciones.map((c) => (
+            <div key={c.id} className="flex items-center justify-between border-b border-border py-2.5 text-sm last:border-0">
+              <div className="min-w-0">
+                <p className="truncate">{c.clienteNombre || "Sin cliente"}</p>
+                <p className="text-xs text-muted">
+                  {c.numero} · {formatMoney(c.total)}
+                </p>
+              </div>
+              <button
+                className="flex-shrink-0 rounded-lg border border-teal px-2.5 py-1.5 text-xs font-medium text-teal disabled:opacity-50"
+                disabled={convirtiendoId === c.id}
+                onClick={() => convertirCotizacion(c.id)}
+              >
+                {convirtiendoId === c.id ? "..." : "Empezar"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="vc-card">
         <p className="mb-2 text-xs uppercase tracking-wide text-muted">
