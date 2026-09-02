@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { fechaHoyPR } from "@/lib/hora-pr";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
+import { esFounder } from "@/lib/founder";
 import BottomNav from "./bottom-nav";
 import VictorChat from "./victor-chat";
 import Topbar from "./topbar";
@@ -33,6 +34,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let entidadesNegocio: { id: string; name: string }[] = [];
   let entidadActivaId: string | null = null;
   let vistaGlobalNegocio = false;
+  let esFounderUsuario = false;
   try {
     const supabase = createClient();
     const {
@@ -55,6 +57,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       fullName = userRow?.full_name ?? null;
       plan = userRow?.plan ?? null;
       esReferido = !!userRow?.referred_by;
+      esFounderUsuario = esFounder(user.email);
 
       const esPro = plan === "pro" || plan === "proplus";
       if (esPro) {
@@ -95,7 +98,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           plan={plan}
           esReferido={esReferido}
         />
-        <BottomNav />
+        <BottomNav esFounder={esFounderUsuario} />
       </div>
     </PinGate>
   );

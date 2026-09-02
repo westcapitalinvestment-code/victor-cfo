@@ -48,6 +48,13 @@ const TABS_NEGOCIO = [
 
 const TAB_CONFIG = { href: "/dashboard/config", label: "Config", icon: "ti-settings" };
 
+// Solo para Joel (esFounder(email) en el layout) — el Dashboard de
+// Operaciones (MRR, churn, gasto de IA de TODOS los usuarios) vivía en
+// /dashboard/admin, chocando con el tab de negocio "Admin" que ahora es el
+// módulo real de Admin/Secretaria. Se mudó a su propio ícono aquí, oculto
+// para cualquiera que no sea el founder (2 sept 2026, pedido de Joel).
+const TAB_CFO = { href: "/dashboard/cfo", label: "CFO", icon: "ti-crown" };
+
 function NavLink({ tab, active }: { tab: { href: string; label: string; icon: string }; active: boolean }) {
   return (
     <Link href={tab.href} className="vc-nb">
@@ -57,7 +64,7 @@ function NavLink({ tab, active }: { tab: { href: string; label: string; icon: st
   );
 }
 
-export default function BottomNav() {
+export default function BottomNav({ esFounder = false }: { esFounder?: boolean }) {
   const pathname = usePathname();
   // "/dashboard" y "/dashboard/negocio" son los dos "Inicio" (Personal y de
   // negocio) — necesitan comparación exacta, si no "/dashboard/negocio"
@@ -85,6 +92,7 @@ export default function BottomNav() {
           <NavLink key={tab.href} tab={tab} active={isActive(tab.href)} />
         ))}
         <NavLink tab={TAB_CONFIG} active={isActive(TAB_CONFIG.href)} />
+        {esFounder && <NavLink tab={TAB_CFO} active={isActive(TAB_CFO.href)} />}
       </div>
     </div>
   );
