@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -681,6 +681,121 @@ function ContratistasTab({
   );
 }
 
+// Botones de periodo — calcado 1:1 de PERIODOS en Reportes de Facturación
+// (2 sept 2026, pedido de Joel: mantener el trimestre y añadirle "Rango" al
+// lado, no reemplazarlo por un toggle de dos opciones).
+const PERIODOS_PAGOS = [
+  { value: "mes", label: "Este mes" },
+  { value: "trimestre", label: "Trimestre" },
+  { value: "anio", label: "Este año" },
+  { value: "todo", label: "Todo" },
+  { value: "rango", label: "Rango" },
+] as const;
+
+function inicioPeriodoPagos(periodo: string, rangoDesde: string): string {
+  const hoy = new Date();
+  if (periodo === "mes") return new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+  if (periodo === "trimestre") {
+    const inicioTrimestre = Math.floor(hoy.getMonth() / 3) * 3;
+    return new Date(hoy.getFullYear(), inicioTrimestre, 1).toISOString().slice(0, 10);
+  }
+  if (periodo === "anio") return new Date(hoy.getFullYear(), 0, 1).toISOString().slice(0, 10);
+  if (periodo === "rango") return rangoDesde || "0000-01-01";
+  return "0000-01-01";
+}
+
+function finPeriodoPagos(periodo: string, rangoHasta: string): string {
+  if (periodo === "rango") return rangoHasta || hoyISO();
+  return hoyISO();
+}
+
+// Combobox con búsqueda + "Todos" fijo adentro del scroll — calcado del
+// ComboBuscable de Reportes en Facturación (2 sept 2026, pedido de Joel:
+// "igual que clientes... por ejemplo si quiero saber cuanto pagué... por
+// todos los vendors o por x vendor"). Duplicado aquí a propósito, mismo
+// patrón que el resto del código (cada portal trae su propia copia).
+function ComboBuscableVendor<T extends { id: string }>({
+  items,
+  valorId,
+  onSeleccionar,
+  etiqueta,
+  etiquetaTodos,
+  placeholder,
+}: {
+  items: T[];
+  valorId: string;
+  onSeleccionar: (id: string) => void;
+  etiqueta: (item: T) => string;
+  etiquetaTodos: string;
+  placeholder: string;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const seleccionado = items.find((i) => i.id === valorId);
+
+  useEffect(() => {
+    function alHacerClicFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setAbierto(false);
+        setBusqueda("");
+      }
+    }
+    document.addEventListener("mousedown", alHacerClicFuera);
+    return () => document.removeEventListener("mousedown", alHacerClicFuera);
+  }, []);
+
+  const filtrados = busqueda.trim()
+    ? items.filter((i) => etiqueta(i).toLowerCase().includes(busqueda.trim().toLowerCase()))
+    : items;
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        className="vc-input"
+        style={{ fontSize: 12 }}
+        placeholder={placeholder}
+        value={abierto ? busqueda : seleccionado ? etiqueta(seleccionado) : etiquetaTodos}
+        onFocus={() => {
+          setAbierto(true);
+          setBusqueda("");
+        }}
+        onChange={(e) => setBusqueda(e.target.value)}
+      />
+      {abierto && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+          <button
+            type="button"
+            className="block w-full border-b border-border px-3 py-2 text-left text-sm font-medium text-teal hover:bg-bg"
+            onClick={() => {
+              onSeleccionar("");
+              setAbierto(false);
+              setBusqueda("");
+            }}
+          >
+            {etiquetaTodos}
+          </button>
+          {filtrados.length === 0 && <p className="p-3 text-xs text-muted">Sin resultados.</p>}
+          {filtrados.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-bg"
+              onClick={() => {
+                onSeleccionar(item.id);
+                setAbierto(false);
+                setBusqueda("");
+              }}
+            >
+              {etiqueta(item)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ============================================================================
 // Tab: Reportes — resumen trimestral por contratista (lo que Joel necesita
 // para llenar el 480.6A/B) + export CSV.
@@ -694,38 +809,33 @@ function ReportesTab({
   retenciones: Retencion[];
   entidadId: string | null;
 }) {
-  const hoy = hoyISO();
-  const [anio, setAnio] = useState(Number(hoy.slice(0, 4)));
-  const [trimestre, setTrimestre] = useState(trimestreDe(hoy));
-  // Rango personalizado (2 sept 2026, pedido de Joel: "necesito filtrar
-  // custom, lo que yo quiera") — alterna con el trimestre fijo. También
-  // filtro por contratista, para cuando solo quiere ver a uno o unos pocos.
-  const [modo, setModo] = useState<"trimestre" | "personalizado">("trimestre");
-  const [rangoDesde, setRangoDesde] = useState(`${hoy.slice(0, 4)}-01-01`);
-  const [rangoHasta, setRangoHasta] = useState(hoy);
-  const [vendorSeleccionados, setVendorSeleccionados] = useState<Set<string>>(new Set());
+  // Mismos botones de periodo que Reportes de Facturación (2 sept 2026,
+  // pedido de Joel: "como estaba con trimestres pero que le añadieras un
+  // rango" — o sea, no reemplazar el trimestre, añadir "Rango" al lado como
+  // una quinta opción, igual que ya funciona allá).
+  const [periodo, setPeriodo] = useState<(typeof PERIODOS_PAGOS)[number]["value"]>("trimestre");
+  const [rangoDesde, setRangoDesde] = useState(hoyISO());
+  const [rangoHasta, setRangoHasta] = useState(hoyISO());
+  // Filtro por contratista — combobox con búsqueda y "Todos" adentro del
+  // scroll, calcado del de Cliente/Servicio en Reportes de Facturación
+  // (pedido de Joel: "igual que clientes... por ejemplo si quiero saber
+  // cuanto pagué y retuve la bisemana o el mes de agosto por todos los
+  // vendors o por x vendor").
+  const [vendorFiltro, setVendorFiltro] = useState("");
 
-  const { desde, hasta } = modo === "personalizado" ? { desde: rangoDesde, hasta: rangoHasta } : rangoTrimestre(anio, trimestre);
+  const desde = inicioPeriodoPagos(periodo, rangoDesde);
+  const hasta = finPeriodoPagos(periodo, rangoHasta);
   const vendorPorId = useMemo(() => new Map(vendors.map((v) => [v.id, v])), [vendors]);
   const vendorsOrdenados = useMemo(() => [...vendors].sort((a, b) => a.name.localeCompare(b.name)), [vendors]);
-
-  function toggleVendor(id: string) {
-    setVendorSeleccionados((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
 
   const enRango = useMemo(
     () =>
       retenciones.filter((r) => {
         if (!r.period_end || r.period_end < desde || r.period_end > hasta) return false;
-        if (vendorSeleccionados.size > 0 && !vendorSeleccionados.has(r.vendor_id)) return false;
+        if (vendorFiltro && r.vendor_id !== vendorFiltro) return false;
         return true;
       }),
-    [retenciones, desde, hasta, vendorSeleccionados]
+    [retenciones, desde, hasta, vendorFiltro]
   );
 
   const porContratista = useMemo(() => {
@@ -747,87 +857,46 @@ function ReportesTab({
   const totalRetenido = porContratista.reduce((s, c) => s + c.retenido, 0);
   const totalNeto = porContratista.reduce((s, c) => s + c.neto, 0);
 
-  const vendorIdsParam = vendorSeleccionados.size > 0 ? `&vendorIds=${[...vendorSeleccionados].join(",")}` : "";
-  const csvHref = `/api/pagos/reportes/csv?desde=${desde}&hasta=${hasta}${entidadId ? `&entityId=${entidadId}` : ""}${vendorIdsParam}`;
+  const csvHref = `/api/pagos/reportes/csv?desde=${desde}&hasta=${hasta}${entidadId ? `&entityId=${entidadId}` : ""}${vendorFiltro ? `&vendorIds=${vendorFiltro}` : ""}`;
 
   return (
     <>
-      <div className="vc-card mb-3">
-        <div className="mb-2.5 flex" style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: 3, gap: 3 }}>
+      <div className="mb-3 flex gap-1.5">
+        {PERIODOS_PAGOS.map((p) => (
           <button
-            className="flex-1 rounded-md py-1.5 text-xs font-medium"
-            style={{ background: modo === "trimestre" ? "var(--card)" : "none", color: modo === "trimestre" ? "#1D9E75" : "var(--muted)" }}
-            onClick={() => setModo("trimestre")}
+            key={p.value}
+            onClick={() => setPeriodo(p.value)}
+            className="flex-1 rounded-lg px-2 py-2 text-xs font-medium"
+            style={
+              periodo === p.value
+                ? { background: "#1D9E75", color: "#fff" }
+                : { background: "var(--card)", color: "var(--muted)", border: "1px solid var(--border)" }
+            }
           >
-            Trimestre
+            {p.label}
           </button>
-          <button
-            className="flex-1 rounded-md py-1.5 text-xs font-medium"
-            style={{ background: modo === "personalizado" ? "var(--card)" : "none", color: modo === "personalizado" ? "#1D9E75" : "var(--muted)" }}
-            onClick={() => setModo("personalizado")}
-          >
-            Personalizado
-          </button>
-        </div>
-
-        {modo === "trimestre" ? (
-          <div className="flex gap-2">
-            <select className="vc-input flex-1" value={trimestre} onChange={(e) => setTrimestre(Number(e.target.value))}>
-              <option value={1}>Q1 — Ene a Mar</option>
-              <option value={2}>Q2 — Abr a Jun</option>
-              <option value={3}>Q3 — Jul a Sep</option>
-              <option value={4}>Q4 — Oct a Dic</option>
-            </select>
-            <input
-              className="vc-input flex-shrink-0"
-              style={{ width: 90 }}
-              type="number"
-              value={anio}
-              onChange={(e) => setAnio(Number(e.target.value))}
-            />
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <input type="date" className="vc-input flex-1" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} />
-            <span className="flex-shrink-0 text-xs text-muted">a</span>
-            <input type="date" className="vc-input flex-1" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} />
-          </div>
-        )}
-        <p className="mt-1.5 text-xs text-muted">
-          {formatFecha(desde)} — {formatFecha(hasta)}
-        </p>
+        ))}
       </div>
 
+      {periodo === "rango" && (
+        <div className="mb-3 flex gap-1.5">
+          <input type="date" className="vc-input flex-1" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} />
+          <input type="date" className="vc-input flex-1" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} />
+        </div>
+      )}
+
       <div className="vc-card mb-3">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs uppercase tracking-wide text-muted">Contratistas</p>
-          {vendorSeleccionados.size > 0 && (
-            <button className="text-xs font-medium text-teal hover:opacity-80" onClick={() => setVendorSeleccionados(new Set())}>
-              Ver todos
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {vendorsOrdenados.map((v) => {
-            const activo = vendorSeleccionados.has(v.id);
-            return (
-              <button
-                key={v.id}
-                onClick={() => toggleVendor(v.id)}
-                className="rounded-full border px-2.5 py-1 text-xs font-medium"
-                style={{
-                  borderColor: activo ? "#1D9E75" : "var(--border)",
-                  background: activo ? "rgba(29,158,117,0.1)" : "none",
-                  color: activo ? "#1D9E75" : "var(--muted)",
-                }}
-              >
-                {v.name}
-              </button>
-            );
-          })}
-        </div>
-        <p className="mt-2 text-xs text-muted">
-          {vendorSeleccionados.size === 0 ? "Mostrando todos los contratistas." : `${vendorSeleccionados.size} seleccionado${vendorSeleccionados.size === 1 ? "" : "s"}.`}
+        <p className="mb-1 text-xs uppercase tracking-wide text-muted">Contratista</p>
+        <ComboBuscableVendor
+          items={vendorsOrdenados}
+          valorId={vendorFiltro}
+          onSeleccionar={setVendorFiltro}
+          etiqueta={(v) => v.name}
+          etiquetaTodos="Todos los contratistas"
+          placeholder="Buscar contratista..."
+        />
+        <p className="mt-1.5 text-xs text-muted">
+          {formatFecha(desde)} — {formatFecha(hasta)}
         </p>
       </div>
 
