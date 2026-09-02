@@ -11,14 +11,19 @@ export default async function NuevaFacturaPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase.from("users").select("plan").eq("id", user.id).maybeSingle();
+  const { data: profile } = await supabase
+    .from("users")
+    .select("plan, addon_tecnicos_status")
+    .eq("id", user.id)
+    .maybeSingle();
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   if (!esPro) return <ProPaywall />;
+  const addonTecnicosActivo = profile?.addon_tecnicos_status === "activo";
 
   const { data: entities } = await supabase
     .from("business_entities")
     .select(
-      "id, name, ivu_applies, ivu_rate_estatal, ivu_rate_municipal, invoice_prefix, invoice_start_number, default_payment_terms, client_retention_situation"
+      "id, name, ivu_applies, ivu_rate_estatal, ivu_rate_municipal, invoice_prefix, invoice_start_number, default_payment_terms, client_retention_situation, ath_movil_business_path"
     )
     .eq("owner_id", user.id)
     .eq("active", true);
@@ -99,6 +104,7 @@ export default async function NuevaFacturaPage() {
       servicios={servicios ?? []}
       conteosPorEntidad={conteosPorEntidad}
       tecnicos={tecnicos ?? []}
+      addonTecnicosActivo={addonTecnicosActivo}
     />
   );
 }

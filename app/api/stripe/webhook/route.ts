@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { getStripe, esPlanValido } from "@/lib/stripe";
+import { getStripe, esPlanValido, priceIdAddonTecnicos } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Saca las fechas de inicio/fin del ciclo de facturación actual de una
@@ -130,6 +130,18 @@ export async function POST(req: NextRequest) {
           datosActualizar.ciclo_fin = ciclo.fin;
         }
 
+        // Addon Equipo (2 sept 2026): reconciliamos con lo que REALMENTE
+        // tiene la suscripción en Stripe, no solo con lo que hizo nuestra
+        // ruta /activar — así si alguien lo quita o lo pone a mano desde
+        // el Dashboard de Stripe, la cuenta igual queda correcta en la
+        // próxima renovación/cambio.
+        const addonPriceId = priceIdAddonTecnicos();
+        if (addonPriceId) {
+          const itemAddon = subscription.items.data.find((it) => it.price.id === addonPriceId);
+          datosActualizar.addon_tecnicos_status = itemAddon ? "activo" : "inactivo";
+          datosActualizar.addon_tecnicos_item_id = itemAddon ? itemAddon.id : null;
+        }
+
         await supabase.from("users").update(datosActualizar).eq("id", userId);
         break;
       }
@@ -162,6 +174,10 @@ export async function POST(req: NextRequest) {
             cancelled_at: new Date().toISOString(),
             cancellation_reason: cancelacion?.reason ?? null,
             cancellation_comment: cancelacion?.comment ?? null,
+            // Si se cancela la suscripción entera, el addon Equipo se va
+            // con ella — no queda un item huérfano cobrando por su cuenta.
+            addon_tecnicos_status: "inactivo",
+            addon_tecnicos_item_id: null,
           })
           .eq("id", userId);
         break;

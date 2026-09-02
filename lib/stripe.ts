@@ -71,6 +71,16 @@ export function esPlanValido(valor: unknown): valor is PlanId {
   return valor === "core" || valor === "pro" || valor === "proplus";
 }
 
+// Addon "Equipo" (técnicos) — 2 sept 2026, pedido de Joel: "$49.99 pero
+// con los Addon sube de precio, Técnicos $20.00 hasta 3 técnicos". A
+// diferencia de los planes, esto NO es una suscripción aparte — es un
+// SEGUNDO subscription item que se añade a la suscripción Pro que el
+// usuario ya tiene, así que la factura de Stripe queda como un solo cargo
+// combinado (Pro + Equipo). Solo mensual, sin ciclo anual todavía.
+export function priceIdAddonTecnicos(): string | null {
+  return process.env.STRIPE_PRICE_ADDON_TECNICOS || null;
+}
+
 export function esCicloValido(valor: unknown): valor is Ciclo {
   return valor === "mensual" || valor === "anual";
 }

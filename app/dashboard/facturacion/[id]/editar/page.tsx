@@ -11,14 +11,19 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase.from("users").select("plan").eq("id", user.id).maybeSingle();
+  const { data: profile } = await supabase
+    .from("users")
+    .select("plan, addon_tecnicos_status")
+    .eq("id", user.id)
+    .maybeSingle();
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   if (!esPro) return <ProPaywall />;
+  const addonTecnicosActivo = profile?.addon_tecnicos_status === "activo";
 
   const { data: factura } = await supabase
     .from("invoices")
     .select(
-      "id, entity_id, client_id, servicio_id, technician_id, numero, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, retencion_pct, late_fee_habilitado, late_fee_tipo, late_fee_monto, late_fee_dias_gracia, es_recurrente, frecuencia_recurrente"
+      "id, entity_id, client_id, servicio_id, technician_id, numero, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, retencion_pct, late_fee_habilitado, late_fee_tipo, late_fee_monto, late_fee_dias_gracia, es_recurrente, frecuencia_recurrente, deposito_monto"
     )
     .eq("id", params.id)
     .eq("owner_id", user.id)
@@ -50,7 +55,7 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
 
   const { data: entities } = await supabase
     .from("business_entities")
-    .select("id, name, ivu_applies, ivu_rate_estatal, ivu_rate_municipal, client_retention_situation")
+    .select("id, name, ivu_applies, ivu_rate_estatal, ivu_rate_municipal, client_retention_situation, ath_movil_business_path")
     .eq("owner_id", user.id)
     .eq("active", true);
 
@@ -82,6 +87,7 @@ export default async function EditarFacturaPage({ params }: { params: { id: stri
       clients={clients ?? []}
       servicios={servicios ?? []}
       tecnicos={tecnicos ?? []}
+      addonTecnicosActivo={addonTecnicosActivo}
     />
   );
 }

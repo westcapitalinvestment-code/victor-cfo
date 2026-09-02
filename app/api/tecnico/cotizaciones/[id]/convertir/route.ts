@@ -17,7 +17,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data: cotizacion } = await ctx.admin
     .from("cotizaciones")
-    .select("id, numero, client_id, subtotal, ivu_pct, ivu_monto, total, notas")
+    .select("id, numero, client_id, subtotal, ivu_pct, ivu_monto, total, deposito_monto, notas")
     .eq("id", params.id)
     .eq("entity_id", ctx.tecnico.entity_id)
     .eq("technician_id", ctx.tecnico.id)
@@ -55,6 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       retencion_pct: 0,
       retencion_monto: 0,
       total: cotizacion.total,
+      deposito_monto: cotizacion.deposito_monto ?? 0,
       estado: esManual ? "borrador" : "enviada",
       pendiente_revision_tecnico: esManual,
       fecha_emision: new Date().toISOString().slice(0, 10),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
@@ -17,6 +18,7 @@ type Entity = {
   invoice_start_number: number;
   default_payment_terms: string;
   client_retention_situation: string | null;
+  ath_movil_business_path: string | null;
 };
 
 // Convierte el "relevo" de la entidad (0039: no | 10 | 6 | exento — lo que
@@ -70,6 +72,15 @@ const METODOS_COBRO = ["ATH Móvil", "Transferencia / ACH", "Cheque", "Efectivo"
 const STRIPE_FEE_PCT = 0.029;
 const STRIPE_FEE_FIJO = 0.3;
 
+// ATH Móvil Business: 2.25% por pago recibido, mínimo $0.06 — confirmado en
+// el FAQ oficial de ATH Business (ath.business/preguntas), 2 sept 2026,
+// pedido de Joel: "vi que ATH Movil Business como 2.25% por transaccion
+// (menos que Stripe) sería buena opción". Solo informativo, igual que el
+// estimado de Stripe — no procesamos el cobro, es para que Joel sepa qué le
+// queda neto si el cliente le paga por su pATH.
+const ATH_FEE_PCT = 0.0225;
+const ATH_FEE_MINIMO = 0.06;
+
 function diasDeTermino(term: string): number {
   const m = term.match(/(\d+)/);
   return m ? Number(m[1]) : 30;
@@ -92,12 +103,14 @@ export default function NuevaFacturaForm({
   servicios,
   conteosPorEntidad,
   tecnicos,
+  addonTecnicosActivo,
 }: {
   entities: Entity[];
   clients: Client[];
   servicios: ServicioCat[];
   conteosPorEntidad: Record<string, number>;
   tecnicos: TecnicoOpcion[];
+  addonTecnicosActivo: boolean;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -277,6 +290,14 @@ export default function NuevaFacturaForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Depósito (2 sept 2026, pedido de Joel): a veces el cliente paga un
+  // adelanto antes de empezar el trabajo — se resta del total para mostrar
+  // el balance real pendiente. Aquí, en Nueva Factura, representa un
+  // depósito YA RECIBIDO (a diferencia de Cotización, donde es uno pedido
+  // pero todavía no cobrado).
+  const [depositoInput, setDepositoInput] = useState("");
+  const depositoMonto = Number(depositoInput) || 0;
+
   const inputCamaraRef = useRef<HTMLInputElement>(null);
   const inputArchivoRef = useRef<HTMLInputElement>(null);
   const [archivosPendientes, setArchivosPendientes] = useState<ArchivoPendiente[]>([]);
@@ -312,11 +333,20 @@ export default function NuevaFacturaForm({
   const retencionPct = retencionActiva ? Number(retencionPctInput) || 0 : 0;
   const retencionMonto = subtotal * (retencionPct / 100);
   const total = subtotal + ivuMonto - retencionMonto;
+  const balanceAPagar = total - depositoMonto;
 
   // Cobro en línea real (que el cliente pague con tarjeta directo en la
   // app) todavía no está activo — este fee es solo un estimado informativo.
   const feeStripeEstimado = (subtotal + ivuMonto) * STRIPE_FEE_PCT + STRIPE_FEE_FIJO;
   const recibirasConTarjeta = total - feeStripeEstimado;
+
+  // Estimado de ATH Móvil Business — solo se muestra si la entidad ya
+  // configuró su pATH (Config → Facturas). Mismo criterio que el estimado
+  // de Stripe: informativo, calculado sobre subtotal+IVU.
+  const feeAthEstimado = entidad?.ath_movil_business_path
+    ? Math.max((subtotal + ivuMonto) * ATH_FEE_PCT, ATH_FEE_MINIMO)
+    : 0;
+  const recibirasConAth = total - feeAthEstimado;
 
   const numeroPreview = entidad ? `${entidad.invoice_prefix}-${entidad.invoice_start_number + (conteosPorEntidad[entidad.id] ?? 0)}` : "";
 
@@ -371,6 +401,7 @@ export default function NuevaFacturaForm({
         retencion_pct: retencionPct,
         retencion_monto: retencionMonto,
         total,
+        deposito_monto: depositoMonto,
         estado: estadoInicial,
         fecha_emision: fechaFactura,
         fecha_vencimiento: fechaVencimiento,
@@ -517,23 +548,36 @@ export default function NuevaFacturaForm({
           </div>
         )}
 
-        {tecnicosDeEntidad.length > 0 && (
-          <Field label="Asignar a técnico (opcional)">
-            <select className="vc-input" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>
-              <option value="">Sin asignar — la manejas tú</option>
-              {tecnicosDeEntidad.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            {technicianId && (
-              <p className="mt-1 text-xs text-muted">
-                {tecnicosDeEntidad.find((t) => t.id === technicianId)?.name} va a ver esta tarea en su app y puede añadir más
-                servicios antes de mandarla.
-              </p>
-            )}
-          </Field>
+        {!addonTecnicosActivo ? (
+          <div className="rounded-lg border border-teal/30 bg-teal/[.05] p-3 text-xs">
+            <p className="font-medium text-teal">Add-on Equipo — $20.00/mes</p>
+            <p className="mt-0.5 text-muted">
+              Actívalo desde{" "}
+              <Link href="/dashboard/equipo" className="underline">
+                Equipo
+              </Link>{" "}
+              para poder asignar esta factura a un técnico.
+            </p>
+          </div>
+        ) : (
+          tecnicosDeEntidad.length > 0 && (
+            <Field label="Asignar a técnico (opcional)">
+              <select className="vc-input" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>
+                <option value="">Sin asignar — la manejas tú</option>
+                {tecnicosDeEntidad.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              {technicianId && (
+                <p className="mt-1 text-xs text-muted">
+                  {tecnicosDeEntidad.find((t) => t.id === technicianId)?.name} va a ver esta tarea en su app y puede añadir más
+                  servicios antes de mandarla.
+                </p>
+              )}
+            </Field>
+          )
         )}
 
         <button
@@ -762,6 +806,19 @@ export default function NuevaFacturaForm({
           )}
         </Field>
 
+        <Field label="Depósito recibido (opcional)">
+          <input
+            className="vc-input"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            value={depositoInput}
+            onChange={(e) => setDepositoInput(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-muted">Si el cliente ya te adelantó parte del pago, ponlo aquí — se resta del total.</p>
+        </Field>
+
         <Field label="Notas para el cliente (opcional)">
           <textarea
             className="vc-input"
@@ -831,6 +888,18 @@ export default function NuevaFacturaForm({
             <span>Total a pagar</span>
             <span className="text-teal">{formatMoney(total)}</span>
           </div>
+          {depositoMonto > 0 && (
+            <>
+              <div className="flex justify-between py-0.5">
+                <span className="text-muted">Depósito recibido</span>
+                <span>-{formatMoney(depositoMonto)}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t border-teal/30 pt-1.5 font-medium">
+                <span>Balance a pagar</span>
+                <span className="text-teal">{formatMoney(balanceAPagar)}</span>
+              </div>
+            </>
+          )}
           {retencionMonto > 0 && (
             <p className="mt-1 text-[11px] text-muted">
               Los {formatMoney(retencionMonto)} de retención los deposita el cliente a Hacienda PR según la Sección 1062.03.
@@ -855,6 +924,27 @@ export default function NuevaFacturaForm({
             <span>{formatMoney(recibirasConTarjeta)}</span>
           </div>
           <p className="mt-1 text-[11px] text-muted">Estimado — todavía no procesamos cobros con tarjeta directamente en la app.</p>
+
+          {entidad?.ath_movil_business_path ? (
+            <>
+              <div className="mt-2 flex justify-between border-t border-border pt-2 py-0.5">
+                <span className="text-muted">Fee ATH Móvil Business estimado (2.25%, mín. $0.06)</span>
+                <span className="text-red">-{formatMoney(feeAthEstimado)}</span>
+              </div>
+              <div className="mt-1 flex justify-between font-medium">
+                <span>Recibirías si el cliente paga por {entidad.ath_movil_business_path}</span>
+                <span>{formatMoney(recibirasConAth)}</span>
+              </div>
+            </>
+          ) : (
+            <p className="mt-2 border-t border-border pt-2 text-[11px] text-muted">
+              Configura tu pATH de ATH Móvil Business en{" "}
+              <Link href="/dashboard/config" className="underline">
+                Config
+              </Link>{" "}
+              para ver aquí cuánto te llega neto (2.25%, menos que Stripe).
+            </p>
+          )}
         </div>
 
         <button className="vc-btn-primary mt-1" disabled={loading || !cliente} onClick={() => guardar("enviada")}>

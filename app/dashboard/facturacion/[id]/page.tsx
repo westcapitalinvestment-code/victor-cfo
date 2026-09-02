@@ -17,7 +17,7 @@ export default async function FacturaDetallePage({ params }: { params: { id: str
   const { data: factura } = await supabase
     .from("invoices")
     .select(
-      "id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, metodo_pago, fecha_pago, notas, metodos_cobro_aceptados, late_fee_habilitado, late_fee_tipo, late_fee_monto, late_fee_dias_gracia, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, ivu_applies)"
+      "id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, deposito_monto, estado, fecha_emision, fecha_vencimiento, metodo_pago, fecha_pago, notas, metodos_cobro_aceptados, late_fee_habilitado, late_fee_tipo, late_fee_monto, late_fee_dias_gracia, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, ivu_applies)"
     )
     .eq("id", params.id)
     .eq("owner_id", user.id)

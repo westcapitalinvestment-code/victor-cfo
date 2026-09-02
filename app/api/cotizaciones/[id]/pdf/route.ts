@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data: cotizacion, error } = await supabase
     .from("cotizaciones")
     .select(
-      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, total, estado, fecha_emision, fecha_vencimiento, notas, clients(name, email, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key, ivu_applies, brand_color)"
+      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, total, deposito_monto, estado, fecha_emision, fecha_vencimiento, notas, clients(name, email, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key, ivu_applies, brand_color)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -209,10 +209,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     textoDerecha(`Válida hasta: ${formatFecha(cotizacion.fecha_vencimiento)}`, width - margin, yDer, { size: 9, color: gris });
     yDer -= 12;
   }
+  const tieneDeposito = Number(cotizacion.deposito_monto) > 0;
   yDer -= 8;
-  textoDerecha("TOTAL COTIZADO", width - margin, yDer, { f: bold, size: 8, color: gris });
+  textoDerecha(tieneDeposito ? "BALANCE AL APROBAR" : "TOTAL COTIZADO", width - margin, yDer, { f: bold, size: 8, color: gris });
   yDer -= 22;
-  textoDerecha(formatMoney(Number(cotizacion.total)), width - margin, yDer, { f: bold, size: 22, color: marca });
+  textoDerecha(
+    formatMoney(tieneDeposito ? Number(cotizacion.total) - Number(cotizacion.deposito_monto) : Number(cotizacion.total)),
+    width - margin,
+    yDer,
+    { f: bold, size: 22, color: marca }
+  );
 
   y = Math.min(yIzq, yDer) - 20;
 
@@ -262,6 +268,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   page.drawLine({ start: { x: colPrecio - 10, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 1, color: lineaGris });
   y -= 4;
   filaTotales("TOTAL", formatMoney(Number(cotizacion.total)), { bold: true, color: marca });
+
+  // Depósito requerido para comenzar (2 sept 2026, pedido de Joel) — se
+  // resta del total para mostrar el balance que quedaría al aprobar.
+  if (Number(cotizacion.deposito_monto) > 0) {
+    filaTotales("Depósito requerido", `-${formatMoney(Number(cotizacion.deposito_monto))}`);
+    page.drawLine({ start: { x: colPrecio - 10, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 1, color: lineaGris });
+    y -= 4;
+    filaTotales("BALANCE AL APROBAR", formatMoney(Number(cotizacion.total) - Number(cotizacion.deposito_monto)), { bold: true, color: marca });
+  }
 
   y -= 15;
 

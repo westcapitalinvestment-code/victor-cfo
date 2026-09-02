@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
@@ -23,6 +24,7 @@ type Cotizacion = {
   technician_id: string | null;
   fecha_vencimiento: string | null;
   notas: string | null;
+  deposito_monto: number | null;
 };
 
 function sumaLinea(l: Linea): number {
@@ -38,6 +40,7 @@ export default function EditarCotizacionForm({
   clients,
   servicios,
   tecnicos,
+  addonTecnicosActivo,
 }: {
   cotizacion: Cotizacion;
   itemsIniciales: {
@@ -52,6 +55,7 @@ export default function EditarCotizacionForm({
   clients: Client[];
   servicios: ServicioCat[];
   tecnicos: TecnicoOpcion[];
+  addonTecnicosActivo: boolean;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -75,6 +79,10 @@ export default function EditarCotizacionForm({
 
   const [fechaVencimiento, setFechaVencimiento] = useState(cotizacion.fecha_vencimiento ?? "");
   const [notas, setNotas] = useState(cotizacion.notas ?? "");
+  const [depositoInput, setDepositoInput] = useState(
+    cotizacion.deposito_monto ? String(cotizacion.deposito_monto) : ""
+  );
+  const depositoMonto = Number(depositoInput) || 0;
   const [lineas, setLineas] = useState<Linea[]>(
     itemsIniciales.length > 0
       ? itemsIniciales.map((it) => ({
@@ -138,6 +146,7 @@ export default function EditarCotizacionForm({
       : 0;
   const ivuMonto = subtotalGravable * (ivuPct / 100);
   const total = subtotal + ivuMonto;
+  const balanceAlAprobar = total - depositoMonto;
 
   async function guardar() {
     if (!entidad || !cliente) return;
@@ -160,6 +169,7 @@ export default function EditarCotizacionForm({
         ivu_pct: ivuPct,
         ivu_monto: ivuMonto,
         total,
+        deposito_monto: depositoMonto,
         fecha_vencimiento: fechaVencimiento || null,
         notas: notas || null,
       })
@@ -244,17 +254,30 @@ export default function EditarCotizacionForm({
           <input className="vc-input" type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} />
         </Field>
 
-        {tecnicosDeEntidad.length > 0 && (
-          <Field label="Asignar a técnico (opcional)">
-            <select className="vc-input" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>
-              <option value="">Sin asignar — la manejas tú</option>
-              {tecnicosDeEntidad.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+        {!addonTecnicosActivo ? (
+          <div className="rounded-lg border border-teal/30 bg-teal/[.05] p-3 text-xs">
+            <p className="font-medium text-teal">Add-on Equipo — $20.00/mes</p>
+            <p className="mt-0.5 text-muted">
+              Actívalo desde{" "}
+              <Link href="/dashboard/equipo" className="underline">
+                Equipo
+              </Link>{" "}
+              para poder asignar esta cotización a un técnico.
+            </p>
+          </div>
+        ) : (
+          tecnicosDeEntidad.length > 0 && (
+            <Field label="Asignar a técnico (opcional)">
+              <select className="vc-input" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>
+                <option value="">Sin asignar — la manejas tú</option>
+                {tecnicosDeEntidad.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )
         )}
 
         <div>
@@ -315,6 +338,18 @@ export default function EditarCotizacionForm({
           </button>
         </div>
 
+        <Field label="Depósito requerido para comenzar (opcional)">
+          <input
+            className="vc-input"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            value={depositoInput}
+            onChange={(e) => setDepositoInput(e.target.value)}
+          />
+        </Field>
+
         <Field label="Notas (opcional)">
           <textarea className="vc-input" rows={2} value={notas} onChange={(e) => setNotas(e.target.value)} />
         </Field>
@@ -334,6 +369,18 @@ export default function EditarCotizacionForm({
             <span>Total</span>
             <span>{formatMoney(total)}</span>
           </div>
+          {depositoMonto > 0 && (
+            <>
+              <div className="flex justify-between py-0.5">
+                <span className="text-muted">Depósito requerido</span>
+                <span>-{formatMoney(depositoMonto)}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-medium">
+                <span>Balance al aprobar</span>
+                <span>{formatMoney(balanceAlAprobar)}</span>
+              </div>
+            </>
+          )}
         </div>
 
         <button className="vc-btn-primary mt-1" disabled={loading || !cliente} onClick={guardar}>

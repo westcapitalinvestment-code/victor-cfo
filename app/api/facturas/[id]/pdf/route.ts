@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data: factura, error } = await supabase
     .from("invoices")
     .select(
-      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key, ivu_applies, brand_color)"
+      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, deposito_monto, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key, ivu_applies, brand_color)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -231,10 +231,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     textoDerecha(`Vence: ${formatFecha(factura.fecha_vencimiento)}`, width - margin, yDer, { size: 9, color: gris });
     yDer -= 12;
   }
+  const tieneDeposito = Number(factura.deposito_monto) > 0;
   yDer -= 8;
-  textoDerecha("TOTAL A PAGAR", width - margin, yDer, { f: bold, size: 8, color: gris });
+  textoDerecha(tieneDeposito ? "BALANCE A PAGAR" : "TOTAL A PAGAR", width - margin, yDer, { f: bold, size: 8, color: gris });
   yDer -= 22;
-  textoDerecha(formatMoney(Number(factura.total)), width - margin, yDer, { f: bold, size: 22, color: marca });
+  textoDerecha(
+    formatMoney(tieneDeposito ? Number(factura.total) - Number(factura.deposito_monto) : Number(factura.total)),
+    width - margin,
+    yDer,
+    { f: bold, size: 22, color: marca }
+  );
 
   y = Math.min(yIzq, yDer) - 20;
 
@@ -290,6 +296,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   page.drawLine({ start: { x: colPrecio - 10, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 1, color: lineaGris });
   y -= 4;
   filaTotales("TOTAL", formatMoney(Number(factura.total)), { bold: true, color: marca });
+
+  // Depósito ya recibido (2 sept 2026, pedido de Joel) — se resta del total
+  // para mostrar el balance real pendiente de cobro.
+  if (Number(factura.deposito_monto) > 0) {
+    filaTotales("Depósito recibido", `-${formatMoney(Number(factura.deposito_monto))}`);
+    page.drawLine({ start: { x: colPrecio - 10, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 1, color: lineaGris });
+    y -= 4;
+    filaTotales("BALANCE A PAGAR", formatMoney(Number(factura.total) - Number(factura.deposito_monto)), { bold: true, color: marca });
+  }
 
   y -= 15;
 

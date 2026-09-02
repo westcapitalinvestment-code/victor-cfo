@@ -26,6 +26,7 @@ type Factura = {
   retencion_pct: number;
   retencion_monto: number;
   total: number;
+  deposito_monto: number | null;
   estado: string;
   fecha_emision: string;
   fecha_vencimiento: string | null;
@@ -329,6 +330,18 @@ export default function FacturaDetalle({
             <span>Total</span>
             <span>{formatMoney(factura.total)}</span>
           </div>
+          {Number(factura.deposito_monto) > 0 && (
+            <>
+              <div className="flex justify-between py-0.5">
+                <span className="text-muted">Depósito recibido</span>
+                <span>-{formatMoney(Number(factura.deposito_monto))}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-medium">
+                <span>Balance a pagar</span>
+                <span>{formatMoney(factura.total - Number(factura.deposito_monto))}</span>
+              </div>
+            </>
+          )}
         </div>
 
         {factura.notas && (

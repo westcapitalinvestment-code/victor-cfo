@@ -17,7 +17,7 @@ export default async function CotizacionDetallePage({ params }: { params: { id: 
   const { data: cotizacion } = await supabase
     .from("cotizaciones")
     .select(
-      "id, numero, subtotal, ivu_pct, ivu_monto, total, estado, fecha_emision, fecha_vencimiento, notas, invoice_id, entity_id, client_id, technician_id, clients(name, email, telefono, es_negocio, retention_pct), business_entities(name, invoice_prefix, invoice_start_number, default_payment_terms, ein, municipio, phone, address, zip, invoice_footer, ivu_applies), technicians(name)"
+      "id, numero, subtotal, ivu_pct, ivu_monto, total, deposito_monto, estado, fecha_emision, fecha_vencimiento, notas, invoice_id, entity_id, client_id, technician_id, clients(name, email, telefono, es_negocio, retention_pct), business_entities(name, invoice_prefix, invoice_start_number, default_payment_terms, ein, municipio, phone, address, zip, invoice_footer, ivu_applies), technicians(name)"
     )
     .eq("id", params.id)
     .eq("owner_id", user.id)

@@ -11,13 +11,18 @@ export default async function EditarCotizacionPage({ params }: { params: { id: s
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase.from("users").select("plan").eq("id", user.id).maybeSingle();
+  const { data: profile } = await supabase
+    .from("users")
+    .select("plan, addon_tecnicos_status")
+    .eq("id", user.id)
+    .maybeSingle();
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   if (!esPro) return <ProPaywall />;
+  const addonTecnicosActivo = profile?.addon_tecnicos_status === "activo";
 
   const { data: cotizacion } = await supabase
     .from("cotizaciones")
-    .select("id, numero, entity_id, client_id, technician_id, estado, fecha_vencimiento, notas")
+    .select("id, numero, entity_id, client_id, technician_id, estado, fecha_vencimiento, notas, deposito_monto")
     .eq("id", params.id)
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -77,6 +82,7 @@ export default async function EditarCotizacionPage({ params }: { params: { id: s
       clients={clients ?? []}
       servicios={servicios ?? []}
       tecnicos={tecnicos ?? []}
+      addonTecnicosActivo={addonTecnicosActivo}
     />
   );
 }

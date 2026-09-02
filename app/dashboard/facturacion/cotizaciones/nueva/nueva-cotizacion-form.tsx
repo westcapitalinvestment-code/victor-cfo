@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
@@ -30,12 +31,14 @@ export default function NuevaCotizacionForm({
   servicios,
   numeroInicial,
   tecnicos,
+  addonTecnicosActivo,
 }: {
   entities: Entity[];
   clients: Client[];
   servicios: ServicioCat[];
   numeroInicial: string;
   tecnicos: TecnicoOpcion[];
+  addonTecnicosActivo: boolean;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -66,6 +69,12 @@ export default function NuevaCotizacionForm({
   const hoy = new Date().toISOString().slice(0, 10);
   const [fechaVencimiento, setFechaVencimiento] = useState("");
   const [notas, setNotas] = useState("");
+  // Depósito (2 sept 2026, pedido de Joel): aquí, en Cotización, representa
+  // un depósito REQUERIDO para empezar el trabajo (todavía no cobrado) — a
+  // diferencia de Factura, donde es uno ya recibido. Si el cliente aprueba
+  // y se convierte a factura, este monto pasa tal cual.
+  const [depositoInput, setDepositoInput] = useState("");
+  const depositoMonto = Number(depositoInput) || 0;
   const [lineas, setLineas] = useState<Linea[]>([
     { descripcion: "", detalle: "", cantidad: "1", precioUnitario: "", servicioId: null },
   ]);
@@ -126,6 +135,7 @@ export default function NuevaCotizacionForm({
       : 0;
   const ivuMonto = subtotalGravable * (ivuPct / 100);
   const total = subtotal + ivuMonto;
+  const balanceAlAprobar = total - depositoMonto;
 
   async function guardar() {
     if (!entidad || !cliente) return;
@@ -163,6 +173,7 @@ export default function NuevaCotizacionForm({
         ivu_pct: ivuPct,
         ivu_monto: ivuMonto,
         total,
+        deposito_monto: depositoMonto,
         estado: "enviada",
         fecha_emision: hoy,
         fecha_vencimiento: fechaVencimiento,
@@ -251,23 +262,36 @@ export default function NuevaCotizacionForm({
           />
         </Field>
 
-        {tecnicosDeEntidad.length > 0 && (
-          <Field label="Asignar a técnico (opcional)">
-            <select className="vc-input" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>
-              <option value="">Sin asignar — la manejas tú</option>
-              {tecnicosDeEntidad.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            {technicianId && (
-              <p className="mt-1 text-xs text-muted">
-                Cuando la apruebes, {tecnicosDeEntidad.find((t) => t.id === technicianId)?.name} la va a ver en su app y puede
-                convertirla él mismo en factura al terminar el trabajo.
-              </p>
-            )}
-          </Field>
+        {!addonTecnicosActivo ? (
+          <div className="rounded-lg border border-teal/30 bg-teal/[.05] p-3 text-xs">
+            <p className="font-medium text-teal">Add-on Equipo — $20.00/mes</p>
+            <p className="mt-0.5 text-muted">
+              Actívalo desde{" "}
+              <Link href="/dashboard/equipo" className="underline">
+                Equipo
+              </Link>{" "}
+              para poder asignar esta cotización a un técnico.
+            </p>
+          </div>
+        ) : (
+          tecnicosDeEntidad.length > 0 && (
+            <Field label="Asignar a técnico (opcional)">
+              <select className="vc-input" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>
+                <option value="">Sin asignar — la manejas tú</option>
+                {tecnicosDeEntidad.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              {technicianId && (
+                <p className="mt-1 text-xs text-muted">
+                  Cuando la apruebes, {tecnicosDeEntidad.find((t) => t.id === technicianId)?.name} la va a ver en su app y
+                  puede convertirla él mismo en factura al terminar el trabajo.
+                </p>
+              )}
+            </Field>
+          )
         )}
 
         <div>
@@ -333,6 +357,19 @@ export default function NuevaCotizacionForm({
           </button>
         </div>
 
+        <Field label="Depósito requerido para comenzar (opcional)">
+          <input
+            className="vc-input"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            value={depositoInput}
+            onChange={(e) => setDepositoInput(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-muted">Si vas a pedir un adelanto antes de empezar, ponlo aquí — se resta del total.</p>
+        </Field>
+
         <Field label="Notas (opcional)">
           <textarea
             className="vc-input"
@@ -361,6 +398,18 @@ export default function NuevaCotizacionForm({
             <span>Total</span>
             <span>{formatMoney(total)}</span>
           </div>
+          {depositoMonto > 0 && (
+            <>
+              <div className="flex justify-between py-0.5">
+                <span className="text-muted">Depósito requerido</span>
+                <span>-{formatMoney(depositoMonto)}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-medium">
+                <span>Balance al aprobar</span>
+                <span>{formatMoney(balanceAlAprobar)}</span>
+              </div>
+            </>
+          )}
         </div>
 
         <button className="vc-btn-primary mt-1" disabled={loading || !cliente || !fechaVencimiento} onClick={guardar}>

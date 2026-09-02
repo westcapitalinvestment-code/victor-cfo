@@ -18,7 +18,7 @@ export default async function EditarEntidadPage({
   const { data: entidad } = await supabase
     .from("business_entities")
     .select(
-      "id, name, ein, entity_type, phone, address, municipio, zip, email, website, tax_regime, ivu_applies, ivu_rate_estatal, ivu_rate_municipal, client_retention_situation, relevo_certificate_expiry, relevo_certificate_r2_key, invoice_prefix, invoice_start_number, default_payment_terms, default_late_fee, payment_methods, invoice_footer, logo_r2_key, brand_color, created_at"
+      "id, name, ein, entity_type, phone, address, municipio, zip, email, website, tax_regime, ivu_applies, ivu_rate_estatal, ivu_rate_municipal, client_retention_situation, relevo_certificate_expiry, relevo_certificate_r2_key, invoice_prefix, invoice_start_number, default_payment_terms, default_late_fee, payment_methods, invoice_footer, logo_r2_key, brand_color, ath_movil_business_path, created_at"
     )
     .eq("id", params.id)
     .eq("owner_id", user.id)

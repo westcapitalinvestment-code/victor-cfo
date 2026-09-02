@@ -44,6 +44,7 @@ export type EntidadCompleta = {
   invoice_footer: string | null;
   logo_r2_key: string | null;
   brand_color: string | null;
+  ath_movil_business_path: string | null;
 };
 
 // Paleta de colores de marca (pedido de Joel, 1 sept 2026): para que la
@@ -128,6 +129,13 @@ export default function EntidadForm({
   const [lateFee, setLateFee] = useState(entidad?.default_late_fee ?? "Sin recargo");
   const [metodosCobro, setMetodosCobro] = useState<string[]>(entidad?.payment_methods ?? ["Stripe"]);
   const [invoiceFooter, setInvoiceFooter] = useState(entidad?.invoice_footer ?? "");
+  // pATH de ATH Móvil Business (2 sept 2026, pedido de Joel): el
+  // identificador que usan los clientes para pagarte por ATH Móvil Business
+  // — siempre empieza con "/" (ej. /MiNegocioPR). No es "el nombre del
+  // negocio" — es un handle propio que Joel configura en la app de ATH
+  // Móvil Business. Con este campo lleno, Nueva/Editar Factura puede
+  // mostrar el estimado de cuánto le llega neto con el 2.25% que cobra BPPR.
+  const [athMovilPath, setAthMovilPath] = useState(entidad?.ath_movil_business_path ?? "");
 
   // Certificado de relevo — solo se puede subir con una entidad que ya
   // existe (necesita el id real para la key de R2), igual que el logo.
@@ -182,6 +190,7 @@ export default function EntidadForm({
       default_late_fee: lateFee,
       payment_methods: metodosCobro,
       invoice_footer: invoiceFooter || null,
+      ath_movil_business_path: metodosCobro.includes("ATH Móvil") ? athMovilPath.trim() || null : null,
     };
   }
 
@@ -498,6 +507,23 @@ export default function EntidadForm({
                 </button>
               ))}
             </div>
+            {metodosCobro.includes("ATH Móvil") && (
+              <div className="mt-3">
+                <Field label="Tu pATH de ATH Móvil Business">
+                  <input
+                    className="vc-input"
+                    value={athMovilPath}
+                    onChange={(e) => setAthMovilPath(e.target.value)}
+                    placeholder="/MiNegocioPR"
+                  />
+                </Field>
+                <p className="mt-1 text-xs text-muted">
+                  El identificador (empieza con "/") que usan tus clientes para pagarte por ATH Móvil Business — lo
+                  configuras en la app de ATH Móvil Business, no aquí. Con esto lleno, Facturación te muestra cuánto te
+                  llega neto (BPPR cobra 2.25% por pago, mínimo $0.06).
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="vc-card">

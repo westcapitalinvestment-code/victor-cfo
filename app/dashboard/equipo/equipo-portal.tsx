@@ -97,6 +97,7 @@ export default function EquipoPortal({
   entidad,
   vistaGlobalActiva,
   cantidadEntidades,
+  addonTecnicosActivo,
 }: {
   tecnicos: Tecnico[];
   vendors: Vendor[];
@@ -106,6 +107,7 @@ export default function EquipoPortal({
   entidad: Entidad;
   vistaGlobalActiva: boolean;
   cantidadEntidades: number;
+  addonTecnicosActivo: boolean;
 }) {
   const [tab, setTab] = useState<TabId>("panel");
 
@@ -162,7 +164,9 @@ export default function EquipoPortal({
       )}
 
       {tab === "panel" && <PanelTab facturas={facturas} tecnicos={tecnicos} cotizacionesAsignadas={cotizacionesAsignadas} />}
-      {tab === "tecnicos" && <TecnicosTab tecnicos={tecnicos} vendors={vendors} entidad={entidad} />}
+      {tab === "tecnicos" && (
+        <TecnicosTab tecnicos={tecnicos} vendors={vendors} entidad={entidad} addonTecnicosActivo={addonTecnicosActivo} />
+      )}
       {tab === "reportes" && <ReportesTab facturas={facturas} items={items} tecnicos={tecnicos} />}
     </div>
   );
@@ -368,9 +372,52 @@ function PanelTab({
 // link, WhatsApp, vínculo con Pagos), todo en la misma pestaña (pedido de
 // Joel: "cada addon debe tener su configuración en la misma pestaña").
 // ============================================================================
-function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vendors: Vendor[]; entidad: Entidad }) {
+function TecnicosTab({
+  tecnicos,
+  vendors,
+  entidad,
+  addonTecnicosActivo,
+}: {
+  tecnicos: Tecnico[];
+  vendors: Vendor[];
+  entidad: Entidad;
+  addonTecnicosActivo: boolean;
+}) {
   const supabase = createClient();
   const router = useRouter();
+
+  const TOPE_TECNICOS_ADDON = 3;
+
+  // Activar/desactivar el addon Equipo en Stripe ($20/mes, hasta 3
+  // técnicos, 2 sept 2026, pedido de Joel) — un segundo subscription item
+  // sobre la misma suscripción Pro, no un checkout aparte.
+  const [activandoAddon, setActivandoAddon] = useState(false);
+  const [errorAddon, setErrorAddon] = useState<string | null>(null);
+  async function activarAddon() {
+    setActivandoAddon(true);
+    setErrorAddon(null);
+    const res = await fetch("/api/stripe/addon-tecnicos/activar", { method: "POST" });
+    const data = await res.json().catch(() => null);
+    setActivandoAddon(false);
+    if (!res.ok || !data?.ok) {
+      setErrorAddon(data?.error ?? "No se pudo activar el addon.");
+      return;
+    }
+    router.refresh();
+  }
+  async function desactivarAddon() {
+    if (!window.confirm("¿Desactivar el addon Equipo? No vas a poder asignar técnicos nuevos hasta que lo actives de nuevo.")) return;
+    setActivandoAddon(true);
+    setErrorAddon(null);
+    const res = await fetch("/api/stripe/addon-tecnicos/desactivar", { method: "POST" });
+    const data = await res.json().catch(() => null);
+    setActivandoAddon(false);
+    if (!res.ok || !data?.ok) {
+      setErrorAddon(data?.error ?? "No se pudo desactivar el addon.");
+      return;
+    }
+    router.refresh();
+  }
 
   // ---- Configuración global ----
   const [aprobacionDefault, setAprobacionDefault] = useState(entidad.equipo_aprobacion_default ?? "auto");
@@ -465,6 +512,10 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
 
   async function guardar() {
     if (!name.trim()) return;
+    if (formAbierto === "nuevo" && (!addonTecnicosActivo || tecnicos.filter((t) => t.active).length >= TOPE_TECNICOS_ADDON)) {
+      setError("Necesitas el addon Equipo activo (y cupo disponible) para crear un técnico.");
+      return;
+    }
     if (formAbierto === "nuevo" && !/^\d{4}$/.test(pin)) {
       setError("El PIN debe ser de 4 dígitos.");
       return;
@@ -643,8 +694,49 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
     window.open(`https://wa.me/${telefonoWhatsapp(t.phone)}?text=${encodeURIComponent(mensaje)}`, "_blank");
   }
 
+  const tecnicosActivosCount = tecnicos.filter((t) => t.active).length;
+  const topeAlcanzado = tecnicosActivosCount >= TOPE_TECNICOS_ADDON;
+
   return (
     <>
+      <div
+        className="mb-3 rounded-2xl border p-3.5"
+        style={
+          addonTecnicosActivo
+            ? { borderColor: "var(--border)", background: "var(--card)" }
+            : { borderColor: "#1D9E75", background: "rgba(29,158,117,.06)" }
+        }
+      >
+        {errorAddon && <p className="mb-2 text-xs text-red">{errorAddon}</p>}
+        {!addonTecnicosActivo ? (
+          <>
+            <p className="text-sm font-medium">Add-on Equipo — $20.00/mes</p>
+            <p className="mb-2.5 text-xs text-muted">
+              Incluye hasta {TOPE_TECNICOS_ADDON} técnicos. Se suma a tu factura de Pro — no es un plan aparte. Actívalo para
+              poder crear técnicos y asignarles facturas/cotizaciones.
+            </p>
+            <button className="vc-btn-primary" style={{ width: "auto" }} disabled={activandoAddon} onClick={activarAddon}>
+              {activandoAddon ? "Activando..." : "Activar addon"}
+            </button>
+          </>
+        ) : (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">
+                <i className="ti ti-circle-check text-teal" style={{ marginRight: 4 }} />
+                Add-on Equipo activo — $20.00/mes
+              </p>
+              <p className="text-xs text-muted">
+                {tecnicosActivosCount}/{TOPE_TECNICOS_ADDON} técnicos usados
+              </p>
+            </div>
+            <button className="flex-shrink-0 text-xs text-muted underline hover:opacity-80" disabled={activandoAddon} onClick={desactivarAddon}>
+              Desactivar
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="vc-card mb-3">
         <p className="mb-3 text-xs uppercase tracking-wide text-muted">Configuración de Equipo</p>
 
@@ -681,15 +773,21 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
         </button>
       </div>
 
-      <div className="mb-3 flex justify-end">
-        <button
-          onClick={abrirNuevo}
-          className="flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-2.5 text-xs font-medium text-white hover:opacity-90"
-          style={{ background: "#1D9E75", width: "auto" }}
-        >
-          <i className="ti ti-plus" /> Nuevo técnico
-        </button>
-      </div>
+      {addonTecnicosActivo && (
+        <div className="mb-3 flex items-center justify-between gap-2">
+          {topeAlcanzado && (
+            <p className="text-xs text-amb">Llegaste al tope de {TOPE_TECNICOS_ADDON} técnicos incluidos en el addon.</p>
+          )}
+          <button
+            onClick={abrirNuevo}
+            disabled={topeAlcanzado}
+            className="ml-auto flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-2.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
+            style={{ background: "#1D9E75", width: "auto" }}
+          >
+            <i className="ti ti-plus" /> Nuevo técnico
+          </button>
+        </div>
+      )}
 
       {pinParaCompartir && (
         <div className="vc-card mb-3" style={{ borderColor: "#1D9E75" }}>
@@ -807,7 +905,12 @@ function TecnicosTab({ tecnicos, vendors, entidad }: { tecnicos: Tecnico[]; vend
         <p className="mb-2 text-xs uppercase tracking-wide text-muted">
           Técnicos <span className="normal-case text-muted">· {lista.length}</span>
         </p>
-        {lista.length === 0 && <p className="text-xs text-muted">Todavía no tienes técnicos. Dale a "+ Nuevo técnico" arriba.</p>}
+        {lista.length === 0 && addonTecnicosActivo && (
+          <p className="text-xs text-muted">Todavía no tienes técnicos. Dale a "+ Nuevo técnico" arriba.</p>
+        )}
+        {lista.length === 0 && !addonTecnicosActivo && (
+          <p className="text-xs text-muted">Activa el addon Equipo arriba para empezar a añadir técnicos.</p>
+        )}
 
         {lista.map((t) => (
           <div key={t.id} className="border-b border-border py-3 text-sm last:border-0">

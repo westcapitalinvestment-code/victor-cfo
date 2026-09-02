@@ -25,6 +25,7 @@ type Cotizacion = {
   ivu_pct: number;
   ivu_monto: number;
   total: number;
+  deposito_monto: number | null;
   estado: string;
   fecha_emision: string;
   fecha_vencimiento: string | null;
@@ -195,6 +196,11 @@ export default function CotizacionDetalle({
         retencion_pct: retencionPct,
         retencion_monto: retencionMonto,
         total,
+        // El depósito requerido en la cotización pasa tal cual a la
+        // factura — si el cliente ya lo pagó al aprobar, esto deja el
+        // balance correcto desde que nace la factura (2 sept 2026, pedido
+        // de Joel).
+        deposito_monto: cotizacion.deposito_monto ?? 0,
         // Si la cotización ya tenía un técnico asignado, la factura nace
         // con el mismo vínculo (Equipo, 2 sept 2026, pedido de Joel) — así
         // el trabajo sigue apareciendo en su Panel/Reportes de Equipo
@@ -338,6 +344,18 @@ export default function CotizacionDetalle({
             <span>Total</span>
             <span>{formatMoney(cotizacion.total)}</span>
           </div>
+          {Number(cotizacion.deposito_monto) > 0 && (
+            <>
+              <div className="flex justify-between py-0.5">
+                <span className="text-muted">Depósito requerido</span>
+                <span>-{formatMoney(Number(cotizacion.deposito_monto))}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-medium">
+                <span>Balance al aprobar</span>
+                <span>{formatMoney(cotizacion.total - Number(cotizacion.deposito_monto))}</span>
+              </div>
+            </>
+          )}
         </div>
 
         {cotizacion.notas && (

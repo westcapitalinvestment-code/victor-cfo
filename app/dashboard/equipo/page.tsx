@@ -19,9 +19,14 @@ export default async function EquipoPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase.from("users").select("plan").eq("id", user.id).maybeSingle();
+  const { data: profile } = await supabase
+    .from("users")
+    .select("plan, addon_tecnicos_status")
+    .eq("id", user.id)
+    .maybeSingle();
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   if (!esPro) return <ProPaywall />;
+  const addonTecnicosActivo = profile?.addon_tecnicos_status === "activo";
 
   const { data: entities } = await supabase
     .from("business_entities")
@@ -109,6 +114,7 @@ export default async function EquipoPage() {
       entidad={entidadEfectiva}
       vistaGlobalActiva={vistaGlobal}
       cantidadEntidades={entities.length}
+      addonTecnicosActivo={addonTecnicosActivo}
     />
   );
 }
