@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney, formatFecha } from "@/lib/format";
 
@@ -69,7 +70,6 @@ const RETURN_TO_TAB_CLIENTES = encodeURIComponent("/dashboard/facturacion?tab=cl
 const TABS = [
   { id: "facturas", label: "Facturas", icon: "ti-file-invoice" },
   { id: "cotizaciones", label: "Cotizaciones", icon: "ti-file-description" },
-  { id: "cobros", label: "Cobros", icon: "ti-cash" },
   { id: "clientes", label: "Clientes", icon: "ti-users" },
   { id: "servicios", label: "Servicios", icon: "ti-package" },
   { id: "reportes", label: "Reportes", icon: "ti-chart-bar" },
@@ -198,7 +198,6 @@ export default function FacturacionPortal({
       </div>
 
       {tab === "facturas" && <FacturasTab facturas={facturas} />}
-      {tab === "cobros" && <CobrosTab facturasIniciales={facturas.filter((f) => f.estado !== "borrador" && f.estado !== "pagada")} />}
       {tab === "clientes" && <ClientesTab clients={clients} />}
       {tab === "cotizaciones" && <CotizacionesTab cotizaciones={cotizaciones} />}
       {tab === "servicios" && <ServiciosTab servicios={servicios} entidadId={entidadId} />}
@@ -310,30 +309,121 @@ function FacturasTab({ facturas }: { facturas: Factura[] }) {
   );
 }
 
+// Fusionado con lo que antes era el tab "Cobros" (1 sept 2026, pedido de
+// Joel: "quitalo y añade el boton, seria como fusionar todo en Facturas") —
+// cada fila ahora trae su propio "Registrar pago" inline, con el mismo
+// aviso de retención que tenía CobrosTab, en vez de vivir en una pestaña
+// aparte que no aportaba nada que Facturas no tuviera ya. También se le
+// añadió un hover al nombre/fila (cambio de color + fondo) para que se
+// note que es clickeable, ya que ahora el Link solo envuelve esa parte y
+// no toda la fila (el botón de pago necesita vivir fuera del <a>).
 function FilaFactura({ factura }: { factura: Factura }) {
+  const supabase = createClient();
+  const router = useRouter();
   const nombre = factura.clients?.name ?? "Sin cliente";
+  const [pagando, setPagando] = useState(false);
+  const [metodoPago, setMetodoPago] = useState(METODOS_PAGO[0]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const puedeRegistrarPago = factura.estado !== "pagada" && factura.estado !== "borrador";
+
+  async function marcarPagada() {
+    setLoading(true);
+    setError(null);
+    const { error: updateError } = await supabase
+      .from("invoices")
+      .update({ estado: "pagada", metodo_pago: metodoPago })
+      .eq("id", factura.id);
+    setLoading(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setPagando(false);
+    router.refresh();
+  }
+
   return (
-    <Link
-      href={`/dashboard/facturacion/${factura.id}`}
-      className="flex items-center gap-2.5 border-b border-border py-2.5 last:border-0"
-    >
-      <div
-        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-        style={{ background: colorAvatar(factura.client_id ?? factura.id) }}
-      >
-        {iniciales(nombre)}
+    <div className="border-b border-border py-2.5 last:border-0">
+      <div className="flex items-center gap-2.5">
+        <Link
+          href={`/dashboard/facturacion/${factura.id}`}
+          className="group flex min-w-0 flex-1 items-center gap-2.5 rounded-lg -m-1 p-1 transition-colors hover:bg-bg"
+        >
+          <div
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
+            style={{ background: colorAvatar(factura.client_id ?? factura.id) }}
+          >
+            {iniciales(nombre)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm transition-colors group-hover:text-teal">{nombre}</p>
+            <p className="truncate text-xs text-muted">
+              #{factura.numero} · {formatFecha(factura.fecha_emision)}
+            </p>
+          </div>
+        </Link>
+        <div className="flex flex-shrink-0 flex-col items-end gap-1">
+          <span className="text-sm font-medium">{formatMoney(Number(factura.total))}</span>
+          <Badge estado={estadoMostrado(factura)} />
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm">{nombre}</p>
-        <p className="truncate text-xs text-muted">
-          #{factura.numero} · {formatFecha(factura.fecha_emision)}
-        </p>
-      </div>
-      <div className="flex flex-shrink-0 flex-col items-end gap-1">
-        <span className="text-sm font-medium">{formatMoney(Number(factura.total))}</span>
-        <Badge estado={estadoMostrado(factura)} />
-      </div>
-    </Link>
+
+      {puedeRegistrarPago && !pagando && (
+        <div className="mt-1.5 pl-[42px]">
+          <button
+            className="rounded-lg border border-teal px-2.5 py-1.5 text-xs font-medium text-teal hover:opacity-80"
+            onClick={() => setPagando(true)}
+          >
+            Registrar pago
+          </button>
+        </div>
+      )}
+
+      {pagando && (
+        <div className="mt-2 flex flex-col gap-2 pl-[42px]">
+          {error && <p className="text-xs text-red">{error}</p>}
+          {Number(factura.retencion_pct) > 0 && (
+            <div className="rounded-lg border border-border bg-bg p-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted">Total que debía cobrar</span>
+                <span className="font-medium">{formatMoney(Number(factura.total))}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-amb">Retención ({factura.retencion_pct}%) que el cliente debía depositar</span>
+                <span className="font-medium text-amb">{formatMoney(Number(factura.retencion_monto))}</span>
+              </div>
+              <p className="mt-1 text-muted">
+                ¿No coincide con lo que recibiste?{" "}
+                <Link href={`/dashboard/facturacion/${factura.id}/editar`} className="font-medium text-teal underline">
+                  Ajústala primero
+                </Link>
+                .
+              </p>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <select className="vc-input flex-1" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
+              {METODOS_PAGO.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            {/* .vc-btn-primary trae width:100% en globals.css — en este flex
+                row eso gana como flex-basis y aplasta el <select> flex-1 al
+                lado (mismo bug de fondo documentado en varios lugares). */}
+            <button className="vc-btn-primary flex-shrink-0" style={{ width: "auto" }} disabled={loading} onClick={marcarPagada}>
+              {loading ? "..." : "Está correcto"}
+            </button>
+            <button className="flex-shrink-0 text-xs text-muted hover:opacity-80" onClick={() => setPagando(false)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -353,142 +443,6 @@ function StatCard({ label, valor, sub, tono }: { label: string; valor: string; s
 }
 
 const METODOS_PAGO = ["ATH Móvil", "Transferencia", "Cheque", "Efectivo", "Tarjeta", "Otro"];
-
-function CobrosTab({ facturasIniciales }: { facturasIniciales: Factura[] }) {
-  const supabase = createClient();
-  const [facturas, setFacturas] = useState(facturasIniciales);
-  const [pagando, setPagando] = useState<string | null>(null);
-  const [metodoPago, setMetodoPago] = useState(METODOS_PAGO[0]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function marcarPagada(id: string) {
-    setLoading(true);
-    setError(null);
-    const { error: updateError } = await supabase
-      .from("invoices")
-      .update({ estado: "pagada", metodo_pago: metodoPago })
-      .eq("id", id);
-    setLoading(false);
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
-    setFacturas((prev) => prev.filter((f) => f.id !== id));
-    setPagando(null);
-  }
-
-  const vencidas = facturas.filter(estaVencida);
-  const pendientes = facturas.filter((f) => !estaVencida(f));
-  const totalPendiente = facturas.reduce((s, f) => s + Number(f.total), 0);
-  const totalVencido = vencidas.reduce((s, f) => s + Number(f.total), 0);
-
-  return (
-    <>
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <StatCard label="Por cobrar" valor={formatMoney(totalPendiente)} sub={`${facturas.length} factura${facturas.length === 1 ? "" : "s"}`} tono="a" />
-        <StatCard label="Vencidas" valor={formatMoney(totalVencido)} sub={`${vencidas.length} factura${vencidas.length === 1 ? "" : "s"}`} tono="r" />
-      </div>
-
-      <div className="vc-card">
-        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Facturas pendientes</p>
-        {error && <p className="mb-2 text-xs text-red">{error}</p>}
-
-        {facturas.length === 0 && <p className="text-xs text-muted">No tienes facturas pendientes de cobro ahora mismo.</p>}
-
-        {[...vencidas, ...pendientes].map((f) => {
-          const vencida = estaVencida(f);
-          const nombre = f.clients?.name ?? "Sin cliente";
-          return (
-            <div key={f.id} className="border-b border-border py-2.5 text-sm last:border-0">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-                  style={{ background: colorAvatar(f.client_id ?? f.id) }}
-                >
-                  {iniciales(nombre)}
-                </div>
-                <Link href={`/dashboard/facturacion/${f.id}`} className="min-w-0 flex-1">
-                  <p className="truncate font-medium">#{f.numero} · {nombre}</p>
-                  <p className="truncate text-xs text-muted">
-                    {vencida ? (
-                      <span className="text-red">venció {formatFecha(f.fecha_vencimiento)}</span>
-                    ) : (
-                      <span>vence {formatFecha(f.fecha_vencimiento)}</span>
-                    )}
-                  </p>
-                </Link>
-                <div className="flex flex-shrink-0 items-center gap-2">
-                  <span className="font-medium">{formatMoney(Number(f.total))}</span>
-                  {pagando !== f.id && (
-                    <button
-                      className="rounded-lg border border-teal px-2.5 py-1.5 text-xs font-medium text-teal hover:opacity-80"
-                      onClick={() => setPagando(f.id)}
-                    >
-                      Registrar pago
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {pagando === f.id && (
-                <div className="mt-2 flex flex-col gap-2 pl-[42px]">
-                  {/* Antes marcaba pagada de una vez sin mostrar la retención
-                      esperada — pedido de Joel (1 sept 2026): a veces el
-                      cliente se olvida de retener o retiene mal, y si eso
-                      pasa hay que ajustar la factura antes de marcarla pagada. */}
-                  {Number(f.retencion_pct) > 0 && (
-                    <div className="rounded-lg border border-border bg-bg p-2 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-muted">Total que debía cobrar</span>
-                        <span className="font-medium">{formatMoney(Number(f.total))}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-amb">Retención ({f.retencion_pct}%) que el cliente debía depositar</span>
-                        <span className="font-medium text-amb">{formatMoney(Number(f.retencion_monto))}</span>
-                      </div>
-                      <p className="mt-1 text-muted">
-                        ¿No coincide con lo que recibiste?{" "}
-                        <Link href={`/dashboard/facturacion/${f.id}/editar`} className="font-medium text-teal underline">
-                          Ajústala primero
-                        </Link>
-                        .
-                      </p>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <select className="vc-input flex-1" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
-                      {METODOS_PAGO.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                    {/* .vc-btn-primary trae width:100% en globals.css — en
-                        este flex row eso gana como flex-basis y aplasta el
-                        <select> flex-1 al lado (mismo bug de fondo que el de
-                        vc-input; pedido de Joel, 1 sept 2026). */}
-                    <button
-                      className="vc-btn-primary flex-shrink-0"
-                      style={{ width: "auto" }}
-                      disabled={loading}
-                      onClick={() => marcarPagada(f.id)}
-                    >
-                      {loading ? "..." : "Está correcto"}
-                    </button>
-                    <button className="flex-shrink-0 text-xs text-muted hover:opacity-80" onClick={() => setPagando(null)}>
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}
 
 function ClientesTab({ clients }: { clients: Cliente[] }) {
   const [busqueda, setBusqueda] = useState("");
