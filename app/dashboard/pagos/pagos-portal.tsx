@@ -154,6 +154,30 @@ export default function PagosPortal({
   );
 }
 
+// Sección con +/- para minimizar (2 sept 2026, pedido de Joel: "veo una
+// lista laaarga de pagos recientes, puedes ponerle un minimizador") —
+// arranca cerrada por default cuando la lista puede crecer mucho.
+function SeccionColapsable({
+  titulo,
+  defaultAbierta = true,
+  children,
+}: {
+  titulo: string;
+  defaultAbierta?: boolean;
+  children: React.ReactNode;
+}) {
+  const [abierta, setAbierta] = useState(defaultAbierta);
+  return (
+    <div className="vc-card">
+      <button type="button" className="flex w-full items-center justify-between" onClick={() => setAbierta((v) => !v)}>
+        <p className="text-xs uppercase tracking-wide text-muted">{titulo}</p>
+        <i className={`ti ${abierta ? "ti-minus" : "ti-plus"} text-muted`} style={{ fontSize: 13 }} />
+      </button>
+      {abierta && <div className="mt-2">{children}</div>}
+    </div>
+  );
+}
+
 // ============================================================================
 // Tab: Pagos — corrida tipo nómina (pedido de Joel: calcado de cómo lo hace
 // hoy en Excel — un solo periodo, monto bruto por contratista, y de un tirón
@@ -395,8 +419,7 @@ function PagosTab({ vendors, retenciones, entidadId }: { vendors: Vendor[]; rete
         </div>
       )}
 
-      <div className="vc-card">
-        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Pagos recientes</p>
+      <SeccionColapsable titulo={`Pagos recientes${historialOrdenado.length > 0 ? ` (${historialOrdenado.length})` : ""}`} defaultAbierta={false}>
         {historialOrdenado.length === 0 && <p className="text-xs text-muted">Todavía no has registrado ningún pago.</p>}
         {historialOrdenado.map((r) => {
           const v = vendorPorId.get(r.vendor_id);
@@ -416,7 +439,7 @@ function PagosTab({ vendors, retenciones, entidadId }: { vendors: Vendor[]; rete
             </div>
           );
         })}
-      </div>
+      </SeccionColapsable>
     </>
   );
 }
@@ -816,6 +839,11 @@ function ReportesTab({
   const [periodo, setPeriodo] = useState<(typeof PERIODOS_PAGOS)[number]["value"]>("trimestre");
   const [rangoDesde, setRangoDesde] = useState(hoyISO());
   const [rangoHasta, setRangoHasta] = useState(hoyISO());
+  // Q1-Q4 dentro del botón "Trimestre" (como estaba antes de añadir el
+  // botón "Rango", pedido de Joel: "en trimestre añademe un scrolldown de
+  // Q1, Q2, Q3, Q4 como estaba").
+  const [trimestre, setTrimestre] = useState(trimestreDe(hoyISO()));
+  const [anioTrimestre, setAnioTrimestre] = useState(Number(hoyISO().slice(0, 4)));
   // Filtro por contratista — combobox con búsqueda y "Todos" adentro del
   // scroll, calcado del de Cliente/Servicio en Reportes de Facturación
   // (pedido de Joel: "igual que clientes... por ejemplo si quiero saber
@@ -823,8 +851,10 @@ function ReportesTab({
   // vendors o por x vendor").
   const [vendorFiltro, setVendorFiltro] = useState("");
 
-  const desde = inicioPeriodoPagos(periodo, rangoDesde);
-  const hasta = finPeriodoPagos(periodo, rangoHasta);
+  const { desde, hasta } =
+    periodo === "trimestre"
+      ? rangoTrimestre(anioTrimestre, trimestre)
+      : { desde: inicioPeriodoPagos(periodo, rangoDesde), hasta: finPeriodoPagos(periodo, rangoHasta) };
   const vendorPorId = useMemo(() => new Map(vendors.map((v) => [v.id, v])), [vendors]);
   const vendorsOrdenados = useMemo(() => [...vendors].sort((a, b) => a.name.localeCompare(b.name)), [vendors]);
 
@@ -857,7 +887,9 @@ function ReportesTab({
   const totalRetenido = porContratista.reduce((s, c) => s + c.retenido, 0);
   const totalNeto = porContratista.reduce((s, c) => s + c.neto, 0);
 
-  const csvHref = `/api/pagos/reportes/csv?desde=${desde}&hasta=${hasta}${entidadId ? `&entityId=${entidadId}` : ""}${vendorFiltro ? `&vendorIds=${vendorFiltro}` : ""}`;
+  const paramsExport = `desde=${desde}&hasta=${hasta}${entidadId ? `&entityId=${entidadId}` : ""}${vendorFiltro ? `&vendorIds=${vendorFiltro}` : ""}`;
+  const csvHref = `/api/pagos/reportes/csv?${paramsExport}`;
+  const pdfHref = `/api/pagos/reportes/pdf?${paramsExport}`;
 
   return (
     <>
@@ -877,6 +909,24 @@ function ReportesTab({
           </button>
         ))}
       </div>
+
+      {periodo === "trimestre" && (
+        <div className="mb-3 flex gap-1.5">
+          <select className="vc-input flex-1" value={trimestre} onChange={(e) => setTrimestre(Number(e.target.value))}>
+            <option value={1}>Q1 — Ene a Mar</option>
+            <option value={2}>Q2 — Abr a Jun</option>
+            <option value={3}>Q3 — Jul a Sep</option>
+            <option value={4}>Q4 — Oct a Dic</option>
+          </select>
+          <input
+            className="vc-input flex-shrink-0"
+            style={{ width: 90 }}
+            type="number"
+            value={anioTrimestre}
+            onChange={(e) => setAnioTrimestre(Number(e.target.value))}
+          />
+        </div>
+      )}
 
       {periodo === "rango" && (
         <div className="mb-3 flex gap-1.5">
@@ -935,9 +985,14 @@ function ReportesTab({
         ))}
       </div>
 
-      <a href={csvHref} className="vc-btn-secondary block text-center">
-        Exportar CSV
-      </a>
+      <div className="flex gap-2">
+        <a href={pdfHref} target="_blank" rel="noopener noreferrer" className="vc-btn-secondary flex-1 text-center">
+          Exportar PDF
+        </a>
+        <a href={csvHref} className="vc-btn-secondary flex-1 text-center">
+          Exportar CSV
+        </a>
+      </div>
     </>
   );
 }
