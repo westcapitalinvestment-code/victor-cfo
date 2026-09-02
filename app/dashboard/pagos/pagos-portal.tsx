@@ -697,13 +697,35 @@ function ReportesTab({
   const hoy = hoyISO();
   const [anio, setAnio] = useState(Number(hoy.slice(0, 4)));
   const [trimestre, setTrimestre] = useState(trimestreDe(hoy));
+  // Rango personalizado (2 sept 2026, pedido de Joel: "necesito filtrar
+  // custom, lo que yo quiera") — alterna con el trimestre fijo. También
+  // filtro por contratista, para cuando solo quiere ver a uno o unos pocos.
+  const [modo, setModo] = useState<"trimestre" | "personalizado">("trimestre");
+  const [rangoDesde, setRangoDesde] = useState(`${hoy.slice(0, 4)}-01-01`);
+  const [rangoHasta, setRangoHasta] = useState(hoy);
+  const [vendorSeleccionados, setVendorSeleccionados] = useState<Set<string>>(new Set());
 
-  const { desde, hasta } = rangoTrimestre(anio, trimestre);
+  const { desde, hasta } = modo === "personalizado" ? { desde: rangoDesde, hasta: rangoHasta } : rangoTrimestre(anio, trimestre);
   const vendorPorId = useMemo(() => new Map(vendors.map((v) => [v.id, v])), [vendors]);
+  const vendorsOrdenados = useMemo(() => [...vendors].sort((a, b) => a.name.localeCompare(b.name)), [vendors]);
+
+  function toggleVendor(id: string) {
+    setVendorSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const enRango = useMemo(
-    () => retenciones.filter((r) => r.period_end && r.period_end >= desde && r.period_end <= hasta),
-    [retenciones, desde, hasta]
+    () =>
+      retenciones.filter((r) => {
+        if (!r.period_end || r.period_end < desde || r.period_end > hasta) return false;
+        if (vendorSeleccionados.size > 0 && !vendorSeleccionados.has(r.vendor_id)) return false;
+        return true;
+      }),
+    [retenciones, desde, hasta, vendorSeleccionados]
   );
 
   const porContratista = useMemo(() => {
@@ -725,29 +747,87 @@ function ReportesTab({
   const totalRetenido = porContratista.reduce((s, c) => s + c.retenido, 0);
   const totalNeto = porContratista.reduce((s, c) => s + c.neto, 0);
 
-  const csvHref = `/api/pagos/reportes/csv?desde=${desde}&hasta=${hasta}${entidadId ? `&entityId=${entidadId}` : ""}`;
+  const vendorIdsParam = vendorSeleccionados.size > 0 ? `&vendorIds=${[...vendorSeleccionados].join(",")}` : "";
+  const csvHref = `/api/pagos/reportes/csv?desde=${desde}&hasta=${hasta}${entidadId ? `&entityId=${entidadId}` : ""}${vendorIdsParam}`;
 
   return (
     <>
       <div className="vc-card mb-3">
-        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Trimestre</p>
-        <div className="flex gap-2">
-          <select className="vc-input flex-1" value={trimestre} onChange={(e) => setTrimestre(Number(e.target.value))}>
-            <option value={1}>Q1 — Ene a Mar</option>
-            <option value={2}>Q2 — Abr a Jun</option>
-            <option value={3}>Q3 — Jul a Sep</option>
-            <option value={4}>Q4 — Oct a Dic</option>
-          </select>
-          <input
-            className="vc-input flex-shrink-0"
-            style={{ width: 90 }}
-            type="number"
-            value={anio}
-            onChange={(e) => setAnio(Number(e.target.value))}
-          />
+        <div className="mb-2.5 flex" style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: 3, gap: 3 }}>
+          <button
+            className="flex-1 rounded-md py-1.5 text-xs font-medium"
+            style={{ background: modo === "trimestre" ? "var(--card)" : "none", color: modo === "trimestre" ? "#1D9E75" : "var(--muted)" }}
+            onClick={() => setModo("trimestre")}
+          >
+            Trimestre
+          </button>
+          <button
+            className="flex-1 rounded-md py-1.5 text-xs font-medium"
+            style={{ background: modo === "personalizado" ? "var(--card)" : "none", color: modo === "personalizado" ? "#1D9E75" : "var(--muted)" }}
+            onClick={() => setModo("personalizado")}
+          >
+            Personalizado
+          </button>
         </div>
+
+        {modo === "trimestre" ? (
+          <div className="flex gap-2">
+            <select className="vc-input flex-1" value={trimestre} onChange={(e) => setTrimestre(Number(e.target.value))}>
+              <option value={1}>Q1 — Ene a Mar</option>
+              <option value={2}>Q2 — Abr a Jun</option>
+              <option value={3}>Q3 — Jul a Sep</option>
+              <option value={4}>Q4 — Oct a Dic</option>
+            </select>
+            <input
+              className="vc-input flex-shrink-0"
+              style={{ width: 90 }}
+              type="number"
+              value={anio}
+              onChange={(e) => setAnio(Number(e.target.value))}
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <input type="date" className="vc-input flex-1" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} />
+            <span className="flex-shrink-0 text-xs text-muted">a</span>
+            <input type="date" className="vc-input flex-1" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} />
+          </div>
+        )}
         <p className="mt-1.5 text-xs text-muted">
           {formatFecha(desde)} — {formatFecha(hasta)}
+        </p>
+      </div>
+
+      <div className="vc-card mb-3">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs uppercase tracking-wide text-muted">Contratistas</p>
+          {vendorSeleccionados.size > 0 && (
+            <button className="text-xs font-medium text-teal hover:opacity-80" onClick={() => setVendorSeleccionados(new Set())}>
+              Ver todos
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {vendorsOrdenados.map((v) => {
+            const activo = vendorSeleccionados.has(v.id);
+            return (
+              <button
+                key={v.id}
+                onClick={() => toggleVendor(v.id)}
+                className="rounded-full border px-2.5 py-1 text-xs font-medium"
+                style={{
+                  borderColor: activo ? "#1D9E75" : "var(--border)",
+                  background: activo ? "rgba(29,158,117,0.1)" : "none",
+                  color: activo ? "#1D9E75" : "var(--muted)",
+                }}
+              >
+                {v.name}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-xs text-muted">
+          {vendorSeleccionados.size === 0 ? "Mostrando todos los contratistas." : `${vendorSeleccionados.size} seleccionado${vendorSeleccionados.size === 1 ? "" : "s"}.`}
         </p>
       </div>
 
@@ -769,7 +849,7 @@ function ReportesTab({
 
       <div className="vc-card mb-3">
         <p className="mb-2 text-xs uppercase tracking-wide text-muted">Por contratista</p>
-        {porContratista.length === 0 && <p className="text-xs text-muted">No hay pagos registrados en este trimestre.</p>}
+        {porContratista.length === 0 && <p className="text-xs text-muted">No hay pagos registrados con estos filtros.</p>}
         {porContratista.map((c) => (
           <div key={c.nombre} className="border-b border-border py-2 text-sm last:border-0">
             <div className="flex justify-between">

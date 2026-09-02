@@ -25,6 +25,11 @@ export async function GET(req: NextRequest) {
   const desde = searchParams.get("desde") || "0000-01-01";
   const hasta = searchParams.get("hasta") || new Date().toISOString().slice(0, 10);
   const entityId = searchParams.get("entityId");
+  // vendorIds (2 sept 2026, pedido de Joel: "necesito filtrar... por
+  // vendors") — lista de ids separados por coma, opcional. Sin esto se
+  // exportan todos los contratistas, igual que antes.
+  const vendorIdsParam = searchParams.get("vendorIds");
+  const vendorIds = vendorIdsParam ? vendorIdsParam.split(",").filter(Boolean) : null;
 
   let query = supabase
     .from("vendor_retenciones")
@@ -33,6 +38,7 @@ export async function GET(req: NextRequest) {
     .gte("period_end", desde)
     .lte("period_end", hasta);
   if (entityId) query = query.eq("entity_id", entityId);
+  if (vendorIds && vendorIds.length > 0) query = query.in("vendor_id", vendorIds);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
