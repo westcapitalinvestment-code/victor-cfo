@@ -180,3 +180,71 @@ export async function sendAdminInvitationEmail(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+// Envío automático de factura al cliente (3 sept 2026, pedido de Joel: "en
+// FreshBooks cuando ponía que una factura era recurrente, automáticamente
+// todos los 1 y 15 se enviaban solas") — lo llama el cron de
+// facturas-recurrentes justo después de generar la factura hija, para que
+// de verdad salga sola en vez de quedarse en borrador esperando que alguien
+// la mande a mano. Sin monto en el cuerpo, a propósito — mismo criterio que
+// ya existe en el botón "Reenviar" por WhatsApp (factura-detalle.tsx): que
+// el cliente lo descubra al abrir el PDF, no antes.
+export async function sendInvoiceEmail(params: {
+  clientEmail: string;
+  clientName: string | null;
+  entityName: string | null;
+  invoiceId: string;
+  invoiceNumber: string;
+  dueDate: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { clientEmail, clientName, entityName, invoiceId, invoiceNumber, dueDate } = params;
+  const saludoNombre = clientName || "";
+  const negocio = entityName || "";
+  const pdfUrl = `${SITE_URL}/api/facturas/${invoiceId}/pdf`;
+  const vencePart = dueDate ? ` Vence el ${new Date(`${dueDate}T00:00:00Z`).toLocaleDateString("es-PR", { timeZone: "UTC" })}.` : "";
+
+  const textoPlano =
+    `Hola${saludoNombre ? ` ${saludoNombre}` : ""},\n\n` +
+    `Aquí tienes tu factura ${invoiceNumber}${negocio ? ` de ${negocio}` : ""}.${vencePart}\n\n` +
+    `Puedes verla aquí:\n${pdfUrl}\n\n` +
+    `¡Gracias por tu confianza!\n\n` +
+    `— ${negocio || "VICTOR CFO"}\n` +
+    (negocio ? `Enviado a través de VICTOR CFO · ${SITE_URL}\n` : "");
+
+  const htmlSeguro = {
+    saludo: saludoNombre ? escapeHtml(saludoNombre) : "",
+    negocio: negocio ? escapeHtml(negocio) : "",
+    numero: escapeHtml(invoiceNumber),
+  };
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <p>Hola${htmlSeguro.saludo ? ` ${htmlSeguro.saludo}` : ""},</p>
+  <p>Aquí tienes tu factura <strong>${htmlSeguro.numero}</strong>${htmlSeguro.negocio ? ` de ${htmlSeguro.negocio}` : ""}.${vencePart}</p>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${pdfUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Ver factura</a>
+  </div>
+  <p style="font-size: 12px; color: #666;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br/><a href="${pdfUrl}" style="color: #1D9E75; word-break: break-all;">${pdfUrl}</a></p>
+  <p>¡Gracias por tu confianza!</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 11px; color: #bbb;">Enviado a través de VICTOR CFO<br/><a href="${SITE_URL}" style="color: #bbb;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: clientEmail,
+      subject: `Factura ${invoiceNumber}${negocio ? ` de ${negocio}` : ""}`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
