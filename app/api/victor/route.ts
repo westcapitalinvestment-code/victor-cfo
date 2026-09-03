@@ -204,18 +204,20 @@ export async function POST(req: NextRequest) {
   // costo real sin que nadie se entere hasta la factura. El founder queda
   // exento porque necesita poder probar la app libremente — su uso sí se
   // sigue registrando más abajo, solo no lo bloquea.
-  // Cifras actualizadas (30 agosto 2026) tras BAJAR Core de $19.99 a
-  // $14.99/mes (decisión de Joel, de cara al lanzamiento de "familiares
-  // gratis" — #192). Cálculo de margen para Core: $14.99 ingreso − $7.50
-  // tope de IA − $2.00 Plaid − ~$0.73 fees de Stripe (2.9%+$0.30) = $4.76
-  // de ganancia ≈ 32% de margen, en el peor caso (usuario que pega justo
-  // en el tope todos los meses) — bajó bastante del 48% que daba a
-  // $19.99, porque el tope de IA y Plaid NO bajaron con el precio. Con el
-  // fix de caché puesto, un usuario activo normal debería quedar bien por
-  // debajo del tope. Pro y Pro+ se quedan con sus números viejos por ahora
-  // — no son comprables todavía (PRO_DISPONIBLE = false), así que no urge
-  // recalcularlos. Si en la práctica Core se acerca seguido al tope, hay
-  // que subir el número — no es una talla única para siempre.
+  // Cifras actualizadas (3 sept 2026, decisión de Joel — Pro ya destapado y
+  // comprable, Enterprise/Custom sigue bloqueado así que solo existen 2
+  // niveles reales: Core y Pro).
+  // Core: $14.99 ingreso − $7.50 tope de IA − $2.00 Plaid − ~$0.73 fees de
+  // Stripe (2.9%+$0.30) = $4.76 de ganancia ≈ 32% de margen, en el peor
+  // caso (usuario que pega justo en el tope todos los meses). Con el fix
+  // de caché puesto, un usuario activo normal debería quedar bien por
+  // debajo del tope.
+  // Pro: $49.99 ingreso − $15.00 tope de IA − $2.00 Plaid − ~$1.75 fees de
+  // Stripe = $31.24 de ganancia ≈ 62% de margen, en el mismo peor caso —
+  // sin contar todavía el revenue extra de los addons (Admin/Secretaria,
+  // Técnicos, Entidades). Si en la práctica alguno de los dos se acerca
+  // seguido al tope, hay que subir el número — no es una talla única para
+  // siempre.
   //
   // SOLO 2 niveles, NUNCA un bloqueo total — Joel fue explícito: cortarle
   // el acceso del todo a un usuario real es lo que hace que cancele, así
@@ -238,13 +240,16 @@ export async function POST(req: NextRequest) {
   // "aviso" o "normal" más adelante sin que nadie tenga que intervenir —
   // por diseño, no debería ser posible llegar al límite mensual completo
   // a mitad de mes precisamente porque este ritmo diario ya lo frena antes.
-  const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 750, pro: 620, proplus: 1033 };
+  const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 750, pro: 1500 };
   // Piso mínimo de presupuesto para los primeros días de CUALQUIER ciclo
   // (protege la conversación de onboarding, la más pesada de toda la
   // relación) — deja de importar apenas el ritmo-parejo lo supere solo
   // (día ~5 de un ciclo de 31 días con el tope de Core).
   const PRESUPUESTO_MINIMO_CENTAVOS = 100;
-  const SIGUIENTE_PLAN: Record<string, string | null> = { core: "VICTOR Pro", pro: "VICTOR Pro+", proplus: null };
+  // Solo Core → Pro es una subida real hoy — Enterprise/Custom no se
+  // vende, así que un usuario Pro que choque el tope no tiene a dónde
+  // "subir" (cae al mensaje genérico de contactar soporte).
+  const SIGUIENTE_PLAN: Record<string, string | null> = { core: "VICTOR Pro", pro: null };
 
   // El ritmo-parejo se ancla al CICLO DE FACTURACIÓN REAL de Stripe
   // (ciclo_inicio/ciclo_fin, guardados por el webhook en cada activación o
