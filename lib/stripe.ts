@@ -115,6 +115,14 @@ export function priceIdAddonAdministrador(): string | null {
   return process.env.STRIPE_PRICE_ADDON_ADMINISTRADOR || null;
 }
 
+// Addon "Entidad adicional" — 3 sept 2026, migración 0063 ($24.99/mes POR
+// SEAT, mismo patrón que Secretaria/Administrador). La primera entidad de
+// negocio va incluida en Pro; cada entidad activa adicional a esa se
+// factura aparte. Ver app/api/stripe/addon-entidades/sincronizar.
+export function priceIdAddonEntidadAdicional(): string | null {
+  return process.env.STRIPE_PRICE_ADDON_ENTIDAD || null;
+}
+
 export function esCicloValido(valor: unknown): valor is Ciclo {
   return valor === "mensual" || valor === "anual";
 }

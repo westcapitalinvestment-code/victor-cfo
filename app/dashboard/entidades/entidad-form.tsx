@@ -234,6 +234,16 @@ export default function EntidadForm({
       setError(insertError?.message ?? "No se pudo crear el negocio.");
       return;
     }
+    // Si esta NO es la primera entidad, hay que cobrar el addon de $24.99/mes
+    // (migración 0063) — se sincroniza después de crear, no antes, porque la
+    // cantidad real (entidades activas - 1) ya cambió con este insert. Se
+    // dispara sin bloquear la navegación: si Stripe falla por lo que sea, la
+    // entidad ya quedó creada de todos modos — mejor que el usuario pueda
+    // seguir trabajando y que esto se reconcilie en el próximo intento
+    // (ej. al crear otra entidad) que dejarlo atascado en este formulario.
+    if (!esPrimeraEntidad) {
+      fetch("/api/stripe/addon-entidades/sincronizar", { method: "POST" }).catch(() => {});
+    }
     // Al logo y al certificado de relevo les hace falta un id real de
     // entidad para subirse (ver LogoUploader y el input de relevo arriba,
     // ambos deshabilitados en modo "crear") — por eso, en vez de mandar
