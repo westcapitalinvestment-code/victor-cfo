@@ -315,23 +315,40 @@ export default function AdminPortal({
             finanzas personales ni el total del negocio.
           </p>
           <div className="mb-4 grid w-full max-w-md grid-cols-2 gap-2.5">
-            {NIVELES.map((n) => (
-              <div key={n.id} className="flex flex-col rounded-xl border border-border p-3.5 text-left">
-                <span className="text-xs font-medium">{n.label}</span>
-                <span className="mb-1.5 text-sm font-medium">
-                  {n.precio.split("/")[0]}
-                  <span className="text-xs text-muted">/{n.precio.split("/")[1]}</span>
-                </span>
-                <p className="mb-3 flex-1 text-xs text-muted">{n.descripcion}</p>
+            {NIVELES.map((n) => {
+              const seleccionado = tierInicialModal === n.id;
+              return (
                 <button
-                  className="flex items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
-                  onClick={() => abrirModalConTier(n.id)}
+                  key={n.id}
+                  type="button"
+                  onClick={() => setTierInicialModal(n.id)}
+                  className="flex flex-col rounded-xl border-2 p-3.5 text-left transition-colors"
+                  style={
+                    seleccionado
+                      ? { borderColor: "#1D9E75", background: "rgba(29,158,117,.08)" }
+                      : { borderColor: "var(--border)" }
+                  }
                 >
-                  <i className="ti ti-lock" style={{ fontSize: 12 }} /> Elegir {n.label}
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className={`text-xs font-medium ${seleccionado ? "text-teal" : ""}`}>{n.label}</span>
+                    {seleccionado && <i className="ti ti-circle-check text-teal" style={{ fontSize: 15 }} />}
+                  </div>
+                  <span className="mb-1.5 text-sm font-medium">
+                    {n.precio.split("/")[0]}
+                    <span className="text-xs text-muted">/{n.precio.split("/")[1]}</span>
+                  </span>
+                  <p className="text-xs text-muted">{n.descripcion}</p>
                 </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
+          <button
+            className="vc-btn-primary mb-4 flex items-center justify-center gap-1"
+            style={{ width: "auto" }}
+            onClick={() => setModalAbierto(true)}
+          >
+            <i className="ti ti-lock" /> Añadir {tierInicialModal === "administrador" ? "Administrador" : "Secretaria"}
+          </button>
           <ul className="flex flex-col gap-1 text-xs text-muted">
             <li>✓ Login propio — nunca tus credenciales</li>
             <li>✓ Permisos granulares por persona</li>
