@@ -679,6 +679,28 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: "consultar_manual",
+    description:
+      "Busca en el manual de usuario real de VICTOR CFO (guardado en la base de datos, se actualiza con " +
+      "cada feature nueva) cómo funciona una parte de la app que no domines con certeza — sobre todo módulos " +
+      "menos comunes como Admin/Secretaria, Equipo (técnicos), Facturación, Pagos, etc. Úsala ANTES de " +
+      "explicarle al usuario cómo usar una pantalla o botón si no estás 100% seguro del flujo exacto (nombres " +
+      "de botones, costos de addons, permisos) — es mejor buscar y confirmar que adivinar o inventar pasos " +
+      "que no existen en la app real. Si no encuentra nada relacionado, dice la verdad: que no tiene esa " +
+      "parte documentada todavía, en vez de inventar una respuesta.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tema: {
+          type: "string",
+          description:
+            "Qué quieres buscar, en pocas palabras (ej. 'admin secretaria', 'técnicos equipo', 'facturas recurrentes', 'addon pagos').",
+        },
+      },
+      required: ["tema"],
+    },
+  },
 ];
 
 type ToolResult = { ok: boolean; message: string };
@@ -2227,6 +2249,48 @@ export async function executeVictorTool(
       const { error } = await supabase.from("user_profiles").update(patch).eq("id", ownerId);
       if (error) return { ok: false, message: `No se pudo guardar el perfil: ${error.message}` };
       return { ok: true, message: "Perfil de onboarding guardado." };
+    }
+
+    case "consultar_manual": {
+      // Manual real de VICTOR CFO, guardado en manual_articulos (migración
+      // 0060, 3 sept 2026, pedido de Joel: "hay que hacer un manual de
+      // usuario de lo que tenemos y subirlo para que Victor tenga los
+      // detalles"). Búsqueda simple por palabras clave contra slug/titulo/
+      // resumen/contenido — no hace falta nada más sofisticado para el
+      // volumen de artículos que va a tener esto. Tabla de lectura pública
+      // (no depende de ownerId) — es documentación del producto, no datos
+      // del usuario.
+      const tema = String(input.tema ?? "").trim();
+      if (!tema) return { ok: false, message: "Falta el tema a buscar en el manual." };
+
+      const palabras = palabrasClave(tema);
+      const terminos = palabras.length > 0 ? palabras : [tema.toLowerCase()];
+      const orFiltro = terminos
+        .flatMap((p) => [`slug.ilike.%${p}%`, `titulo.ilike.%${p}%`, `resumen.ilike.%${p}%`, `contenido.ilike.%${p}%`])
+        .join(",");
+
+      const { data: articulos, error } = await supabase
+        .from("manual_articulos")
+        .select("slug, titulo, contenido")
+        .or(orFiltro)
+        .limit(3);
+
+      if (error) return { ok: false, message: `No se pudo buscar en el manual: ${error.message}` };
+      if (!articulos || articulos.length === 0) {
+        return {
+          ok: true,
+          message: `No hay ningún artículo del manual sobre "${tema}" todavía — dile al usuario con honestidad que esa parte no está documentada por ahora, en vez de inventar cómo funciona.`,
+        };
+      }
+      if (articulos.length === 1) {
+        return { ok: true, message: `${articulos[0].titulo}:\n\n${articulos[0].contenido}` };
+      }
+      return {
+        ok: true,
+        message: articulos
+          .map((a) => `### ${a.titulo}\n${a.contenido}`)
+          .join("\n\n---\n\n"),
+      };
     }
 
     default:
