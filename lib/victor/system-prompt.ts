@@ -46,7 +46,12 @@ export function buildUserContextBlock(params: {
     tieneHijos: boolean | null;
     hijosDetalle: string | null;
   } | null;
-  entidadesNegocio?: { name: string; entityType: string | null }[] | null;
+  entidadesNegocio?: {
+    name: string;
+    entityType: string | null;
+    athMovilBusinessPath: string | null;
+    cuentasConectadas: string[];
+  }[] | null;
 }): string {
   const { fullName, plan, planStatus, memorySummary, goals, activeStrategies, isFounder, esSaludoDiario, liveGoals, finanzas, onboardingProfile, entidadesNegocio } = params;
 
@@ -281,11 +286,28 @@ export function buildUserContextBlock(params: {
   if (entidadesNegocio && entidadesNegocio.length > 0) {
     lines.push(
       "",
-      "Entidades de negocio activas del usuario (tipo de contribuyente tal como lo",
-      "escogió al crear la entidad — úsalo para la Regla 6 del Estratega, Perfil 1:",
-      "retiro de dueño vs. salario, y para sugerir a qué cuenta pedirle a un cliente",
-      "que pague en vez de a la personal — nunca lo asumas ni lo inventes):",
-      entidadesNegocio.map((e) => `  - "${e.name}": tipo de contribuyente = ${e.entityType ?? "no especificado"}`).join("\n")
+      "Entidades de negocio activas del usuario — tipo de contribuyente para la",
+      "Regla 6 del Estratega (Perfil 1, retiro de dueño vs. salario), y a QUÉ",
+      "cuenta o pATH real pedirle a un cliente que pague en vez de a la personal.",
+      "IMPORTANTE: si aquí abajo ya aparece una cuenta conectada o un pATH para",
+      "la entidad, esa entidad YA TIENE forma de recibir pagos de negocio — NUNCA",
+      "digas que el usuario 'necesita conseguir/abrir una cuenta de negocio', dile",
+      "que use la que ya tiene, por su nombre exacto. Solo sugiere conectar o",
+      "configurar una nueva si de verdad no hay ninguna cuenta ni pATH listado:",
+      entidadesNegocio
+        .map((e) => {
+          const partes = [`tipo de contribuyente = ${e.entityType ?? "no especificado"}`];
+          partes.push(
+            e.cuentasConectadas.length > 0
+              ? `cuenta(s) de negocio ya conectada(s) = ${e.cuentasConectadas.join(", ")}`
+              : "sin cuenta de negocio conectada todavía"
+          );
+          partes.push(
+            e.athMovilBusinessPath ? `pATH de ATH Móvil Business = ${e.athMovilBusinessPath}` : "sin pATH de ATH Móvil Business configurado"
+          );
+          return `  - "${e.name}": ${partes.join(" · ")}`;
+        })
+        .join("\n")
     );
   }
 

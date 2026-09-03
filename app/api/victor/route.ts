@@ -400,16 +400,39 @@ export async function POST(req: NextRequest) {
     .limit(1)
     .maybeSingle();
 
-  // Entidades de negocio activas — solo el tipo de contribuyente (Individuo,
-  // LLC de un miembro, Corporación, Profesional independiente), para que
-  // VICTOR pueda explicar retiro de dueño vs. salario (Regla 6, Estratega
-  // Perfil 1) sin tener que preguntarlo cada vez que sale el tema. Vacío
-  // para Core (la creación de entidades es Pro) — la query no hace daño.
+  // Entidades de negocio activas — tipo de contribuyente (Individuo, LLC de
+  // un miembro, Corporación, Profesional independiente) para explicar
+  // retiro de dueño vs. salario (Regla 6, Estratega Perfil 1), MÁS el pATH
+  // de ATH Móvil Business (0052) y las cuentas ya conectadas — sin esto
+  // VICTOR sugiere genéricamente "consigue una cuenta a nombre de [entidad]"
+  // aunque el usuario YA tenga una conectada, que fue justo el bug real que
+  // Joel reportó (2 sept 2026): le pedía separar el negocio de lo personal
+  // sin saber que la cuenta de VIP Medical ya estaba en la app. Vacío para
+  // Core (la creación de entidades es Pro) — la query no hace daño.
   const { data: entidadesNegocioRaw } = await supabase
     .from("business_entities")
-    .select("name, entity_type")
+    .select("id, name, entity_type, ath_movil_business_path")
     .eq("owner_id", user.id)
     .eq("active", true);
+
+  // Cuentas Plaid ya asignadas a una entidad específica (entity_id real,
+  // asignado por /api/plaid/asignar-entidad-cuenta) — atribución exacta.
+  const entidadIds = (entidadesNegocioRaw ?? []).map((e) => e.id);
+  const { data: cuentasPlaidPorEntidad } =
+    entidadIds.length > 0
+      ? await supabase.from("plaid_accounts").select("name, entity_id").eq("owner_id", user.id).in("entity_id", entidadIds)
+      : { data: [] as { name: string; entity_id: string | null }[] };
+
+  // Cuentas manuales de negocio (ej. Apple Card, o un checking que Joel
+  // metió a mano) — manual_accounts NUNCA tuvo columna entity_id, solo un
+  // booleano es_negocio global por usuario. Con 1 sola entidad activa la
+  // atribución es segura (todo lo que es_negocio=true es de esa entidad);
+  // con 2+ entidades no hay forma de saber de cuál es cada una, así que se
+  // omiten para no atribuir mal — VICTOR no debe inventar a cuál pertenece.
+  const { data: cuentasManualesNegocio } =
+    entidadIds.length === 1
+      ? await supabase.from("manual_accounts").select("name").eq("owner_id", user.id).eq("es_negocio", true)
+      : { data: [] as { name: string }[] };
 
   const [{ data: cuentasPlaid }, { data: cuentasManuales }] = await Promise.all([cuentasQuery, manualesQuery]);
   const todasLasCuentas = [...(cuentasPlaid ?? []), ...(cuentasManuales ?? [])];
@@ -458,7 +481,19 @@ export async function POST(req: NextRequest) {
           hijosDetalle: onboardingProfile.hijos_detalle,
         }
       : null,
-    entidadesNegocio: (entidadesNegocioRaw ?? []).map((e) => ({ name: e.name, entityType: e.entity_type })),
+    entidadesNegocio: (entidadesNegocioRaw ?? []).map((e) => {
+      const cuentasPlaid = (cuentasPlaidPorEntidad ?? []).filter((c) => c.entity_id === e.id).map((c) => c.name);
+      // Las manuales solo se atribuyeron a esta entidad si es la ÚNICA
+      // entidad activa (ver comentario arriba de la query) — mismo caso
+      // (entidadIds.length === 1) implica que esta es esa única entidad.
+      const cuentasManuales = entidadIds.length === 1 ? (cuentasManualesNegocio ?? []).map((c) => c.name) : [];
+      return {
+        name: e.name,
+        entityType: e.entity_type,
+        athMovilBusinessPath: e.ath_movil_business_path,
+        cuentasConectadas: [...cuentasPlaid, ...cuentasManuales],
+      };
+    }),
   });
 
   const systemPrompt = getVictorBasePrompt();
