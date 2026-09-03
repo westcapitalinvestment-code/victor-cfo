@@ -15,13 +15,14 @@ import { esPlanValido, esCicloValido, type PlanId, type Ciclo } from "@/lib/stri
 // A diferencia de /registro, aquí el usuario YA tiene sesión de Supabase
 // (si no la tuviera, el middleware ya lo hubiera mandado a /login antes de
 // llegar a /dashboard) — así que el botón puede llamar al checkout directo.
-// disponible: false → Pro y Enterprise todavía no tienen Price en Stripe
-// (mismo criterio que app/landing-pricing.tsx y app/dashboard/pro-paywall.tsx
-// — "Los 3 planes" ya están en el código, pero solo Core cobra de verdad
-// hasta que Joel cree los otros dos Price en Stripe Dashboard).
+// disponible: false → Enterprise (proplus) sigue bloqueado — no es
+// autoservicio, es el nivel que Joel vende a mano por fuera. Core y Pro ya
+// tienen sus Price ID reales en Stripe (Pro destapado el 3 sept 2026), así
+// que ambos son comprables aquí (mismo criterio que app/landing-pricing.tsx
+// y app/dashboard/pro-paywall.tsx).
 const PLANES: { id: PlanId; nombre: string; precioMensual: string; precioAnual: string; disponible: boolean }[] = [
   { id: "core", nombre: "VICTOR Core", precioMensual: "$14.99/mes", precioAnual: "$164/año", disponible: true },
-  { id: "pro", nombre: "VICTOR Pro", precioMensual: "$49.99/mes", precioAnual: "$549/año", disponible: false },
+  { id: "pro", nombre: "VICTOR Pro", precioMensual: "$49.99/mes", precioAnual: "$549/año", disponible: true },
   { id: "proplus", nombre: "VICTOR Enterprise", precioMensual: "$99.99/mes", precioAnual: "$1,099/año", disponible: false },
 ];
 
@@ -32,9 +33,9 @@ function CompletarPagoForm() {
   const planQuery = searchParams.get("plan");
   const cicloQuery = searchParams.get("ciclo");
 
-  // Si alguien llega con ?plan=pro (ej. un link viejo), lo forzamos a Core
-  // porque Pro todavía no es comprable — no tiene sentido dejarlo
-  // "seleccionado" en un plan que el botón de pagar no puede procesar.
+  // Si alguien llega con ?plan=proplus (Enterprise, no autoservicio), lo
+  // dejamos en Core en vez de "seleccionado" en un plan que el botón de
+  // pagar no puede procesar. Core y Pro sí pasan directo.
   const planInicial = esPlanValido(planQuery) && PLANES.find((p) => p.id === planQuery)?.disponible ? planQuery : "core";
   const [plan, setPlan] = useState<PlanId>(planInicial);
   const [ciclo, setCiclo] = useState<Ciclo>(esCicloValido(cicloQuery) ? cicloQuery : "mensual");

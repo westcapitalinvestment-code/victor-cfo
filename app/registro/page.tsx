@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { esPlanValido, esCicloValido, type PlanId, type Ciclo } from "@/lib/stripe";
+import { esCicloValido, type Ciclo } from "@/lib/stripe";
 
 // Registro real — esto es lo que faltaba para que el landing page
 // (victorcfo.com) pueda mandar gente nueva a crear cuenta de verdad.
@@ -34,10 +34,24 @@ import { esPlanValido, esCicloValido, type PlanId, type Ciclo } from "@/lib/stri
 // ref_id se manda en signUp({ options: { data: {...} } }) para que el
 // trigger handle_new_user (0031) lo guarde en users.referred_by ANTES de
 // que exista sesión autenticada — no hace falta un UPDATE después.
+//
+// Pro destapado (3 sept 2026): ya tiene los 6 Price ID reales en Stripe, así
+// que dejó de forzarse todo a Core. Pro NO tiene precio de referido aparte
+// (a diferencia de Core) — su beneficio de referido es un trial de 30 días
+// sobre el mismo Price (ver app/api/stripe/checkout/route.ts,
+// esReferidoProConTrial), así que el mensaje en pantalla para Pro+referido
+// es "primer mes gratis", no un precio tachado. Enterprise (proplus) sigue
+// bloqueado — no aparece aquí como opción.
 const PRECIOS_REGISTRO = {
-  mensual: { normal: "14.99", referido: "12.99", sufijo: "/mes" },
-  anual: { normal: "164", referido: "142", sufijo: "/año" },
-};
+  core: {
+    mensual: { normal: "14.99", referido: "12.99", sufijo: "/mes" },
+    anual: { normal: "164", referido: "142", sufijo: "/año" },
+  },
+  pro: {
+    mensual: { normal: "49.99", sufijo: "/mes" },
+    anual: { normal: "549", sufijo: "/año" },
+  },
+} as const;
 
 // Validación básica de forma de UUID — solo para decidir qué precio
 // MOSTRAR en pantalla. La validación real (que ese uuid sea de verdad un
@@ -54,16 +68,22 @@ function RegistroForm() {
   const planQuery = searchParams.get("plan");
   const cicloQuery = searchParams.get("ciclo");
   const refQuery = searchParams.get("ref");
-  // Solo Core es comprable hoy (Pro y Enterprise: "Próximamente" hasta que
-  // Joel cree esos Price en Stripe) — si alguien llega con ?plan=pro por un
-  // link viejo o escrito a mano, lo forzamos a Core en vez de dejarlo pagar
-  // un plan que ni siquiera tiene Price ID configurado.
-  const plan: PlanId = esPlanValido(planQuery) && planQuery === "core" ? planQuery : "core";
+  // Core y Pro son comprables hoy (Pro destapado el 3 sept 2026 — ya tiene
+  // los 6 Price ID en Stripe). Enterprise (proplus) sigue bloqueado, así que
+  // si alguien llega con ?plan=proplus lo dejamos en Core, no en un plan sin
+  // Price ID real. ?plan=pro sí pasa directo.
+  const planInicial: "core" | "pro" = planQuery === "pro" ? "pro" : "core";
   const ciclo: Ciclo = esCicloValido(cicloQuery) ? cicloQuery : "mensual";
   const refId = refQuery && UUID_RE.test(refQuery) ? refQuery : null;
   const esReferido = !!refId;
-  const precios = PRECIOS_REGISTRO[ciclo];
-  const precioMostrar = esReferido ? precios.referido : precios.normal;
+
+  const [plan, setPlan] = useState<"core" | "pro">(planInicial);
+  const precios = PRECIOS_REGISTRO[plan][ciclo];
+  // Pro no tiene precio de referido aparte (su beneficio es un trial de 30
+  // días sobre el mismo Price, ver esReferidoProConTrial en
+  // /api/stripe/checkout) — solo Core muestra el precio tachado.
+  const esReferidoConDescuento = plan === "core" && esReferido;
+  const precioMostrar = esReferidoConDescuento ? (precios as { normal: string; referido: string }).referido : precios.normal;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -192,20 +212,49 @@ function RegistroForm() {
         <form onSubmit={handleRegistro} className="vc-card flex flex-col gap-3">
           <h1 className="mb-1 text-base font-medium">Comienza ahora</h1>
 
-          {esReferido && (
+          <div className="mb-1 flex gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => setPlan("core")}
+              className={`flex-1 rounded-lg border p-2 font-medium ${plan === "core" ? "border-teal text-teal" : "border-border text-muted"}`}
+            >
+              Core
+            </button>
+            <button
+              type="button"
+              onClick={() => setPlan("pro")}
+              className={`flex-1 rounded-lg border p-2 font-medium ${plan === "pro" ? "border-teal text-teal" : "border-border text-muted"}`}
+            >
+              Pro (negocio)
+            </button>
+          </div>
+
+          {esReferido && plan === "core" && (
             <p className="mb-1 text-xs font-medium text-teal">
               Te invitaron con un link especial — precio de referido aplicado.
+            </p>
+          )}
+          {esReferido && plan === "pro" && (
+            <p className="mb-1 text-xs font-medium text-teal">
+              Te invitaron con un link especial — tu primer mes de Pro es gratis.
             </p>
           )}
 
           <div className="mb-1 flex items-baseline gap-1">
             <span className="text-2xl font-semibold">${precioMostrar}</span>
             <span className="text-xs text-muted">{precios.sufijo}</span>
-            {esReferido && (
-              <span className="ml-1 text-xs text-muted line-through">${precios.normal}{precios.sufijo}</span>
+            {esReferidoConDescuento && (
+              <span className="ml-1 text-xs text-muted line-through">
+                ${(precios as { normal: string; referido: string }).normal}
+                {precios.sufijo}
+              </span>
             )}
           </div>
-          <p className="mb-1 text-xs text-muted">Acceso completo: banco conectado + VICTOR. Cancela cuando quieras.</p>
+          <p className="mb-1 text-xs text-muted">
+            {plan === "pro"
+              ? "Negocio + personal en un solo lugar: facturación, pagos y VICTOR. Cancela cuando quieras."
+              : "Acceso completo: banco conectado + VICTOR. Cancela cuando quieras."}
+          </p>
 
           <input
             className="vc-input"

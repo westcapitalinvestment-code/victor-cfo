@@ -12,9 +12,17 @@ import styles from "./landing.module.css";
 // Anual = 11 meses (se paga 11, se usan 12 — "1 mes gratis"). Core bajó de
 // $19.99 a $14.99/mes (30 agosto 2026, decisión de Joel) — mismo redondeo
 // hacia abajo al dólar entero de siempre: 14.99*11 = 164.89 → 164.
+//
+// Pro ya es comprable (3 sept 2026, los 6 Price ID de Stripe están creados)
+// — se destapó el CTA y se quitó el badge "Próximamente". Enterprise (antes
+// Pro+) NO se vende — Joel fue explícito en que ahora es un nivel bloqueado,
+// y sus features "exclusivas" (facturación, ATH Móvil, tracking de cobros)
+// en realidad ya viven en Pro (ver app/dashboard/facturacion/page.tsx y
+// app/dashboard/pagos/page.tsx: gating es plan==='pro'||'proplus'), así que
+// mantener la tarjeta Enterprise era engañoso — se quitó del landing.
 const PRECIOS = {
-  mensual: { core: "14", coreSuf: ".99/mes", pro: "49", proSuf: ".99/mes", proplus: "99", proplusSuf: ".99/mes" },
-  anual: { core: "164", coreSuf: "/año", pro: "549", proSuf: "/año", proplus: "1099", proplusSuf: "/año" },
+  mensual: { core: "14", coreSuf: ".99/mes", pro: "49", proSuf: ".99/mes" },
+  anual: { core: "164", coreSuf: "/año", pro: "549", proSuf: "/año" },
 };
 
 export default function LandingPricing() {
@@ -112,13 +120,8 @@ export default function LandingPricing() {
         <div className={`${styles.priceCard} ${styles.priceCardFeatured}`}>
           <div className={styles.featuredBadge}>MÁS POPULAR</div>
           <div className={styles.priceTier}>NEGOCIO</div>
-          <div className={styles.priceName}>
-            VICTOR Pro
-            <div style={{ fontSize: "0.7rem", color: "var(--teal-mid)", fontWeight: 600, marginTop: "0.2rem" }}>
-              Próximamente
-            </div>
-          </div>
-          <p className={styles.priceDesc}>Para el dueño de negocio que quiere controlar todo — negocio y personal — en un solo lugar.</p>
+          <div className={styles.priceName}>VICTOR Pro</div>
+          <p className={styles.priceDesc}>Para el dueño de negocio que quiere controlar todo — negocio y personal, facturar y cobrar — en un solo lugar.</p>
           <div className={styles.priceAmount}>
             <sup>$</sup>
             <span>{p.pro}</span>
@@ -127,50 +130,20 @@ export default function LandingPricing() {
           <hr className={styles.priceDivider} />
           <ul className={styles.priceFeatures}>
             <li>Todo lo del Core</li>
-            <li>Dashboard negocio + personal separados</li>
-            <li>Múltiples cuentas bancarias</li>
-            <li>Categorización negocio vs personal</li>
+            <li>Dashboard de negocio separado del personal</li>
+            <li>Facturación profesional con tu logo — cotizaciones, catálogo de servicios y facturas recurrentes</li>
+            <li>Cobra por WhatsApp, ATH Móvil Business, tarjeta o transferencia</li>
+            <li>Tracking de facturas pagadas y pendientes, con alertas de cobros atrasados</li>
+            <li>Paga contratistas con retención 480.6 automática y reporte trimestral</li>
+            <li>Bóveda, Metas y Cuentas separadas para tu negocio</li>
+            <li>VICTOR te guía en retiro de dueño, IVU y créditos ante Hacienda</li>
             <li>Reportes listos para tu CPA</li>
-            <li>Historial financiero ilimitado</li>
-            <li>Invita a tu secretaria o técnicos (addon)</li>
-            <li>Conecta múltiples entidades de negocio (addon)</li>
+            <li>Invita a tu secretaria, administrador o técnicos de campo (addon)</li>
+            <li>Conecta entidades de negocio adicionales (addon)</li>
           </ul>
-          <span
-            className={styles.priceCta}
-            style={{ background: "var(--border)", color: "var(--muted)", cursor: "default" }}
-          >
-            Próximamente
-          </span>
-        </div>
-
-        <div className={styles.priceCard}>
-          <div className={styles.priceTier}>ENTERPRISE</div>
-          <div className={styles.priceName}>
-            VICTOR Enterprise
-            <div style={{ fontSize: "0.7rem", color: "var(--teal-mid)", fontWeight: 600, marginTop: "0.2rem" }}>
-              Próximamente
-            </div>
-          </div>
-          <p className={styles.priceDesc}>Para el negocio que además quiere facturar y cobrar a sus propios clientes.</p>
-          <div className={styles.priceAmount}>
-            <sup>$</sup>
-            <span>{p.proplus}</span>
-            <span className={styles.mo}>{p.proplusSuf}</span>
-          </div>
-          <hr className={styles.priceDivider} />
-          <ul className={styles.priceFeatures}>
-            <li>Todo lo del Pro</li>
-            <li>Facturación profesional con tu logo</li>
-            <li>Cobra por ATH Móvil, tarjeta o transferencia</li>
-            <li>Tracking de facturas pagadas y pendientes</li>
-            <li>Alertas automáticas de cobros atrasados</li>
-          </ul>
-          <span
-            className={styles.priceCta}
-            style={{ background: "var(--border)", color: "var(--muted)", cursor: "default" }}
-          >
-            Próximamente
-          </span>
+          <Link href={`/registro?plan=pro&ciclo=${anual ? "anual" : "mensual"}`} className={`${styles.priceCta} ${styles.ctaFilled}`}>
+            Comienza ahora
+          </Link>
         </div>
       </div>
 
