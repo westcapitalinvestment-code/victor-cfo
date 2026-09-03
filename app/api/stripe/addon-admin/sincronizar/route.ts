@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getStripe, priceIdAddonAdmin, priceIdAddonAdministrador } from "@/lib/stripe";
+import { getStripe, priceIdAddonSecretaria, priceIdAddonAdministrador } from "@/lib/stripe";
 
 // Sincroniza los subscription items de Admin/Secretaria en Stripe con la
 // cantidad real de "seats" en uso — a diferencia del addon Técnicos (precio
@@ -135,7 +135,7 @@ export async function POST() {
         statusCol: "addon_admin_status",
         itemIdCol: "addon_admin_item_id",
         seatsCol: "addon_admin_seats",
-        priceId: priceIdAddonAdmin(),
+        priceId: priceIdAddonSecretaria(),
       }),
       sincronizarNivel(supabase, user.id, perfil, seatsAdministrador, {
         nivel: "administrador",

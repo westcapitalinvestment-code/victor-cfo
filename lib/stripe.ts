@@ -81,12 +81,16 @@ export function priceIdAddonTecnicos(): string | null {
   return process.env.STRIPE_PRICE_ADDON_TECNICOS || null;
 }
 
-// Addon "Admin/Secretaria" — 2 sept 2026, pedido de Joel: $10.00/mes POR
-// SEAT (a diferencia de Técnicos, que es un precio plano hasta 3). La
-// cantidad del subscription item se sincroniza con la cantidad de admins
-// activos + invitaciones pendientes — ver /api/stripe/addon-admin/sincronizar.
-export function priceIdAddonAdmin(): string | null {
-  return process.env.STRIPE_PRICE_ADDON_ADMIN || null;
+// Addon "Secretaria" — 2 sept 2026, pedido de Joel: $10.00/mes POR SEAT (a
+// diferencia de Técnicos, que es un precio plano hasta 3). La cantidad del
+// subscription item se sincroniza con la cantidad de secretarias activas +
+// invitaciones pendientes — ver /api/stripe/addon-admin/sincronizar.
+// Renombrado de STRIPE_PRICE_ADDON_ADMIN a STRIPE_PRICE_ADDON_SECRE (2 sept
+// 2026, pedido de Joel: "se puede confundir si los dos se llaman Admin o
+// parecidos" — con el nivel Administrador nuevo, dos variables casi
+// idénticas invitaban a poner el Price ID equivocado en la equivocada).
+export function priceIdAddonSecretaria(): string | null {
+  return process.env.STRIPE_PRICE_ADDON_SECRE || null;
 }
 
 // Addon "Administrador" — 2 sept 2026, nivel ampliado ($20.00/mes POR SEAT,
