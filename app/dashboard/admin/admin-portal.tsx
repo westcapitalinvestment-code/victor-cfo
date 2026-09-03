@@ -155,6 +155,12 @@ export default function AdminPortal({
   const [guardado, setGuardado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
+  const [tierInicialModal, setTierInicialModal] = useState<AdminTier>("secretaria");
+
+  function abrirModalConTier(tier: AdminTier) {
+    setTierInicialModal(tier);
+    setModalAbierto(true);
+  }
   const [confirmarBorrar, setConfirmarBorrar] = useState<string | null>(null);
 
   const seatsActuales = items.length;
@@ -308,34 +314,40 @@ export default function AdminPortal({
             Dale acceso a tu secretaria o administrador para crear facturas y registrar cobros — sin ver tus
             finanzas personales ni el total del negocio.
           </p>
-          <div className="mb-4 flex w-full max-w-xs flex-col gap-2">
-            <div className="rounded-xl border border-border p-3.5 text-left">
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-xs font-medium">Secretaria</span>
-                <span className="text-sm font-medium">
-                  $10<span className="text-xs text-muted">/mes</span>
-                </span>
-              </div>
-              <p className="text-xs text-muted">Facturación, clientes y cobros.</p>
+          <div className="mb-4 grid w-full max-w-md grid-cols-2 gap-2.5">
+            <div className="flex flex-col rounded-xl border border-border p-3.5 text-left">
+              <span className="text-xs font-medium">Secretaria</span>
+              <span className="mb-1.5 text-sm font-medium">
+                $10<span className="text-xs text-muted">/mes</span>
+              </span>
+              <p className="mb-3 flex-1 text-xs text-muted">Facturación, clientes y cobros.</p>
+              <button
+                className="flex items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+                onClick={() => abrirModalConTier("secretaria")}
+              >
+                <i className="ti ti-lock" style={{ fontSize: 12 }} /> Elegir
+              </button>
             </div>
-            <div className="rounded-xl border border-teal p-3.5 text-left">
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-xs font-medium text-teal">Administrador</span>
-                <span className="text-sm font-medium">
-                  $20<span className="text-xs text-muted">/mes</span>
-                </span>
-              </div>
-              <p className="text-xs text-muted">Todo lo de Secretaria + Pagos, Metas, Bóveda y Cuentas.</p>
+            <div className="flex flex-col rounded-xl border border-teal p-3.5 text-left">
+              <span className="text-xs font-medium text-teal">Administrador</span>
+              <span className="mb-1.5 text-sm font-medium">
+                $20<span className="text-xs text-muted">/mes</span>
+              </span>
+              <p className="mb-3 flex-1 text-xs text-muted">Todo lo de Secretaria + Pagos, Metas, Bóveda y Cuentas.</p>
+              <button
+                className="flex items-center justify-center gap-1 rounded-lg py-2 text-xs font-medium text-white hover:opacity-90"
+                style={{ background: "#1D9E75" }}
+                onClick={() => abrirModalConTier("administrador")}
+              >
+                <i className="ti ti-lock" style={{ fontSize: 12 }} /> Elegir
+              </button>
             </div>
-            <ul className="mt-1 flex flex-col gap-1 text-xs text-muted">
-              <li>✓ Login propio — nunca tus credenciales</li>
-              <li>✓ Permisos granulares por persona</li>
-              <li>✓ Nunca tus finanzas personales</li>
-            </ul>
           </div>
-          <button className="vc-btn-primary flex items-center justify-center gap-1" style={{ width: "auto" }} onClick={() => setModalAbierto(true)}>
-            <i className="ti ti-lock" /> Añadir Admin
-          </button>
+          <ul className="flex flex-col gap-1 text-xs text-muted">
+            <li>✓ Login propio — nunca tus credenciales</li>
+            <li>✓ Permisos granulares por persona</li>
+            <li>✓ Nunca tus finanzas personales</li>
+          </ul>
         </div>
       ) : (
         <>
@@ -354,7 +366,7 @@ export default function AdminPortal({
             <p className="text-xs uppercase tracking-wide text-muted">Admins / Secretarias</p>
             <button
               className="flex items-center gap-1 rounded-lg border border-teal px-2.5 py-1.5 text-xs font-medium text-teal"
-              onClick={() => setModalAbierto(true)}
+              onClick={() => abrirModalConTier("secretaria")}
             >
               <i className="ti ti-plus" /> Añadir
             </button>
@@ -524,6 +536,7 @@ export default function AdminPortal({
         <ModalAnadirAdmin
           vendors={vendors}
           entidadId={entidad.id}
+          tierInicial={tierInicialModal}
           onCerrar={() => setModalAbierto(false)}
           onCreada={alCrearInvitacion}
         />
@@ -539,11 +552,13 @@ export default function AdminPortal({
 function ModalAnadirAdmin({
   vendors,
   entidadId,
+  tierInicial = "secretaria",
   onCerrar,
   onCreada,
 }: {
   vendors: Vendor[];
   entidadId: string;
+  tierInicial?: AdminTier;
   onCerrar: () => void;
   onCreada: (item: ItemLista) => void;
 }) {
@@ -551,7 +566,7 @@ function ModalAnadirAdmin({
   const [vendorId, setVendorId] = useState("");
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
-  const [tier, setTier] = useState<AdminTier>("secretaria");
+  const [tier, setTier] = useState<AdminTier>(tierInicial);
   const [permisos, setPermisos] = useState<Record<string, boolean>>({});
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
