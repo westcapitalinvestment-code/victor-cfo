@@ -410,7 +410,7 @@ export default async function ResumenPage({
         )}
         {reporteCategoria.some(([nombre]) => nombre === "Sin categorizar") && (
           <p className="mt-3 text-xs text-muted">
-            Corrige las que digan "Sin categorizar" desde <a href="/dashboard/gastos" className="text-teal">Gastos</a> o
+            Corrige las que digan "Sin categorizar" desde <a href="/dashboard/gastos" className="text-teal">Transacciones</a> o
             dile a VICTOR a qué categoría pertenecen — mientras más corrijas, más precisas salen las próximas.
           </p>
         )}

@@ -283,7 +283,7 @@ export default async function GastosNegocioPage({
     <div className="vc-shell">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-medium">Gastos</h1>
+          <h1 className="text-lg font-medium">Transacciones</h1>
           <p className="text-xs text-muted">{entidadActiva.name}</p>
         </div>
       </div>

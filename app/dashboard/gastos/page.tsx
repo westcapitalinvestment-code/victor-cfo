@@ -429,7 +429,7 @@ export default async function GastosPage({
   return (
     <div className="vc-shell">
       <div className="mb-3 flex items-center justify-between">
-        <h1 className="text-lg font-medium">Gastos</h1>
+        <h1 className="text-lg font-medium">Transacciones</h1>
         {!!totalDuplicadas && (
           <Link href="/dashboard/gastos/duplicados" className="text-xs font-medium text-amb hover:opacity-80">
             {totalDuplicadas} posible{totalDuplicadas === 1 ? "" : "s"} duplicado{totalDuplicadas === 1 ? "" : "s"} →

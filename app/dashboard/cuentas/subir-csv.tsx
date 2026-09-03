@@ -527,7 +527,7 @@ function ResultadoImportacion({
         {resultado.duplicadas > 0 && ` ${resultado.duplicadas} ya existían (omitidas).`}
         {resultado.errores > 0 && ` ${resultado.errores} fila(s) con error, no se pudieron leer.`}
       </p>
-      <p className="mt-2 text-xs text-muted">Ya se están categorizando solas — revísalas en la pantalla de Gastos.</p>
+      <p className="mt-2 text-xs text-muted">Ya se están categorizando solas — revísalas en la pantalla de Transacciones.</p>
       <button className="mt-3 vc-btn-primary" onClick={onCerrar}>
         Listo
       </button>

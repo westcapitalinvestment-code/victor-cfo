@@ -154,7 +154,7 @@ export default function GastosPendientesCard({
           solo el mes en curso. */}
           {restantes > 0 && (
             <Link href="/dashboard/gastos?categoria=sin_categorizar" className="block px-4 py-2.5 text-center text-xs font-medium text-teal hover:opacity-80">
-              Ver los {restantes} restantes en Gastos →
+              Ver los {restantes} restantes en Transacciones →
             </Link>
           )}
         </div>

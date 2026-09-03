@@ -41,7 +41,7 @@ export default async function DuplicadosPage() {
     <div className="vc-shell">
       <div className="mb-3 flex items-center gap-2">
         <Link href="/dashboard/gastos" className="text-xs text-muted hover:text-teal">
-          ← Gastos
+          ← Transacciones
         </Link>
       </div>
       <h1 className="mb-1 text-lg font-medium">Posibles duplicados</h1>
