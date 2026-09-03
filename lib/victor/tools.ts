@@ -684,11 +684,15 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     description:
       "Busca en el manual de usuario real de VICTOR CFO (guardado en la base de datos, se actualiza con " +
       "cada feature nueva) cómo funciona una parte de la app que no domines con certeza — sobre todo módulos " +
-      "menos comunes como Admin/Secretaria, Equipo (técnicos), Facturación, Pagos, etc. Úsala ANTES de " +
-      "explicarle al usuario cómo usar una pantalla o botón si no estás 100% seguro del flujo exacto (nombres " +
-      "de botones, costos de addons, permisos) — es mejor buscar y confirmar que adivinar o inventar pasos " +
-      "que no existen en la app real. Si no encuentra nada relacionado, dice la verdad: que no tiene esa " +
-      "parte documentada todavía, en vez de inventar una respuesta.",
+      "menos comunes como Admin/Secretaria, Equipo (técnicos), Facturación, Pagos, Reportes/Hacienda, " +
+      "Transacciones, Cuentas, Metas, Bóveda, etc. Úsala ANTES de contestar cualquier pregunta sobre estos " +
+      "módulos — no solo 'cómo uso el botón X', también preguntas de concepto ('¿qué es Admin/Secretaria?', " +
+      "'¿cómo funciona Equipo?', '¿quién lo usa?'), y preguntas cortas o en jerga ('adm/secre', 'cobros', " +
+      "'boveda'). Si no estás 100% seguro del flujo exacto (nombres de botones, costos de addons, permisos) " +
+      "es mejor buscar y confirmar que adivinar o inventar pasos que no existen en la app real — y NUNCA le " +
+      "devuelvas la pregunta al usuario pidiéndole que te explique a ti cómo funciona su propia app sin " +
+      "haber buscado primero. Si no encuentra nada relacionado, dice la verdad: que no tiene esa parte " +
+      "documentada todavía, en vez de inventar una respuesta.",
     input_schema: {
       type: "object",
       properties: {
