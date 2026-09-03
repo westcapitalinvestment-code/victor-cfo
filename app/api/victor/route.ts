@@ -598,6 +598,23 @@ export async function POST(req: NextRequest) {
         // (ver nota grande junto a modeloTurno, arriba).
         system: systemBlocks,
         tools: VICTOR_TOOLS,
+        // FIX (3 sept 2026 — bug real reportado por Joel: el saludo dijo
+        // "no hay transacciones sin categorizar" con 5 pendientes visibles
+        // en Gastos). El system prompt YA le pedía a Haiku llamar
+        // revisar_gastos_sin_categorizar "de inmediato, sin preguntar" en
+        // el saludo diario, pero eso es solo una instrucción de texto — el
+        // modelo puede saltársela (más probable en Haiku que en Sonnet,
+        // ver nota del experimento "todo en Haiku" arriba) y redactar un
+        // saludo optimista sin haber verificado nada. tool_choice fuerza a
+        // nivel de API que la PRIMERA llamada del saludo sea de verdad esa
+        // herramienta — ya no depende de que el modelo "obedezca", es una
+        // garantía estructural. Solo aplica a i===0: de ahí en adelante
+        // vuelve a "auto" para que pueda llamar también
+        // revisar_documentos_por_vencer, revisar_citas_proximas,
+        // categorizar_transacciones_lote, etc. según haga falta.
+        ...(esSaludoDiario && i === 0
+          ? { tool_choice: { type: "tool" as const, name: "revisar_gastos_sin_categorizar" } }
+          : {}),
         messages: apiMessages,
       });
 
@@ -677,8 +694,23 @@ export async function POST(req: NextRequest) {
   const SUENA_A_ACCION_CONFIRMADA =
     /^\s*(listo|hecho)\b|\bya\s+(la|lo|el)?\s*(cambi[eé]|actualic[eé]|elimin[eé]|cre[eé]|guard[eé]|saqu[eé])|\b(actualizad[oa]|eliminad[oa]|cambiad[oa]|creada?|guardad[oa])\b|acabo de (cambiar|actualizar|eliminar|crear|guardar|sacar|arreglar)/i;
 
-  if (herramientasUsadasTurno.size === 0 && SUENA_A_ACCION_CONFIRMADA.test(assistantText)) {
-    console.error("Posible fabricación detectada — VICTOR confirmó una acción sin llamar herramienta:", {
+  // Variante del mismo problema, pero como NEGACIÓN en vez de confirmación
+  // (bug real reportado por Joel, 3 sept 2026: el saludo diario dijo "no
+  // hay transacciones nuevas sin categorizar desde ayer" con 5 pendientes
+  // visibles en la pantalla de Gastos). El tool_choice forzado de arriba
+  // ya debería evitar esto de raíz para el saludo diario específicamente,
+  // pero esta es la red de seguridad — igual que SUENA_A_ACCION_CONFIRMADA,
+  // no depende de que el modelo "obedezca" el prompt.
+  const SUENA_A_AUSENCIA_CONFIRMADA =
+    /no\s+hay\s+(nada|ning[uú]n[ao]?|transacciones|gastos|documentos|citas)|todo\s+(ya\s+)?(est[aá]|esta)\s+categorizad|no\s+(tienes|tiene)\s+(nada\s+)?pendiente|sin\s+pendientes\b/i;
+
+  const posibleFabricacion =
+    herramientasUsadasTurno.size === 0 &&
+    (SUENA_A_ACCION_CONFIRMADA.test(assistantText) ||
+      (esSaludoDiario && SUENA_A_AUSENCIA_CONFIRMADA.test(assistantText)));
+
+  if (posibleFabricacion) {
+    console.error("Posible fabricación detectada — VICTOR confirmó una acción o ausencia sin llamar herramienta:", {
       userMessage,
       assistantText,
     });
