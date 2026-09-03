@@ -46,8 +46,9 @@ export function buildUserContextBlock(params: {
     tieneHijos: boolean | null;
     hijosDetalle: string | null;
   } | null;
+  entidadesNegocio?: { name: string; entityType: string | null }[] | null;
 }): string {
-  const { fullName, plan, planStatus, memorySummary, goals, activeStrategies, isFounder, esSaludoDiario, liveGoals, finanzas, onboardingProfile } = params;
+  const { fullName, plan, planStatus, memorySummary, goals, activeStrategies, isFounder, esSaludoDiario, liveGoals, finanzas, onboardingProfile, entidadesNegocio } = params;
 
   const ahora = new Date();
   const lines: string[] = [
@@ -275,6 +276,17 @@ export function buildUserContextBlock(params: {
         "conversación, con naturalidad, sin forzarlo."
       );
     }
+  }
+
+  if (entidadesNegocio && entidadesNegocio.length > 0) {
+    lines.push(
+      "",
+      "Entidades de negocio activas del usuario (tipo de contribuyente tal como lo",
+      "escogió al crear la entidad — úsalo para la Regla 6 del Estratega, Perfil 1:",
+      "retiro de dueño vs. salario, y para sugerir a qué cuenta pedirle a un cliente",
+      "que pague en vez de a la personal — nunca lo asumas ni lo inventes):",
+      entidadesNegocio.map((e) => `  - "${e.name}": tipo de contribuyente = ${e.entityType ?? "no especificado"}`).join("\n")
+    );
   }
 
   lines.push(

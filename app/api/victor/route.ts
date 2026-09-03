@@ -400,6 +400,17 @@ export async function POST(req: NextRequest) {
     .limit(1)
     .maybeSingle();
 
+  // Entidades de negocio activas — solo el tipo de contribuyente (Individuo,
+  // LLC de un miembro, Corporación, Profesional independiente), para que
+  // VICTOR pueda explicar retiro de dueño vs. salario (Regla 6, Estratega
+  // Perfil 1) sin tener que preguntarlo cada vez que sale el tema. Vacío
+  // para Core (la creación de entidades es Pro) — la query no hace daño.
+  const { data: entidadesNegocioRaw } = await supabase
+    .from("business_entities")
+    .select("name, entity_type")
+    .eq("owner_id", user.id)
+    .eq("active", true);
+
   const [{ data: cuentasPlaid }, { data: cuentasManuales }] = await Promise.all([cuentasQuery, manualesQuery]);
   const todasLasCuentas = [...(cuentasPlaid ?? []), ...(cuentasManuales ?? [])];
 
@@ -447,6 +458,7 @@ export async function POST(req: NextRequest) {
           hijosDetalle: onboardingProfile.hijos_detalle,
         }
       : null,
+    entidadesNegocio: (entidadesNegocioRaw ?? []).map((e) => ({ name: e.name, entityType: e.entity_type })),
   });
 
   const systemPrompt = getVictorBasePrompt();
