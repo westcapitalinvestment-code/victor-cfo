@@ -2259,25 +2259,41 @@ export async function executeVictorTool(
       // Manual real de VICTOR CFO, guardado en manual_articulos (migración
       // 0060, 3 sept 2026, pedido de Joel: "hay que hacer un manual de
       // usuario de lo que tenemos y subirlo para que Victor tenga los
-      // detalles"). Búsqueda simple por palabras clave contra slug/titulo/
-      // resumen/contenido — no hace falta nada más sofisticado para el
-      // volumen de artículos que va a tener esto. Tabla de lectura pública
-      // (no depende de ownerId) — es documentación del producto, no datos
-      // del usuario.
+      // detalles"). Tabla de lectura pública (no depende de ownerId) — es
+      // documentación del producto, no datos del usuario.
+      //
+      // Búsqueda en DOS pasadas (fix 3 sept 2026 — bug real: Joel preguntó
+      // "adm/secre", el keyword "adm" coincidía por ILIKE tanto con
+      // "admin-secretaria" (correcto) como con la palabra "administras"
+      // dentro del artículo de Cuentas (falso positivo por texto libre), y
+      // VICTOR devolvía los dos artículos mezclados sin que tuviera sentido).
+      // Primero se busca solo en slug/titulo (nombre real del módulo,
+      // coincidencia intencional) — si eso encuentra algo, se usa SOLO eso.
+      // Solo si no hay ningún match de slug/titulo se cae al texto libre de
+      // resumen/contenido, para preguntas que no nombran el módulo (ej.
+      // "checklist 480" → aparece dentro del artículo de Pagos aunque el
+      // título no diga "480").
       const tema = String(input.tema ?? "").trim();
       if (!tema) return { ok: false, message: "Falta el tema a buscar en el manual." };
 
       const palabras = palabrasClave(tema);
       const terminos = palabras.length > 0 ? palabras : [tema.toLowerCase()];
-      const orFiltro = terminos
-        .flatMap((p) => [`slug.ilike.%${p}%`, `titulo.ilike.%${p}%`, `resumen.ilike.%${p}%`, `contenido.ilike.%${p}%`])
-        .join(",");
 
-      const { data: articulos, error } = await supabase
+      const orFiltroNombre = terminos.flatMap((p) => [`slug.ilike.%${p}%`, `titulo.ilike.%${p}%`]).join(",");
+      let { data: articulos, error } = await supabase
         .from("manual_articulos")
         .select("slug, titulo, contenido")
-        .or(orFiltro)
+        .or(orFiltroNombre)
         .limit(3);
+
+      if (!error && (!articulos || articulos.length === 0)) {
+        const orFiltroContenido = terminos.flatMap((p) => [`resumen.ilike.%${p}%`, `contenido.ilike.%${p}%`]).join(",");
+        ({ data: articulos, error } = await supabase
+          .from("manual_articulos")
+          .select("slug, titulo, contenido")
+          .or(orFiltroContenido)
+          .limit(3));
+      }
 
       if (error) return { ok: false, message: `No se pudo buscar en el manual: ${error.message}` };
       if (!articulos || articulos.length === 0) {
