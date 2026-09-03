@@ -36,7 +36,8 @@ export default function GestionarPlan() {
       <button
         onClick={abrirPortal}
         disabled={loading}
-        className="w-full rounded-lg border border-border bg-transparent p-3 text-sm font-medium text-teal"
+        className="w-full rounded-lg border border-teal p-3 text-sm font-medium text-teal"
+        style={{ background: "rgba(29,158,117,.1)" }}
       >
         {loading ? "Abriendo..." : "Gestionar mi plan"}
       </button>

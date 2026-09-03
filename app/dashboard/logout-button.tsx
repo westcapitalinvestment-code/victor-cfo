@@ -14,7 +14,7 @@ export default function LogoutButton() {
   }
 
   return (
-    <button onClick={handleLogout} className="text-xs text-muted hover:text-teal">
+    <button onClick={handleLogout} className="vc-btn-logout">
       Salir
     </button>
   );

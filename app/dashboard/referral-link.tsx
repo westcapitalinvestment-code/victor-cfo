@@ -53,7 +53,11 @@ export default function ReferralLink({ userId }: { userId: string }) {
           onFocus={(e) => e.target.select()}
           className="vc-input flex-1 !py-2 text-xs"
         />
-        <button onClick={copiar} className="rounded-lg border border-teal px-3 py-2 text-xs font-medium text-teal">
+        <button
+          onClick={copiar}
+          className="rounded-lg border border-teal px-3 py-2 text-xs font-medium text-teal"
+          style={{ background: "rgba(29,158,117,.1)" }}
+        >
           {copiado ? "¡Copiado!" : "Copiar"}
         </button>
       </div>

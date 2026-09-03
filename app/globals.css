@@ -183,6 +183,25 @@ body {
 .vc-btn-primary:hover { opacity: .9; }
 .vc-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 
+/* Botón "Salir" en Configuración (3 sept 2026, pedido de Joel: "el de
+   Salir ni se ve casi, pon una barra completa del mismo color... y el
+   Salir en el centro mas grande") — antes era solo texto gris chiquito.
+   Mismo teal sólido que vc-btn-primary, pero más grande/alto para que se
+   sienta como su propia barra dentro de la tarjeta de Cuenta. */
+.vc-btn-logout {
+  width: 100%;
+  background: #1D9E75;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 15px;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+.vc-btn-logout:hover { opacity: .9; }
+
 /* Botón secundario — usado en /registro para "Empezar gratis (limitada)",
    siempre debajo del CTA de pago (vc-btn-primary), nunca al mismo nivel:
    Joel fue explícito en que pagar debe verse como la opción principal. */

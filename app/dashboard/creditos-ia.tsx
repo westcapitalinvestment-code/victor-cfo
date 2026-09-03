@@ -40,7 +40,8 @@ export default function CreditosIA() {
       <button
         onClick={comprarCreditos}
         disabled={loading}
-        className="w-full rounded-lg border border-border bg-transparent p-3 text-sm font-medium text-teal"
+        className="w-full rounded-lg border border-teal p-3 text-sm font-medium text-teal"
+        style={{ background: "rgba(29,158,117,.1)" }}
       >
         {loading ? "Abriendo..." : "Comprar créditos de IA"}
       </button>

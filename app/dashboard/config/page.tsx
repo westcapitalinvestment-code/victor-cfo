@@ -57,7 +57,8 @@ export default async function ConfigPage() {
         </p>
         <a
           href="mailto:soporte@westcapitalventuresllc.com"
-          className="vc-btn-secondary mt-2 inline-block text-center no-underline"
+          className="mt-2 block rounded-lg border border-teal p-3 text-center text-sm font-medium text-teal no-underline"
+          style={{ background: "rgba(29,158,117,.1)" }}
         >
           Escríbenos
         </a>
