@@ -145,6 +145,20 @@ export default function LandingPricing() {
             Comienza ahora
           </Link>
         </div>
+
+        <div className={styles.priceCard}>
+          <div className={styles.priceTier}>A LA MEDIDA</div>
+          <div className={styles.priceName}>VICTOR Custom</div>
+          <p className={styles.priceDesc}>Para el negocio con necesidades particulares — lo armamos contigo.</p>
+          <hr className={styles.priceDivider} />
+          <p style={{ fontSize: "0.85rem", color: "var(--muted)" }}>Próximamente.</p>
+          <span
+            className={styles.priceCta}
+            style={{ background: "var(--border)", color: "var(--muted)", cursor: "default" }}
+          >
+            Próximamente
+          </span>
+        </div>
       </div>
 
       {anual && (

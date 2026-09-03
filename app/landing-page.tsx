@@ -261,12 +261,24 @@ export default function LandingPage() {
               <div className={styles.addonIcon}>🧑‍💼</div>
               <div>
                 <div className={styles.addonName}>
-                  Admin/Secretaria
+                  Secretaria
                   <div style={{ fontSize: "0.7rem", color: "var(--teal-mid)", fontWeight: 600, marginTop: "0.2rem" }}>
                     Plan Pro
                   </div>
                 </div>
                 <div className={styles.addonDesc}>$10/mes · dale acceso a tu asistente para llevar los números</div>
+              </div>
+            </div>
+            <div className={styles.addonCard}>
+              <div className={styles.addonIcon}>👔</div>
+              <div>
+                <div className={styles.addonName}>
+                  Administrador
+                  <div style={{ fontSize: "0.7rem", color: "var(--teal-mid)", fontWeight: 600, marginTop: "0.2rem" }}>
+                    Plan Pro
+                  </div>
+                </div>
+                <div className={styles.addonDesc}>$20/mes · acceso ampliado — Pagos, Metas, Bóveda y Cuentas (solo lectura)</div>
               </div>
             </div>
             <div className={styles.addonCard}>
@@ -278,7 +290,7 @@ export default function LandingPage() {
                     Plan Pro
                   </div>
                 </div>
-                <div className={styles.addonDesc}>$15/mes · añade a tu equipo con acceso completo</div>
+                <div className={styles.addonDesc}>$20/mes · añade a tu equipo con acceso completo</div>
               </div>
             </div>
           </div>
