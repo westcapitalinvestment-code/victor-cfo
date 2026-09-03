@@ -132,8 +132,11 @@ export function esCicloValido(valor: unknown): valor is Ciclo {
 // hace Anthropic". Pago ÚNICO (Stripe Checkout en modo "payment", no
 // suscripción) — $10 pagados = $7.00 de presupuesto añadido al ciclo
 // actual (30% de margen sobre el costo real de Anthropic, decisión de
-// Joel: "con margen"). El crédito NO se acumula entre ciclos — ver
-// app/api/victor/route.ts y lib/ciclo-uso.ts.
+// Joel: "con margen"). Lo que no se gaste en el ciclo en que se compra
+// RUEDA al ciclo siguiente (pedido de Joel, mismo día: "me gustaria que se
+// renueve que no lo pierda pq asi no se siente engañado el cliente") — ver
+// app/api/stripe/webhook/route.ts (rodarCreditoAlNuevoCiclo) y
+// app/api/victor/route.ts.
 export function priceIdCreditosIA(): string | null {
   return process.env.STRIPE_PRICE_CREDITOS_IA || null;
 }

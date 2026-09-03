@@ -2,6 +2,78 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe, esPlanValido, priceIdAddonTecnicos, todosLosPriceIdsDePlanes } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
+
+// Rollover de créditos de IA (migración 0064, 3 sept 2026, pedido de Joel:
+// "me gustaria que se renueve que no lo pierda pq asi no se siente
+// engañado el cliente"). Se llama justo ANTES de sobrescribir
+// ciclo_inicio/ciclo_fin del usuario con el ciclo nuevo — mientras
+// users.ciclo_inicio TODAVÍA apunta al ciclo que está cerrando.
+//
+// La pregunta que responde: de lo que el usuario compró en créditos ese
+// ciclo, ¿cuánto le sobró sin usar? Como el crédito se suma COMPLETO (sin
+// ritmo-parejo) al presupuesto del ciclo, y el presupuesto del PLAN solo
+// (sin crédito) termina el ciclo exactamente en su límite mensual completo
+// (limiteMensual, porque ritmo-parejo con día=días da presupuesto=límite),
+// cualquier gasto del ciclo por ENCIMA del límite del plan solo pudo
+// pagarse con crédito. Lo que quede del crédito después de cubrir ese
+// exceso es lo que rueda al ciclo nuevo.
+async function rodarCreditoAlNuevoCiclo(
+  supabase: ReturnType<typeof createAdminClient>,
+  userId: string,
+  cicloNuevoClave: string
+) {
+  const { data: perfilAnterior } = await supabase
+    .from("users")
+    .select("ciclo_inicio, plan")
+    .eq("id", userId)
+    .maybeSingle();
+
+  const cicloAntiguoClave = perfilAnterior?.ciclo_inicio as string | null | undefined;
+  // Sin ciclo anterior (primera activación) o el ciclo "nuevo" es el mismo
+  // que ya tenía (ej. Stripe reenvía el mismo evento) — no hay nada que
+  // rodar.
+  if (!cicloAntiguoClave || cicloAntiguoClave === cicloNuevoClave) return;
+
+  const { data: creditoFila } = await supabase
+    .from("creditos_ia_ciclo")
+    .select("credito_centavos")
+    .eq("owner_id", userId)
+    .eq("ciclo_clave", cicloAntiguoClave)
+    .maybeSingle();
+
+  const creditoAntiguo = Number(creditoFila?.credito_centavos ?? 0);
+  if (creditoAntiguo <= 0) return; // no compró créditos ese ciclo, nada que rodar
+
+  const { data: usoFila } = await supabase
+    .from("uso_ia_mensual")
+    .select("costo_centavos")
+    .eq("owner_id", userId)
+    .eq("ciclo_clave", cicloAntiguoClave)
+    .maybeSingle();
+
+  const costoFinalCicloAnterior = Number(usoFila?.costo_centavos ?? 0);
+  const planAnterior = (perfilAnterior?.plan as string | null) ?? "core";
+  const limiteMensualAnterior = LIMITES_MENSUALES_CENTAVOS[planAnterior] ?? LIMITES_MENSUALES_CENTAVOS.core;
+
+  const consumoCredito = Math.min(creditoAntiguo, Math.max(0, costoFinalCicloAnterior - limiteMensualAnterior));
+  const remanente = Math.max(0, creditoAntiguo - consumoCredito);
+  if (remanente <= 0) return;
+
+  const { data: creditoNuevoFila } = await supabase
+    .from("creditos_ia_ciclo")
+    .select("credito_centavos")
+    .eq("owner_id", userId)
+    .eq("ciclo_clave", cicloNuevoClave)
+    .maybeSingle();
+
+  await supabase.from("creditos_ia_ciclo").upsert({
+    owner_id: userId,
+    ciclo_clave: cicloNuevoClave,
+    credito_centavos: Number(creditoNuevoFila?.credito_centavos ?? 0) + remanente,
+    actualizado_en: new Date().toISOString(),
+  });
+}
 
 // Saca las fechas de inicio/fin del ciclo de facturación actual de una
 // suscripción — las usa el tope de gasto de IA (app/api/victor/route.ts,
@@ -128,6 +200,10 @@ export async function POST(req: NextRequest) {
             const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
             const ciclo = periodoDeSuscripcion(subscription);
             if (ciclo) {
+              // Si esta cuenta ya tenía un ciclo anterior con crédito de IA
+              // sin gastar (ej. alguien que canceló y vuelve a suscribirse),
+              // se rueda antes de pisar ciclo_inicio con el nuevo valor.
+              await rodarCreditoAlNuevoCiclo(supabase, userId, ciclo.inicio);
               datosActualizar.ciclo_inicio = ciclo.inicio;
               datosActualizar.ciclo_fin = ciclo.fin;
             }
@@ -171,6 +247,11 @@ export async function POST(req: NextRequest) {
         // mensual (Stripe manda este evento en cada ciclo nuevo).
         const ciclo = periodoDeSuscripcion(subscription);
         if (ciclo) {
+          // Este es el punto real donde ocurre una renovación mensual —
+          // aquí es donde rodamos el crédito de IA que sobró del ciclo que
+          // está cerrando (migración 0064, 3 sept 2026, pedido de Joel: que
+          // no se pierda el crédito sin usar).
+          await rodarCreditoAlNuevoCiclo(supabase, userId, ciclo.inicio);
           datosActualizar.ciclo_inicio = ciclo.inicio;
           datosActualizar.ciclo_fin = ciclo.fin;
         }

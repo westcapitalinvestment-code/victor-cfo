@@ -6,6 +6,7 @@ import { VICTOR_TOOLS, executeVictorTool } from "@/lib/victor/tools";
 import { fechaHoyPR } from "@/lib/hora-pr";
 import { costoEnCentavos } from "@/lib/costo-ia";
 import { claveCicloUso, progresoCicloUso } from "@/lib/ciclo-uso";
+import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
 
 // Ruta de servidor — la ANTHROPIC_API_KEY nunca se expone al navegador.
 // El cliente (VictorChat) solo llama a /api/victor con el mensaje del
@@ -241,7 +242,9 @@ export async function POST(req: NextRequest) {
   // "aviso" o "normal" más adelante sin que nadie tenga que intervenir —
   // por diseño, no debería ser posible llegar al límite mensual completo
   // a mitad de mes precisamente porque este ritmo diario ya lo frena antes.
-  const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 750, pro: 1500 };
+  // LIMITES_MENSUALES_CENTAVOS vive ahora en lib/limites-ia.ts (3 sept
+  // 2026, rollover de créditos) — compartido con el webhook, que lo
+  // necesita para calcular cuánto crédito sobró al cerrar un ciclo.
   // Piso mínimo de presupuesto para los primeros días de CUALQUIER ciclo
   // (protege la conversación de onboarding, la más pesada de toda la
   // relación) — deja de importar apenas el ritmo-parejo lo supere solo

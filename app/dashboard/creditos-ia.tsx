@@ -33,8 +33,8 @@ export default function CreditosIA() {
     <div className="vc-card mb-4">
       <p className="mb-2 text-sm font-medium">Créditos extra de IA</p>
       <p className="mb-3 text-xs text-muted">
-        ¿Se te acabó el límite de IA de este mes? Compra créditos extra para seguir hablando con VICTOR el resto del
-        ciclo actual.
+        ¿Se te acabó el límite de IA de este mes? Compra créditos extra para seguir hablando con VICTOR. Lo que no
+        uses no se pierde — pasa automáticamente a tu próximo ciclo.
       </p>
       {error && <p className="mb-2 text-xs text-red">{error}</p>}
       <button

@@ -9,7 +9,10 @@ import { claveCicloUso } from "@/lib/ciclo-uso";
 // El crédito aplica al ciclo de facturación ACTUAL del usuario (mismo
 // cálculo que el tope de gasto de IA, ver lib/ciclo-uso.ts) — se manda por
 // metadata para que el webhook no tenga que recalcularlo con datos que
-// podrían haber cambiado entre el checkout y la confirmación del pago.
+// podrían haber cambiado entre el checkout y la confirmación del pago. Lo
+// que no se use en ese ciclo NO se pierde — el webhook lo rueda al ciclo
+// siguiente en cada renovación (ver rodarCreditoAlNuevoCiclo en
+// app/api/stripe/webhook/route.ts).
 export async function POST(req: NextRequest) {
   const supabase = createClient();
   const {
