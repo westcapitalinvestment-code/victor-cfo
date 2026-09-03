@@ -130,6 +130,16 @@ export default function FacturaDetalle({
   // otro día.
   const [fechaPago, setFechaPago] = useState(hoyISO());
   const [confirmandoPago, setConfirmandoPago] = useState(false);
+  // Editar método/fecha de pago DESPUÉS de marcada pagada (3 sept 2026,
+  // pedido de Joel: "pudiera entrar algo equivocado en el pago y si tiene
+  // que editarse ahora mismo no se puede") — antes, una vez pagada, el
+  // método y la fecha quedaban fijos para siempre, sin forma de corregir un
+  // error de captura (ej. marcó "ATH Móvil" pero en realidad fue
+  // Transferencia). Esto NO reabre la factura completa (líneas/cliente/
+  // total) — eso sigue bloqueado a propósito una vez cobrada, porque
+  // cambiar el total después de que el balance ya dice $0.00 sí sería un
+  // problema real de cuadre.
+  const [editandoPago, setEditandoPago] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
 
@@ -157,6 +167,17 @@ export default function FacturaDetalle({
       return;
     }
     router.refresh();
+  }
+
+  function abrirEditarPago() {
+    setMetodoPago(factura.metodo_pago ?? METODOS_PAGO[0]);
+    setFechaPago(factura.fecha_pago ?? hoyISO());
+    setEditandoPago(true);
+  }
+
+  async function guardarEdicionPago() {
+    await actualizarEstado("pagada", { metodo_pago: metodoPago, fecha_pago: fechaPago });
+    setEditandoPago(false);
   }
 
   async function subirEvidencia(e: React.ChangeEvent<HTMLInputElement>) {
@@ -392,13 +413,59 @@ export default function FacturaDetalle({
           )}
         </div>
 
-        {factura.metodo_pago && (
-          <div className="flex items-center gap-2 rounded-lg border border-teal/30 bg-teal/[.05] px-3 py-2 text-xs">
-            <i className="ti ti-check text-teal" />
-            <span>
-              Pagada vía <strong>{factura.metodo_pago}</strong>
-              {factura.fecha_pago && ` el ${formatFecha(factura.fecha_pago)}`}
-            </span>
+        {factura.metodo_pago && !editandoPago && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-teal/30 bg-teal/[.05] px-3 py-2 text-xs">
+            <div className="flex items-center gap-2">
+              <i className="ti ti-check text-teal" />
+              <span>
+                Pagada vía <strong>{factura.metodo_pago}</strong>
+                {factura.fecha_pago && ` el ${formatFecha(factura.fecha_pago)}`}
+              </span>
+            </div>
+            {!modoAdmin && (
+              <button
+                type="button"
+                className="no-imprimir flex-shrink-0 text-muted hover:text-teal"
+                onClick={abrirEditarPago}
+                title="Corregir método o fecha de pago"
+              >
+                <i className="ti ti-edit text-sm" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {editandoPago && (
+          // Corregir método/fecha de un pago YA registrado — ver comentario
+          // en el useState de editandoPago. Mismo patrón visual que
+          // "Registrar pago" de abajo, pero sin reabrir el resto de la
+          // factura.
+          <div className="flex flex-col gap-2 rounded-lg border border-teal/30 bg-teal/[.05] p-3 text-xs">
+            <p className="text-xs uppercase tracking-wide text-muted">Corregir pago registrado</p>
+            <div className="flex items-center gap-2">
+              <select className="vc-input flex-1" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
+                {METODOS_PAGO.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                className="vc-input flex-shrink-0"
+                style={{ width: "auto" }}
+                value={fechaPago}
+                onChange={(e) => setFechaPago(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button className="vc-btn-primary flex-1" style={{ width: "auto" }} disabled={loading} onClick={guardarEdicionPago}>
+                {loading ? "..." : "Guardar corrección"}
+              </button>
+              <button className="text-xs text-muted underline" disabled={loading} onClick={() => setEditandoPago(false)}>
+                Cancelar
+              </button>
+            </div>
           </div>
         )}
 
@@ -522,9 +589,19 @@ export default function FacturaDetalle({
             </Link>
           )}
           {!modoAdmin && factura.estado === "pagada" && (
-            <span className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium text-muted opacity-40">
+            // Ya no queda deshabilitado (3 sept 2026, pedido de Joel) — una
+            // factura pagada puede tener el método o la fecha de pago mal
+            // capturados, y antes no había forma de corregirlo. Este botón
+            // abre el mismo formulario inline de arriba (abrirEditarPago),
+            // no el formulario completo de líneas/cliente/total — ese sigue
+            // bloqueado a propósito una vez cobrada.
+            <button
+              type="button"
+              onClick={abrirEditarPago}
+              className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+            >
               <i className="ti ti-edit text-base" /> Editar
-            </span>
+            </button>
           )}
           {!modoAdmin && (
             <button

@@ -6,6 +6,12 @@ import { formatMoney, formatFecha } from "@/lib/format";
 
 // PDF de una cotización — mismo patrón que /api/facturas/[id]/pdf: público
 // por UUID (para compartir por WhatsApp sin que el cliente inicie sesión).
+//
+// force-dynamic (3 sept 2026) — mismo bug real que se encontró en el PDF de
+// factura: sin esto, Next cachea la primera versión del PDF para esa URL y
+// las descargas siguientes no reflejan cambios posteriores a la cotización.
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createAdminClient();
 

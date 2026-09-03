@@ -10,6 +10,19 @@ import { formatMoney, formatFecha } from "@/lib/format";
 // pago de Stripe o una factura de FreshBooks — así el cliente puede abrir
 // el PDF desde WhatsApp sin tener que crear cuenta ni iniciar sesión. Por
 // eso usa el cliente admin (se salta RLS) en vez de pedir sesión de usuario.
+//
+// force-dynamic (3 sept 2026, bug real reportado por Joel): sin esto, un
+// Route Handler GET sin funciones dinámicas (cookies/headers/searchParams)
+// entra al Full Route Cache de Next — la PRIMERA vez que alguien pide el
+// PDF de una factura, Vercel cachea esos bytes para esa URL indefinidamente,
+// y toda descarga futura del mismo /api/facturas/{id}/pdf devuelve ESA
+// versión vieja aunque la factura cambie después (ej. se marque pagada). El
+// comentario de arriba ("se arma cada vez que se pide") era la intención,
+// pero sin esta línea Next no la respetaba — la pantalla en vivo sí se veía
+// correcta (otro mecanismo de datos) mientras el PDF descargado seguía
+// mostrando el total viejo en vez del balance $0.00.
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createAdminClient();
 
