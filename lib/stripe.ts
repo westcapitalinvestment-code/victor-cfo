@@ -126,3 +126,22 @@ export function priceIdAddonEntidadAdicional(): string | null {
 export function esCicloValido(valor: unknown): valor is Ciclo {
   return valor === "mensual" || valor === "anual";
 }
+
+// Créditos de IA comprables — 3 sept 2026, migración 0064, pedido de Joel:
+// "ese limite lo podemos resolver poniendo un addon de creditos de AI como
+// hace Anthropic". Pago ÚNICO (Stripe Checkout en modo "payment", no
+// suscripción) — $10 pagados = $7.00 de presupuesto añadido al ciclo
+// actual (30% de margen sobre el costo real de Anthropic, decisión de
+// Joel: "con margen"). El crédito NO se acumula entre ciclos — ver
+// app/api/victor/route.ts y lib/ciclo-uso.ts.
+export function priceIdCreditosIA(): string | null {
+  return process.env.STRIPE_PRICE_CREDITOS_IA || null;
+}
+
+// Cuánto presupuesto de IA (en centavos) se añade por cada compra del pack
+// de créditos — vive aquí (no en el Price de Stripe) porque Stripe solo
+// sabe el precio que cobra ($10), no cuánto de eso es "crédito" vs margen;
+// esa relación es una decisión de negocio nuestra, no algo que Stripe
+// exponga. Si el precio del pack cambia en Stripe, este número hay que
+// ajustarlo a mano para mantener el mismo ~30% de margen.
+export const CREDITO_IA_CENTAVOS_POR_COMPRA = 700;

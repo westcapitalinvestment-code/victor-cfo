@@ -4,6 +4,7 @@ import Link from "next/link";
 import LogoutButton from "../logout-button";
 import NotificacionesToggle from "../notificaciones-toggle";
 import GestionarPlan from "../gestionar-plan";
+import CreditosIA from "../creditos-ia";
 import PinConfig from "../pin-config";
 import SessionTimeoutConfig from "../session-timeout-config";
 import ReferralLink from "../referral-link";
@@ -87,6 +88,8 @@ export default async function ConfigPage() {
       <SessionTimeoutConfig />
 
       <GestionarPlan />
+
+      <CreditosIA />
 
       <div className="vc-card">
         <LogoutButton />

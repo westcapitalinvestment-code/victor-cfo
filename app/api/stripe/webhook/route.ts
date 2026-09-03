@@ -57,6 +57,51 @@ export async function POST(req: NextRequest) {
       // customer/subscription de Stripe y marcamos el plan elegido.
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+
+        // Créditos de IA (migración 0064, 3 sept 2026) — un checkout de pago
+        // ÚNICO (mode: "payment"), NUNCA trae session.subscription, así que
+        // se resuelve aparte y por completo antes de tocar la lógica de
+        // planes de abajo (esa lógica asume una suscripción).
+        if (session.metadata?.tipo === "creditos_ia") {
+          const ownerId = session.metadata?.supabase_user_id;
+          const cicloClave = session.metadata?.ciclo_clave;
+          const creditoCentavos = Number(session.metadata?.credito_centavos);
+
+          if (ownerId && cicloClave && creditoCentavos > 0) {
+            // Idempotencia: si Stripe reintenta la entrega de este mismo
+            // evento (pasa si nuestra respuesta tarda o falla una vez), el
+            // UNIQUE de stripe_checkout_session_id hace que el segundo
+            // intento de INSERT falle solo, sin duplicar el crédito.
+            const { error: errorCompra } = await supabase.from("creditos_ia_compras").insert({
+              owner_id: ownerId,
+              ciclo_clave: cicloClave,
+              credito_centavos: creditoCentavos,
+              precio_pagado_centavos: session.amount_total ?? 0,
+              stripe_checkout_session_id: session.id,
+            });
+
+            // errorCompra != null casi siempre significa "ya existía" (la
+            // unique constraint) — en ese caso NO volvemos a sumar el
+            // crédito al saldo, porque ya se sumó la primera vez.
+            if (!errorCompra) {
+              const { data: saldoActual } = await supabase
+                .from("creditos_ia_ciclo")
+                .select("credito_centavos")
+                .eq("owner_id", ownerId)
+                .eq("ciclo_clave", cicloClave)
+                .maybeSingle();
+
+              await supabase.from("creditos_ia_ciclo").upsert({
+                owner_id: ownerId,
+                ciclo_clave: cicloClave,
+                credito_centavos: Number(saldoActual?.credito_centavos ?? 0) + creditoCentavos,
+                actualizado_en: new Date().toISOString(),
+              });
+            }
+          }
+          break;
+        }
+
         const userId = session.client_reference_id || session.metadata?.supabase_user_id;
         const plan = session.metadata?.plan;
 

@@ -5,6 +5,7 @@ import { getVictorBasePrompt, buildUserContextBlock } from "@/lib/victor/system-
 import { VICTOR_TOOLS, executeVictorTool } from "@/lib/victor/tools";
 import { fechaHoyPR } from "@/lib/hora-pr";
 import { costoEnCentavos } from "@/lib/costo-ia";
+import { claveCicloUso, progresoCicloUso } from "@/lib/ciclo-uso";
 
 // Ruta de servidor — la ANTHROPIC_API_KEY nunca se expone al navegador.
 // El cliente (VictorChat) solo llama a /api/victor con el mensaje del
@@ -253,63 +254,46 @@ export async function POST(req: NextRequest) {
 
   // El ritmo-parejo se ancla al CICLO DE FACTURACIÓN REAL de Stripe
   // (ciclo_inicio/ciclo_fin, guardados por el webhook en cada activación o
-  // renovación — ej. 23 ago → 23 sept), no al mes calendario. Antes de este
-  // cambio (23 agosto 2026, detectado por Joel probando esto mismo) el
-  // contador reseteaba el día 1 de cada mes sin importar cuándo la persona
-  // pagó — alguien que se registrara el 31 de agosto tenía casi nada de
-  // presupuesto ese día, pero el 1 de septiembre el contador volvía a dar
-  // casi un mes completo de golpe, TODAVÍA DENTRO del mismo ciclo que ya
-  // había pagado una vez (su próximo cobro real era el 30 de septiembre) —
-  // podía terminar gastando casi el doble del tope pensado por ciclo.
-  // Cuentas sin ciclo de Stripe (ej. las "trialing" de antes de conectar
-  // Stripe, sin stripe_customer_id) caen al mes calendario como respaldo,
-  // igual que se comportaba todo esto antes.
-  const tieneCicloStripe = !!profile?.ciclo_inicio && !!profile?.ciclo_fin;
-  const hoyPR = fechaHoyPR();
-  const [anioActualStr, mesActualStr, diaActualStr] = hoyPR.split("-");
-  const diasEnElMesCalendario = new Date(Number(anioActualStr), Number(mesActualStr), 0).getDate();
-
-  let claveCicloUso: string;
-  let diaDelPeriodo: number;
-  let diasEnElPeriodo: number;
-
-  if (tieneCicloStripe) {
-    const inicio = new Date(`${profile!.ciclo_inicio}T00:00:00Z`);
-    const fin = new Date(`${profile!.ciclo_fin}T00:00:00Z`);
-    const hoy = new Date(`${hoyPR}T00:00:00Z`);
-    const MS_POR_DIA = 24 * 60 * 60 * 1000;
-    diasEnElPeriodo = Math.max(1, Math.round((fin.getTime() - inicio.getTime()) / MS_POR_DIA));
-    diaDelPeriodo = Math.min(
-      diasEnElPeriodo,
-      Math.max(1, Math.round((hoy.getTime() - inicio.getTime()) / MS_POR_DIA) + 1)
-    );
-    claveCicloUso = profile!.ciclo_inicio as string; // ej. '2026-08-23' — único por ciclo real
-  } else {
-    diaDelPeriodo = Number(diaActualStr);
-    diasEnElPeriodo = diasEnElMesCalendario;
-    claveCicloUso = hoyPR.slice(0, 7); // 'YYYY-MM' — respaldo para cuentas sin Stripe
-  }
+  // renovación — ej. 23 ago → 23 sept), no al mes calendario — ver
+  // migración 0026 para el porqué completo. El cálculo vive ahora en
+  // lib/ciclo-uso.ts (3 sept 2026) para que lo comparta con el checkout de
+  // créditos de IA (migración 0064) sin riesgo de que las dos calculen una
+  // clave distinta.
+  const cicloClave = claveCicloUso(profile);
+  const { diaDelPeriodo, diasEnElPeriodo } = progresoCicloUso(profile);
 
   const planActual = profile?.plan ?? "core";
   const siguientePlan = SIGUIENTE_PLAN[planActual] ?? null;
   const notaUpgrade = siguientePlan
-    ? ` Si quieres seguir hablando sin este tope, en Configuración puedes subir a ${siguientePlan}.`
-    : " Si esto te está bloqueando algo urgente, escríbele a soporte.";
+    ? ` Si quieres seguir hablando sin este tope, en Configuración puedes subir a ${siguientePlan}, o comprar créditos extra de IA.`
+    : " En Configuración puedes comprar créditos extra de IA, o si esto te está bloqueando algo urgente, escríbele a soporte.";
 
   let estadoUso: "normal" | "aviso" | "restringido_hora" = "normal";
   if (!isFounder) {
-    const { data: usoCiclo } = await supabase
-      .from("uso_ia_mensual")
-      .select("costo_centavos")
-      .eq("owner_id", user.id)
-      .eq("ciclo_clave", claveCicloUso)
-      .maybeSingle();
+    const [{ data: usoCiclo }, { data: creditosCiclo }] = await Promise.all([
+      supabase
+        .from("uso_ia_mensual")
+        .select("costo_centavos")
+        .eq("owner_id", user.id)
+        .eq("ciclo_clave", cicloClave)
+        .maybeSingle(),
+      supabase
+        .from("creditos_ia_ciclo")
+        .select("credito_centavos")
+        .eq("owner_id", user.id)
+        .eq("ciclo_clave", cicloClave)
+        .maybeSingle(),
+    ]);
     const costoCicloHastaAhora = Number(usoCiclo?.costo_centavos ?? 0);
     const limiteMensual = LIMITES_MENSUALES_CENTAVOS[planActual] ?? LIMITES_MENSUALES_CENTAVOS.core;
-    const presupuestoHastaHoy = Math.max(
-      (limiteMensual * diaDelPeriodo) / diasEnElPeriodo,
-      PRESUPUESTO_MINIMO_CENTAVOS
-    );
+    // Los créditos comprados (migración 0064) se suman COMPLETOS al
+    // presupuesto de este ciclo — a diferencia del tope del plan, no se les
+    // aplica ritmo-parejo, porque la persona los compró específicamente
+    // para usarlos ya, no para que se les raye poco a poco.
+    const creditosCicloCentavos = Number(creditosCiclo?.credito_centavos ?? 0);
+    const presupuestoHastaHoy =
+      Math.max((limiteMensual * diaDelPeriodo) / diasEnElPeriodo, PRESUPUESTO_MINIMO_CENTAVOS) +
+      creditosCicloCentavos;
 
     // Ya no hay un tercer nivel de bloqueo total — si costoCicloHastaAhora
     // llega o pasa el límite del ciclo completo, sigue cayendo en
@@ -839,7 +823,7 @@ export async function POST(req: NextRequest) {
     await supabase.rpc("registrar_uso_ia", {
       p_owner_id: user.id,
       p_costo_centavos: costoAcumuladoCentavos,
-      p_ciclo_clave: claveCicloUso,
+      p_ciclo_clave: cicloClave,
     });
   } catch (err) {
     console.error("No se pudo registrar uso_ia_mensual:", err);
