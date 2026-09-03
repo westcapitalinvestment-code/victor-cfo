@@ -454,24 +454,27 @@ export default async function GastosPage({
 
       {/* Toggle Gastos/Ingresos — mismo rol que "Debits"/"Credits" en el
       reporte del BPPR. Cambia tipoReporte, que a su vez filtra tanto el
-      reporte de categorías como la lista de transacciones de abajo. */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-xs text-muted">Ver:</span>
+      reporte de categorías como la lista de transacciones de abajo. Antes
+      eran 2 pills sueltas casi idénticas a las de Mes/Cuenta/Categoría —
+      Joel señaló que en una pantalla que ahora se llama "Transacciones"
+      (con Ingresos y Ahorro e inversión adentro, no solo Gastos) ese
+      control se perdía entre el resto. Ahora es una franja de ancho
+      completo, un segmented control real, para que el modo activo (con
+      su color rojo/verde de siempre) sea lo primero que se vea. */}
+      <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg p-1">
         <Link
           href={hrefFiltros({ tipo: "gasto" })}
-          className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
-            tipoReporte === "gasto" ? "border-red text-red" : "text-muted"
+          className={`rounded-md py-2 text-center text-sm font-medium transition-colors ${
+            tipoReporte === "gasto" ? "bg-red text-white" : "text-muted hover:opacity-80"
           }`}
-          style={{ borderColor: tipoReporte === "gasto" ? undefined : "var(--border)" }}
         >
           Gastos
         </Link>
         <Link
           href={hrefFiltros({ tipo: "ingreso" })}
-          className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
-            tipoReporte === "ingreso" ? "border-grn text-grn" : "text-muted"
+          className={`rounded-md py-2 text-center text-sm font-medium transition-colors ${
+            tipoReporte === "ingreso" ? "bg-grn text-white" : "text-muted hover:opacity-80"
           }`}
-          style={{ borderColor: tipoReporte === "ingreso" ? undefined : "var(--border)" }}
         >
           Ingresos
         </Link>

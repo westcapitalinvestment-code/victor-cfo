@@ -300,23 +300,23 @@ export default async function GastosNegocioPage({
         <CategoriaDropdown opciones={opcionesCategoria} basePath={BASE_PATH} />
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-xs text-muted">Ver:</span>
+      {/* Mismo segmented control de ancho completo que /dashboard/gastos —
+      ver el comentario allá para el porqué del cambio de pills sueltas a
+      franja. */}
+      <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg p-1">
         <Link
           href={hrefFiltros({ tipo: "gasto" })}
-          className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
-            tipoReporte === "gasto" ? "border-red text-red" : "text-muted"
+          className={`rounded-md py-2 text-center text-sm font-medium transition-colors ${
+            tipoReporte === "gasto" ? "bg-red text-white" : "text-muted hover:opacity-80"
           }`}
-          style={{ borderColor: tipoReporte === "gasto" ? undefined : "var(--border)" }}
         >
           Gastos
         </Link>
         <Link
           href={hrefFiltros({ tipo: "ingreso" })}
-          className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
-            tipoReporte === "ingreso" ? "border-grn text-grn" : "text-muted"
+          className={`rounded-md py-2 text-center text-sm font-medium transition-colors ${
+            tipoReporte === "ingreso" ? "bg-grn text-white" : "text-muted hover:opacity-80"
           }`}
-          style={{ borderColor: tipoReporte === "ingreso" ? undefined : "var(--border)" }}
         >
           Ingresos
         </Link>
