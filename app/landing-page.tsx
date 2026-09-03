@@ -245,7 +245,7 @@ export default function LandingPage() {
 
         <div style={{ marginTop: "3rem" }}>
           <div className={styles.sectionLabel}>// add-ons · VICTOR te avisa cuándo activarlos</div>
-          <h3 style={{ fontSize: "1.15rem", fontWeight: 600, margin: "0.5rem 0 0.4rem" }}>Servicios a la carta</h3>
+          <h3 style={{ fontSize: "1.15rem", fontWeight: 600, margin: "0.5rem 0 0.4rem" }}>Add-ons</h3>
           <p style={{ fontSize: "0.9rem", color: "var(--muted)", marginBottom: "1.5rem" }}>
             Actívalos cuando tu negocio los necesite. VICTOR te guía al momento correcto.
           </p>
@@ -254,7 +254,12 @@ export default function LandingPage() {
               <div className={styles.addonIcon}>🙋</div>
               <div>
                 <div className={styles.addonName}>Usuario Referido</div>
-                <div className={styles.addonDesc}>Gratis · comparte tu link — cada quien tiene su propia cuenta, y paga Core a $12.99/mes en vez de $14.99</div>
+                <div className={styles.addonDesc}>
+                  Gratis · comparte tu link — cada quien tiene su propia cuenta. Si tu referido elige Core, paga
+                  $12.99/mes en vez de $14.99. Si elige Pro, su primer mes es completamente gratis. Y cuando tu
+                  referido empiece a pagar de verdad, tú te ganas un mes gratis de tu propio plan — sin límite,
+                  acumulable con cada persona que refieras.
+                </div>
               </div>
             </div>
             <div className={styles.addonCard}>

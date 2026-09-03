@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 import { esFounder } from "@/lib/founder";
 import { saludoPorHora, fechaHoraLegiblePR, fechaHoyPR } from "@/lib/hora-pr";
 import { PRECIOS } from "@/lib/costo-ia";
+import { PLAN_LABEL } from "@/lib/plan-label";
+import Colapsable from "./colapsable";
+import UsuariosPanel from "./usuarios-panel";
 
 // Dashboard de Operaciones — vivía en /dashboard/admin, pero esa ruta la
 // necesitaba el módulo real de Admin/Secretaria (2 sept 2026, pedido de
@@ -192,13 +195,15 @@ export default async function CfoPage() {
   const fmtFecha = (iso: string | null) =>
     iso ? new Date(iso).toLocaleDateString("es-PR", { timeZone: "America/Puerto_Rico", day: "numeric", month: "short", year: "numeric" }) : "—";
 
-  const PLAN_LABEL: Record<string, string> = { core: "Core", pro: "Pro", proplus: "Pro+" };
-  const ESTADO_LABEL: Record<string, { texto: string; clase: string }> = {
-    active: { texto: "Activo", clase: "text-grn" },
-    trialing: { texto: "Trial", clase: "text-amb" },
-    incomplete: { texto: "Incompleto", clase: "text-muted" },
-    cancelled: { texto: "Cancelado", clase: "text-red" },
-  };
+  // ---- Usuarios por plan (3 sept 2026, pedido de Joel: "no tengo ninguna
+  // card por plan para saber cuantos hay en cada plan") — cuenta TODOS los
+  // usuarios (no solo activos), incluyendo el plan "gratis" del sistema de
+  // referidos (migración 0031).
+  const conteoPorPlan = new Map<string, number>();
+  for (const u of todos) {
+    const plan = u.plan ?? "core";
+    conteoPorPlan.set(plan, (conteoPorPlan.get(plan) ?? 0) + 1);
+  }
 
   // Traducción de las categorías fijas que usa el Cancellation Flow de
   // Stripe (subscription.cancellation_details.reason) — si el usuario
@@ -286,53 +291,49 @@ export default async function CfoPage() {
         </div>
       </div>
 
-      {/* Usuarios */}
-      <div className="vc-card mb-3">
-        <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
-          Usuarios ({todos.length})
-        </p>
-        {todos.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted">Sin usuarios todavía.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-[10px] uppercase tracking-wide text-muted">
-                  <th className="pb-2 pr-2">Usuario</th>
-                  <th className="pb-2 pr-2">Plan</th>
-                  <th className="pb-2 pr-2">Estado</th>
-                  <th className="pb-2 pr-2">Desde</th>
-                  <th className="pb-2 text-right">Gasto IA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {todos.map((u) => {
-                  const estado = ESTADO_LABEL[u.plan_status ?? ""] ?? { texto: u.plan_status ?? "—", clase: "text-muted" };
-                  return (
-                    <tr key={u.id} className="border-b border-border last:border-0">
-                      <td className="py-2 pr-2">
-                        <p className="truncate">{u.full_name || "Sin nombre"}</p>
-                        <p className="truncate text-[11px] text-muted">{u.email}</p>
-                      </td>
-                      <td className="py-2 pr-2">{PLAN_LABEL[u.plan ?? "core"] ?? u.plan}</td>
-                      <td className={`py-2 pr-2 ${estado.clase}`}>{estado.texto}</td>
-                      <td className="py-2 pr-2 text-muted">{fmtFecha(u.created_at)}</td>
-                      <td className="py-2 text-right">{fmt((costoIaPorUsuarioCentavos.get(u.id) ?? 0) / 100)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Usuarios por plan (3 sept 2026, pedido de Joel) — quick-glance, no
+          colapsable. Tailwind necesita clases LITERALES en el código (su
+          JIT no evalúa template strings en tiempo de ejecución) — de ahí
+          este mapa en vez de armar "md:grid-cols-N" con el número real. */}
+      <div
+        className={`mb-3 grid grid-cols-2 gap-2 ${
+          { 1: "md:grid-cols-1", 2: "md:grid-cols-2", 3: "md:grid-cols-3", 4: "md:grid-cols-4" }[
+            Math.min(Math.max(conteoPorPlan.size, 1), 4)
+          ]
+        }`}
+      >
+        {Array.from(conteoPorPlan.entries())
+          .sort((a, b) => b[1] - a[1])
+          .map(([plan, cantidad]) => (
+            <div key={plan} className="vc-card">
+              <p className="text-[10px] uppercase tracking-wide text-muted">{PLAN_LABEL[plan] ?? plan}</p>
+              <p className="text-xl font-medium">{cantidad}</p>
+            </div>
+          ))}
+        {conteoPorPlan.size === 0 && (
+          <div className="vc-card">
+            <p className="text-[10px] uppercase tracking-wide text-muted">Usuarios por plan</p>
+            <p className="py-2 text-center text-sm text-muted">Sin datos todavía.</p>
           </div>
         )}
       </div>
 
+      {/* Usuarios — colapsable, con búsqueda por nombre/email */}
+      <UsuariosPanel
+        usuarios={todos.map((u) => ({
+          id: u.id,
+          nombre: u.full_name ?? "",
+          email: u.email,
+          plan: u.plan ?? "core",
+          planStatus: u.plan_status,
+          creadoEn: u.created_at,
+          gastoIaCentavos: costoIaPorUsuarioCentavos.get(u.id) ?? 0,
+        }))}
+      />
+
       {/* Cancelados recientes — con razón (si Stripe la capturó) y botón de email */}
       {canceladosRecientes.length > 0 && (
-        <div className="vc-card mb-3">
-          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
-            Cancelados recientes (últimos 30 días) — {canceladosRecientes.length}
-          </p>
+        <Colapsable titulo="Cancelados recientes (últimos 30 días)" contador={canceladosRecientes.length}>
           <div className="flex flex-col gap-2">
             {canceladosRecientes.map((u) => (
               <div key={u.id} className="flex items-center justify-between gap-2 border-b border-border py-2 text-sm last:border-0">
@@ -359,13 +360,12 @@ export default async function CfoPage() {
               </div>
             ))}
           </div>
-        </div>
+        </Colapsable>
       )}
 
       <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
         {/* Gasto de IA por plan */}
-        <div className="vc-card">
-          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">Gasto de IA por plan</p>
+        <Colapsable titulo="Gasto de IA por plan">
           <div className="flex flex-col gap-1">
             {Array.from(costoIaPorPlanCentavos.entries())
               .sort((a, b) => b[1] - a[1])
@@ -384,13 +384,10 @@ export default async function CfoPage() {
               })}
             {costoIaPorPlanCentavos.size === 0 && <p className="py-2 text-center text-sm text-muted">Sin datos todavía.</p>}
           </div>
-        </div>
+        </Colapsable>
 
         {/* Infraestructura */}
-        <div className="vc-card">
-          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
-            Infraestructura — costo mensual estimado
-          </p>
+        <Colapsable titulo="Infraestructura — costo mensual estimado">
           <div className="flex flex-col gap-1 text-sm">
             <div className="flex items-center justify-between border-b border-border py-1.5">
               <span className="text-muted">Claude API (real, todos los ciclos)</span>
@@ -421,14 +418,11 @@ export default async function CfoPage() {
               <span>{fmt(costoTotalEstimado)}</span>
             </div>
           </div>
-        </div>
+        </Colapsable>
       </div>
 
       {/* Desglose de tokens/costo real — de dónde sale el $ de Claude */}
-      <div className="vc-card mb-3">
-        <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted">
-          Desglose de costo de Claude — este mes
-        </p>
+      <Colapsable titulo="Desglose de costo de Claude — este mes">
         <p className="mb-3 text-[11px] text-muted">
           {tokensLogTotalIn.toLocaleString("en-US")} tokens de entrada vs. {tokensLog.output.toLocaleString("en-US")} de salida —
           se ve desproporcionado en tokens, pero la mayoría de la entrada es caché reciclado (10x-50x más barato). Aquí está el $ real por categoría.
@@ -455,7 +449,7 @@ export default async function CfoPage() {
             <span>{fmt(costoDesgloseTotal)}</span>
           </div>
         </div>
-      </div>
+      </Colapsable>
     </div>
   );
 }

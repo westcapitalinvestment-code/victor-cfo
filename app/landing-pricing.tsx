@@ -28,6 +28,7 @@ const PRECIOS = {
 export default function LandingPricing() {
   const [anual, setAnual] = useState(false);
   const [coreExpandido, setCoreExpandido] = useState(false);
+  const [proExpandido, setProExpandido] = useState(false);
   const p = anual ? PRECIOS.anual : PRECIOS.mensual;
 
   return (
@@ -133,14 +134,21 @@ export default function LandingPricing() {
             <li>Dashboard de negocio separado del personal</li>
             <li>Facturación profesional con tu logo — cotizaciones, catálogo de servicios y facturas recurrentes</li>
             <li>Cobra por WhatsApp, ATH Móvil Business, tarjeta o transferencia</li>
-            <li>Tracking de facturas pagadas y pendientes, con alertas de cobros atrasados</li>
-            <li>Paga contratistas con retención 480.6 automática y reporte trimestral</li>
-            <li>Bóveda, Metas y Cuentas separadas para tu negocio</li>
-            <li>VICTOR te guía en retiro de dueño, IVU y créditos ante Hacienda</li>
-            <li>Reportes listos para tu CPA</li>
-            <li>Invita a tu secretaria, administrador o técnicos de campo (addon)</li>
-            <li>Conecta entidades de negocio adicionales (addon)</li>
+            {proExpandido && (
+              <>
+                <li>Tracking de facturas pagadas y pendientes, con alertas de cobros atrasados</li>
+                <li>Paga contratistas con retención 480.6 automática y reporte trimestral</li>
+                <li>Bóveda, Metas y Cuentas separadas para tu negocio</li>
+                <li>VICTOR te guía en retiro de dueño, IVU y créditos ante Hacienda</li>
+                <li>Reportes listos para tu CPA</li>
+                <li>Invita a tu secretaria, administrador o técnicos de campo (add-on)</li>
+                <li>Conecta entidades de negocio adicionales (add-on)</li>
+              </>
+            )}
           </ul>
+          <button className={styles.moreBtn} onClick={() => setProExpandido((v) => !v)}>
+            {proExpandido ? "Ver menos ↑" : "Ver más ↓"}
+          </button>
           <Link href={`/registro?plan=pro&ciclo=${anual ? "anual" : "mensual"}`} className={`${styles.priceCta} ${styles.ctaFilled}`}>
             Comienza ahora
           </Link>
