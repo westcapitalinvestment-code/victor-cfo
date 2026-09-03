@@ -60,6 +60,20 @@ const PRICE_ENV_VARS_CORE_REFERIDO: Record<Ciclo, string | undefined> = {
   anual: process.env.STRIPE_PRICE_CORE_ANUAL_REFERIDO,
 };
 
+// Todos los Price IDs de PLANES reales (no addons) — 3 sept 2026, para el
+// crédito de referido al que REFIERE (ver webhook, case "invoice.paid").
+// Sirve para reconocer, dentro de los items de la suscripción del
+// referidor, cuál de ellos es "el plan" (y no un addon como Técnicos o
+// Secretaria) sin tener que guardar el plan/ciclo del referidor en una
+// columna aparte — se lee directo de Stripe, que es la fuente real.
+export function todosLosPriceIdsDePlanes(): string[] {
+  return [
+    ...Object.values(PRICE_ENV_VARS).flatMap((c) => [c.mensual, c.anual]),
+    PRICE_ENV_VARS_CORE_REFERIDO.mensual,
+    PRICE_ENV_VARS_CORE_REFERIDO.anual,
+  ].filter((v): v is string => !!v);
+}
+
 export function priceIdPara(plan: PlanId, ciclo: Ciclo, esReferido: boolean = false): string | null {
   if (plan === "core" && esReferido) {
     return PRICE_ENV_VARS_CORE_REFERIDO[ciclo] || PRICE_ENV_VARS.core[ciclo] || null;

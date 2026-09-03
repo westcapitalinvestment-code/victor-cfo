@@ -13,6 +13,12 @@ import { useState } from "react";
 // no paga descuento — le regalamos el primer mes completo (trial de 30
 // días en app/api/stripe/checkout/route.ts), sin tocar el precio normal
 // de $49.99/mes de ahí en adelante.
+//
+// Crédito para el que REFIERE (3 sept 2026, migración 0062): cuando su
+// referido paga su primera factura real, quien compartió el link se gana
+// un mes gratis de SU propio plan (crédito automático en Stripe, sin
+// tope — puede acumular varios). Solo aplica si el referidor ya paga; si
+// está en plan gratis no hay factura a la cual aplicarle el crédito.
 export default function ReferralLink({ userId }: { userId: string }) {
   const [copiado, setCopiado] = useState(false);
 
@@ -34,10 +40,11 @@ export default function ReferralLink({ userId }: { userId: string }) {
 
   return (
     <div className="vc-card mb-4">
-      <p className="text-xs uppercase tracking-wide text-muted">Invita y gana descuento para ellos</p>
+      <p className="text-xs uppercase tracking-wide text-muted">Invita y ganen los dos</p>
       <p className="mt-1 text-sm text-text">
         Comparte tu link — quien se registre con él paga Core con descuento ($12.99/mes en vez de $14.99), o si
-        elige Pro directamente, el primer mes le sale gratis.
+        elige Pro directamente, el primer mes le sale gratis. Y cuando empiece a pagar de verdad, tú te ganas un
+        mes gratis también.
       </p>
       <div className="mt-3 flex items-center gap-2">
         <input
