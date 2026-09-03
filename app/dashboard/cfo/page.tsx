@@ -46,18 +46,30 @@ export default async function CfoPage() {
   const [anioPR, mesPR] = hoyPR.split("-");
   const inicioMesPR = new Date(`${anioPR}-${mesPR}-01T00:00:00-04:00`);
 
-  const [{ data: usuarios, error: errorUsuarios }, { data: usoIa, error: errorUso }, { data: logIa, error: errorLog }] =
-    await Promise.all([
-      admin
-        .from("users")
-        .select("id, full_name, email, plan, plan_status, created_at, cancelled_at, cancellation_reason, cancellation_comment")
-        .order("created_at", { ascending: false }),
-      admin.from("uso_ia_mensual").select("owner_id, costo_centavos"),
-      admin
-        .from("uso_ia_log")
-        .select("input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens")
-        .gte("creado_en", inicioMesPR.toISOString()),
-    ]);
+  const [
+    { data: usuarios, error: errorUsuarios },
+    { data: usoIa, error: errorUso },
+    { data: logIa, error: errorLog },
+    { data: creditosCompras },
+  ] = await Promise.all([
+    admin
+      .from("users")
+      .select("id, full_name, email, plan, plan_status, created_at, cancelled_at, cancellation_reason, cancellation_comment")
+      .order("created_at", { ascending: false }),
+    admin.from("uso_ia_mensual").select("owner_id, costo_centavos"),
+    admin
+      .from("uso_ia_log")
+      .select("input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens")
+      .gte("creado_en", inicioMesPR.toISOString()),
+    // Créditos de IA vendidos (migración 0064, 3 sept 2026, pedido de Joel:
+    // "me sirve a ver cuanto estan gastando en IA") — filtrado por fecha de
+    // COMPRA (created_at), no por ciclo_clave, para que la tarjeta refleje
+    // ventas de ESTE MES calendario tal como el resto del dashboard.
+    admin
+      .from("creditos_ia_compras")
+      .select("precio_pagado_centavos, credito_centavos")
+      .gte("created_at", inicioMesPR.toISOString()),
+  ]);
 
   const todos = usuarios ?? [];
   const activos = todos.filter((u) => u.plan_status === "active");
@@ -86,6 +98,16 @@ export default async function CfoPage() {
     if (u.plan_status === "active") activosPorPlan.set(plan, (activosPorPlan.get(plan) ?? 0) + 1);
   }
   const costoIaTotal = Array.from(costoIaPorUsuarioCentavos.values()).reduce((a, b) => a + b, 0) / 100;
+
+  // ---- Créditos de IA vendidos este mes (migración 0064, 3 sept 2026) ----
+  // ingresoCreditosIA = lo que de verdad pagaron los clientes (precio real
+  // de Stripe). creditoOtorgadoCentavos = lo que les dimos de presupuesto
+  // de IA a cambio (con margen, ver CREDITO_IA_CENTAVOS_POR_COMPRA en
+  // lib/stripe.ts — $10 pagados = $7.00 de crédito, así que la diferencia
+  // de $3 es margen bruto de esta línea específica).
+  const ingresoCreditosIA = (creditosCompras ?? []).reduce((sum, c) => sum + Number(c.precio_pagado_centavos), 0) / 100;
+  const creditoOtorgadoCentavos = (creditosCompras ?? []).reduce((sum, c) => sum + Number(c.credito_centavos), 0);
+  const margenCreditosIA = ingresoCreditosIA - creditoOtorgadoCentavos / 100;
 
   // ---- Desglose real de tokens/costo, este mes (uso_ia_log) ----
   // Esto es para responder la duda de Joel sobre el Anthropic Console: ahí
@@ -127,19 +149,25 @@ export default async function CfoPage() {
   const mrr = activos.reduce((sum, u) => sum + (PRECIO_MENSUAL_ESTIMADO[u.plan ?? "core"] ?? 0), 0);
 
   // ---- Costos estimados por usuario ----
-  // Plaid: contrato real (confirmado por Joel, 24 agosto 2026) — $1,000/mes
-  // FIJO durante los primeros 12 meses, cubre hasta 200 usuarios
-  // conectados. Pasado ese número, cada usuario adicional cuesta $2/mes
-  // aparte. NO es un costo plano de $2/usuario desde el usuario #1 — con
-  // pocos usuarios, Plaid es carísimo por usuario (ej. a 50 activos son
-  // $20/usuario, casi todo el precio de Core) y se abarata según creces,
-  // hasta que pasas los 200 y ahí cada usuario nuevo sí es marginal barato.
+  // Plaid: contrato real Order Form Q-56682 (verificado contra el PDF del
+  // contrato, 3 sept 2026 — corrige el estimado anterior de "200 usuarios"
+  // que Joel tenía de memoria). Son DOS compromisos fijos que suman
+  // $1,000/mes durante los primeros 12 meses (8/15/2026–8/14/2027):
+  // "API Services Commitment" $500 (un PISO comparado contra el uso real a
+  // $2.00/usuario/mes — por eso cubre hasta 250 usuarios, no 200: $500 ÷
+  // $2.00 = 250) + "Platform Support Commitment" $500 (siempre se cobra,
+  // no se compensa con uso). Pasados los 250 usuarios, cada uno adicional
+  // cuesta $2/mes aparte. NO es un costo plano de $2/usuario desde el
+  // usuario #1 — con pocos usuarios, Plaid es carísimo por usuario (ej. a
+  // 50 activos son $20/usuario, casi todo el precio de Core) y se abarata
+  // según creces, hasta que pasas los 250 y ahí cada usuario nuevo sí es
+  // marginal barato.
   // OJO: app/api/victor/route.ts todavía usa el viejo estimado de $2 plano
   // en su comentario de margen para el tope de gasto de IA — no es el mismo
   // cálculo (ese tope es solo sobre costo de IA, no sobre Plaid), pero si
   // se revisa ese número también hay que actualizar la nota ahí.
   const PLAID_BASE_MENSUAL = 1000;
-  const PLAID_USUARIOS_INCLUIDOS = 200;
+  const PLAID_USUARIOS_INCLUIDOS = 250;
   const PLAID_POR_USUARIO_ADICIONAL = 2.0;
   const plaidEstimado =
     PLAID_BASE_MENSUAL + Math.max(0, activos.length - PLAID_USUARIOS_INCLUIDOS) * PLAID_POR_USUARIO_ADICIONAL;
@@ -225,8 +253,8 @@ export default async function CfoPage() {
         </div>
       </div>
 
-      {/* 4 métricas */}
-      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+      {/* 5 métricas */}
+      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
         <div className="vc-card">
           <p className="text-[10px] uppercase tracking-wide text-muted">Cancelados este mes</p>
           <p className="text-xl font-medium">{canceladosEsteMes.length}</p>
@@ -244,6 +272,17 @@ export default async function CfoPage() {
           <p className={`text-xl font-medium ${margenBruto === null ? "text-muted" : margenBruto >= 0 ? "text-grn" : "text-red"}`}>
             {margenBruto === null ? "—" : `${margenBruto.toFixed(0)}%`}
           </p>
+        </div>
+        {/* Créditos de IA vendidos este mes (migración 0064, 3 sept 2026,
+            pedido de Joel: "me sirve a ver cuanto estan gastando en IA") —
+            ingreso real de Stripe, no el crédito otorgado (que es más bajo
+            por el margen). */}
+        <div className="vc-card">
+          <p className="text-[10px] uppercase tracking-wide text-muted">Créditos IA vendidos</p>
+          <p className="text-xl font-medium">{fmt(ingresoCreditosIA)}</p>
+          {ingresoCreditosIA > 0 && (
+            <p className="mt-0.5 text-[11px] text-muted">margen {fmt(margenCreditosIA)}</p>
+          )}
         </div>
       </div>
 
