@@ -314,35 +314,36 @@ export default function AdminPortal({
             Dale acceso a tu secretaria o administrador para crear facturas y registrar cobros — sin ver tus
             finanzas personales ni el total del negocio.
           </p>
-          <div className="mb-4 grid w-full max-w-md grid-cols-2 gap-2.5">
-            <div className="flex flex-col rounded-xl border border-border p-3.5 text-left">
-              <span className="text-xs font-medium">Secretaria</span>
-              <span className="mb-1.5 text-sm font-medium">
-                $10<span className="text-xs text-muted">/mes</span>
-              </span>
-              <p className="mb-3 flex-1 text-xs text-muted">Facturación, clientes y cobros.</p>
-              <button
-                className="flex items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
-                onClick={() => abrirModalConTier("secretaria")}
-              >
-                <i className="ti ti-lock" style={{ fontSize: 12 }} /> Elegir
-              </button>
-            </div>
-            <div className="flex flex-col rounded-xl border border-teal p-3.5 text-left">
-              <span className="text-xs font-medium text-teal">Administrador</span>
-              <span className="mb-1.5 text-sm font-medium">
-                $20<span className="text-xs text-muted">/mes</span>
-              </span>
-              <p className="mb-3 flex-1 text-xs text-muted">Todo lo de Secretaria + Pagos, Metas, Bóveda y Cuentas.</p>
-              <button
-                className="flex items-center justify-center gap-1 rounded-lg py-2 text-xs font-medium text-white hover:opacity-90"
-                style={{ background: "#1D9E75" }}
-                onClick={() => abrirModalConTier("administrador")}
-              >
-                <i className="ti ti-lock" style={{ fontSize: 12 }} /> Elegir
-              </button>
-            </div>
+          <div className="mb-3 grid w-full max-w-md grid-cols-2 gap-2.5">
+            {NIVELES.map((n) => {
+              const seleccionado = tierInicialModal === n.id;
+              return (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => setTierInicialModal(n.id)}
+                  className="flex flex-col rounded-xl border p-3.5 text-left"
+                  style={
+                    seleccionado ? { borderColor: "#1D9E75", background: "rgba(29,158,117,.06)" } : { borderColor: "var(--border)" }
+                  }
+                >
+                  <span className={`text-xs font-medium ${seleccionado ? "text-teal" : ""}`}>{n.label}</span>
+                  <span className="mb-1.5 text-sm font-medium">
+                    {n.precio.split("/")[0]}
+                    <span className="text-xs text-muted">/{n.precio.split("/")[1]}</span>
+                  </span>
+                  <p className="text-xs text-muted">{n.descripcion}</p>
+                </button>
+              );
+            })}
           </div>
+          <button
+            className="vc-btn-primary mb-4 flex items-center justify-center gap-1"
+            style={{ width: "auto" }}
+            onClick={() => setModalAbierto(true)}
+          >
+            <i className="ti ti-lock" /> Añadir Admin
+          </button>
           <ul className="flex flex-col gap-1 text-xs text-muted">
             <li>✓ Login propio — nunca tus credenciales</li>
             <li>✓ Permisos granulares por persona</li>
