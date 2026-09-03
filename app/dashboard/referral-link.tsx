@@ -8,6 +8,11 @@ import { useState } from "react";
 // Quien se registre con este link entra con referred_by apuntando a este
 // usuario, y paga Core con descuento ($12.99 en vez de $14.99) si decide
 // pagar en vez de empezar gratis — ver /registro y la migración 0031.
+//
+// Referido en Pro (3 sept 2026): si el referido elige Pro directamente,
+// no paga descuento — le regalamos el primer mes completo (trial de 30
+// días en app/api/stripe/checkout/route.ts), sin tocar el precio normal
+// de $49.99/mes de ahí en adelante.
 export default function ReferralLink({ userId }: { userId: string }) {
   const [copiado, setCopiado] = useState(false);
 
@@ -31,7 +36,8 @@ export default function ReferralLink({ userId }: { userId: string }) {
     <div className="vc-card mb-4">
       <p className="text-xs uppercase tracking-wide text-muted">Invita y gana descuento para ellos</p>
       <p className="mt-1 text-sm text-text">
-        Comparte tu link — quien se registre con él paga Core con descuento ($12.99/mes en vez de $14.99).
+        Comparte tu link — quien se registre con él paga Core con descuento ($12.99/mes en vez de $14.99), o si
+        elige Pro directamente, el primer mes le sale gratis.
       </p>
       <div className="mt-3 flex items-center gap-2">
         <input

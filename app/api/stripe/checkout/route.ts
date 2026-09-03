@@ -46,6 +46,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Referido en Pro (3 sept 2026, pedido de Joel: "hay que hacer un link
+  // para Pro pq la idea es vender todos los pro posibles pq los medicos
+  // caen en Pro"). A diferencia de Core (que usa un Price ID paralelo con
+  // descuento, arriba), Pro usa un trial de 30 días sobre el MISMO Price ID
+  // — no hace falta crear precios nuevos en Stripe ni env vars nuevas. Se
+  // confirmó que checkout.session.completed escribe plan_status="active" e
+  // igual customer.subscription.updated trata "trialing" como "active", así
+  // que el usuario referido queda con acceso completo a Pro desde que
+  // termina el checkout, sin pagar nada el primer mes. Pro+ queda fuera a
+  // propósito (ya no es autoservicio).
+  const esReferidoProConTrial = plan === "pro" && esReferido;
+
   const origin = req.headers.get("origin") || "https://www.victorcfo.com";
   const separadorReturn = returnTo.includes("?") ? "&" : "?";
   const separadorCancel = cancelTo.includes("?") ? "&" : "?";
@@ -58,7 +70,10 @@ export async function POST(req: NextRequest) {
       customer: perfil?.stripe_customer_id || undefined,
       customer_email: perfil?.stripe_customer_id ? undefined : user.email,
       metadata: { supabase_user_id: user.id, plan, ciclo },
-      subscription_data: { metadata: { supabase_user_id: user.id, plan, ciclo } },
+      subscription_data: {
+        metadata: { supabase_user_id: user.id, plan, ciclo },
+        ...(esReferidoProConTrial ? { trial_period_days: 30 } : {}),
+      },
       success_url: `${origin}${returnTo}${separadorReturn}pago=exitoso`,
       cancel_url: `${origin}${cancelTo}${separadorCancel}plan=${plan}&ciclo=${ciclo}`,
       allow_promotion_codes: true,
