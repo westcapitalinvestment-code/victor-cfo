@@ -50,11 +50,13 @@ const PRICE_ENV_VARS: Record<PlanId, Record<Ciclo, string | undefined>> = {
   },
 };
 
-// Precio con descuento de referido (30 agosto 2026) — solo existe para
-// Core, y solo aplica cuando el usuario que va a pagar tiene un
-// referred_by real (alguien lo invitó con su link). Sin referidor, paga
-// el precio normal de PRICE_ENV_VARS de arriba — por diseño no hace falta
-// ninguna lógica especial para ese caso, ya existía.
+// Precio con descuento de referido — DEPRECADO (4 sept 2026, pedido de
+// Joel: "que los 2 sean iguales", Core referido pasa de descuento
+// permanente a primer mes gratis, igual que Pro — ver esReferidoConTrial
+// en app/api/stripe/checkout/route.ts). Ya no se usa para checkouts
+// nuevos, pero el Price ID sigue vivo aquí (nunca se borra un Price de
+// Stripe) solo para que todosLosPriceIdsDePlanes() siga reconociendo a
+// quien ya quedó suscrito con este precio antes del cambio.
 const PRICE_ENV_VARS_CORE_REFERIDO: Record<Ciclo, string | undefined> = {
   mensual: process.env.STRIPE_PRICE_CORE_MENSUAL_REFERIDO,
   anual: process.env.STRIPE_PRICE_CORE_ANUAL_REFERIDO,
@@ -74,10 +76,13 @@ export function todosLosPriceIdsDePlanes(): string[] {
   ].filter((v): v is string => !!v);
 }
 
-export function priceIdPara(plan: PlanId, ciclo: Ciclo, esReferido: boolean = false): string | null {
-  if (plan === "core" && esReferido) {
-    return PRICE_ENV_VARS_CORE_REFERIDO[ciclo] || PRICE_ENV_VARS.core[ciclo] || null;
-  }
+// Nota (4 sept 2026): el parámetro esReferido ya NO cambia el Price ID —
+// Core y Pro referidos ahora pagan el precio normal, con 30 días de
+// trial aplicados aparte en subscription_data (ver checkout/route.ts).
+// Se deja el parámetro en la firma sin uso para no romper el único
+// caller existente; queda documentado el porqué en vez de borrarlo en
+// silencio.
+export function priceIdPara(plan: PlanId, ciclo: Ciclo, _esReferido: boolean = false): string | null {
   return PRICE_ENV_VARS[plan]?.[ciclo] || null;
 }
 

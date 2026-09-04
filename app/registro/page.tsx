@@ -24,28 +24,31 @@ import { esCicloValido, type Ciclo } from "@/lib/stripe";
 //
 // Referidos + plan gratis (30 agosto 2026, migración 0031): esta pantalla
 // ahora sirve DOS caminos, decididos por Joel — (1) alguien pagando de una
-// vez ($12.99/mes si vino con un link ?ref=<uuid> de otro usuario, $14.99
-// si no), o (2) "Empezar gratis (limitada)" sin pasar por Stripe para nada
-// — acceso completo a Bóveda/Metas/Citas/CSV, pero sin conectar banco ni
-// hablar con VICTOR hasta que suba de plan. Joel fue explícito en que la
-// opción de PAGAR debe ser la primaria/más prominente y la gratis la
-// secundaria, en ambos casos (con o sin ?ref=): "AMBOS SE LE OFRECE LAS
-// OPCIONES DE $12.99 O $14.99, O LA GRATIS LIMITADA COMO 2DA OPCION".
-// ref_id se manda en signUp({ options: { data: {...} } }) para que el
-// trigger handle_new_user (0031) lo guarde en users.referred_by ANTES de
-// que exista sesión autenticada — no hace falta un UPDATE después.
+// vez (precio normal, con 30 días gratis si vino con un link ?ref=<uuid> de
+// otro usuario), o (2) "Empezar gratis (limitada)" sin pasar por Stripe
+// para nada — acceso completo a Bóveda/Metas/Citas/CSV, pero sin conectar
+// banco ni hablar con VICTOR hasta que suba de plan. Joel fue explícito en
+// que la opción de PAGAR debe ser la primaria/más prominente y la gratis la
+// secundaria, en ambos casos (con o sin ?ref=). ref_id se manda en
+// signUp({ options: { data: {...} } }) para que el trigger handle_new_user
+// (0031) lo guarde en users.referred_by ANTES de que exista sesión
+// autenticada — no hace falta un UPDATE después.
 //
 // Pro destapado (3 sept 2026): ya tiene los 6 Price ID reales en Stripe, así
-// que dejó de forzarse todo a Core. Pro NO tiene precio de referido aparte
-// (a diferencia de Core) — su beneficio de referido es un trial de 30 días
-// sobre el mismo Price (ver app/api/stripe/checkout/route.ts,
-// esReferidoProConTrial), así que el mensaje en pantalla para Pro+referido
-// es "primer mes gratis", no un precio tachado. Enterprise (proplus) sigue
-// bloqueado — no aparece aquí como opción.
+// que dejó de forzarse todo a Core. Enterprise (proplus) sigue bloqueado —
+// no aparece aquí como opción.
+//
+// Referido = mes gratis para los dos planes (4 sept 2026, pedido de Joel:
+// "que los 2 sean iguales"). Antes Core tenía un Price ID de descuento
+// permanente ($12.99/mes para siempre) mientras Pro tenía un trial de 30
+// días — se unificó a "primer mes gratis, luego precio normal" para ambos
+// (ver esReferidoConTrial en app/api/stripe/checkout/route.ts). Por eso ya
+// no hay precio "referido" tachado aquí — el precio mostrado es siempre el
+// normal, y el beneficio se comunica aparte como mensaje de "mes gratis".
 const PRECIOS_REGISTRO = {
   core: {
-    mensual: { normal: "14.99", referido: "12.99", sufijo: "/mes" },
-    anual: { normal: "164", referido: "142", sufijo: "/año" },
+    mensual: { normal: "14.99", sufijo: "/mes" },
+    anual: { normal: "164", sufijo: "/año" },
   },
   pro: {
     mensual: { normal: "49.99", sufijo: "/mes" },
@@ -79,11 +82,10 @@ function RegistroForm() {
 
   const [plan, setPlan] = useState<"core" | "pro">(planInicial);
   const precios = PRECIOS_REGISTRO[plan][ciclo];
-  // Pro no tiene precio de referido aparte (su beneficio es un trial de 30
-  // días sobre el mismo Price, ver esReferidoProConTrial en
-  // /api/stripe/checkout) — solo Core muestra el precio tachado.
-  const esReferidoConDescuento = plan === "core" && esReferido;
-  const precioMostrar = esReferidoConDescuento ? (precios as { normal: string; referido: string }).referido : precios.normal;
+  // El precio mostrado es siempre el normal — el beneficio de referido
+  // (mes gratis, cualquier plan) se comunica aparte, no como precio
+  // tachado. Ver comentario grande arriba de PRECIOS_REGISTRO.
+  const precioMostrar = precios.normal;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -229,26 +231,15 @@ function RegistroForm() {
             </button>
           </div>
 
-          {esReferido && plan === "core" && (
+          {esReferido && (
             <p className="mb-1 text-xs font-medium text-teal">
-              Te invitaron con un link especial — precio de referido aplicado.
-            </p>
-          )}
-          {esReferido && plan === "pro" && (
-            <p className="mb-1 text-xs font-medium text-teal">
-              Te invitaron con un link especial — tu primer mes de Pro es gratis.
+              Te invitaron con un link especial — tu primer mes de {plan === "pro" ? "Pro" : "Core"} es gratis.
             </p>
           )}
 
           <div className="mb-1 flex items-baseline gap-1">
             <span className="text-2xl font-semibold">${precioMostrar}</span>
             <span className="text-xs text-muted">{precios.sufijo}</span>
-            {esReferidoConDescuento && (
-              <span className="ml-1 text-xs text-muted line-through">
-                ${(precios as { normal: string; referido: string }).normal}
-                {precios.sufijo}
-              </span>
-            )}
           </div>
           <p className="mb-1 text-xs text-muted">
             {plan === "pro"
@@ -298,7 +289,11 @@ function RegistroForm() {
           {error && <p className="text-xs text-red">{error}</p>}
 
           <button type="submit" className="vc-btn-primary mt-2" disabled={loading || !aceptaTerminos}>
-            {loading && accionEnCurso === "pago" ? "Creando cuenta..." : `Activar por $${precioMostrar}${precios.sufijo}`}
+            {loading && accionEnCurso === "pago"
+              ? "Creando cuenta..."
+              : esReferido
+                ? `Activar — primer mes gratis (luego $${precioMostrar}${precios.sufijo})`
+                : `Activar por $${precioMostrar}${precios.sufijo}`}
           </button>
 
           <div className="my-1 flex items-center gap-2 text-xs text-muted">

@@ -255,10 +255,9 @@ export default function LandingPage() {
               <div>
                 <div className={styles.addonName}>Usuario Referido</div>
                 <div className={styles.addonDesc}>
-                  Gratis · comparte tu link — cada quien tiene su propia cuenta. Si tu referido elige Core, paga
-                  $12.99/mes en vez de $14.99. Si elige Pro, su primer mes es completamente gratis. Y cuando tu
-                  referido empiece a pagar de verdad, tú te ganas un mes gratis de tu propio plan — sin límite,
-                  acumulable con cada persona que refieras.
+                  Gratis · comparte tu link — cada quien tiene su propia cuenta. Tu referido arranca con su primer
+                  mes completamente gratis, sea Core o Pro. Y cuando empiece a pagar de verdad, tú te ganas un mes
+                  gratis de tu propio plan — sin límite, acumulable con cada persona que refieras.
                 </div>
               </div>
             </div>

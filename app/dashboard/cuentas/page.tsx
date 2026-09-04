@@ -132,9 +132,10 @@ export default function CuentasPage() {
   useEffect(() => {
     cargarCuentas();
   }, [cargarCuentas]);
-  // Igual que en victor-chat.tsx: llama al checkout de Stripe de verdad,
-  // con el precio correcto ($12.99 referido / $14.99 normal) ya resuelto
-  // por priceIdPara en el server a partir de users.referred_by.
+  // Igual que en victor-chat.tsx: llama al checkout de Stripe de verdad.
+  // El precio siempre es el normal ($14.99) — si hay referido, el checkout
+  // aplica 30 días de trial aparte (esReferidoConTrial en
+  // app/api/stripe/checkout/route.ts), no un Price ID con descuento.
   async function activarCore() {
     setActivandoCore(true);
     setUpsellError(null);
@@ -361,14 +362,14 @@ export default function CuentasPage() {
           </p>
           <div className="mb-3 rounded-lg border border-teal bg-teal/[.06] p-3">
             <p className="text-2xl font-semibold text-teal">
-              ${esReferido ? "12.99" : "14.99"}
+              $14.99
               <span className="text-sm font-normal">/mes</span>
             </p>
-            {esReferido && <p className="text-xs text-muted">Precio de referido</p>}
+            {esReferido && <p className="text-xs font-medium text-teal">Primer mes gratis</p>}
           </div>
           {upsellError && <p className="mb-2 text-xs text-red">{upsellError}</p>}
           <button className="vc-btn-primary mb-2" disabled={activandoCore} onClick={activarCore}>
-            {activandoCore ? "Conectando con Stripe..." : `Activar Core — $${esReferido ? "12.99" : "14.99"}/mes`}
+            {activandoCore ? "Conectando con Stripe..." : esReferido ? "Activar Core — primer mes gratis" : "Activar Core — $14.99/mes"}
           </button>
           <button
             className="w-full rounded-lg border border-border bg-transparent p-3 text-sm text-muted"

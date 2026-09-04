@@ -32,13 +32,18 @@ export async function POST(req: NextRequest) {
     .eq("id", user.id)
     .maybeSingle();
 
-  // Precio de referido (30 agosto 2026): si a este usuario lo trajo el
-  // link de otro (referred_by no es null — se guarda en el signup, ver
-  // migración 0031), paga el Core con descuento en vez del precio normal.
-  // Nunca se confía en nada que mande el cliente para esto — referred_by
-  // se lee de la base de datos, no del body de este POST.
+  // Referido (30 agosto 2026, ajustado 4 sept 2026 — pedido de Joel: "que
+  // los 2 sean iguales"). Si a este usuario lo trajo el link de otro
+  // (referred_by no es null — se guarda en el signup, ver migración 0031),
+  // paga el precio NORMAL de Core o Pro, pero con 30 días de trial — mismo
+  // mecanismo para los dos planes, sin Price ID aparte ni env vars nuevas.
+  // Antes Core tenía un descuento permanente ($12.99/mes para siempre) en
+  // vez de mes gratis; se dejó así porque no era simétrico con Pro y le
+  // daba menos beneficio real a quien refiere desde Core. Nunca se confía
+  // en nada que mande el cliente para esto — referred_by se lee de la base
+  // de datos, no del body de este POST.
   const esReferido = !!perfil?.referred_by;
-  const priceId = priceIdPara(plan, ciclo, esReferido);
+  const priceId = priceIdPara(plan, ciclo);
   if (!priceId) {
     return NextResponse.json(
       { error: `Falta configurar el Price ID de Stripe para ${plan}/${ciclo} en las variables de entorno.` },
@@ -46,17 +51,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Referido en Pro (3 sept 2026, pedido de Joel: "hay que hacer un link
-  // para Pro pq la idea es vender todos los pro posibles pq los medicos
-  // caen en Pro"). A diferencia de Core (que usa un Price ID paralelo con
-  // descuento, arriba), Pro usa un trial de 30 días sobre el MISMO Price ID
-  // — no hace falta crear precios nuevos en Stripe ni env vars nuevas. Se
-  // confirmó que checkout.session.completed escribe plan_status="active" e
-  // igual customer.subscription.updated trata "trialing" como "active", así
-  // que el usuario referido queda con acceso completo a Pro desde que
-  // termina el checkout, sin pagar nada el primer mes. Pro+ queda fuera a
-  // propósito (ya no es autoservicio).
-  const esReferidoProConTrial = plan === "pro" && esReferido;
+  // Se confirmó que checkout.session.completed escribe plan_status="active"
+  // e igual customer.subscription.updated trata "trialing" como "active",
+  // así que el usuario referido queda con acceso completo desde que termina
+  // el checkout, sin pagar nada el primer mes. Pro+ queda fuera a propósito
+  // (ya no es autoservicio).
+  const esReferidoConTrial = esReferido && (plan === "core" || plan === "pro");
 
   const origin = req.headers.get("origin") || "https://www.victorcfo.com";
   const separadorReturn = returnTo.includes("?") ? "&" : "?";
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       metadata: { supabase_user_id: user.id, plan, ciclo },
       subscription_data: {
         metadata: { supabase_user_id: user.id, plan, ciclo },
-        ...(esReferidoProConTrial ? { trial_period_days: 30 } : {}),
+        ...(esReferidoConTrial ? { trial_period_days: 30 } : {}),
       },
       success_url: `${origin}${returnTo}${separadorReturn}pago=exitoso`,
       cancel_url: `${origin}${cancelTo}${separadorCancel}plan=${plan}&ciclo=${ciclo}`,

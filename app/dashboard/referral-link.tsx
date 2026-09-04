@@ -6,13 +6,15 @@ import { useState } from "react";
 // uuid real de users.id como ?ref= — decisión deliberada de no generar un
 // código corto aparte (sin lógica de colisiones/unicidad que mantener).
 // Quien se registre con este link entra con referred_by apuntando a este
-// usuario, y paga Core con descuento ($12.99 en vez de $14.99) si decide
-// pagar en vez de empezar gratis — ver /registro y la migración 0031.
+// usuario — ver /registro y la migración 0031.
 //
-// Referido en Pro (3 sept 2026): si el referido elige Pro directamente,
-// no paga descuento — le regalamos el primer mes completo (trial de 30
-// días en app/api/stripe/checkout/route.ts), sin tocar el precio normal
-// de $49.99/mes de ahí en adelante.
+// Mes gratis para el referido, Core y Pro por igual (4 sept 2026, pedido
+// de Joel: "que los 2 sean iguales"). Antes Core pagaba un precio con
+// descuento permanente ($12.99 en vez de $14.99, para siempre) mientras
+// Pro tenía 30 días gratis — ahora los dos funcionan igual: primer mes
+// completamente gratis (trial de 30 días en
+// app/api/stripe/checkout/route.ts), y de ahí en adelante el precio
+// normal de cada plan.
 //
 // Crédito para el que REFIERE (3 sept 2026, migración 0062): cuando su
 // referido paga su primera factura real, quien compartió el link se gana
@@ -39,12 +41,11 @@ export default function ReferralLink({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="vc-card mb-4">
+    <div id="referidos" className="vc-card mb-4 scroll-mt-20">
       <p className="text-xs uppercase tracking-wide text-muted">Invita y ganen los dos</p>
       <p className="mt-1 text-sm text-text">
-        Comparte tu link — quien se registre con él paga Core con descuento ($12.99/mes en vez de $14.99), o si
-        elige Pro directamente, el primer mes le sale gratis. Y cuando empiece a pagar de verdad, tú te ganas un
-        mes gratis también.
+        Comparte tu link — quien se registre con él tiene su primer mes completamente gratis, sea Core o Pro. Y
+        cuando empiece a pagar de verdad, tú te ganas un mes gratis de tu propio plan también.
       </p>
       <div className="mt-3 flex items-center gap-2">
         <input

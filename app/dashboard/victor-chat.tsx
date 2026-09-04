@@ -52,14 +52,16 @@ export default function VictorChat({
   // Gate del plan gratis (30 agosto 2026, migración 0031): un usuario
   // 'gratis' tiene cuenta real e independiente, pero hablar con VICTOR es
   // una de las dos cosas caras (~$7.50/mes de tope de Anthropic) que
-  // requieren Core. esReferido decide qué precio de upgrade mostrarle acá
-  // — $12.99 si alguien lo refirió, $14.99 si no (viene de layout.tsx,
-  // que lo lee de users.referred_by).
+  // requieren Core. esReferido ya no cambia el precio mostrado (4 sept
+  // 2026: Core referido pasó de descuento permanente a primer mes gratis,
+  // igual que Pro) — solo agrega el mensaje de "primer mes gratis" abajo
+  // del precio normal (viene de layout.tsx, que lo lee de
+  // users.referred_by).
   plan?: string | null;
   esReferido?: boolean;
 }) {
   const bloqueado = plan === "gratis";
-  const precioUpgrade = esReferido ? "12.99" : "14.99";
+  const precioUpgrade = "14.99";
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
 
@@ -463,12 +465,16 @@ export default function VictorChat({
                   ${precioUpgrade}
                   <span className="text-sm font-normal">/mes</span>
                 </p>
-                {esReferido && <p className="text-xs text-muted">Precio de referido</p>}
+                {esReferido && <p className="text-xs font-medium text-teal">Primer mes gratis</p>}
                 <p className="text-xs text-muted">Cancela cuando quieras</p>
               </div>
               {upgradeError && <p className="text-center text-xs text-red">{upgradeError}</p>}
               <button onClick={activarCore} className="vc-btn-primary" disabled={upgradeLoading}>
-                {upgradeLoading ? "Conectando con Stripe..." : `Activar Core — $${precioUpgrade}/mes`}
+                {upgradeLoading
+                  ? "Conectando con Stripe..."
+                  : esReferido
+                    ? `Activar Core — primer mes gratis`
+                    : `Activar Core — $${precioUpgrade}/mes`}
               </button>
               {/* Sin Core, este usuario no tiene a VICTOR para preguntarle
                   nada (30 agosto 2026, pedido de Joel) — que no se sienta

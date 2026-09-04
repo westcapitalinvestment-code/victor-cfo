@@ -23,11 +23,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let autoOpenSaludoDiario = false;
   let fullName: string | null = null;
   let plan: string | null = null;
-  // esReferido (30 agosto 2026): solo importa para el precio de upgrade que
-  // le mostramos a un usuario 'gratis' cuando toca algo bloqueado (Plaid o
-  // VICTOR) — $12.99 si alguien lo refirió, $14.99 si no. No es lo mismo
-  // que "referred_by" para el que SÍ paga (eso lo lee el checkout directo
-  // de la base de datos); aquí solo es para pintar el número correcto.
+  // esReferido (30 agosto 2026, ajustado 4 sept 2026): solo importa para
+  // decidir si le mostramos a un usuario 'gratis' el mensaje de "primer mes
+  // gratis" cuando toca algo bloqueado (Plaid o VICTOR) — el precio en sí
+  // ya es siempre el normal ($14.99), el beneficio de referido es el mes
+  // gratis, no un descuento. No es lo mismo que "referred_by" para el que
+  // SÍ paga (eso lo lee el checkout directo de la base de datos); aquí solo
+  // es para decidir si se muestra el mensaje.
   let esReferido = false;
   // Entidades de negocio del usuario (solo aplica a Pro) + cuál quedó
   // activa en el selector "Negocio" del topbar — ver lib/entidad-activa.ts.
