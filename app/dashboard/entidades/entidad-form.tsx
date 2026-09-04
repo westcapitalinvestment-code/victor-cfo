@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import CobroTarjeta from "./cobro-tarjeta";
 
 // Formulario completo de entidad de negocio — calcado campo por campo de
 // "VICTOR — Dashboard Pro.html" (sección Configuración: Perfil/Fiscal/
@@ -45,6 +46,8 @@ export type EntidadCompleta = {
   logo_r2_key: string | null;
   brand_color: string | null;
   ath_movil_business_path: string | null;
+  stripe_connect_account_id?: string | null;
+  stripe_connect_charges_enabled?: boolean | null;
 };
 
 // Paleta de colores de marca (pedido de Joel, 1 sept 2026): para que la
@@ -533,6 +536,19 @@ export default function EntidadForm({
                   llega neto (BPPR cobra 2.25% por pago, mínimo $0.06).
                 </p>
               </div>
+            )}
+            {metodosCobro.includes("Stripe") && modo === "editar" && entidad?.id && (
+              <CobroTarjeta
+                entityId={entidad.id}
+                cuentaId={entidad.stripe_connect_account_id}
+                chargesEnabled={entidad.stripe_connect_charges_enabled}
+              />
+            )}
+            {metodosCobro.includes("Stripe") && modo === "crear" && (
+              <p className="mt-3 text-xs text-muted">
+                Guarda tu negocio primero — después de crearlo, en Configuración podrás conectar tu cuenta de Stripe
+                para cobrar con tarjeta de verdad.
+              </p>
             )}
           </div>
 

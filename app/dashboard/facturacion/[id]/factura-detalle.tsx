@@ -51,6 +51,8 @@ type Factura = {
     zip: string | null;
     invoice_footer: string | null;
     ivu_applies: boolean;
+    stripe_connect_account_id: string | null;
+    stripe_connect_charges_enabled: boolean;
   } | null;
 };
 
@@ -142,6 +144,15 @@ export default function FacturaDetalle({
   const [editandoPago, setEditandoPago] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
+
+  // Cobro real con tarjeta vía Stripe Connect (migración 0065, 3 sept
+  // 2026) — separado de "Registrar pago", que solo anota a mano un cobro
+  // que ya pasó por fuera. Este genera un link de Stripe Checkout de
+  // verdad, a nombre de la cuenta conectada del negocio, y el webhook de
+  // Connect marca la factura pagada solo — no hace falta "Registrar pago"
+  // después.
+  const [cobrando, setCobrando] = useState(false);
+  const [linkCobro, setLinkCobro] = useState<string | null>(null);
 
   const [adjuntos, setAdjuntos] = useState(adjuntosIniciales);
   const [subiendo, setSubiendo] = useState(false);
@@ -235,6 +246,39 @@ export default function FacturaDetalle({
     const destino = factura.clients?.telefono ? telefonoWhatsapp(factura.clients.telefono) : "";
     const url = `https://wa.me/${destino}?text=${encodeURIComponent(mensajeConLink)}`;
     window.open(url, "_blank");
+  }
+
+  // Genera el link real de Stripe Checkout (Connect Standard) para esta
+  // factura y lo manda directo por WhatsApp — mismo criterio que
+  // enviarPorWhatsapp: si la factura seguía en borrador, la marca enviada
+  // primero.
+  async function cobrarConTarjeta() {
+    setCobrando(true);
+    setError(null);
+    if (factura.estado === "borrador") {
+      await actualizarEstado("enviada");
+    }
+    const res = await fetch("/api/stripe-connect/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoiceId: factura.id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setCobrando(false);
+    if (!res.ok || !data.url) {
+      setError(data.error ?? "No se pudo generar el link de cobro.");
+      return;
+    }
+    setLinkCobro(data.url);
+  }
+
+  function enviarLinkCobroPorWhatsapp() {
+    if (!linkCobro) return;
+    const mensaje = `Hola ${clienteNombre}, aquí puedes pagar tu factura ${factura.numero}${
+      entidadNombre ? ` de ${entidadNombre}` : ""
+    } con tarjeta: ${linkCobro}`;
+    const destino = factura.clients?.telefono ? telefonoWhatsapp(factura.clients.telefono) : "";
+    window.open(`https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`, "_blank");
   }
 
   // PDF real generado en el servidor (app/api/facturas/[id]/pdf) — no es
@@ -613,6 +657,47 @@ export default function FacturaDetalle({
             </button>
           )}
         </div>
+
+        {factura.estado !== "pagada" && factura.business_entities?.stripe_connect_charges_enabled && (
+          // Cobro real con tarjeta (Stripe Connect Standard, migración 0065)
+          // — separado de "Registrar pago" de abajo: esto genera un link de
+          // verdad y el cliente paga con su tarjeta ahí mismo; el webhook de
+          // Connect marca la factura pagada solo, sin que el usuario Pro
+          // tenga que anotarlo a mano.
+          <div className="no-imprimir flex flex-col gap-2 border-t border-border pt-3">
+            {!linkCobro ? (
+              <button className="vc-btn-primary" disabled={cobrando} onClick={cobrarConTarjeta}>
+                {cobrando ? "Generando link..." : "💳 Cobrar con tarjeta"}
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2 rounded-lg border border-teal/30 bg-teal/[.05] p-3 text-xs">
+                <p className="text-xs uppercase tracking-wide text-muted">Link de cobro listo</p>
+                <p className="break-all text-text">{linkCobro}</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="vc-btn-primary flex-1"
+                    style={{ width: "auto" }}
+                    onClick={enviarLinkCobroPorWhatsapp}
+                  >
+                    <i className="ti ti-brand-whatsapp" /> Enviar por WhatsApp
+                  </button>
+                  <a
+                    href={linkCobro}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 rounded-pill border border-border py-2 text-center text-xs font-medium hover:opacity-80"
+                  >
+                    Abrir link
+                  </a>
+                </div>
+                <button type="button" className="text-left text-muted underline" onClick={() => setLinkCobro(null)}>
+                  Generar otro link
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {factura.estado !== "pagada" && (
           <div className="no-imprimir flex flex-col gap-2 border-t border-border pt-3">
