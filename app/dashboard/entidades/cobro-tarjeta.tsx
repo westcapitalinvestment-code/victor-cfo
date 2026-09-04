@@ -85,6 +85,28 @@ export default function CobroTarjeta({
         )}
       </div>
       {error && <p className="mt-2 text-xs text-red">{textoConLinks(error)}</p>}
+      {/* Tip de más formas de pago (4 sept 2026, pedido de Joel: "que el
+          cliente tenga más opciones para pagar" — su esposa preguntó por
+          Klarna específicamente). No requiere ningún cambio en el checkout
+          de VICTOR — lib/stripe-connect-checkout.ts no fija
+          payment_method_types, así que Stripe ya muestra automáticamente
+          cualquier método que el dueño tenga prendido en SU propio Stripe
+          Dashboard. Solo hacía falta que el usuario supiera que existe. */}
+      {estado === "activo" && (
+        <p className="mt-2 text-[11px] text-muted">
+          ¿Quieres darle a tus clientes más formas de pagar (Klarna, Afterpay, Affirm — pagar en cuotas — o
+          transferencia bancaria directa)? Actívalas en tu{" "}
+          <a
+            href="https://dashboard.stripe.com/settings/payment_methods"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-teal underline"
+          >
+            Stripe Dashboard → Payment methods
+          </a>
+          . VICTOR las muestra automáticamente en el checkout sin que tengas que hacer nada más aquí.
+        </p>
+      )}
     </div>
   );
 }
