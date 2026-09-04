@@ -50,7 +50,7 @@ export default function SessionTimeoutConfig() {
 
   return (
     <div className="vc-card mb-4">
-      <p className="text-xs uppercase tracking-wide text-muted">Cerrar sesión por inactividad</p>
+      <p className="text-sm font-semibold">Cerrar sesión por inactividad</p>
       <p className="mt-1 text-sm text-text">
         Si no usas la app por este tiempo, te vuelve a pedir el PIN. Si no tienes un PIN activado, en su lugar cierra
         la sesión de verdad y hay que entrar con tu contraseña.

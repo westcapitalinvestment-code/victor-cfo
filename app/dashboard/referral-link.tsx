@@ -42,7 +42,7 @@ export default function ReferralLink({ userId }: { userId: string }) {
 
   return (
     <div id="referidos" className="vc-card mb-4 scroll-mt-20">
-      <p className="text-xs uppercase tracking-wide text-muted">Invita y ganen los dos</p>
+      <p className="text-sm font-semibold">Invita y ganen los dos</p>
       <p className="mt-1 text-sm text-text">
         Comparte tu link — quien se registre con él tiene su primer mes completamente gratis, sea Core o Pro. Y
         cuando empiece a pagar de verdad, tú te ganas un mes gratis de tu propio plan también.

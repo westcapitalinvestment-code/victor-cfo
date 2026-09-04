@@ -38,7 +38,7 @@ export default async function ConfigPage() {
       <h1 className="mb-4 text-lg font-medium">Configuración</h1>
 
       <div className="vc-card mb-4">
-        <p className="text-xs uppercase tracking-wide text-muted">Cuenta</p>
+        <p className="text-sm font-semibold">Cuenta</p>
         <p className="mt-1 text-sm font-medium">{profile?.full_name || user.email}</p>
         <p className="text-xs text-muted">{user.email}</p>
         <p className="mt-2 inline-block rounded bg-teal/10 px-2 py-1 text-xs font-medium text-teal">
@@ -51,7 +51,7 @@ export default async function ConfigPage() {
           que no tiene acceso a VICTOR para preguntarle nada. Visible para
           todos, en un lugar fijo y fácil de encontrar. */}
       <div className="vc-card mb-4">
-        <p className="text-xs uppercase tracking-wide text-muted">Soporte</p>
+        <p className="text-sm font-semibold">Soporte</p>
         <p className="mt-1 text-sm">
           ¿Tienes una pregunta o algo no está funcionando? Escríbenos, te contestamos lo antes posible.
         </p>
@@ -66,16 +66,21 @@ export default async function ConfigPage() {
 
       {entities && entities.length > 0 && (
         <div className="vc-card mb-4">
-          <p className="mb-2 text-xs uppercase tracking-wide text-muted">Negocio</p>
+          <p className="mb-2 text-sm font-semibold">Negocio</p>
           {entities.map((e) => (
-            <Link
+            <div
               key={e.id}
-              href={`/dashboard/entidades/${e.id}/editar`}
-              className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0"
+              className="flex items-center justify-between gap-2 border-b border-border py-2 last:border-0"
             >
-              <span>{e.name}</span>
-              <span className="text-xs text-teal">Editar negocio →</span>
-            </Link>
+              <span className="text-sm">{e.name}</span>
+              <Link
+                href={`/dashboard/entidades/${e.id}/editar`}
+                className="shrink-0 rounded-lg border border-teal px-3 py-1.5 text-xs font-medium text-teal"
+                style={{ background: "rgba(29,158,117,.1)" }}
+              >
+                Editar negocio
+              </Link>
+            </div>
           ))}
         </div>
       )}

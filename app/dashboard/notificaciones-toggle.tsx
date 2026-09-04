@@ -119,7 +119,7 @@ export default function NotificacionesToggle() {
 
   return (
     <div className="vc-card mb-4">
-      <p className="text-xs uppercase tracking-wide text-muted">Notificaciones</p>
+      <p className="text-sm font-semibold">Notificaciones</p>
 
       {estado === "no_soportado" && (
         <p className="mt-2 text-sm text-muted">Tu navegador no soporta notificaciones push todavía.</p>

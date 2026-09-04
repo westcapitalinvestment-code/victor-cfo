@@ -118,7 +118,7 @@ export default function PinConfig() {
 
   return (
     <div className="vc-card mb-4">
-      <p className="text-xs uppercase tracking-wide text-muted">Bloqueo con PIN</p>
+      <p className="text-sm font-semibold">Bloqueo con PIN</p>
 
       {(estado === "sin_pin" || estado === "activo") && (
         <div className="mt-2 flex items-center justify-between">
