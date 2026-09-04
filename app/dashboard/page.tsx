@@ -383,20 +383,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* Tarjeta de referidos (4 sept 2026, pedido de Joel): llamativa a
           propósito — la mayoría de la gente no sabe que existe el sistema
-          de referidos si no la ve. Lleva directo al link + explicación en
-          Configuración en vez de duplicar esa lógica aquí. Solo a planes
-          pagados — ver comentario junto a esPagando arriba. */}
+          de referidos si no la ve. Sin explicación aquí (pedido de Joel,
+          4 sept: "que llame la atención" nada más) — esa vive en
+          Configuración, a donde lleva el link. Color ámbar a propósito,
+          distinto del teal que usa todo lo demás en Inicio, para que
+          resalte como el lugar al que hay que ir por el mes gratis. Solo a
+          planes pagados — ver comentario junto a esPagando arriba. */}
       {esPagando && (
         <Link
           href="/dashboard/config#referidos"
-          className="mb-3 flex items-center justify-between rounded-lg border border-teal p-3"
-          style={{ background: "rgba(29,158,117,.08)" }}
+          className="mb-3 flex items-center justify-between rounded-lg border p-3"
+          style={{ borderColor: "#D97706", background: "rgba(217,119,6,.1)" }}
         >
-          <div>
-            <p className="text-sm font-medium text-teal">🎁 Recibe mes Gratis</p>
-            <p className="mt-0.5 text-xs text-muted">Invita a alguien — cuando empiece a pagar, tú te ganas un mes gratis</p>
-          </div>
-          <span className="text-teal">→</span>
+          <p className="text-sm font-semibold" style={{ color: "#B45309" }}>
+            🎁 Recibe mes Gratis
+          </p>
+          <span style={{ color: "#B45309" }}>→</span>
         </Link>
       )}
 
