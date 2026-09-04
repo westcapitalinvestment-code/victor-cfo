@@ -2,6 +2,25 @@
 
 import { useState } from "react";
 
+// Los errores que devuelve Stripe a veces traen una URL adentro del texto
+// (ej. "...Visit your dashboard at https://dashboard.stripe.com/... to
+// answer the questionnaire") — sin esto salía como texto plano y Joel tenía
+// que seleccionar/copiar/pegar el link a mano (3 sept 2026, pedido de
+// Joel). Esto parte el mensaje en pedazos y convierte cualquier URL en un
+// link azul de verdad, abre en pestaña nueva.
+function textoConLinks(texto: string) {
+  const partes = texto.split(/(https?:\/\/[^\s]+)/g);
+  return partes.map((parte, i) =>
+    /^https?:\/\//.test(parte) ? (
+      <a key={i} href={parte} target="_blank" rel="noopener noreferrer" className="text-teal underline">
+        {parte}
+      </a>
+    ) : (
+      <span key={i}>{parte}</span>
+    )
+  );
+}
+
 // Activación de cobro real con tarjeta vía Stripe Connect Standard
 // (migración 0065, 3 sept 2026) — vive en el tab "Facturas" de EntidadForm,
 // junto al checkbox "Stripe" de métodos de cobro. Solo aparece EDITANDO una
@@ -65,7 +84,7 @@ export default function CobroTarjeta({
           </button>
         )}
       </div>
-      {error && <p className="mt-2 text-xs text-red">{error}</p>}
+      {error && <p className="mt-2 text-xs text-red">{textoConLinks(error)}</p>}
     </div>
   );
 }
