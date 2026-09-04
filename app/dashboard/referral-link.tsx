@@ -41,8 +41,14 @@ export default function ReferralLink({ userId }: { userId: string }) {
   }
 
   return (
-    <div id="referidos" className="vc-card mb-4 scroll-mt-20">
-      <p className="text-sm font-semibold">Invita y ganen los dos</p>
+    <div
+      id="referidos"
+      className="mb-4 scroll-mt-20 rounded-lg border p-3"
+      style={{ borderColor: "#D97706", background: "rgba(217,119,6,.1)" }}
+    >
+      <p className="text-sm font-semibold" style={{ color: "#B45309" }}>
+        🎁 Invita y ganen los dos
+      </p>
       <p className="mt-1 text-sm text-text">
         Comparte tu link — quien se registre con él tiene su primer mes completamente gratis, sea Core o Pro. Y
         cuando empiece a pagar de verdad, tú te ganas un mes gratis de tu propio plan también.
@@ -56,8 +62,8 @@ export default function ReferralLink({ userId }: { userId: string }) {
         />
         <button
           onClick={copiar}
-          className="rounded-lg border border-teal px-3 py-2 text-xs font-medium text-teal"
-          style={{ background: "rgba(29,158,117,.1)" }}
+          className="rounded-lg border px-3 py-2 text-xs font-medium"
+          style={{ borderColor: "#D97706", background: "rgba(217,119,6,.15)", color: "#B45309" }}
         >
           {copiado ? "¡Copiado!" : "Copiar"}
         </button>
