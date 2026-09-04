@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { plaidClient } from "@/lib/plaid";
 import { decryptSecret } from "@/lib/crypto";
+import { fechaHoyPR } from "@/lib/hora-pr";
 import type { Transaction } from "plaid";
 
 export type ResultadoSincronizacion = {
@@ -78,6 +79,40 @@ export async function sincronizarPlaidDeUsuario(
   const errores: string[] = [];
   const refreshInfo: string[] = [];
 
+  // Tope diario de transactionsRefresh, por PLAN (4 sept 2026, pedido de
+  // Joel — ver migración 0067). Core NUNCA fuerza refresh: solo usa
+  // transactionsSync (lo que Plaid ya tiene en su propia caché, gratis).
+  // Pro tiene un cupo diario: 2/día base (cubre las 2 corridas del cron
+  // nocturno) + 2/día extra por cada entidad de negocio adicional que paga
+  // ($24.99/mes c/u — users.addon_entidades_seats, migración 0063). El
+  // contador se gasta UNA vez por llamada a esta función, sin importar
+  // cuántos bancos tenga conectados el usuario — una sincronización con 3
+  // bancos gasta 1 del cupo, no 3.
+  let puedeRefrescarHoy = false;
+  if (esPro) {
+    const hoy = fechaHoyPR();
+    const { data: cfgUsuario } = await supabase
+      .from("users")
+      .select("addon_entidades_seats, plaid_refresh_count, plaid_refresh_count_fecha")
+      .eq("id", ownerId)
+      .maybeSingle();
+    const contadorHoy = cfgUsuario?.plaid_refresh_count_fecha === hoy ? (cfgUsuario?.plaid_refresh_count ?? 0) : 0;
+    const limiteHoy = 2 + 2 * (cfgUsuario?.addon_entidades_seats ?? 0);
+    puedeRefrescarHoy = contadorHoy < limiteHoy;
+    if (puedeRefrescarHoy) {
+      await supabase
+        .from("users")
+        .update({ plaid_refresh_count: contadorHoy + 1, plaid_refresh_count_fecha: hoy })
+        .eq("id", ownerId);
+    } else {
+      refreshInfo.push(
+        `Límite diario de actualizaciones en vivo alcanzado (${limiteHoy}/día) — usando lo último que Plaid ya tenía en caché. Se resetea mañana.`
+      );
+    }
+  } else {
+    refreshInfo.push("Plan Core: sincronización con transactionsSync (gratis), sin refresh en vivo.");
+  }
+
   for (const item of items) {
     try {
       const accessToken = decryptSecret(item.access_token);
@@ -97,21 +132,23 @@ export async function sincronizarPlaidDeUsuario(
       // No todos los bancos soportan refresh bajo demanda — si Plaid
       // responde con error (ej. PRODUCT_NOT_READY), se ignora y se sigue
       // con transactionsSync normal en vez de tumbar toda la sincronización.
-      try {
-        await plaidClient.transactionsRefresh({ access_token: accessToken });
-        refreshInfo.push(`${item.id}: refresh solicitado a Plaid ok`);
-        await new Promise((resolve) => setTimeout(resolve, 4000));
-      } catch (refreshErr) {
-        // Plaid manda el motivo real (ej. PRODUCT_NOT_READY,
-        // ITEM_LOGIN_REQUIRED) en el body de la respuesta del error, no en
-        // err.message — sin leer response.data, el mensaje que le llega a
-        // Joel en la pantalla sería un genérico "Request failed with
-        // status code 400" sin decir nada útil sobre POR QUÉ falló.
-        const detalle =
-          (refreshErr as { response?: { data?: { error_code?: string; error_message?: string } } })?.response?.data;
-        const motivo = detalle?.error_code ? `${detalle.error_code} — ${detalle.error_message}` : (refreshErr instanceof Error ? refreshErr.message : "error desconocido");
-        refreshInfo.push(`${item.id}: refresh falló (${motivo}) — usando lo que Plaid ya tenía en caché`);
-        console.warn(`transactionsRefresh no disponible para item ${item.id}:`, refreshErr);
+      if (puedeRefrescarHoy) {
+        try {
+          await plaidClient.transactionsRefresh({ access_token: accessToken });
+          refreshInfo.push(`${item.id}: refresh solicitado a Plaid ok`);
+          await new Promise((resolve) => setTimeout(resolve, 4000));
+        } catch (refreshErr) {
+          // Plaid manda el motivo real (ej. PRODUCT_NOT_READY,
+          // ITEM_LOGIN_REQUIRED) en el body de la respuesta del error, no en
+          // err.message — sin leer response.data, el mensaje que le llega a
+          // Joel en la pantalla sería un genérico "Request failed with
+          // status code 400" sin decir nada útil sobre POR QUÉ falló.
+          const detalle =
+            (refreshErr as { response?: { data?: { error_code?: string; error_message?: string } } })?.response?.data;
+          const motivo = detalle?.error_code ? `${detalle.error_code} — ${detalle.error_message}` : (refreshErr instanceof Error ? refreshErr.message : "error desconocido");
+          refreshInfo.push(`${item.id}: refresh falló (${motivo}) — usando lo que Plaid ya tenía en caché`);
+          console.warn(`transactionsRefresh no disponible para item ${item.id}:`, refreshErr);
+        }
       }
 
       const { data: cuentasDelItem } = await supabase
