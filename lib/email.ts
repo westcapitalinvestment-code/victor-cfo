@@ -196,21 +196,29 @@ export async function sendInvoiceEmail(params: {
   invoiceId: string;
   invoiceNumber: string;
   dueDate: string | null;
+  // Si la entidad ya activó Stripe Connect (migración 0065), el correo
+  // añade un segundo botón "Pagar con tarjeta" que apunta al link ESTABLE
+  // /api/facturas/[id]/pagar — nunca a una Checkout Session de Stripe
+  // directa, porque esas expiran a las 24h y este correo puede abrirse
+  // semanas después (3 sept 2026, pedido de Joel).
+  cobroTarjetaDisponible?: boolean;
 }): Promise<{ sent: boolean; reason?: string }> {
   if (!resend) {
     return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
   }
 
-  const { clientEmail, clientName, entityName, invoiceId, invoiceNumber, dueDate } = params;
+  const { clientEmail, clientName, entityName, invoiceId, invoiceNumber, dueDate, cobroTarjetaDisponible } = params;
   const saludoNombre = clientName || "";
   const negocio = entityName || "";
   const pdfUrl = `${SITE_URL}/api/facturas/${invoiceId}/pdf`;
+  const pagarUrl = `${SITE_URL}/api/facturas/${invoiceId}/pagar`;
   const vencePart = dueDate ? ` Vence el ${new Date(`${dueDate}T00:00:00Z`).toLocaleDateString("es-PR", { timeZone: "UTC" })}.` : "";
 
   const textoPlano =
     `Hola${saludoNombre ? ` ${saludoNombre}` : ""},\n\n` +
     `Aquí tienes tu factura ${invoiceNumber}${negocio ? ` de ${negocio}` : ""}.${vencePart}\n\n` +
     `Puedes verla aquí:\n${pdfUrl}\n\n` +
+    (cobroTarjetaDisponible ? `¿Prefieres pagar con tarjeta ahora mismo? ${pagarUrl}\n\n` : "") +
     `¡Gracias por tu confianza!\n\n` +
     `— ${negocio || "VICTOR CFO"}\n` +
     (negocio ? `Enviado a través de VICTOR CFO · ${SITE_URL}\n` : "");
@@ -227,6 +235,11 @@ export async function sendInvoiceEmail(params: {
   <p>Aquí tienes tu factura <strong>${htmlSeguro.numero}</strong>${htmlSeguro.negocio ? ` de ${htmlSeguro.negocio}` : ""}.${vencePart}</p>
   <div style="text-align: center; margin: 28px 0;">
     <a href="${pdfUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Ver factura</a>
+    ${
+      cobroTarjetaDisponible
+        ? `<br/><a href="${pagarUrl}" style="display: inline-block; margin-top: 10px; color: #1D9E75; font-weight: 600; text-decoration: none; font-size: 13px;">💳 Pagar con tarjeta ahora</a>`
+        : ""
+    }
   </div>
   <p style="font-size: 12px; color: #666;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br/><a href="${pdfUrl}" style="color: #1D9E75; word-break: break-all;">${pdfUrl}</a></p>
   <p>¡Gracias por tu confianza!</p>

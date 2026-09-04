@@ -23,13 +23,17 @@ import { formatMoney, formatFecha } from "@/lib/format";
 // mostrando el total viejo en vez del balance $0.00.
 export const dynamic = "force-dynamic";
 
+// Mismo dominio hardcodeado que lib/email.ts (SITE_URL) — no hay variable
+// de entorno para esto en el resto del proyecto.
+const SITE_URL = "https://www.victorcfo.com";
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createAdminClient();
 
   const { data: factura, error } = await supabase
     .from("invoices")
     .select(
-      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, deposito_monto, estado, fecha_emision, fecha_vencimiento, metodo_pago, fecha_pago, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key, ivu_applies, brand_color)"
+      "id, owner_id, numero, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, deposito_monto, estado, fecha_emision, fecha_vencimiento, metodo_pago, fecha_pago, notas, metodos_cobro_aceptados, clients(name, email, telefono, tax_id), business_entities(name, ein, municipio, phone, address, zip, invoice_footer, logo_r2_key, ivu_applies, brand_color, stripe_connect_charges_enabled)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -58,6 +62,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     logo_r2_key: string | null;
     ivu_applies: boolean;
     brand_color: string | null;
+    stripe_connect_charges_enabled: boolean;
   } | null;
 
   const pdf = await PDFDocument.create();
@@ -272,6 +277,26 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       yDer,
       { size: 9, color: gris }
     );
+  }
+
+  // Botón real de "Pagar con tarjeta" (3 sept 2026, pedido de Joel: que el
+  // PDF/correo "jale" el link de cobro de Stripe Connect) — apunta al link
+  // ESTABLE (/api/facturas/[id]/pagar), nunca directo a una Checkout
+  // Session de Stripe (esas expiran a las 24h y este PDF puede reabrirse
+  // semanas después). Solo aparece si la entidad ya activó el cobro con
+  // tarjeta y la factura sigue sin pagar.
+  if (!estaPagada && entidad?.stripe_connect_charges_enabled) {
+    yDer -= 10;
+    const linkPago = `${SITE_URL}/api/facturas/${factura.id}/pagar`;
+    const btnTexto = "Pagar con tarjeta";
+    const btnAncho = bold.widthOfTextAtSize(btnTexto, 10) + 20;
+    const btnAltura = 22;
+    const btnX = width - margin - btnAncho;
+    const btnY = yDer - btnAltura;
+    page.drawRectangle({ x: btnX, y: btnY, width: btnAncho, height: btnAltura, color: marca });
+    texto(btnTexto, btnX + 10, btnY + 7, { f: bold, size: 10, color: rgb(1, 1, 1) });
+    agregarLinkPDF(btnX, btnY, btnAncho, btnAltura, linkPago);
+    yDer = btnY - 10;
   }
 
   y = Math.min(yIzq, yDer) - 20;

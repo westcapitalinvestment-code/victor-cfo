@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
   const { data: plantillas, error: plantillasError } = await supabase
     .from("invoices")
     .select(
-      "id, owner_id, entity_id, client_id, servicio_id, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, late_fee_habilitado, late_fee_tipo, late_fee_monto, late_fee_dias_gracia, frecuencia_recurrente, fecha_proxima_generacion, clients(name, email), business_entities(name)"
+      "id, owner_id, entity_id, client_id, servicio_id, subtotal, ivu_pct, ivu_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, notas, metodos_cobro_aceptados, late_fee_habilitado, late_fee_tipo, late_fee_monto, late_fee_dias_gracia, frecuencia_recurrente, fecha_proxima_generacion, clients(name, email), business_entities(name, stripe_connect_charges_enabled)"
     )
     .eq("es_recurrente", true)
     .neq("estado", "borrador")
@@ -160,6 +160,7 @@ export async function GET(req: NextRequest) {
           invoiceId: nuevaFactura.id,
           invoiceNumber: numero,
           dueDate: nuevaFechaVencimiento.toISOString().slice(0, 10),
+          cobroTarjetaDisponible: !!entidadJoin?.stripe_connect_charges_enabled,
         });
         envioResultado = { intentado: true, enviado: resultadoEmail.sent, razon: resultadoEmail.reason };
         if (resultadoEmail.sent) {
