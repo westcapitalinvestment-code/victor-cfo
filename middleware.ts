@@ -35,6 +35,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // MFA (4 sept 2026, migración 0068): cierra el hueco de que alguien pase
+  // la contraseña (sesión aal1) y en vez de completar /login/verificar,
+  // escriba /dashboard directo en la URL. app/login/page.tsx ya manda a
+  // /login/verificar en el flujo normal — esto es el mismo chequeo del
+  // lado del servidor, por si acaso.
+  if (user && protectedPath) {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal && aal.currentLevel !== aal.nextLevel) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login/verificar";
+      url.searchParams.set("next", request.nextUrl.pathname);
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Gate de pago (23 agosto 2026): un usuario autenticado pero que todavía
   // no completó el checkout de Stripe tiene plan_status = 'incomplete'
   // (default desde la migración 0025). Antes de esto, cualquiera que se

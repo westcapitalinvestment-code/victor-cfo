@@ -30,6 +30,53 @@ function escapeHtml(texto: string): string {
     .replace(/"/g, "&quot;");
 }
 
+// Aviso de seguridad cuando alguien usa un código de respaldo de MFA (4
+// sept 2026) — usar un código de respaldo APAGA la verificación en dos
+// pasos de la cuenta (ver /api/mfa/backup-code), así que el dueño real
+// necesita enterarse de inmediato: si no fue él, es la primera señal de que
+// alguien más tiene acceso a su cuenta.
+export async function sendMfaBackupCodeUsedEmail(params: { toEmail: string }): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const textoPlano =
+    `Se usó un código de respaldo para entrar a tu cuenta de VICTOR CFO, y por eso la ` +
+    `verificación en dos pasos (MFA) se desactivó automáticamente.\n\n` +
+    `Si fuiste tú (perdiste el acceso a tu app de autenticación), no tienes que hacer nada más — ` +
+    `puedes volver a activar MFA cuando quieras desde Configuración.\n\n` +
+    `Si NO fuiste tú, entra a tu cuenta ahora mismo, cambia tu contraseña, y vuelve a activar MFA.\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; background: #1D9E75; color: #fff; font-weight: 600; font-size: 14px; vertical-align: middle;">V</span>
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>Se usó un <strong>código de respaldo</strong> para entrar a tu cuenta, y por eso la verificación en dos pasos (MFA) se desactivó automáticamente.</p>
+  <p>Si fuiste tú (perdiste el acceso a tu app de autenticación), no tienes que hacer nada más — puedes volver a activar MFA cuando quieras desde Configuración.</p>
+  <p style="color: #B45309;"><strong>Si NO fuiste tú</strong>, entra a tu cuenta ahora mismo, cambia tu contraseña, y vuelve a activar MFA.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: params.toEmail,
+      subject: "Se desactivó la verificación en dos pasos de tu cuenta",
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
 export async function sendCpaInvitationEmail(params: {
   cpaEmail: string;
   cpaName: string | null;

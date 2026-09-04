@@ -6,6 +6,7 @@ import NotificacionesToggle from "../notificaciones-toggle";
 import GestionarPlan from "../gestionar-plan";
 import CreditosIA from "../creditos-ia";
 import PinConfig from "../pin-config";
+import MfaConfig from "../mfa-config";
 import SessionTimeoutConfig from "../session-timeout-config";
 import ReferralLink from "../referral-link";
 
@@ -88,6 +89,8 @@ export default async function ConfigPage() {
       <ReferralLink userId={user.id} />
 
       <NotificacionesToggle />
+
+      <MfaConfig />
 
       <PinConfig />
 

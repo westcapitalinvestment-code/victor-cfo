@@ -89,7 +89,21 @@ function LoginForm() {
         .maybeSingle(),
     ]);
 
-    router.push(membresiaAdmin ? "/admin" : membresiaCpa ? "/cpa" : "/dashboard");
+    const destino = membresiaAdmin ? "/admin" : membresiaCpa ? "/cpa" : "/dashboard";
+
+    // MFA (4 sept 2026, migración 0068): la contraseña correcta solo sube
+    // la sesión a aal1 — si la cuenta tiene un factor TOTP verificado,
+    // Supabase marca nextLevel como aal2 y hay que pasar por
+    // /login/verificar antes de dejarlo entrar. middleware.ts hace el
+    // mismo chequeo por si alguien intenta saltarse esto escribiendo la
+    // URL del destino directo.
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal && aal.currentLevel !== aal.nextLevel) {
+      router.push(`/login/verificar?next=${encodeURIComponent(destino)}`);
+      return;
+    }
+
+    router.push(destino);
     router.refresh();
   }
 
