@@ -59,6 +59,12 @@ export default function MfaConfig() {
       return;
     }
     setFactorId(data.id);
+    // DEBUG TEMPORAL (4 sept 2026) — el QR se ve bien a simple vista pero
+    // ninguna app lo escanea. Antes de seguir adivinando, imprimir el string
+    // crudo tal cual lo manda Supabase para inspeccionarlo de verdad. Quitar
+    // este console.log en cuanto se resuelva.
+    console.log("QR crudo de Supabase:", JSON.stringify(data.totp.qr_code));
+    console.log("URI otpauth completa:", data.totp.uri);
     // Render directo del SVG en vez de meterlo en un <img src="data:...">
     // (4 sept 2026, reportado por Joel con screenshot: el QR salía como
     // ícono de imagen rota). dangerouslySetInnerHTML es seguro aquí: el SVG
@@ -222,7 +228,7 @@ export default function MfaConfig() {
               // que un lector lo reconozca — con poco margen o un fondo que
               // no sea blanco puro (ej. heredado de dark mode) puede verse
               // bien a simple vista y aun así fallar al escanear.
-              className="mx-auto mb-3 w-44 rounded-lg border border-border bg-white p-4 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
+              className="mx-auto mb-3 w-44 bg-white p-4 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
               dangerouslySetInnerHTML={{ __html: qrSvg }}
             />
           )}
