@@ -10,7 +10,12 @@ import { useRouter } from "next/navigation";
 // system prompt completo, y ahora también sus "manos" (tool use) —
 // este componente nunca ve esas cosas, solo manda texto y pinta la respuesta.
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = { role: "user" | "assistant"; content: string; imageDataUrl?: string };
+
+// Tipos de imagen que Anthropic acepta para visión — mismo criterio que
+// app/api/victor/route.ts, para no dejar pegar algo que el servidor va a
+// rechazar después de todos modos (ej. un .heic de un iPhone).
+const IMAGE_MEDIA_TYPES_ACEPTADOS = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
 const STORAGE_KEY = "victor_conversation_id";
 const ONBOARDING_TRIGGER = "[INICIO_AUTOMATICO]";
@@ -99,6 +104,11 @@ export default function VictorChat({
   const [listening, setListening] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
   const [showEmojis, setShowEmojis] = useState(false);
+  // Imagen pegada (Ctrl+V) o adjuntada, lista para mandar en el próximo
+  // mensaje — se limpia sola después de enviar. dataUrl es para la vista
+  // previa y la burbuja del chat; base64/mediaType es lo que de verdad se
+  // manda al servidor (misma separación que ya usa subir-csv.tsx para PDFs).
+  const [pendingImage, setPendingImage] = useState<{ dataUrl: string; base64: string; mediaType: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -323,12 +333,20 @@ export default function VictorChat({
   async function send(text?: string, opts?: { hidden?: boolean }) {
     if (bloqueado) return;
     const content = (text ?? input).trim();
-    if (!content || loading) return;
+    // Con una imagen pegada, un mensaje sin texto es válido (igual que
+    // pegar una foto sola en cualquier chat de IA) — antes esto se
+    // bloqueaba porque solo se revisaba `content`.
+    const imagenAEnviar = pendingImage;
+    if ((!content && !imagenAEnviar) || loading) return;
 
     setError(null);
     setInput("");
+    setPendingImage(null);
     if (!opts?.hidden) {
-      setMessages((prev) => [...prev, { role: "user", content }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: content || "Analiza esta imagen.", imageDataUrl: imagenAEnviar?.dataUrl },
+      ]);
     }
     setLoading(true);
 
@@ -336,7 +354,11 @@ export default function VictorChat({
       const res = await fetch("/api/victor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: content, conversationId }),
+        body: JSON.stringify({
+          message: content,
+          conversationId,
+          ...(imagenAEnviar ? { imageBase64: imagenAEnviar.base64, imageMediaType: imagenAEnviar.mediaType } : {}),
+        }),
       });
       const data = await res.json();
 
@@ -514,6 +536,9 @@ export default function VictorChat({
                   }`}
                   style={m.role === "user" ? { background: "#1D9E75" } : undefined}
                 >
+                  {m.imageDataUrl && (
+                    <img src={m.imageDataUrl} alt="Imagen enviada" className="mb-1.5 max-h-40 w-full rounded-lg object-cover" />
+                  )}
                   {m.content}
                 </div>
               </div>
@@ -547,7 +572,21 @@ export default function VictorChat({
           </div>
 
           {/* Input */}
-          <div className="relative flex gap-2 border-t border-border bg-card p-3">
+          <div className="relative flex flex-col gap-2 border-t border-border bg-card p-3">
+            {pendingImage && (
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-bg p-1.5">
+                <img src={pendingImage.dataUrl} alt="Imagen lista para enviar" className="h-11 w-11 flex-shrink-0 rounded-lg object-cover" />
+                <span className="flex-1 text-xs text-muted">Imagen lista — escribe algo o envíala así</span>
+                <button
+                  onClick={() => setPendingImage(null)}
+                  title="Quitar imagen"
+                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-border"
+                >
+                  <i className="ti ti-x" style={{ fontSize: 14 }} />
+                </button>
+              </div>
+            )}
+            <div className="relative flex gap-2">
             {showEmojis && (
               <>
                 {/* Capa invisible para cerrar el panel al tocar afuera,
@@ -606,6 +645,34 @@ export default function VictorChat({
                     send();
                   }
                 }}
+                onPaste={(e) => {
+                  // Un screenshot pegado (Ctrl+V) nunca llega como texto —
+                  // un <textarea> normal no acepta imágenes, así que sin
+                  // esto no pasaba NADA (bug real reportado por Joel, 5
+                  // sept 2026: "el chat no deja pegar", que resultó ser
+                  // justo esto). Si el portapapeles trae una imagen, la
+                  // interceptamos y la mandamos como adjunto en vez de
+                  // dejar que el navegador intente (y falle en silencio)
+                  // pegarla como texto. Si es texto normal, no se hace
+                  // nada aquí y el pegado sigue su curso normal.
+                  const item = Array.from(e.clipboardData.items).find((it) => it.type.startsWith("image/"));
+                  if (!item) return;
+                  if (!IMAGE_MEDIA_TYPES_ACEPTADOS.includes(item.type)) {
+                    e.preventDefault();
+                    setError("Ese tipo de imagen no es compatible — prueba con un PNG, JPG, WEBP o GIF.");
+                    return;
+                  }
+                  e.preventDefault();
+                  const file = item.getAsFile();
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    const resultado = reader.result as string;
+                    const base64 = resultado.split(",")[1] || "";
+                    setPendingImage({ dataUrl: resultado, base64, mediaType: file.type });
+                  };
+                  reader.readAsDataURL(file);
+                }}
                 placeholder={listening ? "Escuchando…" : "Pregúntale a VICTOR..."}
                 className="vc-input w-full resize-none rounded-2xl leading-snug"
                 style={{ maxHeight: 120, overflowY: "auto" }}
@@ -625,19 +692,20 @@ export default function VictorChat({
             </div>
             <button
               onClick={() => send()}
-              disabled={loading || !input.trim()}
+              disabled={loading || (!input.trim() && !pendingImage)}
               title="Enviar mensaje"
               className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border ${
                 listening ? "vc-send-listening" : ""
               }`}
               style={
-                input.trim()
+                input.trim() || pendingImage
                   ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
                   : { background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }
               }
             >
               <i className="ti ti-send" style={{ fontSize: 16 }} />
             </button>
+            </div>
           </div>
             </>
           )}

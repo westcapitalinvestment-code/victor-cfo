@@ -113,12 +113,53 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
-  const userMessage: string | undefined = body?.message;
+  const userMessageRaw: string | undefined = body?.message;
   const conversationId: string | undefined = body?.conversationId;
 
-  if (!userMessage || typeof userMessage !== "string" || !userMessage.trim()) {
+  // Imagen pegada en el chat (Ctrl+V de un screenshot — Joel, 5 sept 2026:
+  // reportó que el chat "no deja pegar", y resultó ser que SÍ pega texto,
+  // pero un <textarea> normal nunca aceptó imágenes, que es justo lo que
+  // intentaba pegar). Solo los 4 tipos que Anthropic acepta para visión;
+  // cualquier otro valor se descarta en silencio (tieneImagen queda false)
+  // en vez de tirar un error de servidor por un tipo raro del navegador.
+  const IMAGE_MEDIA_TYPES_PERMITIDOS = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
+  type ImageMediaTypePermitido = (typeof IMAGE_MEDIA_TYPES_PERMITIDOS)[number];
+  const imageBase64Raw: string | undefined = body?.imageBase64;
+  const imageMediaTypeRaw: string | undefined = body?.imageMediaType;
+  const imageMediaType: ImageMediaTypePermitido | null =
+    imageMediaTypeRaw && (IMAGE_MEDIA_TYPES_PERMITIDOS as readonly string[]).includes(imageMediaTypeRaw)
+      ? (imageMediaTypeRaw as ImageMediaTypePermitido)
+      : null;
+  const tieneImagen = !!imageBase64Raw && !!imageMediaType;
+
+  // Tope de tamaño — un screenshot de pantalla completa en 4K en base64
+  // puede pasar los ~5MB que Anthropic acepta por imagen sin comprimir.
+  // 7,000,000 caracteres de base64 ≈ 5.25MB del archivo real — margen
+  // de sobra antes del límite real de la API, con un mensaje claro en vez
+  // de un error 400 genérico de Anthropic.
+  if (tieneImagen && imageBase64Raw!.length > 7_000_000) {
+    return NextResponse.json(
+      { error: "La imagen es muy grande — prueba con un recorte más pequeño o una captura de menor resolución." },
+      { status: 400 }
+    );
+  }
+
+  // Con una imagen pegada y ninguna instrucción escrita, se asume que el
+  // usuario quiere que VICTOR simplemente la mire — igual que pegar una
+  // imagen sin texto en cualquier chat de IA.
+  const userMessage: string =
+    (typeof userMessageRaw === "string" && userMessageRaw.trim()) || (tieneImagen ? "Analiza esta imagen." : "");
+
+  if (!userMessage) {
     return NextResponse.json({ error: "Falta el mensaje." }, { status: 400 });
   }
+
+  // Lo que se guarda en el historial (messages_json) — nunca los bytes de
+  // la imagen (innecesario para turnos futuros y encarecería cada mensaje
+  // subsiguiente que la incluya en el contexto). Con la etiqueta 📎 VICTOR
+  // sabe, al releer el historial más adelante en la misma conversación,
+  // que ese turno tuvo una imagen que ya no puede volver a ver.
+  const textoParaHistorial = tieneImagen ? `📎 [Imagen adjunta] ${userMessage}` : userMessage;
 
   // 1. Perfil del usuario (nombre, plan) para el bloque de contexto.
   // ciclo_inicio/ciclo_fin (migración 0026) son las fechas del ciclo de
@@ -313,7 +354,7 @@ export async function POST(req: NextRequest) {
   async function responderSinLlamarAClaude(mensaje: string) {
     const updatedMessagesFijo: ChatMessage[] = [
       ...history,
-      { role: "user", content: userMessage as string },
+      { role: "user", content: textoParaHistorial },
       { role: "assistant", content: mensaje },
     ];
     await supabase
@@ -637,9 +678,22 @@ export async function POST(req: NextRequest) {
   // sea, solo cuando ya sabemos de verdad que hace falta un loop real
   // (categorización en lote, revisar pendientes, etc.), que es exactamente
   // donde SÍ hay lecturas de sobra para recuperar esa escritura cara.
+  // El bloque de imagen SOLO va en el mensaje de este turno — el historial
+  // (recentHistory) nunca tuvo los bytes de una imagen guardados (ver
+  // textoParaHistorial arriba), así que no hay nada que reconstruir ahí.
+  const ultimoMensajeContent: Anthropic.MessageParam["content"] = tieneImagen
+    ? [
+        {
+          type: "image",
+          source: { type: "base64", media_type: imageMediaType as ImageMediaTypePermitido, data: imageBase64Raw as string },
+        },
+        { type: "text", text: userMessage },
+      ]
+    : userMessage;
+
   const apiMessages: Anthropic.MessageParam[] = [
     ...recentHistory.filter((m) => m.content && m.content.trim()).map((m) => ({ role: m.role, content: m.content })),
-    { role: "user" as const, content: userMessage },
+    { role: "user" as const, content: ultimoMensajeContent },
   ];
   // Posición del último mensaje ANTES de que el loop de herramientas
   // empiece a agregarle más (assistant tool_use / user tool_result) — es
@@ -1002,7 +1056,7 @@ export async function POST(req: NextRequest) {
 
   const updatedMessages: ChatMessage[] = [
     ...history,
-    { role: "user", content: userMessage },
+    { role: "user", content: textoParaHistorial },
     { role: "assistant", content: assistantText },
   ];
 
