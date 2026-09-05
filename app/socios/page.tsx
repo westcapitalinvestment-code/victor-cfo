@@ -92,9 +92,9 @@ export default function SociosPage() {
           <h1 className="mb-1 text-base font-medium">Sé Embajador o Afiliado de VICTOR CFO</h1>
           <p className="mb-1 text-xs text-muted">
             Gana una comisión real por cada cliente que traigas a VICTOR CFO — sin límite, mientras
-            más traigas, más ganas. No hace falta ser CPA, contador, o influencer: si tienes una red de
-            contactos en Puerto Rico y ganas de promocionarlo activamente, completa el formulario y te
-            contactamos directamente para darte los detalles del programa.
+            más traigas, más ganas. Seas CPA, contador, influencer, o simplemente alguien con la red y las
+            ganas de promocionarlo activamente en Puerto Rico: completa el formulario y te contactamos
+            directamente para darte los detalles del programa.
           </p>
 
           <div className="mb-1 flex gap-2 text-xs">
