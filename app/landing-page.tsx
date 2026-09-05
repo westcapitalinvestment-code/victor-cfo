@@ -327,7 +327,7 @@ export default function LandingPage() {
           activamente. Sin límite: mientras más traigas, más ganas. Escríbenos.
         </p>
         <a
-          href="mailto:dr.jvalentin@gmail.com?subject=Quiero%20ser%20Embajador%2FAfiliado%20de%20VICTOR%20CFO"
+          href="mailto:info@westcapitalventuresllc.com?subject=Quiero%20ser%20Embajador%2FAfiliado%20de%20VICTOR%20CFO"
           className={styles.sociosBtn}
         >
           Quiero ser Embajador →

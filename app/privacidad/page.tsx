@@ -77,8 +77,8 @@ export default function PoliticaPrivacidadPage() {
         Puedes desconectar cualquier cuenta bancaria conectada en cualquier momento desde la sección
         &quot;Cuentas&quot; de la app. Puedes pedirnos acceso, corrección, o eliminación completa de tu
         información escribiendo a{" "}
-        <a href="mailto:dr.jvalentin@gmail.com" className="text-teal-700 underline">
-          dr.jvalentin@gmail.com
+        <a href="mailto:info@westcapitalventuresllc.com" className="text-teal-700 underline">
+          info@westcapitalventuresllc.com
         </a>
         . Al eliminar tu cuenta, eliminamos tu información personal y financiera de nuestros sistemas,
         salvo lo que estemos legalmente obligados a conservar.
@@ -100,8 +100,8 @@ export default function PoliticaPrivacidadPage() {
       <h2 className="mb-2 mt-6 text-base font-semibold">8. Contacto</h2>
       <p className="mb-4">
         West Capital Ventures LLC — Puerto Rico.{" "}
-        <a href="mailto:dr.jvalentin@gmail.com" className="text-teal-700 underline">
-          dr.jvalentin@gmail.com
+        <a href="mailto:info@westcapitalventuresllc.com" className="text-teal-700 underline">
+          info@westcapitalventuresllc.com
         </a>
       </p>
     </div>

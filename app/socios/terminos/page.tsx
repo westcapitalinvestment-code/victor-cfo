@@ -124,8 +124,8 @@ export default function TerminosSociosPage() {
       <h2 className="mb-2 mt-6 text-base font-semibold">13. Contacto</h2>
       <p className="mb-4">
         West Capital Ventures LLC — Puerto Rico.{" "}
-        <a href="mailto:dr.jvalentin@gmail.com" className="text-teal-700 underline">
-          dr.jvalentin@gmail.com
+        <a href="mailto:info@westcapitalventuresllc.com" className="text-teal-700 underline">
+          info@westcapitalventuresllc.com
         </a>
       </p>
     </div>
