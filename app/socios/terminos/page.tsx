@@ -73,9 +73,12 @@ export default function TerminosSociosPage() {
       <p className="mb-4">
         Eres responsable de reportar y pagar cualquier impuesto que corresponda sobre las comisiones que
         recibas, independientemente de si WCV te emite o no un formulario informativo (como una 480.6 o un
-        1099). Si tus comisiones acumuladas en un año calendario cruzan el umbral que exige reporte o
-        retención bajo la ley aplicable, podemos pedirte información contributiva adicional (como tu número
-        de Seguro Social o EIN) para cumplir con esa obligación.
+        1099). Bajo la ley de Puerto Rico vigente (Sección 1062.03 del Código de Rentas Internas), los
+        primeros $500 que te paguemos en un año calendario no están sujetos a retención ni a informativa; si
+        tus comisiones acumuladas ese año superan los $500, WCV radica la informativa correspondiente y
+        retiene el 10% sobre el exceso de esos primeros $500 — salvo que nos presentes un Certificado de
+        Relevo de Retención vigente emitido por Hacienda. Podemos pedirte información contributiva adicional
+        (como tu número de Seguro Social o EIN) para cumplir con esa obligación.
       </p>
 
       <h2 className="mb-2 mt-6 text-base font-semibold">7. Conducta prohibida</h2>
