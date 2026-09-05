@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Mismo patrón que RangoDropdown de /dashboard/resumen (click-afuera real,
-// sin quedarse pegado) pero para elegir el rango de fechas del reporte CSV
+// Mismo patrón de dropdown con click-afuera real (sin quedarse pegado) que
+// usa el resto de la app, pero para elegir el rango de fechas del reporte CSV
 // en vez de filtrar la pantalla — el formulario apunta directo a la ruta
 // de exportar, así que "Descargar" dispara la descarga sin navegar la app.
 export default function ReporteRangoDropdown() {

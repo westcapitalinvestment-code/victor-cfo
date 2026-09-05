@@ -250,8 +250,9 @@ export default async function GastosPage({
 
   const totalCuentas = (cuentasPlaid?.length ?? 0) + (cuentasManuales?.length ?? 0);
 
-  // Reporte del mes por categoría — mismo cálculo que /dashboard/resumen,
-  // pero aquí mismo en Gastos, que es donde el usuario lo busca primero.
+  // Reporte del mes por categoría — cálculo propio de esta pantalla (el
+  // tab "Resumen" que hacía algo parecido se eliminó el 5 sept 2026, ver
+  // topbar.tsx), aquí mismo en Gastos, que es donde el usuario lo busca primero.
   // "hoy" se conserva (no confundir con mesSeleccionado/mesActualStr de
   // arriba) porque el bloque de rangosReporte del CSV para el contable,
   // más abajo, sigue usando hoy.getFullYear()/getMonth() para sus propios

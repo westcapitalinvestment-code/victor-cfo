@@ -6,6 +6,7 @@ import { Sensitive, PrivacyToggle } from "@/lib/privacy";
 import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 import GastosPendientesCard from "../gastos-pendientes-card";
+import ResumenCard from "../resumen-card";
 
 function hoyISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -282,6 +283,48 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
 
   const totalAlertas = facturasVencidas.length + documentosPorVencer.length;
 
+  // Resumen y proyección (5 sept 2026) — reemplaza el tab "Resumen" que se
+  // quitó. Mismo cálculo que dashboard/page.tsx (Personal), pero SOLO con
+  // transacciones de ESTA entidad — nunca se mezcla con Personal ni con
+  // otras entidades, ver nota grande en topbar.tsx. Fechas ancladas a
+  // UTC-medianoche, mismo patrón que app/api/victor/route.ts.
+  const anioActual = Number(hoyStrPR.slice(0, 4));
+  const inicioAñoStr = `${anioActual}-01-01`;
+  const MS_POR_DIA = 24 * 60 * 60 * 1000;
+  const inicioAñoUTC = new Date(`${inicioAñoStr}T00:00:00Z`).getTime();
+  const finAñoExclusivoUTC = new Date(`${anioActual + 1}-01-01T00:00:00Z`).getTime();
+  const hoyUTC = new Date(`${hoyStrPR}T00:00:00Z`).getTime();
+  const diasEnAño = Math.round((finAñoExclusivoUTC - inicioAñoUTC) / MS_POR_DIA);
+  const diasTranscurridosAño = Math.max(1, Math.round((hoyUTC - inicioAñoUTC) / MS_POR_DIA) + 1);
+  const diasRestantesAño = Math.max(0, diasEnAño - diasTranscurridosAño);
+
+  const { data: transYTDNegocio } =
+    mesSeleccionado === mesActualStr && inicioMesSel === inicioAñoStr
+      ? { data: transaccionesNegocioMes }
+      : await supabase
+          .from("transactions")
+          .select("amount, tipo_flujo")
+          .eq("owner_id", user.id)
+          .eq("entity_id", entidadId)
+          .eq("es_duplicada", false)
+          .gte("fecha", inicioAñoStr)
+          .lte("fecha", hoyStrPR);
+  const ingresosYTDNegocio = (transYTDNegocio ?? []).reduce((sum, t) => sum + (t.tipo_flujo === "ingreso" ? Math.abs(Number(t.amount)) : 0), 0);
+  const gastosYTDNegocio = (transYTDNegocio ?? []).reduce((sum, t) => sum + (t.tipo_flujo === "gasto" ? Number(t.amount) : 0), 0);
+
+  const ritmoDiarioIngresoNegocio = ingresosYTDNegocio / diasTranscurridosAño;
+  const ritmoDiarioGastoNegocio = gastosYTDNegocio / diasTranscurridosAño;
+  const ingresoProyectadoNegocio = ingresosYTDNegocio + ritmoDiarioIngresoNegocio * diasRestantesAño;
+  const gastoProyectadoNegocio = gastosYTDNegocio + ritmoDiarioGastoNegocio * diasRestantesAño;
+  const flujoProyectadoNegocio = ingresoProyectadoNegocio - gastoProyectadoNegocio;
+  const tasaAhorroYTDNegocio = ingresosYTDNegocio > 0 ? Math.round(((ingresosYTDNegocio - gastosYTDNegocio) / ingresosYTDNegocio) * 100) : 0;
+
+  // Reserva de impuestos sugerida — 25% de la ganancia YTD de ESTA entidad
+  // (misma heurística que tenía resumen/page.tsx, ahora por entidad en vez
+  // de sumando todas las de negocio).
+  const gananciaNegocioYTD = ingresosYTDNegocio - gastosYTDNegocio;
+  const reservaImpuestosNegocio = gananciaNegocioYTD > 0 ? gananciaNegocioYTD * 0.25 : 0;
+
   return (
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
@@ -480,6 +523,46 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
           </div>
         </div>
       </div>
+
+      {/* Resumen y proyección — reemplaza el tab "Resumen" que se quitó (5
+          sept 2026). Colapsada por defecto, solo esta entidad — nunca
+          mezclada con Personal ni con otras entidades. Ver comentario
+          grande junto al cálculo arriba y en topbar.tsx. */}
+      <ResumenCard
+        anio={anioActual}
+        mesLabel={mesSeleccionado === mesActualStr ? "este mes" : etiquetaMes(mesSeleccionado)}
+        ingresosDelMes={ingresosDelMesNegocio}
+        gastosDelMes={gastosDelMesNegocio}
+        ingresosYTD={ingresosYTDNegocio}
+        gastosYTD={gastosYTDNegocio}
+        diasTranscurridosAño={diasTranscurridosAño}
+        diasRestantesAño={diasRestantesAño}
+        ingresoProyectado={ingresoProyectadoNegocio}
+        gastoProyectado={gastoProyectadoNegocio}
+        flujoProyectado={flujoProyectadoNegocio}
+        tasaAhorroYTD={tasaAhorroYTDNegocio}
+        reservaImpuestos={reservaImpuestosNegocio}
+      />
+
+      {/* Tarjeta de referidos (5 sept 2026, pedido de Joel: que también
+          salga en el Home de Negocio, no solo en Personal — antes de esto
+          un usuario que solo vive en el tab de Negocio nunca la veía).
+          Duplicada aquí a propósito, mismo patrón que el resto del código
+          (cada Home trae su propia copia) en vez de moverla al topbar, que
+          se monta también en Facturación/Gastos/Clientes y le añadiría
+          ruido promocional permanente a esas pantallas de trabajo. Sin
+          gate de plan: solo se llega a este Home siendo Pro/Pro+, que ya
+          son planes pagados. */}
+      <Link
+        href="/dashboard/config#referidos"
+        className="mt-3 flex items-center justify-between rounded-lg border p-3"
+        style={{ borderColor: "#D97706", background: "rgba(217,119,6,.1)" }}
+      >
+        <p className="text-sm font-semibold" style={{ color: "#B45309" }}>
+          🎁 Recibe mes Gratis
+        </p>
+        <span style={{ color: "#B45309" }}>→</span>
+      </Link>
     </div>
   );
 }

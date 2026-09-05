@@ -467,15 +467,23 @@ export async function POST(req: NextRequest) {
       ? await supabase.from("manual_accounts").select("name").eq("owner_id", user.id).eq("es_negocio", true)
       : { data: [] as { name: string }[] };
 
-  // Resumen financiero consolidado (mes en curso + YTD + proyección de fin
-  // de año) — MISMO cálculo que /dashboard/resumen/page.tsx, para que
-  // VICTOR pueda contestar "cómo van mis finanzas" o "cómo voy a terminar
-  // el año" con los mismos números exactos que ve el usuario en pantalla,
-  // nunca una versión distinta o inventada (Joel, 5 sept 2026: la tarjeta
-  // de Resumen existía pero VICTOR no la veía en su contexto). Fechas como
-  // strings YYYY-MM-DD anclados a fechaHoyPR()/UTC-medianoche — nunca
-  // Date() de instante contra medianoche local del servidor (ver el bug
-  // documentado en lib/hora-pr.ts sobre "hoy" en Vercel corriendo en UTC).
+  // Resumen financiero (mes en curso + YTD + proyección de fin de año) —
+  // MISMO cálculo que muestra la tarjeta desplegable "Resumen y proyección"
+  // de cada Home (app/dashboard/resumen-card.tsx), para que VICTOR pueda
+  // contestar "cómo van mis finanzas" con los mismos números exactos que
+  // ve el usuario en pantalla. IMPORTANTE (5 sept 2026, decisión de Joel):
+  // Personal y Negocio se calculan y se exponen COMPLETAMENTE POR
+  // SEPARADO — nunca un total sumado de ambos. El tab "Resumen" que hacía
+  // eso se eliminó a propósito porque el ingreso bruto del negocio no es
+  // "del usuario" hasta que se retira (draw/salario); sumarlo a Personal
+  // en un solo número lo habría sido también aquí, en el contexto de
+  // VICTOR, no solo en la pantalla. Negocio SÍ agrega todas las entidades
+  // activas entre sí (mismo criterio que "Vista global" en el topbar —
+  // eso es negocio-con-negocio, no personal-con-negocio, así que no aplica
+  // la misma objeción). Fechas como strings YYYY-MM-DD anclados a
+  // fechaHoyPR()/UTC-medianoche — nunca Date() de instante contra
+  // medianoche local del servidor (ver el bug documentado en
+  // lib/hora-pr.ts sobre "hoy" en Vercel corriendo en UTC).
   const hoyStrPR = fechaHoyPR();
   const [anioActualStr, mesActualStrNum] = hoyStrPR.split("-");
   const anioActual = Number(anioActualStr);
@@ -509,13 +517,12 @@ export async function POST(req: NextRequest) {
   function sumarFlujo(
     rows: { amount: unknown; tipo_flujo: string | null; entity_id: string | null }[],
     tipo: "ingreso" | "gasto",
-    soloNegocio: boolean | null
+    soloNegocio: boolean
   ) {
     return rows.reduce((sum, t) => {
       if (t.tipo_flujo !== tipo) return sum;
       const esNegocio = !!t.entity_id && entidadIds.includes(t.entity_id);
-      if (soloNegocio === true && !esNegocio) return sum;
-      if (soloNegocio === false && esNegocio) return sum;
+      if (esNegocio !== soloNegocio) return sum;
       return sum + Math.abs(Number(t.amount));
     }, 0);
   }
@@ -523,23 +530,37 @@ export async function POST(req: NextRequest) {
   const filasMes = transMesActual ?? [];
   const filasYTD = transYTD ?? [];
 
+  // PERSONAL — nunca mezclado con negocio.
   const ingresosPersonalMes = sumarFlujo(filasMes, "ingreso", false);
   const gastosPersonalMes = sumarFlujo(filasMes, "gasto", false);
+  const ingresosPersonalYTD = sumarFlujo(filasYTD, "ingreso", false);
+  const gastosPersonalYTD = sumarFlujo(filasYTD, "gasto", false);
+  const ritmoDiarioIngresoPersonal = ingresosPersonalYTD / diasTranscurridosAño;
+  const ritmoDiarioGastoPersonal = gastosPersonalYTD / diasTranscurridosAño;
+  const ingresoProyectadoPersonal = ingresosPersonalYTD + ritmoDiarioIngresoPersonal * diasRestantesAño;
+  const gastoProyectadoPersonal = gastosPersonalYTD + ritmoDiarioGastoPersonal * diasRestantesAño;
+  const flujoProyectadoPersonal = ingresoProyectadoPersonal - gastoProyectadoPersonal;
+  const tasaAhorroPersonalYTD =
+    ingresosPersonalYTD > 0 ? Math.round(((ingresosPersonalYTD - gastosPersonalYTD) / ingresosPersonalYTD) * 100) : 0;
+
+  // NEGOCIO — todas las entidades activas juntas (mismo criterio que
+  // "Vista global" del topbar), pero SIEMPRE separado de Personal.
+  const tieneNegocio = entidadIds.length > 0;
   const ingresosNegocioMes = sumarFlujo(filasMes, "ingreso", true);
   const gastosNegocioMes = sumarFlujo(filasMes, "gasto", true);
-
-  const ingresosYTD = sumarFlujo(filasYTD, "ingreso", null);
-  const gastosYTD = sumarFlujo(filasYTD, "gasto", null);
-  const gananciaNegocioYTD = sumarFlujo(filasYTD, "ingreso", true) - sumarFlujo(filasYTD, "gasto", true);
-
-  const ritmoDiarioIngresoYTD = ingresosYTD / diasTranscurridosAño;
-  const ritmoDiarioGastoYTD = gastosYTD / diasTranscurridosAño;
-  const ingresoProyectadoFinAño = ingresosYTD + ritmoDiarioIngresoYTD * diasRestantesAño;
-  const gastoProyectadoFinAño = gastosYTD + ritmoDiarioGastoYTD * diasRestantesAño;
-  const flujoProyectadoFinAño = ingresoProyectadoFinAño - gastoProyectadoFinAño;
-  const tasaAhorroYTD = ingresosYTD > 0 ? Math.round(((ingresosYTD - gastosYTD) / ingresosYTD) * 100) : 0;
+  const ingresosNegocioYTD = sumarFlujo(filasYTD, "ingreso", true);
+  const gastosNegocioYTD = sumarFlujo(filasYTD, "gasto", true);
+  const ritmoDiarioIngresoNegocio = ingresosNegocioYTD / diasTranscurridosAño;
+  const ritmoDiarioGastoNegocio = gastosNegocioYTD / diasTranscurridosAño;
+  const ingresoProyectadoNegocio = ingresosNegocioYTD + ritmoDiarioIngresoNegocio * diasRestantesAño;
+  const gastoProyectadoNegocio = gastosNegocioYTD + ritmoDiarioGastoNegocio * diasRestantesAño;
+  const flujoProyectadoNegocio = ingresoProyectadoNegocio - gastoProyectadoNegocio;
+  const tasaAhorroNegocioYTD =
+    ingresosNegocioYTD > 0 ? Math.round(((ingresosNegocioYTD - gastosNegocioYTD) / ingresosNegocioYTD) * 100) : 0;
+  const gananciaNegocioYTD = ingresosNegocioYTD - gastosNegocioYTD;
   const RESERVA_PCT_VICTOR = 0.25;
   const reservaImpuestosSugerida = gananciaNegocioYTD > 0 ? gananciaNegocioYTD * RESERVA_PCT_VICTOR : 0;
+
   const mesActualLabel = new Intl.DateTimeFormat("es-PR", {
     month: "long",
     year: "numeric",
@@ -609,19 +630,31 @@ export async function POST(req: NextRequest) {
     resumenFinanciero: {
       anioActual,
       mesActualLabel,
-      ingresosPersonalMes,
-      gastosPersonalMes,
-      ingresosNegocioMes,
-      gastosNegocioMes,
-      ingresosYTD,
-      gastosYTD,
       diasTranscurridosAño,
       diasRestantesAño,
-      ingresoProyectadoFinAño,
-      gastoProyectadoFinAño,
-      flujoProyectadoFinAño,
-      tasaAhorroYTD,
-      reservaImpuestosSugerida,
+      personal: {
+        ingresosMes: ingresosPersonalMes,
+        gastosMes: gastosPersonalMes,
+        ingresosYTD: ingresosPersonalYTD,
+        gastosYTD: gastosPersonalYTD,
+        tasaAhorroYTD: tasaAhorroPersonalYTD,
+        ingresoProyectado: ingresoProyectadoPersonal,
+        gastoProyectado: gastoProyectadoPersonal,
+        flujoProyectado: flujoProyectadoPersonal,
+      },
+      negocio: tieneNegocio
+        ? {
+            ingresosMes: ingresosNegocioMes,
+            gastosMes: gastosNegocioMes,
+            ingresosYTD: ingresosNegocioYTD,
+            gastosYTD: gastosNegocioYTD,
+            tasaAhorroYTD: tasaAhorroNegocioYTD,
+            ingresoProyectado: ingresoProyectadoNegocio,
+            gastoProyectado: gastoProyectadoNegocio,
+            flujoProyectado: flujoProyectadoNegocio,
+            reservaImpuestosSugerida,
+          }
+        : null,
     },
   });
 

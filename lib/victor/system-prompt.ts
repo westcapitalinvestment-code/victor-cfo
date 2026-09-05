@@ -55,19 +55,29 @@ export function buildUserContextBlock(params: {
   resumenFinanciero?: {
     anioActual: number;
     mesActualLabel: string;
-    ingresosPersonalMes: number;
-    gastosPersonalMes: number;
-    ingresosNegocioMes: number;
-    gastosNegocioMes: number;
-    ingresosYTD: number;
-    gastosYTD: number;
     diasTranscurridosAño: number;
     diasRestantesAño: number;
-    ingresoProyectadoFinAño: number;
-    gastoProyectadoFinAño: number;
-    flujoProyectadoFinAño: number;
-    tasaAhorroYTD: number;
-    reservaImpuestosSugerida: number;
+    personal: {
+      ingresosMes: number;
+      gastosMes: number;
+      ingresosYTD: number;
+      gastosYTD: number;
+      tasaAhorroYTD: number;
+      ingresoProyectado: number;
+      gastoProyectado: number;
+      flujoProyectado: number;
+    };
+    negocio: {
+      ingresosMes: number;
+      gastosMes: number;
+      ingresosYTD: number;
+      gastosYTD: number;
+      tasaAhorroYTD: number;
+      ingresoProyectado: number;
+      gastoProyectado: number;
+      flujoProyectado: number;
+      reservaImpuestosSugerida: number;
+    } | null;
   } | null;
 }): string {
   const {
@@ -269,46 +279,53 @@ export function buildUserContextBlock(params: {
 
   if (resumenFinanciero) {
     const r = resumenFinanciero;
-    const ingresosMesTotal = r.ingresosPersonalMes + r.ingresosNegocioMes;
-    const gastosMesTotal = r.gastosPersonalMes + r.gastosNegocioMes;
     lines.push(
       "",
-      "RESUMEN FINANCIERO CONSOLIDADO (los MISMOS números que el usuario ve en la",
-      "pantalla 'Resumen' — Personal + TODAS sus entidades de negocio activas si es",
-      "Pro, sin duplicadas. Úsalos para contestar directo preguntas como 'cómo van",
-      "mis finanzas', 'cómo voy este mes', 'cuál es mi tasa de ahorro', 'cuánto voy",
-      "a tener a fin de año' — nunca lo mandes a revisar la pantalla, tú ya tienes",
-      "el dato):",
+      "RESUMEN FINANCIERO (los MISMOS números que el usuario ve en la tarjeta",
+      "desplegable 'Resumen y proyección' de cada Home). REGLA DE ORO (decisión de",
+      "Joel, 5 sept 2026, la razón por la que se eliminó el viejo tab 'Resumen'):",
+      "Personal y Negocio se contestan SIEMPRE por separado — NUNCA sumes ingresos",
+      "o gastos de Personal con los de Negocio en un solo número, ni digas frases",
+      "como 'en total entre personal y negocio tienes $X'. El ingreso bruto del",
+      "negocio no es 'del usuario' hasta que se lo retira (draw/salario) — sumarlo",
+      "a Personal como si ya fuera suyo sería literalmente incorrecto, no solo",
+      "confuso. Si el usuario pregunta 'cómo van mis finanzas' sin especificar cuál,",
+      "dale AMBOS bloques por separado (Personal primero, Negocio después),",
+      "nunca un total combinado. Si tiene varias entidades de negocio, el bloque",
+      "Negocio de abajo ya las suma ENTRE SÍ (igual que 'Vista global' en el",
+      "topbar) — eso sí es correcto, negocio-con-negocio no es personal-con-negocio.",
       "",
-      `Mes en curso (${r.mesActualLabel}, de lo que va del mes a hoy):`,
-      `  - Ingresos: $${r.ingresosPersonalMes.toFixed(2)} personal + $${r.ingresosNegocioMes.toFixed(2)} negocio = $${ingresosMesTotal.toFixed(2)} total`,
-      `  - Gastos: $${r.gastosPersonalMes.toFixed(2)} personal + $${r.gastosNegocioMes.toFixed(2)} negocio = $${gastosMesTotal.toFixed(2)} total`,
-      `  - Ganancia de negocio del mes: $${(r.ingresosNegocioMes - r.gastosNegocioMes).toFixed(2)}`,
+      `Mes en curso: ${r.mesActualLabel}, de lo que va del mes a hoy.`,
       "",
-      `Año ${r.anioActual} a la fecha (YTD, ${r.diasTranscurridosAño} días transcurridos):`,
-      `  - Ingresos YTD: $${r.ingresosYTD.toFixed(2)} · Gastos YTD: $${r.gastosYTD.toFixed(2)}`,
-      `  - Tasa de ahorro YTD: ${r.tasaAhorroYTD}%${r.tasaAhorroYTD >= 20 ? " (saludable, ≥20%)" : ""}`,
+      "PERSONAL:",
+      `  - Ingresos del mes: $${r.personal.ingresosMes.toFixed(2)} · Gastos del mes: $${r.personal.gastosMes.toFixed(2)}`,
+      `  - Año ${r.anioActual} a la fecha (YTD, ${r.diasTranscurridosAño} días transcurridos): ingresos $${r.personal.ingresosYTD.toFixed(2)}, gastos $${r.personal.gastosYTD.toFixed(2)}`,
+      `  - Tasa de ahorro YTD: ${r.personal.tasaAhorroYTD}%${r.personal.tasaAhorroYTD >= 20 ? " (saludable, ≥20%)" : ""}`,
+      `  - Proyección a fin de año (31 dic ${r.anioActual}): ingreso $${r.personal.ingresoProyectado.toFixed(2)}, gasto $${r.personal.gastoProyectado.toFixed(2)}, flujo neto $${r.personal.flujoProyectado.toFixed(2)}`,
       "",
-      `PROYECCIÓN A FIN DE AÑO (31 de diciembre de ${r.anioActual}) — esto NO es una`,
-      "garantía ni un hecho cerrado, es matemática simple: lo que YA pasó en el año",
-      "(real, YTD) más el ritmo diario de YTD extendido a los días que faltan del",
-      "año CALENDARIO (no un ciclo rotativo de 365 días desde hoy). Si el usuario",
-      "pregunta 'cómo voy a terminar el año' o algo parecido, explícaselo así — y",
-      "acláralo si el año apenas empezó (pocos días transcurridos = número más",
-      "volátil, un solo gasto o ingreso grande puede distorsionar mucho el ritmo",
-      "diario todavía):",
-      `  - Ingreso proyectado a fin de año: $${r.ingresoProyectadoFinAño.toFixed(2)}`,
-      `  - Gasto proyectado a fin de año: $${r.gastoProyectadoFinAño.toFixed(2)}`,
-      `  - Flujo neto proyectado a fin de año: $${r.flujoProyectadoFinAño.toFixed(2)}`,
-      `  - Días que quedan hasta el 31 de diciembre: ${r.diasRestantesAño}`,
+      r.negocio
+        ? [
+            "NEGOCIO (todas sus entidades activas sumadas entre sí, nunca con Personal):",
+            `  - Ingresos del mes: $${r.negocio.ingresosMes.toFixed(2)} · Gastos del mes: $${r.negocio.gastosMes.toFixed(2)}`,
+            `  - Año ${r.anioActual} a la fecha (YTD): ingresos $${r.negocio.ingresosYTD.toFixed(2)}, gastos $${r.negocio.gastosYTD.toFixed(2)}`,
+            `  - Tasa de ahorro/margen YTD: ${r.negocio.tasaAhorroYTD}%${r.negocio.tasaAhorroYTD >= 20 ? " (saludable, ≥20%)" : ""}`,
+            `  - Proyección a fin de año (31 dic ${r.anioActual}): ingreso $${r.negocio.ingresoProyectado.toFixed(2)}, gasto $${r.negocio.gastoProyectado.toFixed(2)}, flujo neto $${r.negocio.flujoProyectado.toFixed(2)}`,
+            r.negocio.reservaImpuestosSugerida > 0
+              ? `  - Reserva de impuestos sugerida (25% de la ganancia de negocio YTD — heurística ` +
+                `de reserva para estimadas trimestrales, NO es asesoría fiscal oficial): ` +
+                `$${r.negocio.reservaImpuestosSugerida.toFixed(2)}. Si pregunta cuánto apartar para ` +
+                "Hacienda, dale este número con esa aclaración y sugiere confirmarlo con su " +
+                "contador (lo puede invitar gratis desde Configuración)."
+              : "  - Sin ganancia de negocio positiva en lo que va del año — no aplica reserva de impuestos sugerida todavía.",
+          ].join("\n")
+        : "NEGOCIO: el usuario no tiene ninguna entidad de negocio activa todavía — no apliquen preguntas de negocio.",
       "",
-      r.reservaImpuestosSugerida > 0
-        ? `Reserva de impuestos sugerida (25% de la ganancia de negocio YTD — heurística ` +
-          `de reserva para estimadas trimestrales, NO es asesoría fiscal oficial): ` +
-          `$${r.reservaImpuestosSugerida.toFixed(2)}. Si pregunta cuánto apartar para ` +
-          "Hacienda, dale este número con esa aclaración y sugiere confirmarlo con su " +
-          "contador (lo puede invitar gratis desde Configuración)."
-        : "Sin ganancia de negocio positiva en lo que va del año — no aplica reserva de impuestos sugerida todavía."
+      `Días que quedan hasta el 31 de diciembre de ${r.anioActual}: ${r.diasRestantesAño}. Las proyecciones de arriba`,
+      "NO son una garantía ni un hecho cerrado — es matemática simple: lo que YA pasó en el año",
+      "(real, YTD) más el ritmo diario de YTD extendido a los días que faltan del año CALENDARIO",
+      "(no un ciclo rotativo de 365 días desde hoy). Aclara esto si el usuario pregunta 'cómo voy",
+      "a terminar el año', y adviértele si el año apenas empezó (pocos días transcurridos = número",
+      "más volátil, un solo gasto o ingreso grande puede distorsionar mucho el ritmo diario todavía)."
     );
   }
 

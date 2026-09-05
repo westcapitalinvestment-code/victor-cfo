@@ -83,7 +83,6 @@ export default function Topbar({
     pathname.startsWith("/dashboard/facturacion") ||
     pathname.startsWith("/dashboard/clientes") ||
     pathname.startsWith("/dashboard/entidades");
-  const enResumen = pathname === "/dashboard/resumen";
 
   const [openNegocio, setOpenNegocio] = useState(false);
   const [cambiando, setCambiando] = useState(false);
@@ -201,11 +200,19 @@ export default function Topbar({
         </Link>
       </div>
 
-      {/* Tabs de contexto — Personal y Resumen están disponibles en Core.
-          Negocio (selector de entidad) solo aparece si el usuario es Pro. */}
+      {/* Tabs de contexto — Personal está disponible en Core. Negocio
+          (selector de entidad) solo aparece si el usuario es Pro. El tab
+          "Resumen" (consolidado Personal+Negocio) se quitó a propósito (5
+          sept 2026, decisión de Joel): sumar ingreso/gasto de Personal y
+          Negocio en un solo número contradice la separación que el resto
+          del producto enseña activamente (draw vs. salario, Chart of
+          Accounts aparte) — el ingreso bruto del negocio no es "tuyo"
+          hasta que te lo retiras, así que un total mezclado podía ser
+          hasta engañoso. Cada Home (Personal y cada entidad) tiene ahora
+          su propia tarjeta desplegable de resumen, sin mezclar cifras. */}
       <div className="vc-ctxbar">
         <div className="vc-ctxwrap">
-          <Link href="/dashboard" className={`vc-ctxtab ${!enResumen && !enNegocio ? "on" : ""}`}>
+          <Link href="/dashboard" className={`vc-ctxtab ${!enNegocio ? "on" : ""}`}>
             Personal
           </Link>
 
@@ -275,10 +282,6 @@ export default function Topbar({
               )}
             </div>
           )}
-
-          <Link href="/dashboard/resumen" className={`vc-ctxtab ${enResumen ? "on" : ""}`}>
-            Resumen
-          </Link>
         </div>
       </div>
     </div>

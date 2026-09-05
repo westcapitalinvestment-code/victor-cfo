@@ -5,6 +5,7 @@ import { Sensitive, PrivacyToggle } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
 import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import GastosPendientesCard from "./gastos-pendientes-card";
+import ResumenCard from "./resumen-card";
 
 // Primer día del mes SIGUIENTE a "YYYY-MM" — mismo helper que en
 // /dashboard/gastos/page.tsx, copiado aquí para no crear una dependencia
@@ -345,6 +346,43 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     })
   );
 
+  // Resumen y proyección (5 sept 2026) — reemplaza el tab "Resumen" que se
+  // quitó. Mismo cálculo exacto que tenía app/dashboard/resumen/page.tsx
+  // (ahora eliminado), pero SOLO con transacciones personales (entity_id
+  // IS NULL) — nunca se mezcla con negocio, ver nota grande en topbar.tsx.
+  // Fechas ancladas a UTC-medianoche (mismo patrón que app/api/victor/route.ts)
+  // para evitar el bug de zona horaria documentado en lib/hora-pr.ts.
+  const anioActual = Number(hoyStrPR.slice(0, 4));
+  const inicioAñoStr = `${anioActual}-01-01`;
+  const MS_POR_DIA = 24 * 60 * 60 * 1000;
+  const inicioAñoUTC = new Date(`${inicioAñoStr}T00:00:00Z`).getTime();
+  const finAñoExclusivoUTC = new Date(`${anioActual + 1}-01-01T00:00:00Z`).getTime();
+  const hoyUTC = new Date(`${hoyStrPR}T00:00:00Z`).getTime();
+  const diasEnAño = Math.round((finAñoExclusivoUTC - inicioAñoUTC) / MS_POR_DIA);
+  const diasTranscurridosAño = Math.max(1, Math.round((hoyUTC - inicioAñoUTC) / MS_POR_DIA) + 1);
+  const diasRestantesAño = Math.max(0, diasEnAño - diasTranscurridosAño);
+
+  const { data: transYTDPersonal } =
+    mesSeleccionado === mesActualStr && inicioMesSel === inicioAñoStr
+      ? { data: transacciones }
+      : await supabase
+          .from("transactions")
+          .select("amount, tipo_flujo")
+          .eq("owner_id", user.id)
+          .is("entity_id", null)
+          .eq("es_duplicada", false)
+          .gte("fecha", inicioAñoStr)
+          .lte("fecha", hoyStrPR);
+  const ingresosYTD = (transYTDPersonal ?? []).reduce((sum, t) => sum + (t.tipo_flujo === "ingreso" ? Math.abs(Number(t.amount)) : 0), 0);
+  const gastosYTD = (transYTDPersonal ?? []).reduce((sum, t) => sum + (t.tipo_flujo === "gasto" ? Number(t.amount) : 0), 0);
+
+  const ritmoDiarioIngreso = ingresosYTD / diasTranscurridosAño;
+  const ritmoDiarioGasto = gastosYTD / diasTranscurridosAño;
+  const ingresoProyectado = ingresosYTD + ritmoDiarioIngreso * diasRestantesAño;
+  const gastoProyectado = gastosYTD + ritmoDiarioGasto * diasRestantesAño;
+  const flujoProyectado = ingresoProyectado - gastoProyectado;
+  const tasaAhorroYTD = ingresosYTD > 0 ? Math.round(((ingresosYTD - gastosYTD) / ingresosYTD) * 100) : 0;
+
   return (
     <div className="vc-shell">
       <div className="mb-4">
@@ -569,6 +607,25 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </div>
         </div>
       </div>
+
+      {/* Resumen y proyección — reemplaza el tab "Resumen" que se quitó (5
+          sept 2026). Colapsada por defecto, solo Personal — nunca mezclada
+          con negocio. Ver comentario grande junto al cálculo arriba y en
+          topbar.tsx. */}
+      <ResumenCard
+        anio={anioActual}
+        mesLabel={mesSeleccionado === mesActualStr ? "este mes" : etiquetaMes(mesSeleccionado)}
+        ingresosDelMes={ingresosDelMes}
+        gastosDelMes={gastosDelMes}
+        ingresosYTD={ingresosYTD}
+        gastosYTD={gastosYTD}
+        diasTranscurridosAño={diasTranscurridosAño}
+        diasRestantesAño={diasRestantesAño}
+        ingresoProyectado={ingresoProyectado}
+        gastoProyectado={gastoProyectado}
+        flujoProyectado={flujoProyectado}
+        tasaAhorroYTD={tasaAhorroYTD}
+      />
     </div>
   );
 }
