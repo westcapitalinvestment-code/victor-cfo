@@ -151,6 +151,32 @@ export async function sincronizarPlaidDeUsuario(
         }
       }
 
+      // BUG REAL (4 sept 2026, reportado por Joel): el balance de cada cuenta
+      // se guardaba UNA sola vez, el día que se conectó el banco
+      // (exchange-token/route.ts) — este sync nunca lo volvía a pedir, así
+      // que quedaba congelado para siempre sin importar cuántas
+      // transacciones entraran o salieran después. accountsGet es parte del
+      // producto Transactions (viene en el mismo CSV de la cuenta en el
+      // dashboard de Plaid) — no es el endpoint de Balance en vivo que sí
+      // se cobra aparte, así que se pide en cada sync sin restricción de
+      // cuota (a diferencia de transactionsRefresh más arriba). No tumba la
+      // sincronización si falla — el balance viejo se queda como estaba.
+      try {
+        const cuentasActualizadas = await plaidClient.accountsGet({ access_token: accessToken });
+        for (const acc of cuentasActualizadas.data.accounts) {
+          await supabase
+            .from("plaid_accounts")
+            .update({
+              current_balance: acc.balances.current,
+              available_balance: acc.balances.available,
+            })
+            .eq("plaid_item_id", item.id)
+            .eq("plaid_account_id", acc.account_id);
+        }
+      } catch (balanceErr) {
+        console.warn(`No se pudo actualizar balance (item ${item.id}):`, balanceErr);
+      }
+
       const { data: cuentasDelItem } = await supabase
         .from("plaid_accounts")
         .select("plaid_account_id, es_negocio, entity_id, name, nickname")
