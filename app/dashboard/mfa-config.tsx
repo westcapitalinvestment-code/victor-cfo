@@ -203,8 +203,15 @@ export default function MfaConfig() {
             Escanea este código con Google Authenticator, Authy, o cualquier app de autenticación:
           </p>
           {qrSvg && (
+            // Forzar h-full Y w-full a la vez estira el SVG a lo que sea el
+            // alto/ancho del contenedor por separado — si el SVG de Plaid no
+            // es perfectamente 1:1 por dentro, eso deja los cuadritos del QR
+            // rectangulares en vez de cuadrados, y ningún lector lo reconoce
+            // (bug real, 4 sept 2026, reportado por Joel: "quedo medio
+            // virado"). Solo se fija el ancho — el alto se ajusta solo
+            // respetando la proporción real del SVG.
             <div
-              className="mx-auto mb-3 h-40 w-40 rounded-lg border border-border p-2 [&>svg]:h-full [&>svg]:w-full"
+              className="mx-auto mb-3 w-40 rounded-lg border border-border p-2 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
               dangerouslySetInnerHTML={{ __html: qrSvg }}
             />
           )}
