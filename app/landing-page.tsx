@@ -306,19 +306,30 @@ export default function LandingPage() {
           profesional, no me gusta que diga el precio ahí"): el CTA es un
           mailto en vez de un link directo a /socios — quiere que le
           escriban primero y les manda el link él mismo después de hablar
-          con cada quien, no un formulario público autoservicio. */}
+          con cada quien, no un formulario público autoservicio.
+          Ampliado 5 sept 2026 (misma tarde): el copy original ("¿Eres CPA,
+          contador, o influencer?") sonaba a requisito de identidad y
+          dejaba fuera a cualquiera que quisiera promocionar activamente
+          sin encajar en esas tres categorías — los Términos del programa
+          ya decían "cualquier persona en Puerto Rico", el copy público
+          simplemente no lo reflejaba. Ahora es "Embajador o Afiliado":
+          abre la puerta a cualquiera, mencionando CPA/contador/influencer
+          como ejemplos en vez de como filtro. El programa interno
+          (Dashboard, Términos, nombres de tabla/código) sigue llamándose
+          "Programa de Socios" — este es solo el gancho público. */}
       <div className={styles.sociosBanner}>
-        <div className={styles.sociosBadge}>// alianzas</div>
-        <h3>¿Eres CPA, contador, o influencer?</h3>
+        <div className={styles.sociosBadge}>// embajadores</div>
+        <h3>¿Quieres formar parte de la familia VICTOR CFO?</h3>
         <p>
-          Gana una comisión real por cada cliente que traigas a VICTOR CFO — sin límite, mientras más
-          traigas, más ganas. Escríbenos y hablamos de los detalles.
+          Como Embajador o Afiliado, ganas una comisión real en efectivo por cada cliente que traigas —
+          seas CPA, contador, influencer, o simplemente alguien con la red y las ganas de promocionarlo
+          activamente. Sin límite: mientras más traigas, más ganas. Escríbenos y hablamos de los detalles.
         </p>
         <a
-          href="mailto:dr.jvalentin@gmail.com?subject=Quiero%20ser%20Socio%20de%20VICTOR%20CFO"
+          href="mailto:dr.jvalentin@gmail.com?subject=Quiero%20ser%20Embajador%2FAfiliado%20de%20VICTOR%20CFO"
           className={styles.sociosBtn}
         >
-          Quiero ser socio →
+          Quiero ser Embajador →
         </a>
       </div>
 

@@ -89,10 +89,11 @@ export default function SociosPage() {
         </div>
 
         <form onSubmit={enviar} className="vc-card flex flex-col gap-3">
-          <h1 className="mb-1 text-base font-medium">Programa de Socios</h1>
+          <h1 className="mb-1 text-base font-medium">Sé Embajador o Afiliado de VICTOR CFO</h1>
           <p className="mb-1 text-xs text-muted">
-            ¿Eres CPA, contador, o influencer en Puerto Rico? Gana una comisión en efectivo real por cada cliente
-            que traigas a VICTOR CFO — sin límite, mientras más traigas, más ganas. Completa el formulario y te
+            Gana una comisión en efectivo real por cada cliente que traigas a VICTOR CFO — sin límite, mientras
+            más traigas, más ganas. No hace falta ser CPA, contador, o influencer: si tienes una red de
+            contactos en Puerto Rico y ganas de promocionarlo activamente, completa el formulario y te
             contactamos directamente para darte los detalles del programa.
           </p>
 
@@ -145,10 +146,11 @@ export default function SociosPage() {
           />
           <textarea
             className="vc-input"
-            placeholder="¿Cómo planeas promocionar VICTOR CFO? (ej. clientes de mi práctica de contabilidad, mis redes sociales, etc.)"
+            placeholder="¿Cómo planeas promocionarlo? Sé específico: por qué canal (clientes de tu práctica, tus redes, tu círculo de negocios), a cuántas personas aproximadamente puedes alcanzar, y con qué frecuencia."
             rows={3}
             value={comoPromociona}
             onChange={(e) => setComoPromociona(e.target.value)}
+            required
           />
 
           <label className="flex items-start gap-2 text-xs text-muted">
