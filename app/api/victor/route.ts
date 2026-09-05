@@ -426,6 +426,85 @@ export async function POST(req: NextRequest) {
       ? await supabase.from("manual_accounts").select("name").eq("owner_id", user.id).eq("es_negocio", true)
       : { data: [] as { name: string }[] };
 
+  // Resumen financiero consolidado (mes en curso + YTD + proyección de fin
+  // de año) — MISMO cálculo que /dashboard/resumen/page.tsx, para que
+  // VICTOR pueda contestar "cómo van mis finanzas" o "cómo voy a terminar
+  // el año" con los mismos números exactos que ve el usuario en pantalla,
+  // nunca una versión distinta o inventada (Joel, 5 sept 2026: la tarjeta
+  // de Resumen existía pero VICTOR no la veía en su contexto). Fechas como
+  // strings YYYY-MM-DD anclados a fechaHoyPR()/UTC-medianoche — nunca
+  // Date() de instante contra medianoche local del servidor (ver el bug
+  // documentado en lib/hora-pr.ts sobre "hoy" en Vercel corriendo en UTC).
+  const hoyStrPR = fechaHoyPR();
+  const [anioActualStr, mesActualStrNum] = hoyStrPR.split("-");
+  const anioActual = Number(anioActualStr);
+  const inicioMesStr = `${anioActualStr}-${mesActualStrNum}-01`;
+  const inicioAñoStr = `${anioActualStr}-01-01`;
+  const MS_POR_DIA = 24 * 60 * 60 * 1000;
+  const inicioAñoUTC = new Date(`${inicioAñoStr}T00:00:00Z`).getTime();
+  const finAñoExclusivoUTC = new Date(`${anioActual + 1}-01-01T00:00:00Z`).getTime();
+  const hoyUTC = new Date(`${hoyStrPR}T00:00:00Z`).getTime();
+  const diasEnAño = Math.round((finAñoExclusivoUTC - inicioAñoUTC) / MS_POR_DIA);
+  const diasTranscurridosAño = Math.max(1, Math.round((hoyUTC - inicioAñoUTC) / MS_POR_DIA) + 1);
+  const diasRestantesAño = Math.max(0, diasEnAño - diasTranscurridosAño);
+
+  const [{ data: transMesActual }, { data: transYTD }] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("amount, tipo_flujo, entity_id")
+      .eq("owner_id", user.id)
+      .eq("es_duplicada", false)
+      .gte("fecha", inicioMesStr)
+      .lte("fecha", hoyStrPR),
+    supabase
+      .from("transactions")
+      .select("amount, tipo_flujo, entity_id")
+      .eq("owner_id", user.id)
+      .eq("es_duplicada", false)
+      .gte("fecha", inicioAñoStr)
+      .lte("fecha", hoyStrPR),
+  ]);
+
+  function sumarFlujo(
+    rows: { amount: unknown; tipo_flujo: string | null; entity_id: string | null }[],
+    tipo: "ingreso" | "gasto",
+    soloNegocio: boolean | null
+  ) {
+    return rows.reduce((sum, t) => {
+      if (t.tipo_flujo !== tipo) return sum;
+      const esNegocio = !!t.entity_id && entidadIds.includes(t.entity_id);
+      if (soloNegocio === true && !esNegocio) return sum;
+      if (soloNegocio === false && esNegocio) return sum;
+      return sum + Math.abs(Number(t.amount));
+    }, 0);
+  }
+
+  const filasMes = transMesActual ?? [];
+  const filasYTD = transYTD ?? [];
+
+  const ingresosPersonalMes = sumarFlujo(filasMes, "ingreso", false);
+  const gastosPersonalMes = sumarFlujo(filasMes, "gasto", false);
+  const ingresosNegocioMes = sumarFlujo(filasMes, "ingreso", true);
+  const gastosNegocioMes = sumarFlujo(filasMes, "gasto", true);
+
+  const ingresosYTD = sumarFlujo(filasYTD, "ingreso", null);
+  const gastosYTD = sumarFlujo(filasYTD, "gasto", null);
+  const gananciaNegocioYTD = sumarFlujo(filasYTD, "ingreso", true) - sumarFlujo(filasYTD, "gasto", true);
+
+  const ritmoDiarioIngresoYTD = ingresosYTD / diasTranscurridosAño;
+  const ritmoDiarioGastoYTD = gastosYTD / diasTranscurridosAño;
+  const ingresoProyectadoFinAño = ingresosYTD + ritmoDiarioIngresoYTD * diasRestantesAño;
+  const gastoProyectadoFinAño = gastosYTD + ritmoDiarioGastoYTD * diasRestantesAño;
+  const flujoProyectadoFinAño = ingresoProyectadoFinAño - gastoProyectadoFinAño;
+  const tasaAhorroYTD = ingresosYTD > 0 ? Math.round(((ingresosYTD - gastosYTD) / ingresosYTD) * 100) : 0;
+  const RESERVA_PCT_VICTOR = 0.25;
+  const reservaImpuestosSugerida = gananciaNegocioYTD > 0 ? gananciaNegocioYTD * RESERVA_PCT_VICTOR : 0;
+  const mesActualLabel = new Intl.DateTimeFormat("es-PR", {
+    month: "long",
+    year: "numeric",
+    timeZone: "America/Puerto_Rico",
+  }).format(new Date(`${hoyStrPR}T12:00:00Z`));
+
   const [{ data: cuentasPlaid }, { data: cuentasManuales }] = await Promise.all([cuentasQuery, manualesQuery]);
   const todasLasCuentas = [...(cuentasPlaid ?? []), ...(cuentasManuales ?? [])];
 
@@ -486,6 +565,23 @@ export async function POST(req: NextRequest) {
         cuentasConectadas: [...cuentasPlaid, ...cuentasManuales],
       };
     }),
+    resumenFinanciero: {
+      anioActual,
+      mesActualLabel,
+      ingresosPersonalMes,
+      gastosPersonalMes,
+      ingresosNegocioMes,
+      gastosNegocioMes,
+      ingresosYTD,
+      gastosYTD,
+      diasTranscurridosAño,
+      diasRestantesAño,
+      ingresoProyectadoFinAño,
+      gastoProyectadoFinAño,
+      flujoProyectadoFinAño,
+      tasaAhorroYTD,
+      reservaImpuestosSugerida,
+    },
   });
 
   const systemPrompt = getVictorBasePrompt();

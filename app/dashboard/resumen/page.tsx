@@ -188,19 +188,37 @@ export default async function ResumenPage({
     deltaFlujoNeto = flujoNetoTotal - (ing - gas);
   }
 
-  // Proyección anual — solo tiene sentido para un período que todavía está
-  // corriendo (mes_actual/trimestre/ytd, no un mes ya cerrado ni un rango
-  // custom): ritmo diario real de LO QUE VA DE ESE PERÍODO, extendido a
-  // 365 días. Nada inventado — si no hay datos, ritmo diario es $0.
-  let diasTranscurridos = 0;
-  if (rango === "mes_actual" || rango === "trimestre" || rango === "ytd") {
-    const inicioDate = new Date(`${inicio}T00:00:00`);
-    diasTranscurridos = Math.max(1, Math.round((hoy.getTime() - inicioDate.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+  // Proyección de fin de año — SIEMPRE basada en el ritmo real del año en
+  // curso (1 de enero a hoy), sin importar qué rango tenga seleccionado la
+  // pantalla arriba: contesta "¿cómo voy a terminar el año?", no "¿a qué
+  // ritmo voy?". Es YTD real + (ritmo diario YTD × días que quedan hasta el
+  // 31 de diciembre) — nada inventado, si no hay datos el ritmo es $0.
+  const inicioAño = new Date(hoy.getFullYear(), 0, 1);
+  const finAño = new Date(hoy.getFullYear(), 11, 31);
+  const diasTranscurridosAño = Math.max(1, Math.round((hoy.getTime() - inicioAño.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+  const diasRestantesAño = Math.max(0, Math.round((finAño.getTime() - hoy.getTime()) / (24 * 60 * 60 * 1000)));
+
+  let ingresosYTD = ingresosDelPeriodo;
+  let gastosYTD = gastosDelPeriodo;
+  if (rango !== "ytd") {
+    const { data: transYTD } = await supabase
+      .from("transactions")
+      .select("amount, tipo_flujo, entity_id")
+      .eq("owner_id", user.id)
+      .eq("es_duplicada", false)
+      .gte("fecha", fmt(inicioAño))
+      .lte("fecha", fmt(hoy));
+    const filasYTD = transYTD ?? [];
+    ingresosYTD = filasYTD.reduce((sum, t) => sum + (t.tipo_flujo === "ingreso" ? Math.abs(Number(t.amount)) : 0), 0);
+    gastosYTD = filasYTD.reduce((sum, t) => sum + (t.tipo_flujo === "gasto" ? Math.abs(Number(t.amount)) : 0), 0);
   }
-  const mostrarProyeccion = diasTranscurridos > 0;
-  const ingresoProyectado = mostrarProyeccion ? (ingresosDelPeriodo / diasTranscurridos) * 365 : 0;
-  const gastoProyectado = mostrarProyeccion ? (gastosDelPeriodo / diasTranscurridos) * 365 : 0;
+
+  const ritmoDiarioIngreso = ingresosYTD / diasTranscurridosAño;
+  const ritmoDiarioGasto = gastosYTD / diasTranscurridosAño;
+  const ingresoProyectado = ingresosYTD + ritmoDiarioIngreso * diasRestantesAño;
+  const gastoProyectado = gastosYTD + ritmoDiarioGasto * diasRestantesAño;
   const flujoProyectado = ingresoProyectado - gastoProyectado;
+  const tasaAhorroYTD = ingresosYTD > 0 ? Math.round(((ingresosYTD - gastosYTD) / ingresosYTD) * 100) : 0;
 
   // Reserva de impuestos sugerida — 25% de la ganancia de negocio del
   // período (heurística de reserva para estimadas trimestrales, no un
@@ -321,41 +339,39 @@ export default async function ResumenPage({
         )}
       </div>
 
-      {/* PROYECCIÓN ANUAL CONSOLIDADA — solo si el período todavía está
-          corriendo (mes_actual/trimestre/ytd). Ritmo real del período,
-          extendido a 365 días — no un número inventado. */}
-      {mostrarProyeccion && (
-        <div className="vc-card mb-3">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">Proyección anual consolidada</p>
-          <div className="rw flex justify-between border-b border-border py-2 text-sm">
-            <span className="text-muted">Ingreso proyectado total</span>
-            <span className="font-medium text-grn">
-              <Sensitive>{formatMoney(ingresoProyectado)}</Sensitive>
-            </span>
-          </div>
-          <div className="rw flex justify-between border-b border-border py-2 text-sm">
-            <span className="text-muted">Gastos proyectados</span>
-            <span className="font-medium text-red">
-              <Sensitive>{formatMoney(gastoProyectado)}</Sensitive>
-            </span>
-          </div>
-          <div className="rw flex justify-between border-b border-border py-2 text-sm">
-            <span className="text-muted">Flujo neto proyectado</span>
-            <span className="font-medium">
-              <Sensitive>{formatMoney(flujoProyectado)}</Sensitive>
-            </span>
-          </div>
-          <div className="rw flex justify-between py-2 text-sm">
-            <span className="text-muted">Tasa de ahorro actual</span>
-            <span className="font-medium">
-              {tasaAhorro}% {tasaAhorro >= 20 && <span className="text-grn">— saludable</span>}
-            </span>
-          </div>
-          <p className="mt-2 text-[10px] text-muted">
-            Calculado con tu ritmo real de {etiqueta} ({diasTranscurridos} día{diasTranscurridos === 1 ? "" : "s"}), extendido a 365 días.
-          </p>
+      {/* PROYECCIÓN A FIN DE AÑO — siempre visible, siempre basada en el
+          ritmo real del año en curso (YTD), no en el rango seleccionado
+          arriba. Ya real + resto del año proyectado al mismo ritmo. */}
+      <div className="vc-card mb-3">
+        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">Proyección a fin de año ({hoy.getFullYear()})</p>
+        <div className="rw flex justify-between border-b border-border py-2 text-sm">
+          <span className="text-muted">Ingreso proyectado total</span>
+          <span className="font-medium text-grn">
+            <Sensitive>{formatMoney(ingresoProyectado)}</Sensitive>
+          </span>
         </div>
-      )}
+        <div className="rw flex justify-between border-b border-border py-2 text-sm">
+          <span className="text-muted">Gastos proyectados</span>
+          <span className="font-medium text-red">
+            <Sensitive>{formatMoney(gastoProyectado)}</Sensitive>
+          </span>
+        </div>
+        <div className="rw flex justify-between border-b border-border py-2 text-sm">
+          <span className="text-muted">Flujo neto proyectado</span>
+          <span className="font-medium">
+            <Sensitive>{formatMoney(flujoProyectado)}</Sensitive>
+          </span>
+        </div>
+        <div className="rw flex justify-between py-2 text-sm">
+          <span className="text-muted">Tasa de ahorro (año a la fecha)</span>
+          <span className="font-medium">
+            {tasaAhorroYTD}% {tasaAhorroYTD >= 20 && <span className="text-grn">— saludable</span>}
+          </span>
+        </div>
+        <p className="mt-2 text-[10px] text-muted">
+          Ya llevas <Sensitive>{formatMoney(ingresosYTD)}</Sensitive> en ingresos y <Sensitive>{formatMoney(gastosYTD)}</Sensitive> en gastos en lo que va de {hoy.getFullYear()} ({diasTranscurridosAño} días) — el resto se proyecta al mismo ritmo diario para los {diasRestantesAño} días que quedan hasta el 31 de diciembre.
+        </p>
+      </div>
 
       {/* ACCIONES RECOMENDADAS — hoy solo la reserva de impuestos (fórmula
           simple y visible). La sugerencia de aportación IRA/Keogh queda

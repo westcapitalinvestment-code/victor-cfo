@@ -52,8 +52,39 @@ export function buildUserContextBlock(params: {
     athMovilBusinessPath: string | null;
     cuentasConectadas: string[];
   }[] | null;
+  resumenFinanciero?: {
+    anioActual: number;
+    mesActualLabel: string;
+    ingresosPersonalMes: number;
+    gastosPersonalMes: number;
+    ingresosNegocioMes: number;
+    gastosNegocioMes: number;
+    ingresosYTD: number;
+    gastosYTD: number;
+    diasTranscurridosAño: number;
+    diasRestantesAño: number;
+    ingresoProyectadoFinAño: number;
+    gastoProyectadoFinAño: number;
+    flujoProyectadoFinAño: number;
+    tasaAhorroYTD: number;
+    reservaImpuestosSugerida: number;
+  } | null;
 }): string {
-  const { fullName, plan, planStatus, memorySummary, goals, activeStrategies, isFounder, esSaludoDiario, liveGoals, finanzas, onboardingProfile, entidadesNegocio } = params;
+  const {
+    fullName,
+    plan,
+    planStatus,
+    memorySummary,
+    goals,
+    activeStrategies,
+    isFounder,
+    esSaludoDiario,
+    liveGoals,
+    finanzas,
+    onboardingProfile,
+    entidadesNegocio,
+    resumenFinanciero,
+  } = params;
 
   const ahora = new Date();
   const lines: string[] = [
@@ -234,6 +265,51 @@ export function buildUserContextBlock(params: {
         "puedas verlo y ayudarlo de verdad, en vez de inventar un número."
       );
     }
+  }
+
+  if (resumenFinanciero) {
+    const r = resumenFinanciero;
+    const ingresosMesTotal = r.ingresosPersonalMes + r.ingresosNegocioMes;
+    const gastosMesTotal = r.gastosPersonalMes + r.gastosNegocioMes;
+    lines.push(
+      "",
+      "RESUMEN FINANCIERO CONSOLIDADO (los MISMOS números que el usuario ve en la",
+      "pantalla 'Resumen' — Personal + TODAS sus entidades de negocio activas si es",
+      "Pro, sin duplicadas. Úsalos para contestar directo preguntas como 'cómo van",
+      "mis finanzas', 'cómo voy este mes', 'cuál es mi tasa de ahorro', 'cuánto voy",
+      "a tener a fin de año' — nunca lo mandes a revisar la pantalla, tú ya tienes",
+      "el dato):",
+      "",
+      `Mes en curso (${r.mesActualLabel}, de lo que va del mes a hoy):`,
+      `  - Ingresos: $${r.ingresosPersonalMes.toFixed(2)} personal + $${r.ingresosNegocioMes.toFixed(2)} negocio = $${ingresosMesTotal.toFixed(2)} total`,
+      `  - Gastos: $${r.gastosPersonalMes.toFixed(2)} personal + $${r.gastosNegocioMes.toFixed(2)} negocio = $${gastosMesTotal.toFixed(2)} total`,
+      `  - Ganancia de negocio del mes: $${(r.ingresosNegocioMes - r.gastosNegocioMes).toFixed(2)}`,
+      "",
+      `Año ${r.anioActual} a la fecha (YTD, ${r.diasTranscurridosAño} días transcurridos):`,
+      `  - Ingresos YTD: $${r.ingresosYTD.toFixed(2)} · Gastos YTD: $${r.gastosYTD.toFixed(2)}`,
+      `  - Tasa de ahorro YTD: ${r.tasaAhorroYTD}%${r.tasaAhorroYTD >= 20 ? " (saludable, ≥20%)" : ""}`,
+      "",
+      `PROYECCIÓN A FIN DE AÑO (31 de diciembre de ${r.anioActual}) — esto NO es una`,
+      "garantía ni un hecho cerrado, es matemática simple: lo que YA pasó en el año",
+      "(real, YTD) más el ritmo diario de YTD extendido a los días que faltan del",
+      "año CALENDARIO (no un ciclo rotativo de 365 días desde hoy). Si el usuario",
+      "pregunta 'cómo voy a terminar el año' o algo parecido, explícaselo así — y",
+      "acláralo si el año apenas empezó (pocos días transcurridos = número más",
+      "volátil, un solo gasto o ingreso grande puede distorsionar mucho el ritmo",
+      "diario todavía):",
+      `  - Ingreso proyectado a fin de año: $${r.ingresoProyectadoFinAño.toFixed(2)}`,
+      `  - Gasto proyectado a fin de año: $${r.gastoProyectadoFinAño.toFixed(2)}`,
+      `  - Flujo neto proyectado a fin de año: $${r.flujoProyectadoFinAño.toFixed(2)}`,
+      `  - Días que quedan hasta el 31 de diciembre: ${r.diasRestantesAño}`,
+      "",
+      r.reservaImpuestosSugerida > 0
+        ? `Reserva de impuestos sugerida (25% de la ganancia de negocio YTD — heurística ` +
+          `de reserva para estimadas trimestrales, NO es asesoría fiscal oficial): ` +
+          `$${r.reservaImpuestosSugerida.toFixed(2)}. Si pregunta cuánto apartar para ` +
+          "Hacienda, dale este número con esa aclaración y sugiere confirmarlo con su " +
+          "contador (lo puede invitar gratis desde Configuración)."
+        : "Sin ganancia de negocio positiva en lo que va del año — no aplica reserva de impuestos sugerida todavía."
+    );
   }
 
   if (onboardingProfile) {
