@@ -13,9 +13,17 @@ export async function POST(req: NextRequest) {
   const telefono = typeof body?.telefono === "string" ? body.telefono.trim() : null;
   const tipo = body?.tipo === "cpa" || body?.tipo === "influencer" ? body.tipo : "otro";
   const comoPromociona = typeof body?.comoPromociona === "string" ? body.comoPromociona.trim() : null;
+  const aceptaTerminos = body?.aceptaTerminos === true;
 
   if (!nombre || !email) {
     return NextResponse.json({ error: "Falta tu nombre o email." }, { status: 400 });
+  }
+  // Este programa es una relación de contratista independiente pagada en
+  // efectivo real (ver app/socios/terminos/page.tsx) — a diferencia del
+  // referido peer-to-peer, necesita su propia aceptación explícita, nunca
+  // asumida.
+  if (!aceptaTerminos) {
+    return NextResponse.json({ error: "Tienes que aceptar los Términos del Programa de Socios." }, { status: 400 });
   }
 
   const admin = createAdminClient();
@@ -25,6 +33,7 @@ export async function POST(req: NextRequest) {
     telefono,
     tipo,
     como_promociona: comoPromociona,
+    terminos_aceptados_at: new Date().toISOString(),
   });
 
   if (error) {

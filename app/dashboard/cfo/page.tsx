@@ -80,7 +80,9 @@ export default async function CfoPage() {
     // del cliente (socios-panel.tsx) decide cómo agruparlos.
     admin
       .from("socios")
-      .select("id, tipo, nombre, email, telefono, como_promociona, codigo, estado, created_at")
+      .select(
+        "id, tipo, nombre, email, telefono, como_promociona, codigo, estado, created_at, payment_token, datos_pago_completados_at, bank_name, account_last4"
+      )
       .order("created_at", { ascending: false }),
     admin
       .from("socios_comisiones")
@@ -357,6 +359,10 @@ export default async function CfoPage() {
           codigo: s.codigo,
           estado: s.estado as "pendiente" | "aprobado" | "suspendido",
           createdAt: s.created_at,
+          paymentToken: s.payment_token,
+          datosPagoCompletados: !!s.datos_pago_completados_at,
+          bankName: s.bank_name,
+          accountLast4: s.account_last4,
         }))}
         comisiones={(comisionesSocios ?? []).map((c) => ({
           id: c.id,

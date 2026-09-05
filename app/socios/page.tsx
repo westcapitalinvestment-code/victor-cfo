@@ -15,6 +15,7 @@ export default function SociosPage() {
   const [telefono, setTelefono] = useState("");
   const [tipo, setTipo] = useState<"cpa" | "influencer" | "otro">("otro");
   const [comoPromociona, setComoPromociona] = useState("");
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
   const [loading, setLoading] = useState(false);
   const [enviado, setEnviado] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +24,10 @@ export default function SociosPage() {
     e.preventDefault();
     if (!nombre.trim() || !email.trim()) {
       setError("Completa tu nombre y email para continuar.");
+      return;
+    }
+    if (!aceptaTerminos) {
+      setError("Tienes que aceptar los Términos del Programa de Socios para continuar.");
       return;
     }
 
@@ -38,6 +43,7 @@ export default function SociosPage() {
         telefono: telefono.trim() || null,
         tipo,
         comoPromociona: comoPromociona.trim() || null,
+        aceptaTerminos,
       }),
     });
     const json = await res.json().catch(() => null);
@@ -145,9 +151,26 @@ export default function SociosPage() {
             onChange={(e) => setComoPromociona(e.target.value)}
           />
 
+          <label className="flex items-start gap-2 text-xs text-muted">
+            <input
+              type="checkbox"
+              checked={aceptaTerminos}
+              onChange={(e) => setAceptaTerminos(e.target.checked)}
+              className="mt-0.5"
+              required
+            />
+            <span>
+              Acepto los{" "}
+              <Link href="/socios/terminos" target="_blank" className="font-medium text-teal">
+                Términos del Programa de Socios
+              </Link>
+              .
+            </span>
+          </label>
+
           {error && <p className="text-xs text-red">{error}</p>}
 
-          <button type="submit" className="vc-btn-primary mt-2" disabled={loading}>
+          <button type="submit" className="vc-btn-primary mt-2" disabled={loading || !aceptaTerminos}>
             {loading ? "Enviando..." : "Enviar solicitud"}
           </button>
 

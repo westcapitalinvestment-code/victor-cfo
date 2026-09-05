@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 
 // Panel de "Programa de Socios" del Dashboard de Operaciones (migración
-// 0070, 5 sept 2026) — mismo patrón que usuarios-panel.tsx: recibe los
+// 0070/0071, 5 sept 2026) — mismo patrón que usuarios-panel.tsx: recibe los
 // datos YA leídos desde el Server Component (app/dashboard/cfo/page.tsx) y
-// solo maneja estado de UI + las dos acciones del founder (aprobar/
-// suspender un socio, marcar una comisión como pagada). El pago en sí es
-// SIEMPRE manual — este botón solo deja constancia de que Joel ya
-// transfirió el efectivo por fuera de la app.
+// solo maneja estado de UI + las acciones del founder (aprobar/suspender un
+// socio, marcar una comisión como pagada, revelar banco/cuenta/ruta para
+// hacer el ACH). El pago en sí es SIEMPRE manual — estos botones solo
+// dejan constancia o te dan lo que necesitas para transferir por fuera de
+// la app (Mercury).
 
 export type SocioFila = {
   id: string;
@@ -20,6 +21,10 @@ export type SocioFila = {
   codigo: string | null;
   estado: "pendiente" | "aprobado" | "suspendido";
   createdAt: string | null;
+  paymentToken: string | null;
+  datosPagoCompletados: boolean;
+  bankName: string | null;
+  accountLast4: string | null;
 };
 
 export type ComisionFila = {
@@ -62,6 +67,10 @@ export default function SociosPanel({
   const [comisiones, setComisiones] = useState(comisionesIniciales);
   const [cargando, setCargando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState<string | null>(null);
+  const [datosRevelados, setDatosRevelados] = useState<
+    Record<string, { bankName: string; accountNumber: string; routingNumber: string } | "cargando" | "error">
+  >({});
 
   const pendientes = socios.filter((s) => s.estado === "pendiente");
   const aprobados = socios.filter((s) => s.estado === "aprobado");
@@ -91,7 +100,11 @@ export default function SociosPanel({
       setError(json?.error || "No se pudo actualizar el socio.");
       return;
     }
-    setSocios((prev) => prev.map((s) => (s.id === id ? { ...s, estado, codigo: json?.codigo ?? s.codigo } : s)));
+    setSocios((prev) =>
+      prev.map((s) =>
+        s.id === id ? { ...s, estado, codigo: json?.codigo ?? s.codigo, paymentToken: json?.paymentToken ?? s.paymentToken } : s
+      )
+    );
   }
 
   async function marcarPagada(id: string) {
@@ -107,7 +120,32 @@ export default function SociosPanel({
     setComisiones((prev) => prev.map((c) => (c.id === id ? { ...c, estado: "pagada" } : c)));
   }
 
+  async function copiarLink(texto: string, id: string) {
+    try {
+      await navigator.clipboard.writeText(texto);
+      setCopiado(id);
+      setTimeout(() => setCopiado(null), 2000);
+    } catch {
+      // Sin permiso de portapapeles — Joel puede seleccionar el texto a mano.
+    }
+  }
+
+  async function revelarDatosPago(id: string) {
+    setDatosRevelados((prev) => ({ ...prev, [id]: "cargando" }));
+    const res = await fetch(`/api/socios/${id}/datos-pago`);
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      setDatosRevelados((prev) => ({ ...prev, [id]: "error" }));
+      return;
+    }
+    setDatosRevelados((prev) => ({
+      ...prev,
+      [id]: { bankName: json.bankName, accountNumber: json.accountNumber, routingNumber: json.routingNumber },
+    }));
+  }
+
   const inicioAño = new Date(`${new Date().getFullYear()}-01-01T00:00:00-04:00`);
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://www.victorcfo.com";
 
   return (
     <div className="vc-card mb-3">
@@ -158,7 +196,7 @@ export default function SociosPanel({
             </div>
           )}
 
-          {/* Socios activos — comisiones pendientes/pagadas y alerta de 1062.03 */}
+          {/* Socios activos — código + link de pago, comisiones pendientes/pagadas y alerta de 1062.03 */}
           <div>
             <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">Socios activos</p>
             {aprobados.length === 0 ? (
@@ -178,6 +216,8 @@ export default function SociosPanel({
                       .filter((c) => c.estado === "pendiente" && c.createdAt && new Date(c.createdAt) >= inicioAño)
                       .reduce((sum, c) => sum + c.comisionCentavos, 0);
                   const cercaDelUmbral = acumuladoEsteAño >= UMBRAL_1062_CENTAVOS;
+                  const linkPago = s.paymentToken ? `${origin}/socios/pago/${s.paymentToken}` : null;
+                  const revelado = datosRevelados[s.id];
 
                   return (
                     <div key={s.id} className="rounded-lg border border-border p-2 text-sm">
@@ -195,6 +235,46 @@ export default function SociosPanel({
                           <p className="font-medium">{fmt(totalPendiente)}</p>
                         </div>
                       </div>
+
+                      {/* Datos de pago: si no los ha llenado, dale el link para mandarle;
+                          si ya los llenó, muestra ···last4 con opción de revelar completo. */}
+                      <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
+                        {s.datosPagoCompletados ? (
+                          <span className="text-muted">
+                            🏦 {s.bankName ?? "Banco"} ···{s.accountLast4}
+                          </span>
+                        ) : (
+                          <span className="text-amb">⚠️ Falta que llene sus datos de pago</span>
+                        )}
+                        <div className="flex shrink-0 gap-1">
+                          {!s.datosPagoCompletados && linkPago && (
+                            <button
+                              onClick={() => copiarLink(linkPago, `pago-${s.id}`)}
+                              className="rounded-pill border border-border px-2 py-0.5 font-medium text-muted"
+                            >
+                              {copiado === `pago-${s.id}` ? "¡Copiado!" : "Copiar link de pago"}
+                            </button>
+                          )}
+                          {s.datosPagoCompletados && !revelado && (
+                            <button
+                              onClick={() => revelarDatosPago(s.id)}
+                              className="rounded-pill border border-border px-2 py-0.5 font-medium text-muted"
+                            >
+                              Ver cuenta completa
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {revelado === "cargando" && <p className="mt-1 text-[11px] text-muted">Descifrando...</p>}
+                      {revelado === "error" && <p className="mt-1 text-[11px] text-red">No se pudo cargar.</p>}
+                      {revelado && typeof revelado === "object" && (
+                        <div className="mt-1.5 rounded-md bg-teal/5 px-2 py-1.5 text-[11px]">
+                          <p>Banco: {revelado.bankName}</p>
+                          <p>Routing: <span className="font-mono">{revelado.routingNumber}</span></p>
+                          <p>Cuenta: <span className="font-mono">{revelado.accountNumber}</span></p>
+                        </div>
+                      )}
 
                       {cercaDelUmbral && (
                         <p className="mt-1.5 rounded-md bg-amb/10 px-2 py-1 text-[11px] text-amb">

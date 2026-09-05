@@ -35,14 +35,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const admin = createAdminClient();
-  const { data: socio } = await admin.from("socios").select("id, nombre, codigo").eq("id", params.id).maybeSingle();
+  const { data: socio } = await admin
+    .from("socios")
+    .select("id, nombre, codigo, payment_token")
+    .eq("id", params.id)
+    .maybeSingle();
   if (!socio) return NextResponse.json({ error: "Socio no encontrado." }, { status: 404 });
 
   const datosActualizar: Record<string, unknown> = { estado };
 
   // Genera el código solo la primera vez que se aprueba (si ya tenía uno de
   // una aprobación anterior — ej. se suspendió y se vuelve a aprobar — se
-  // conserva, para no romper links que ya haya compartido antes).
+  // conserva, para no romper links que ya haya compartido antes). El
+  // payment_token (migración 0071) ya existe desde que se creó la
+  // solicitud (columna con DEFAULT gen_random_uuid()) — no hace falta
+  // generarlo aquí, solo devolverlo, porque el link de pago no funciona
+  // hasta que el socio esté aprobado (ver app/api/socios/pago/[token]/route.ts).
   if (estado === "aprobado") {
     datosActualizar.approved_at = new Date().toISOString();
     if (!socio.codigo) {
@@ -51,7 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       for (let intento = 0; intento < 5; intento++) {
         const codigo = generarCodigo(socio.nombre);
         const { error } = await admin.from("socios").update({ ...datosActualizar, codigo }).eq("id", params.id);
-        if (!error) return NextResponse.json({ ok: true, codigo });
+        if (!error) return NextResponse.json({ ok: true, codigo, paymentToken: socio.payment_token });
       }
       return NextResponse.json({ error: "No se pudo generar un código único, intenta de nuevo." }, { status: 500 });
     }
@@ -60,5 +68,5 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { error } = await admin.from("socios").update(datosActualizar).eq("id", params.id);
   if (error) return NextResponse.json({ error: "No se pudo actualizar el socio." }, { status: 500 });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, codigo: socio.codigo, paymentToken: socio.payment_token });
 }
