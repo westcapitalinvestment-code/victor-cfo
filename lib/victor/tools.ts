@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buscarEstrategia } from "@/lib/victor/estrategias-financieras";
 import { buscarConocimiento } from "@/lib/victor/conocimiento-financiero";
 import { buscarIdentidadCultural } from "@/lib/victor/identidad-cultural";
@@ -282,6 +283,23 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
           description: "Nombre (o parte) de la entidad de negocio a revisar. Usa 'todas' para Personal + todas las entidades juntas. Si se omite, se revisa solo Personal.",
         },
       },
+      required: [],
+    },
+  },
+  {
+    name: "verificar_programa_referidos",
+    description:
+      "Consulta en vivo los datos reales del programa de referidos de Victor-a-Victor (el link personal " +
+      "?ref=, NO el Programa de Socios de CPAs/influencers, que es un programa aparte). OBLIGATORIO: llama " +
+      "esta herramienta SIEMPRE que el usuario pregunte por su link de referido, cuánto ha ganado o acumulado " +
+      "en créditos, cuántos referidos le han pagado, si le queda tope disponible este año, o si él mismo fue " +
+      "referido por alguien — NUNCA contestes esas preguntas de memoria ni inventes un monto; ya ha pasado " +
+      "que VICTOR no tenía forma de ver esto y adivinaba o decía que no sabía. Devuelve: su link personal, " +
+      "cuántos referidos ya generaron crédito y el total acumulado este año calendario, el tope anual según " +
+      "su plan y cuánto le queda disponible, y si él fue referido por alguien más.",
+    input_schema: {
+      type: "object",
+      properties: {},
       required: [],
     },
   },
@@ -1759,6 +1777,75 @@ export async function executeVictorTool(
         message:
           `Confirmado en vivo — esto SÍ está conectado ahora mismo en ${alcance.alcanceLabel}:\n${lineas.map((l) => `- ${l}`).join("\n")}\n\n` +
           `Usa esta lista tal cual para contestar — no digas que falta conectar algo que ya aparece aquí arriba.`,
+      };
+    }
+
+    case "verificar_programa_referidos": {
+      // 5 sept 2026 — Joel pegó una conversación real donde un usuario le
+      // preguntó a VICTOR por su programa de referidos (el de Victor-a-
+      // Victor, vía ?ref=, NO el Programa de Socios de CPAs/influencers) y
+      // VICTOR admitió no tener forma de verlo. Instrucción explícita de
+      // Joel: "Hay que darle las herramientas a Victor". referral_rewards
+      // (migración 0062) tiene RLS encendido SIN políticas — a propósito,
+      // solo el webhook con service role puede tocarla — así que aquí hace
+      // falta el cliente admin, igual que el webhook, pero cada consulta va
+      // filtrada explícitamente por el id del usuario que está hablando
+      // (ownerId), nunca por datos sueltos que vengan del modelo.
+      const admin = createAdminClient();
+
+      const { data: yo, error: errorYo } = await admin
+        .from("users")
+        .select("plan, referred_by")
+        .eq("id", ownerId)
+        .maybeSingle();
+      if (errorYo || !yo) {
+        return { ok: false, message: "No se pudo verificar el programa de referidos en este momento." };
+      }
+
+      const inicioAñoISO = `${new Date().getUTCFullYear()}-01-01T00:00:00.000Z`;
+      const { data: creditos } = await admin
+        .from("referral_rewards")
+        .select("credit_cents, created_at")
+        .eq("referrer_id", ownerId)
+        .order("created_at", { ascending: true });
+
+      const totalHistorico = (creditos ?? []).reduce((sum, r) => sum + Number(r.credit_cents), 0);
+      const acumuladoEsteAño = (creditos ?? [])
+        .filter((r) => (r.created_at as string) >= inicioAñoISO)
+        .reduce((sum, r) => sum + Number(r.credit_cents), 0);
+
+      // Mismo tope y misma regla de "según tu plan" que
+      // procesarCreditoReferido en app/api/stripe/webhook/route.ts — si eso
+      // cambia allá, hay que cambiarlo aquí también.
+      const TOPE_ANUAL_CORE_CENTAVOS = 17_500; // $175/año
+      const TOPE_ANUAL_PRO_CENTAVOS = 50_000; // $500/año
+      const topeAnual = yo.plan === "pro" || yo.plan === "proplus" ? TOPE_ANUAL_PRO_CENTAVOS : TOPE_ANUAL_CORE_CENTAVOS;
+      const disponibleEsteAño = Math.max(0, topeAnual - acumuladoEsteAño);
+
+      const link = `https://www.victorcfo.com/registro?ref=${ownerId}`;
+      const numReferidosPremiados = (creditos ?? []).length;
+
+      const partes: string[] = [];
+      partes.push(`Link personal de referido: ${link}`);
+      partes.push(
+        numReferidosPremiados === 0
+          ? "Todavía no tiene ningún referido que haya empezado a pagar de verdad, así que no ha generado crédito."
+          : `${numReferidosPremiados} referido(s) ya generaron crédito (pagaron su primera factura real). Total acumulado histórico: $${(totalHistorico / 100).toFixed(2)}.`
+      );
+      partes.push(
+        `Este año calendario lleva $${(acumuladoEsteAño / 100).toFixed(2)} acumulado, de un tope de $${(topeAnual / 100).toFixed(2)} (según su plan actual, ${yo.plan}). Le queda disponible $${(disponibleEsteAño / 100).toFixed(2)} en lo que resta del año.`
+      );
+      partes.push(
+        yo.referred_by
+          ? "Este usuario SÍ fue referido por otra persona al registrarse."
+          : "Este usuario no fue referido por nadie — entró por su cuenta."
+      );
+
+      return {
+        ok: true,
+        message:
+          `Confirmado en vivo sobre el programa de referidos (Victor-a-Victor):\n${partes.map((p) => `- ${p}`).join("\n")}\n\n` +
+          `Usa estos datos tal cual para contestar — no inventes montos ni digas que no tienes forma de verlo.`,
       };
     }
 
