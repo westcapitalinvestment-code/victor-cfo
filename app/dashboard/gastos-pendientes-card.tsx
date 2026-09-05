@@ -30,10 +30,17 @@ export default function GastosPendientesCard({
   pendientesIniciales,
   totalPendientes,
   categorias,
+  // A dónde manda "Ver los N restantes en Transacciones →" — Personal usa
+  // /dashboard/gastos (default), Negocio manda /dashboard/negocio/gastos
+  // para quedarse dentro del contexto de la entidad activa (4 sept 2026,
+  // pedido de Joel: esta tarjeta también debía existir en el Inicio de
+  // negocio, no solo en Personal).
+  hrefBase = "/dashboard/gastos",
 }: {
   pendientesIniciales: Pendiente[];
   totalPendientes: number;
   categorias: Categoria[];
+  hrefBase?: string;
 }) {
   const router = useRouter();
   const [pendientes, setPendientes] = useState(pendientesIniciales);
@@ -89,7 +96,7 @@ export default function GastosPendientesCard({
           <span className="text-base">🏷️</span>
           <div>
             <p className="text-sm font-medium text-text">
-              {pendientes.length} gasto{pendientes.length > 1 ? "s" : ""} sin categorizar
+              {pendientes.length} transacci{pendientes.length > 1 ? "ones" : "ón"} sin categorizar
             </p>
             <p className="text-[11px] text-muted">Toca cada uno para categorizarlo o acepta la sugerencia</p>
           </div>
@@ -153,7 +160,7 @@ export default function GastosPendientesCard({
           filtrada, que además ahora muestra TODO el historial pendiente, no
           solo el mes en curso. */}
           {restantes > 0 && (
-            <Link href="/dashboard/gastos?categoria=sin_categorizar" className="block px-4 py-2.5 text-center text-xs font-medium text-teal hover:opacity-80">
+            <Link href={`${hrefBase}?categoria=sin_categorizar`} className="block px-4 py-2.5 text-center text-xs font-medium text-teal hover:opacity-80">
               Ver los {restantes} restantes en Transacciones →
             </Link>
           )}

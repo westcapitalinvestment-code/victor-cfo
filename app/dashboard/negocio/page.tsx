@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format";
 import { Sensitive, PrivacyToggle } from "@/lib/privacy";
 import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
+import GastosPendientesCard from "../gastos-pendientes-card";
 
 function hoyISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -12,9 +13,16 @@ function hoyISO(): string {
 
 // Inicio de negocio — versión ligera del mockup "VICTOR — Dashboard Pro.html"
 // (Inicio con contexto Negocio): saludo, balance/deuda de las cuentas
-// asignadas a esta entidad, Facturado/Cobrado/Pendiente, facturas
-// recientes, metas del negocio, alertas — todo real, scoped por la entidad
-// activa (mismo mecanismo que Facturación).
+// asignadas a esta entidad, transacciones sin categorizar, metas del
+// negocio, alertas y próxima cita — todo real, scoped por la entidad activa
+// (mismo mecanismo que Facturación).
+//
+// Facturado/Cobrado/Pendiente y "Facturas recientes" se QUITARON de aquí
+// (4 sept 2026, pedido de Joel: "quita la parte de facturas del home de
+// negocio, si es lo mismo que esta en Facturas") — ese resumen ya vive en
+// el portal de Facturación (pestaña Reportes/Facturas), mostrarlo dos
+// veces era puro ruido duplicado. `todasFacturas` se queda solo para
+// calcular las facturas vencidas que sí alimentan la tarjeta de Alertas.
 //
 // El balance/deuda (1 sept 2026, migración 0040) lee plaid_accounts.entity_id
 // — el usuario asigna cada cuenta a su entidad desde /dashboard/cuentas
@@ -106,6 +114,61 @@ export default async function InicioNegocioPage() {
 
   const citasProximas = (citasProximasRaw ?? []).map((c) => ({ ...c, dias: diasHastaPR(c.fecha as string) }));
 
+  // Transacciones sin categorizar de ESTA entidad (4 sept 2026, reportado
+  // por Joel: el Inicio de negocio debía ser igual al de Personal, y esta
+  // tarjeta faltaba por completo aquí — solo existía en dashboard/page.tsx
+  // con el filtro entity_id IS NULL, así que las transacciones de negocio
+  // nunca aparecían pendientes en ningún lado). Mismo patrón exacto que
+  // Personal, solo que filtrado por entity_id en vez de IS NULL.
+  const LIMITE_PENDIENTES_NEGOCIO = 8;
+  const [{ data: pendientesNegocioRaw }, { count: totalPendientesNegocio }, { data: categoriasNegocio }] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("id, description_raw, amount, fecha, tipo_flujo, pending, plaid_account_id, manual_account_id")
+      .eq("owner_id", user.id)
+      .eq("entity_id", entidadId)
+      .is("hacienda_category_id", null)
+      .eq("es_duplicada", false)
+      .eq("pending", false)
+      .order("fecha", { ascending: false })
+      .limit(LIMITE_PENDIENTES_NEGOCIO),
+    supabase
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_id", user.id)
+      .eq("entity_id", entidadId)
+      .is("hacienda_category_id", null)
+      .eq("es_duplicada", false)
+      .eq("pending", false),
+    supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
+  ]);
+
+  // Nombres para mostrar junto a cada pendiente (mismo patrón que Personal,
+  // dashboard/page.tsx) — solo cuentas Plaid YA asignadas a esta entidad.
+  // Las cuentas manuales no tienen columna entity_id (solo es_negocio global,
+  // ver nota en lib/victor/tools.ts), así que aquí se omiten a propósito en
+  // vez de arriesgarse a etiquetar mal con la cuenta manual de otra entidad.
+  const { data: cuentasPlaidParaLabelNegocio } = await supabase
+    .from("plaid_accounts")
+    .select("plaid_account_id, name, nickname, mask")
+    .eq("owner_id", user.id)
+    .eq("entity_id", entidadId);
+  const nombrePorCuentaNegocio = new Map<string, string>();
+  for (const c of cuentasPlaidParaLabelNegocio ?? []) {
+    nombrePorCuentaNegocio.set(`plaid:${c.plaid_account_id}`, `${c.nickname || c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`);
+  }
+  const etiquetaDeTransaccionNegocio = (t: { plaid_account_id: string | null; manual_account_id: string | null }) =>
+    (t.plaid_account_id && nombrePorCuentaNegocio.get(`plaid:${t.plaid_account_id}`)) || null;
+
+  const pendientesNegocioConSugerencia = await Promise.all(
+    (pendientesNegocioRaw ?? []).map(async (t) => {
+      const { data: match } = await supabase
+        .rpc("match_category", { p_raw_description: t.description_raw, p_entity_id: entidadId, p_tipo_flujo: t.tipo_flujo ?? null })
+        .maybeSingle<{ hacienda_category_id: number | null }>();
+      return { ...t, sugeridaId: match?.hacienda_category_id ?? null, cuentaLabel: etiquetaDeTransaccionNegocio(t) };
+    })
+  );
+
   const cuentasDeLaEntidad = cuentasNegocio ?? [];
   const balanceNegocio = cuentasDeLaEntidad
     .filter((c) => c.type === "depository")
@@ -136,15 +199,7 @@ export default async function InicioNegocioPage() {
   const estaVencida = (f: (typeof todasFacturas)[number]) =>
     f.estado !== "pagada" && f.estado !== "borrador" && !!f.fecha_vencimiento && f.fecha_vencimiento < hoyISO();
 
-  const noBorrador = todasFacturas.filter((f) => f.estado !== "borrador");
-  const facturado = noBorrador.reduce((s, f) => s + Number(f.total), 0);
-  const cobrado = todasFacturas.filter((f) => f.estado === "pagada").reduce((s, f) => s + Number(f.total), 0);
-  const pendiente = todasFacturas
-    .filter((f) => f.estado === "enviada" && !estaVencida(f))
-    .reduce((s, f) => s + Number(f.total), 0);
   const facturasVencidas = todasFacturas.filter(estaVencida);
-
-  const recientes = todasFacturas.slice(0, 3);
 
   const metasTotal = (goals ?? []).length;
   const metasAhorrado = (goals ?? []).reduce((s, g) => s + Number(g.current_amount), 0);
@@ -156,13 +211,6 @@ export default async function InicioNegocioPage() {
   const documentosPorVencer = (documentos ?? []).filter((d) => d.fecha_vencimiento && d.fecha_vencimiento <= en30diasISO);
 
   const totalAlertas = facturasVencidas.length + documentosPorVencer.length;
-
-  function estadoBadge(f: (typeof todasFacturas)[number]) {
-    if (f.estado === "pagada") return { texto: "Pagada", color: "#1D9E75" };
-    if (estaVencida(f)) return { texto: "Vencida", color: "#B7304A" };
-    if (f.estado === "borrador") return { texto: "Borrador", color: "var(--muted)" };
-    return { texto: "Vista sin pagar", color: "#8B6BD1" };
-  }
 
   return (
     <div className="vc-shell">
@@ -216,64 +264,12 @@ export default async function InicioNegocioPage() {
         </div>
       )}
 
-      <div className="mb-4 grid grid-cols-3 gap-3">
-        <div className="vc-card text-center">
-          <p className="text-[10px] uppercase tracking-wide text-muted">Facturado</p>
-          <p className="mt-1 text-lg font-medium">{formatMoney(facturado)}</p>
-          <p className="text-[10px] text-muted">{noBorrador.length} facturas</p>
-        </div>
-        <div className="vc-card text-center">
-          <p className="text-[10px] uppercase tracking-wide text-muted">Cobrado</p>
-          <p className="mt-1 text-lg font-medium" style={{ color: "#1D9E75" }}>
-            {formatMoney(cobrado)}
-          </p>
-          <p className="text-[10px] text-muted">{facturado > 0 ? Math.round((cobrado / facturado) * 100) : 0}%</p>
-        </div>
-        <div className="vc-card text-center">
-          <p className="text-[10px] uppercase tracking-wide text-muted">Pendiente</p>
-          <p className="mt-1 text-lg font-medium" style={{ color: "#B7860F" }}>
-            {formatMoney(pendiente)}
-          </p>
-          <p className="text-[10px] text-muted">
-            {todasFacturas.filter((f) => f.estado === "enviada" && !estaVencida(f)).length} fact.
-          </p>
-        </div>
-      </div>
-
-      <div className="vc-card mb-4">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs uppercase tracking-wide text-muted">Facturas recientes</p>
-          <Link href="/dashboard/facturacion" className="text-xs font-medium text-teal hover:opacity-80">
-            ver portal →
-          </Link>
-        </div>
-
-        {recientes.length === 0 && <p className="py-3 text-center text-sm text-muted">Sin facturas todavía.</p>}
-
-        {recientes.map((f) => {
-          const badge = estadoBadge(f);
-          return (
-            <Link
-              key={f.id}
-              href={`/dashboard/facturacion/${f.id}`}
-              className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0"
-            >
-              <div>
-                <p>{f.clients?.name ?? "Sin cliente"}</p>
-                <p className="text-xs text-muted">
-                  #{f.numero} · {f.fecha_emision}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-medium">{formatMoney(Number(f.total))}</p>
-                <p className="text-xs" style={{ color: badge.color }}>
-                  {badge.texto}
-                </p>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+      <GastosPendientesCard
+        pendientesIniciales={pendientesNegocioConSugerencia}
+        totalPendientes={totalPendientesNegocio ?? 0}
+        categorias={categoriasNegocio ?? []}
+        hrefBase="/dashboard/negocio/gastos"
+      />
 
       {/* Metas / Alertas / Próxima cita — mismo grid de 2 columnas que usa
           Personal (dashboard/page.tsx) para las mismas 3 tarjetas. */}
