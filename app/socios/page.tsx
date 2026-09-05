@@ -91,7 +91,7 @@ export default function SociosPage() {
         <form onSubmit={enviar} className="vc-card flex flex-col gap-3">
           <h1 className="mb-1 text-base font-medium">Sé Embajador o Afiliado de VICTOR CFO</h1>
           <p className="mb-1 text-xs text-muted">
-            Gana una comisión en efectivo real por cada cliente que traigas a VICTOR CFO — sin límite, mientras
+            Gana una comisión real por cada cliente que traigas a VICTOR CFO — sin límite, mientras
             más traigas, más ganas. No hace falta ser CPA, contador, o influencer: si tienes una red de
             contactos en Puerto Rico y ganas de promocionarlo activamente, completa el formulario y te
             contactamos directamente para darte los detalles del programa.

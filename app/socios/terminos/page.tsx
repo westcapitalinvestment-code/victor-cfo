@@ -25,7 +25,7 @@ export default function TerminosSociosPage() {
 
       <h2 className="mb-2 mt-6 text-base font-semibold">1. Qué es el Programa de Socios</h2>
       <p className="mb-4">
-        Es un programa de referidos en efectivo para CPAs, contadores, influencers y cualquier persona en
+        Es un programa de referidos con comisión real para CPAs, contadores, influencers y cualquier persona en
         Puerto Rico que quiera recomendar VICTOR CFO. No requiere que seas cliente de VICTOR CFO. Al ser
         aprobado, recibes un código único para compartir; cuando alguien se registra con tu código y empieza
         a pagar de verdad, ganas una comisión.

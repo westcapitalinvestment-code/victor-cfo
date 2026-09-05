@@ -20,6 +20,7 @@ export default function LandingPage() {
           <a href="#como-funciona">Cómo funciona</a>
           <a href="#victor">VICTOR</a>
           <a href="#precios">Precios</a>
+          <a href="#embajadores">Embajadores</a>
           <Link href="/registro" className={styles.navCta}>
             Comienza Gratis
           </Link>
@@ -317,11 +318,11 @@ export default function LandingPage() {
           como ejemplos en vez de como filtro. El programa interno
           (Dashboard, Términos, nombres de tabla/código) sigue llamándose
           "Programa de Socios" — este es solo el gancho público. */}
-      <div className={styles.sociosBanner}>
+      <div id="embajadores" className={styles.sociosBanner}>
         <div className={styles.sociosBadge}>// embajadores</div>
         <h3>¿Quieres formar parte de la familia VICTOR CFO?</h3>
         <p>
-          Como Embajador o Afiliado, ganas una comisión real en efectivo por cada cliente que traigas —
+          Como Embajador o Afiliado, ganas una comisión real por cada cliente que traigas —
           seas CPA, contador, influencer, o simplemente alguien con la red y las ganas de promocionarlo
           activamente. Sin límite: mientras más traigas, más ganas. Escríbenos y hablamos de los detalles.
         </p>
