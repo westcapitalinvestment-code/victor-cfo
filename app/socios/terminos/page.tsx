@@ -48,11 +48,12 @@ export default function TerminosSociosPage() {
 
       <h2 className="mb-2 mt-6 text-base font-semibold">4. Cómo se gana la comisión</h2>
       <p className="mb-4">
-        Ganas una comisión fija de $7.00 cuando alguien que se registró con tu código empieza a pagar de
-        verdad el plan Core, o $25.00 si empieza a pagar el plan Pro. La comisión se gana UNA sola vez por
-        cada cliente (no en renovaciones futuras de esa misma persona), y solo después de que esa persona
-        haya pagado su primera factura real — no durante ningún período de prueba gratis. No hay límite de
-        cuántos clientes puedes referir ni de cuánto puedes ganar en total.
+        Ganas una comisión fija en efectivo cuando alguien que se registró con tu código empieza a pagar de
+        verdad su plan — el monto exacto varía según el plan al que entró esa persona, y te lo confirmamos
+        directamente al aprobar tu solicitud. La comisión se gana UNA sola vez por cada cliente (no en
+        renovaciones futuras de esa misma persona), y solo después de que esa persona haya pagado su primera
+        factura real — no durante ningún período de prueba gratis. No hay límite de cuántos clientes puedes
+        referir ni de cuánto puedes ganar en total.
       </p>
       <p className="mb-4">
         Referirte a ti mismo como tu propio primer cliente está permitido. Lo que no está permitido es crear

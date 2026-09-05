@@ -301,6 +301,27 @@ export default function LandingPage() {
         </div>
       </div>
 
+      {/* Programa de Socios (5 sept 2026, pedido de Joel) — a propósito sin
+          monto ni método de pago aquí ("debe ser más una relación
+          profesional, no me gusta que diga el precio ahí"): el CTA es un
+          mailto en vez de un link directo a /socios — quiere que le
+          escriban primero y les manda el link él mismo después de hablar
+          con cada quien, no un formulario público autoservicio. */}
+      <div className={styles.sociosBanner}>
+        <div className={styles.sociosBadge}>// alianzas</div>
+        <h3>¿Eres CPA, contador, o influencer?</h3>
+        <p>
+          Gana una comisión real por cada cliente que traigas a VICTOR CFO — sin límite, mientras más
+          traigas, más ganas. Escríbenos y hablamos de los detalles.
+        </p>
+        <a
+          href="mailto:dr.jvalentin@gmail.com?subject=Quiero%20ser%20Socio%20de%20VICTOR%20CFO"
+          className={styles.sociosBtn}
+        >
+          Quiero ser socio →
+        </a>
+      </div>
+
       <div className={styles.ctaFinal}>
         <div className={styles.sectionLabel} style={{ textAlign: "center" }}>
           // la pregunta que importa

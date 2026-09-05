@@ -91,9 +91,9 @@ export default function SociosPage() {
         <form onSubmit={enviar} className="vc-card flex flex-col gap-3">
           <h1 className="mb-1 text-base font-medium">Programa de Socios</h1>
           <p className="mb-1 text-xs text-muted">
-            ¿Eres CPA, contador, o influencer en Puerto Rico? Gana una comisión en efectivo por cada cliente que
-            traigas a VICTOR CFO — $7 si entra a Core, $25 si entra a Pro. Sin límite: mientras más traigas, más
-            ganas. El pago es real, por transferencia o ATH Business, no un crédito ni descuento.
+            ¿Eres CPA, contador, o influencer en Puerto Rico? Gana una comisión en efectivo real por cada cliente
+            que traigas a VICTOR CFO — sin límite, mientras más traigas, más ganas. Completa el formulario y te
+            contactamos directamente para darte los detalles del programa.
           </p>
 
           <div className="mb-1 flex gap-2 text-xs">
