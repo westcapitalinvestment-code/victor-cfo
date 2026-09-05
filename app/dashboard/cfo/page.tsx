@@ -7,6 +7,7 @@ import { PRECIOS } from "@/lib/costo-ia";
 import { PLAN_LABEL } from "@/lib/plan-label";
 import Colapsable from "./colapsable";
 import UsuariosPanel from "./usuarios-panel";
+import SociosPanel from "./socios-panel";
 
 // Dashboard de Operaciones — vivía en /dashboard/admin, pero esa ruta la
 // necesitaba el módulo real de Admin/Secretaria (2 sept 2026, pedido de
@@ -54,6 +55,8 @@ export default async function CfoPage() {
     { data: usoIa, error: errorUso },
     { data: logIa, error: errorLog },
     { data: creditosCompras },
+    { data: socios },
+    { data: comisionesSocios },
   ] = await Promise.all([
     admin
       .from("users")
@@ -72,6 +75,16 @@ export default async function CfoPage() {
       .from("creditos_ia_compras")
       .select("precio_pagado_centavos, credito_centavos")
       .gte("created_at", inicioMesPR.toISOString()),
+    // Programa de Socios (migración 0070, 5 sept 2026) — se traen TODOS
+    // (pendientes/aprobados/suspendidos y todas las comisiones), el panel
+    // del cliente (socios-panel.tsx) decide cómo agruparlos.
+    admin
+      .from("socios")
+      .select("id, tipo, nombre, email, telefono, como_promociona, codigo, estado, created_at")
+      .order("created_at", { ascending: false }),
+    admin
+      .from("socios_comisiones")
+      .select("id, socio_id, plan, comision_centavos, estado, created_at"),
   ]);
 
   const todos = usuarios ?? [];
@@ -328,6 +341,30 @@ export default async function CfoPage() {
           planStatus: u.plan_status,
           creadoEn: u.created_at,
           gastoIaCentavos: costoIaPorUsuarioCentavos.get(u.id) ?? 0,
+        }))}
+      />
+
+      {/* Programa de Socios (CPAs/influencers, migración 0070) — aprobar
+          solicitudes y marcar comisiones en efectivo como pagadas */}
+      <SociosPanel
+        socios={(socios ?? []).map((s) => ({
+          id: s.id,
+          tipo: s.tipo,
+          nombre: s.nombre,
+          email: s.email,
+          telefono: s.telefono,
+          comoPromociona: s.como_promociona,
+          codigo: s.codigo,
+          estado: s.estado as "pendiente" | "aprobado" | "suspendido",
+          createdAt: s.created_at,
+        }))}
+        comisiones={(comisionesSocios ?? []).map((c) => ({
+          id: c.id,
+          socioId: c.socio_id,
+          plan: c.plan,
+          comisionCentavos: Number(c.comision_centavos),
+          estado: c.estado as "pendiente" | "pagada",
+          createdAt: c.created_at,
         }))}
       />
 

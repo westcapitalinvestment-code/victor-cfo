@@ -63,6 +63,17 @@ const PRECIOS_REGISTRO = {
 // silencio y el checkout cobra el precio normal, sin romper nada.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Programa de Socios (migración 0070, 5 sept 2026): código corto legible
+// (ej. "ANA7F3K"), no un uuid — lo comparte un CPA/influencer aprobado, no
+// otro usuario. A diferencia de ?ref=, esto NO cambia el precio ni da mes
+// gratis (esa es la recompensa del programa peer-to-peer); solo conecta al
+// nuevo usuario con el socio para que el trigger valide el código y, si
+// está aprobado, registre la comisión en efectivo cuando pague de verdad
+// (ver handle_new_user en 0070 y el webhook, case "invoice.paid"). Forma
+// suelta a propósito — la validación real (código existe Y está
+// 'aprobado') vive en el trigger de Postgres.
+const SOCIO_CODIGO_RE = /^[A-Z0-9]{4,20}$/i;
+
 function RegistroForm() {
   const router = useRouter();
   const supabase = createClient();
@@ -71,6 +82,7 @@ function RegistroForm() {
   const planQuery = searchParams.get("plan");
   const cicloQuery = searchParams.get("ciclo");
   const refQuery = searchParams.get("ref");
+  const socioQuery = searchParams.get("socio");
   // Core y Pro son comprables hoy (Pro destapado el 3 sept 2026 — ya tiene
   // los 6 Price ID en Stripe). Enterprise (proplus) sigue bloqueado, así que
   // si alguien llega con ?plan=proplus lo dejamos en Core, no en un plan sin
@@ -79,6 +91,7 @@ function RegistroForm() {
   const ciclo: Ciclo = esCicloValido(cicloQuery) ? cicloQuery : "mensual";
   const refId = refQuery && UUID_RE.test(refQuery) ? refQuery : null;
   const esReferido = !!refId;
+  const socioCodigo = socioQuery && SOCIO_CODIGO_RE.test(socioQuery) ? socioQuery.toUpperCase() : null;
 
   const [plan, setPlan] = useState<"core" | "pro">(planInicial);
   const precios = PRECIOS_REGISTRO[plan][ciclo];
@@ -126,6 +139,7 @@ function RegistroForm() {
         data: {
           signup_gratis: esGratis ? "true" : "false",
           ...(refId ? { ref_id: refId } : {}),
+          ...(socioCodigo ? { socio_codigo: socioCodigo } : {}),
         },
       },
     });
