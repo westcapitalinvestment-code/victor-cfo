@@ -59,7 +59,12 @@ export default function MfaConfig() {
       return;
     }
     setFactorId(data.id);
-    setQrCode(`data:image/svg+xml;utf-8,${data.totp.qr_code}`);
+    // encodeURIComponent es obligatorio aquí — el SVG que manda Supabase
+    // trae colores en hex (ej. fill="#000000"), y sin escapar el "#" el
+    // navegador lo interpreta como el inicio de un fragment identifier y
+    // corta la data URL justo ahí. Bug real (4 sept 2026, reportado por
+    // Joel con screenshot): el QR salía como ícono de imagen rota.
+    setQrCode(`data:image/svg+xml;utf-8,${encodeURIComponent(data.totp.qr_code)}`);
     setSecreto(data.totp.secret);
     setCodigo("");
     setEstado("activando");
