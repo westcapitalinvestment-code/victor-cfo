@@ -21,7 +21,7 @@ export default function MfaConfig() {
   const supabase = createClient();
   const [estado, setEstado] = useState<Estado>("cargando");
   const [factorId, setFactorId] = useState<string | null>(null);
-  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [qrSvg, setQrSvg] = useState<string | null>(null);
   const [secreto, setSecreto] = useState<string | null>(null);
   const [codigo, setCodigo] = useState("");
   const [codigosRespaldo, setCodigosRespaldo] = useState<string[]>([]);
@@ -59,12 +59,14 @@ export default function MfaConfig() {
       return;
     }
     setFactorId(data.id);
-    // encodeURIComponent es obligatorio aquí — el SVG que manda Supabase
-    // trae colores en hex (ej. fill="#000000"), y sin escapar el "#" el
-    // navegador lo interpreta como el inicio de un fragment identifier y
-    // corta la data URL justo ahí. Bug real (4 sept 2026, reportado por
-    // Joel con screenshot): el QR salía como ícono de imagen rota.
-    setQrCode(`data:image/svg+xml;utf-8,${encodeURIComponent(data.totp.qr_code)}`);
+    // Render directo del SVG en vez de meterlo en un <img src="data:...">
+    // (4 sept 2026, reportado por Joel con screenshot: el QR salía como
+    // ícono de imagen rota, incluso después de escapar el "#" de los
+    // colores hex con encodeURIComponent — seguía sin cargar en
+    // producción). dangerouslySetInnerHTML es seguro aquí: el SVG viene de
+    // Supabase (fuente de confianza, no de un usuario), nunca de input
+    // externo.
+    setQrSvg(data.totp.qr_code);
     setSecreto(data.totp.secret);
     setCodigo("");
     setEstado("activando");
@@ -194,9 +196,11 @@ export default function MfaConfig() {
           <p className="mb-2 text-sm text-text">
             Escanea este código con Google Authenticator, Authy, o cualquier app de autenticación:
           </p>
-          {qrCode && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={qrCode} alt="Código QR de MFA" className="mx-auto mb-3 h-40 w-40 rounded-lg border border-border" />
+          {qrSvg && (
+            <div
+              className="mx-auto mb-3 h-40 w-40 rounded-lg border border-border p-2 [&>svg]:h-full [&>svg]:w-full"
+              dangerouslySetInnerHTML={{ __html: qrSvg }}
+            />
           )}
           {secreto && (
             <p className="mb-3 text-center text-xs text-muted">
