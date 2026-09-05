@@ -11,6 +11,21 @@ function hoyISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Mismos helpers que dashboard/page.tsx (Personal) — duplicados aquí a
+// propósito, mismo patrón que el resto del código (cada Inicio trae su
+// propia copia en vez de una dependencia cruzada por un par de líneas).
+function primerDiaDelMesSiguiente(mesYYYYMM: string): string {
+  const [anio, mes] = mesYYYYMM.split("-").map(Number);
+  return new Date(anio, mes, 1).toISOString().slice(0, 10);
+}
+
+function etiquetaMes(mesYYYYMM: string): string {
+  const [anio, mes] = mesYYYYMM.split("-").map(Number);
+  const fecha = new Date(anio, mes - 1, 1);
+  const texto = new Intl.DateTimeFormat("es-PR", { month: "short", year: "numeric" }).format(fecha);
+  return texto.charAt(0).toUpperCase() + texto.slice(1).replace(".", "");
+}
+
 // Inicio de negocio — versión ligera del mockup "VICTOR — Dashboard Pro.html"
 // (Inicio con contexto Negocio): saludo, balance/deuda de las cuentas
 // asignadas a esta entidad, transacciones sin categorizar, metas del
@@ -28,7 +43,7 @@ function hoyISO(): string {
 // — el usuario asigna cada cuenta a su entidad desde /dashboard/cuentas
 // ("Pertenece a"). Antes de esto no había forma de saber qué cuenta era de
 // qué entidad, así que esta tarjeta no existía.
-export default async function InicioNegocioPage() {
+export default async function InicioNegocioPage({ searchParams }: { searchParams: { mes?: string } }) {
   const supabase = createClient();
   const {
     data: { user },
@@ -74,8 +89,25 @@ export default async function InicioNegocioPage() {
 
   const hoyStrPR = fechaHoyPR();
 
-  const [{ data: facturasRaw }, { data: goals }, { data: documentos }, { data: cuentasNegocio }, { data: citasProximasRaw }] =
-    await Promise.all([
+  // Selector de mes para Ingresos/Gastos (4 sept 2026, pedido de Joel: "el
+  // dashboard de Negocio sea igual al de Personal") — mismo mecanismo que
+  // dashboard/page.tsx, aquí filtrado además por entity_id. Ahorrado/Deuda/
+  // Inversiones NO llevan este selector, mismo motivo que en Personal: son
+  // el balance ACTUAL de la cuenta, no algo con historial por transacción.
+  const mesActualStr = fechaHoyPR().slice(0, 7);
+  const mesSeleccionado = searchParams.mes ?? mesActualStr;
+  const inicioMesSel = `${mesSeleccionado}-01`;
+  const finMesSel = primerDiaDelMesSiguiente(mesSeleccionado);
+
+  const [
+    { data: facturasRaw },
+    { data: goals },
+    { data: documentos },
+    { data: cuentasNegocio },
+    { data: citasProximasRaw },
+    { data: transaccionesNegocioMes },
+    { data: fechasTransaccionesNegocio },
+  ] = await Promise.all([
       supabase
         .from("invoices")
         .select("id, numero, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
@@ -96,7 +128,7 @@ export default async function InicioNegocioPage() {
         .order("fecha_vencimiento", { ascending: true }),
       supabase
         .from("plaid_accounts")
-        .select("current_balance, type")
+        .select("current_balance, type, subtype")
         .eq("owner_id", user.id)
         .eq("entity_id", entidadId),
       // Próxima cita (1 sept 2026, migración 0041) — mismo criterio que
@@ -110,9 +142,43 @@ export default async function InicioNegocioPage() {
         .gte("fecha", hoyStrPR)
         .order("fecha", { ascending: true })
         .limit(3),
+      // Ingresos/Gastos del mes seleccionado — mismo query que Personal
+      // (dashboard/page.tsx), filtrado por entity_id en vez de IS NULL.
+      supabase
+        .from("transactions")
+        .select("amount, tipo_flujo")
+        .eq("owner_id", user.id)
+        .eq("entity_id", entidadId)
+        .eq("es_duplicada", false)
+        .gte("fecha", inicioMesSel)
+        .lt("fecha", finMesSel),
+      // Meses con transacciones reales de esta entidad, para las pills del
+      // selector — mismo patrón que Personal.
+      supabase
+        .from("transactions")
+        .select("fecha")
+        .eq("owner_id", user.id)
+        .eq("entity_id", entidadId)
+        .order("fecha", { ascending: false })
+        .limit(500),
     ]);
 
   const citasProximas = (citasProximasRaw ?? []).map((c) => ({ ...c, dias: diasHastaPR(c.fecha as string) }));
+
+  const mesesDisponiblesNegocio = Array.from(
+    new Set([mesActualStr, ...(fechasTransaccionesNegocio ?? []).map((t) => t.fecha.slice(0, 7))])
+  )
+    .sort()
+    .slice(-12);
+
+  const gastosDelMesNegocio = (transaccionesNegocioMes ?? []).reduce(
+    (sum, t) => sum + (t.tipo_flujo === "gasto" ? Number(t.amount) : 0),
+    0
+  );
+  const ingresosDelMesNegocio = (transaccionesNegocioMes ?? []).reduce(
+    (sum, t) => sum + (t.tipo_flujo === "ingreso" ? Math.abs(Number(t.amount)) : 0),
+    0
+  );
 
   // Transacciones sin categorizar de ESTA entidad (4 sept 2026, reportado
   // por Joel: el Inicio de negocio debía ser igual al de Personal, y esta
@@ -170,8 +236,12 @@ export default async function InicioNegocioPage() {
   );
 
   const cuentasDeLaEntidad = cuentasNegocio ?? [];
-  const balanceNegocio = cuentasDeLaEntidad
-    .filter((c) => c.type === "depository")
+  const cuentasLiquidasNegocio = cuentasDeLaEntidad.filter((c) => c.type === "depository");
+  const balanceNegocio = cuentasLiquidasNegocio.reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
+  // Ahorrado (4 sept 2026, paridad con Personal) — mismo criterio: solo el
+  // subtipo "savings" dentro de las líquidas.
+  const ahorradoNegocio = cuentasLiquidasNegocio
+    .filter((c) => c.subtype === "savings")
     .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
   const deudaNegocio = cuentasDeLaEntidad
     .filter((c) => c.type === "credit" || c.type === "loan")
@@ -245,31 +315,71 @@ export default async function InicioNegocioPage() {
         )}
       </div>
 
-      {tieneCuentas && (
-        <div className="vc-mets" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
-          <div className="vc-met">
-            <p className="vc-ml">Deuda</p>
-            <p className="vc-mv" style={{ color: deudaNegocio > 0 ? "var(--red)" : undefined }}>
-              <Sensitive>{formatMoney(deudaNegocio)}</Sensitive>
-            </p>
-            <p className="mt-0.5 text-[10px] text-muted">tarjetas y préstamos</p>
-          </div>
-          <div className="vc-met">
-            <p className="vc-ml">Inversiones</p>
-            <p className="vc-mv">
-              <Sensitive>{formatMoney(inversionNegocio)}</Sensitive>
-            </p>
-            <p className="mt-0.5 text-[10px] text-muted">cuentas de inversión</p>
-          </div>
-        </div>
-      )}
-
       <GastosPendientesCard
         pendientesIniciales={pendientesNegocioConSugerencia}
         totalPendientes={totalPendientesNegocio ?? 0}
         categorias={categoriasNegocio ?? []}
         hrefBase="/dashboard/negocio/gastos"
       />
+
+      {/* Selector de mes + 5 métricas — mismo bloque que Personal
+          (dashboard/page.tsx), scoped a esta entidad (4 sept 2026, pedido de
+          Joel: "el dashboard de Negocio sea igual al de Personal"). Antes
+          esto era solo Deuda/Inversiones en un grid de 2 — faltaban
+          Ingresos/Gastos/Ahorrado del mes, que sí tiene Personal. */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs text-muted">Ingresos y Gastos de:</span>
+        {mesesDisponiblesNegocio.map((m) => (
+          <Link
+            key={m}
+            href={m === mesActualStr ? "/dashboard/negocio" : `/dashboard/negocio?mes=${m}`}
+            className={`rounded-pill border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
+              mesSeleccionado === m ? "border-teal text-teal" : "text-muted"
+            }`}
+            style={{ borderColor: mesSeleccionado === m ? undefined : "var(--border)" }}
+          >
+            {etiquetaMes(m)}
+          </Link>
+        ))}
+      </div>
+
+      <div className="vc-mets">
+        <div className="vc-met">
+          <p className="vc-ml">Ingresos</p>
+          <p className={`vc-mv ${tieneCuentas && ingresosDelMesNegocio > 0 ? "!text-grn" : ""}`}>
+            <Sensitive>{formatMoney(ingresosDelMesNegocio)}</Sensitive>
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted">{mesSeleccionado === mesActualStr ? "este mes" : etiquetaMes(mesSeleccionado)}</p>
+        </div>
+        <div className="vc-met">
+          <p className="vc-ml">Gastos</p>
+          <p className="vc-mv">
+            <Sensitive>{formatMoney(gastosDelMesNegocio)}</Sensitive>
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted">{mesSeleccionado === mesActualStr ? "este mes" : etiquetaMes(mesSeleccionado)}</p>
+        </div>
+        <div className="vc-met">
+          <p className="vc-ml">Ahorrado</p>
+          <p className="vc-mv">
+            <Sensitive>{tieneCuentas ? formatMoney(ahorradoNegocio) : "—"}</Sensitive>
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted">{tieneCuentas ? "en cuentas de ahorro" : "sin cuentas asignadas"}</p>
+        </div>
+        <div className="vc-met">
+          <p className="vc-ml">Deuda</p>
+          <p className={`vc-mv ${tieneCuentas && deudaNegocio > 0 ? "!text-red" : ""}`}>
+            <Sensitive>{tieneCuentas ? formatMoney(deudaNegocio) : "—"}</Sensitive>
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted">{tieneCuentas ? "tarjetas y préstamos" : "sin cuentas asignadas"}</p>
+        </div>
+        <div className="vc-met">
+          <p className="vc-ml">Inversiones</p>
+          <p className="vc-mv">
+            <Sensitive>{tieneCuentas ? formatMoney(inversionNegocio) : "—"}</Sensitive>
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted">{tieneCuentas ? "cuentas de inversión" : "sin cuentas asignadas"}</p>
+        </div>
+      </div>
 
       {/* Metas / Alertas / Próxima cita — mismo grid de 2 columnas que usa
           Personal (dashboard/page.tsx) para las mismas 3 tarjetas. */}

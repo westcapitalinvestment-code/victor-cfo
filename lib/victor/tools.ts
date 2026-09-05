@@ -264,6 +264,28 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "verificar_cuentas_conectadas",
+    description:
+      "Consulta en vivo qué cuentas de banco (Plaid) y cuentas manuales están conectadas ahora mismo, para " +
+      "Personal o para una entidad de negocio específica. OBLIGATORIO: llama esta herramienta SIEMPRE antes " +
+      "de contestar cualquier pregunta sobre si un banco/cuenta 'está conectado', 'lo ves', 'lo tienes' o " +
+      "similar — NUNCA contestes esa pregunta de memoria ni asumas que no hay nada conectado solo porque no " +
+      "lo recuerdas del contexto de arriba; ya ha pasado que la cuenta SÍ estaba conectada y VICTOR dijo que " +
+      "no, lo cual es un error grave de cara al usuario. Por defecto (sin entidad_nombre) mira Personal; " +
+      "manda el nombre de la entidad para revisar sus cuentas de negocio, o 'todas' para ver Personal + todas " +
+      "las entidades juntas.",
+    input_schema: {
+      type: "object",
+      properties: {
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio a revisar. Usa 'todas' para Personal + todas las entidades juntas. Si se omite, se revisa solo Personal.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "revisar_documentos_por_vencer",
     description:
       "Trae la lista real de documentos de la Bóveda del usuario que están por vencer o ya vencieron — " +
@@ -1649,6 +1671,94 @@ export async function executeVictorTool(
           `una por una con categorizar_transaccion), las que reconozcas con alta confianza por el nombre del ` +
           `comercio — no le preguntes al usuario esas. Para las que no estés seguro, agrúpalas en un solo ` +
           `mensaje y pregúntale.${avisoTotal}`,
+      };
+    }
+
+    case "verificar_cuentas_conectadas": {
+      // 4 sept 2026 — Joel confirmó que la cuenta de VIP Medical YA estaba
+      // asignada a esa entidad cuando le preguntó a VICTOR si la veía, y
+      // aun así VICTOR contestó que no estaba conectada y le sugirió
+      // conectarla de nuevo. El bloque "Entidades de negocio activas" del
+      // contexto (buildUserContextBlock, system-prompt.ts) ya trae esta
+      // misma información y ya trae una instrucción explícita de no decir
+      // eso — pero confiar en que el modelo recuerde y aplique un párrafo
+      // de contexto en medio de un system prompt largo demostró fallar dos
+      // veces (el bug original del 2 sept, y este). Esta tool obliga a
+      // VICTOR a consultar el dato en vivo, justo antes de contestar, en
+      // vez de recordarlo — mismo principio que ya se usa en
+      // revisar_gastos_sin_categorizar en vez de dejarlo adivinar.
+      const alcance = await resolverAlcanceTransacciones(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!alcance.ok) return { ok: false, message: alcance.message };
+
+      function etiquetaCuenta(c: { name: string | null; nickname?: string | null; mask: string | null; type: string | null; subtype?: string | null; current_balance: number | string | null }, origen: string): string {
+        const nombre = (c.nickname || c.name || "Cuenta") + (c.mask ? ` ···${c.mask}` : "");
+        const tipo = c.subtype ? `${c.type}/${c.subtype}` : c.type ?? "?";
+        return `${nombre} (${origen}, ${tipo}, saldo $${Number(c.current_balance || 0).toFixed(2)})`;
+      }
+
+      const lineas: string[] = [];
+
+      if (alcance.modo === "personal" || alcance.modo === "todas") {
+        const [{ data: plaidPersonal }, { data: manualesPersonal }] = await Promise.all([
+          supabase.from("plaid_accounts").select("name, nickname, mask, type, subtype, current_balance").eq("owner_id", ownerId).is("entity_id", null),
+          supabase.from("manual_accounts").select("name, mask, type, current_balance").eq("owner_id", ownerId).eq("es_negocio", false),
+        ]);
+        for (const c of plaidPersonal ?? []) lineas.push(`Personal — ${etiquetaCuenta(c, "Plaid")}`);
+        for (const c of manualesPersonal ?? []) lineas.push(`Personal — ${etiquetaCuenta(c, "manual")}`);
+      }
+
+      if (alcance.modo === "entidad" || alcance.modo === "todas") {
+        const { data: entidadesActivas } = await supabase
+          .from("business_entities")
+          .select("id, name, ath_movil_business_path")
+          .eq("owner_id", ownerId)
+          .eq("active", true);
+        const entidadesARevisar = alcance.modo === "entidad" ? (entidadesActivas ?? []).filter((e) => e.id === alcance.entityId) : (entidadesActivas ?? []);
+        const soloUnaEntidad = (entidadesActivas ?? []).length === 1;
+
+        for (const e of entidadesARevisar) {
+          const { data: plaidEntidad } = await supabase
+            .from("plaid_accounts")
+            .select("name, nickname, mask, type, subtype, current_balance")
+            .eq("owner_id", ownerId)
+            .eq("entity_id", e.id);
+          for (const c of plaidEntidad ?? []) lineas.push(`"${e.name}" — ${etiquetaCuenta(c, "Plaid")}`);
+
+          // manual_accounts no tiene columna entity_id (solo es_negocio
+          // global) — solo se puede atribuir con certeza si esta es la
+          // ÚNICA entidad de negocio activa del usuario. Mismo criterio que
+          // usa app/api/victor/route.ts para el mismo problema.
+          if (soloUnaEntidad) {
+            const { data: manualesEntidad } = await supabase
+              .from("manual_accounts")
+              .select("name, mask, type, current_balance")
+              .eq("owner_id", ownerId)
+              .eq("es_negocio", true);
+            for (const c of manualesEntidad ?? []) lineas.push(`"${e.name}" — ${etiquetaCuenta(c, "manual")}`);
+          }
+
+          if (e.ath_movil_business_path) lineas.push(`"${e.name}" — pATH de ATH Móvil Business: ${e.ath_movil_business_path}`);
+        }
+      }
+
+      if (lineas.length === 0) {
+        return {
+          ok: true,
+          message:
+            `Confirmado en vivo: no hay NINGUNA cuenta conectada (ni Plaid ni manual, ni pATH) en ${alcance.alcanceLabel} en este momento. ` +
+            `Aquí sí es correcto ofrecer conectar un banco por Plaid o subir un estado de cuenta en CSV/PDF.`,
+        };
+      }
+
+      return {
+        ok: true,
+        message:
+          `Confirmado en vivo — esto SÍ está conectado ahora mismo en ${alcance.alcanceLabel}:\n${lineas.map((l) => `- ${l}`).join("\n")}\n\n` +
+          `Usa esta lista tal cual para contestar — no digas que falta conectar algo que ya aparece aquí arriba.`,
       };
     }
 
