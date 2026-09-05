@@ -309,16 +309,36 @@ export async function POST(req: NextRequest) {
         break;
       }
 
-      // Crédito de referido para el que REFIERE (3 sept 2026, pedido de
-      // Joel: "si un usuario refiere un amigo o colega recibe un beneficio
-      // pero el que refiere no"). Se dispara con CUALQUIER factura pagada
-      // de verdad (amount_paid > 0) de un usuario que tiene referred_by —
-      // cubre tanto al que nunca tuvo trial (Core) como al que sí (Pro con
-      // los 30 días gratis: Stripe no manda invoice.paid durante el trial,
-      // así que este evento solo llega cuando de verdad empieza a cobrar).
+      // Crédito de referido para el que REFIERE (3 sept 2026, rediseñado 5
+      // sept 2026 — decisión de Joel de sesgar el crecimiento hacia Pro).
+      // Se dispara con CUALQUIER factura pagada de verdad (amount_paid > 0)
+      // de un usuario que tiene referred_by — cubre tanto al que nunca tuvo
+      // trial (Core) como al que sí (Pro con los 30 días gratis: Stripe no
+      // manda invoice.paid durante el trial, así que este evento solo llega
+      // cuando de verdad empieza a cobrar). Esto es lo que hace el
+      // programa "autofinanciado": nunca se suelta un crédito sin que el
+      // dólar que lo paga ya esté en la cuenta de Stripe primero.
+      //
+      // Mecánica nueva (asimétrica, a propósito):
+      //   - El monto del crédito se calcula del plan del REFERIDO (no del
+      //     plan del referidor, como era antes) — si el referido entró a
+      //     Pro, el referidor gana un crédito de un mes de Pro completo,
+      //     sin importar si el referidor mismo está en Core. El mismo
+      //     esfuerzo de compartir un link paga ~3.3x más si el referido es
+      //     Pro — empuja a la gente a referir negocios sin forzar nada.
+      //   - Tope anual por referidor (protección de caja, no un requisito
+      //     contributivo — la retención de la 1062.03 aplica a partir de
+      //     $1,500/año, no antes; este tope es más conservador a propósito):
+      //     equivalente a la anualidad de SU propio plan.
+      //   - Guardarraíl anti-fraude: si el referido es Pro, no se suelta el
+      //     crédito hasta que haya evidencia de actividad real de negocio
+      //     (al menos una transacción de negocio o una factura creada) —
+      //     cierra el hueco de crear una entidad vacía solo para farmear el
+      //     crédito. Si todavía no hay actividad, no se registra nada y se
+      //     vuelve a intentar en la próxima factura (mes siguiente).
       // referral_rewards (migración 0062) tiene UNIQUE en referred_id —
       // solo se premia la PRIMERA vez que un referido paga, nunca en cada
-      // renovación mensual.
+      // renovación mensual (una vez se registra, no se vuelve a intentar).
       case "invoice.paid": {
         const invoice = event.data.object as Stripe.Invoice;
         if (!invoice.amount_paid || invoice.amount_paid <= 0) break;
@@ -328,7 +348,7 @@ export async function POST(req: NextRequest) {
 
         const { data: referido } = await supabase
           .from("users")
-          .select("id, referred_by")
+          .select("id, referred_by, plan, stripe_subscription_id")
           .eq("stripe_customer_id", customerId)
           .maybeSingle();
         if (!referido?.referred_by) break;
@@ -342,7 +362,7 @@ export async function POST(req: NextRequest) {
 
         const { data: referidor } = await supabase
           .from("users")
-          .select("id, stripe_customer_id, stripe_subscription_id")
+          .select("id, stripe_customer_id, stripe_subscription_id, plan")
           .eq("id", referido.referred_by)
           .maybeSingle();
         // Si el que refirió nunca ha pagado (plan gratis, sin suscripción
@@ -351,28 +371,75 @@ export async function POST(req: NextRequest) {
         // descuento de referido siempre fue pensado para "quien ya paga").
         if (!referidor?.stripe_customer_id || !referidor.stripe_subscription_id) break;
 
+        // Guardarraíl anti-fraude (solo aplica si el REFERIDO es Pro/Pro+):
+        // exige evidencia real de negocio antes de soltar el crédito del
+        // referidor — una entidad vacía sin transacciones ni facturas no
+        // cuenta. En duda, es más seguro no premiar todavía que premiar de
+        // más — se reintenta solo con la próxima factura del referido.
+        if (referido.plan === "pro" || referido.plan === "proplus") {
+          const [{ count: transaccionesNegocio }, { count: facturas }] = await Promise.all([
+            supabase
+              .from("transactions")
+              .select("id", { count: "exact", head: true })
+              .eq("owner_id", referido.id)
+              .not("entity_id", "is", null),
+            supabase.from("invoices").select("id", { count: "exact", head: true }).eq("owner_id", referido.id),
+          ]);
+          const hayActividadReal = (transaccionesNegocio ?? 0) > 0 || (facturas ?? 0) > 0;
+          if (!hayActividadReal) break;
+        }
+
+        if (!referido.stripe_subscription_id) break;
+
         try {
-          const subReferidor = await getStripe().subscriptions.retrieve(referidor.stripe_subscription_id);
+          // El monto sale del plan del REFERIDO (no del plan del
+          // referidor, como era antes) — mismo principio autofinanciado:
+          // se lee directo de su suscripción real en Stripe, nunca
+          // hardcodeado, para que siga correcto si los precios cambian.
+          const subReferido = await getStripe().subscriptions.retrieve(referido.stripe_subscription_id);
           const priceIdsDePlanes = new Set(todosLosPriceIdsDePlanes());
-          const itemPlan = subReferidor.items.data.find((it) => priceIdsDePlanes.has(it.price.id));
-          const montoBase = itemPlan?.price.unit_amount ?? null;
+          const itemPlanReferido = subReferido.items.data.find((it) => priceIdsDePlanes.has(it.price.id));
+          const montoBase = itemPlanReferido?.price.unit_amount ?? null;
           if (!montoBase) break;
 
-          // Si el referidor paga anual, "un mes gratis" es 1/12 del precio
-          // anual, no el año completo.
+          // Si el referido paga anual, "un mes gratis" para el referidor es
+          // 1/12 del precio anual, no el año completo.
           const montoCredito =
-            itemPlan?.price.recurring?.interval === "year" ? Math.round(montoBase / 12) : montoBase;
+            itemPlanReferido?.price.recurring?.interval === "year" ? Math.round(montoBase / 12) : montoBase;
+
+          // Tope anual del referidor — protección de caja, calculado sobre
+          // SU propio plan (a más alto el plan del referidor, más margen
+          // tiene para acumular). Redondeado a números limpios, no a la
+          // anualidad exacta ($179.88/$599.88) — más fácil de comunicar.
+          const TOPE_ANUAL_CORE_CENTAVOS = 17_500; // $175/año
+          const TOPE_ANUAL_PRO_CENTAVOS = 50_000; // $500/año
+          const topeAnual =
+            referidor.plan === "pro" || referidor.plan === "proplus" ? TOPE_ANUAL_PRO_CENTAVOS : TOPE_ANUAL_CORE_CENTAVOS;
+
+          const inicioAñoISO = `${new Date().getUTCFullYear()}-01-01T00:00:00.000Z`;
+          const { data: creditosEsteAño } = await supabase
+            .from("referral_rewards")
+            .select("credit_cents")
+            .eq("referrer_id", referidor.id)
+            .gte("created_at", inicioAñoISO);
+          const acumuladoEsteAño = (creditosEsteAño ?? []).reduce((sum, r) => sum + Number(r.credit_cents), 0);
+
+          const montoCreditoConTope = Math.max(0, Math.min(montoCredito, topeAnual - acumuladoEsteAño));
+          if (montoCreditoConTope <= 0) break; // tope alcanzado este año — se reintenta cuando el año ruede
 
           await getStripe().customers.createBalanceTransaction(referidor.stripe_customer_id, {
-            amount: -montoCredito,
+            amount: -montoCreditoConTope,
             currency: invoice.currency || "usd",
-            description: "VICTOR CFO — crédito por referido: un colega tuyo empezó a pagar",
+            description:
+              montoCreditoConTope < montoCredito
+                ? "VICTOR CFO — crédito por referido (parcial, tope anual alcanzado)"
+                : "VICTOR CFO — crédito por referido: un colega tuyo empezó a pagar",
           });
 
           await supabase.from("referral_rewards").insert({
             referrer_id: referidor.id,
             referred_id: referido.id,
-            credit_cents: montoCredito,
+            credit_cents: montoCreditoConTope,
           });
         } catch (err) {
           // No relanzamos — perder un crédito de referido no debe tumbar

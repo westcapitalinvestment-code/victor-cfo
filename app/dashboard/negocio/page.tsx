@@ -559,7 +559,7 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
         style={{ borderColor: "#D97706", background: "rgba(217,119,6,.1)" }}
       >
         <p className="text-sm font-semibold" style={{ color: "#B45309" }}>
-          🎁 Recibe mes Gratis
+          🎁 Refiere y ahorra
         </p>
         <span style={{ color: "#B45309" }}>→</span>
       </Link>

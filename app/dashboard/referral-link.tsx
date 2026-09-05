@@ -16,11 +16,19 @@ import { useState } from "react";
 // app/api/stripe/checkout/route.ts), y de ahí en adelante el precio
 // normal de cada plan.
 //
-// Crédito para el que REFIERE (3 sept 2026, migración 0062): cuando su
-// referido paga su primera factura real, quien compartió el link se gana
-// un mes gratis de SU propio plan (crédito automático en Stripe, sin
-// tope — puede acumular varios). Solo aplica si el referidor ya paga; si
-// está en plan gratis no hay factura a la cual aplicarle el crédito.
+// Crédito para el que REFIERE (3 sept 2026, migración 0062; rediseñado 5
+// sept 2026, ver app/api/stripe/webhook/route.ts case "invoice.paid"):
+// cuando su referido paga su primera factura real, quien compartió el
+// link se gana un crédito automático en su saldo de Stripe — asimétrico a
+// propósito: el monto es un mes completo DEL PLAN QUE ENTRÓ EL REFERIDO,
+// no del plan del referidor, así que traer un negocio a Pro paga ~3.3x
+// más que traer a alguien a Core. Con tope anual (protección de caja, no
+// un requisito de Hacienda): hasta $175/año si el referidor está en Core,
+// hasta $500/año si está en Pro. El crédito es intransferible, no se
+// puede cambiar por efectivo, y solo aplica contra futuras facturas de la
+// plataforma — nunca es un pago en efectivo ni una comisión. Solo aplica
+// si el referidor ya paga; si está en plan gratis no hay factura a la
+// cual aplicarle el crédito.
 export default function ReferralLink({ userId }: { userId: string }) {
   const [copiado, setCopiado] = useState(false);
 
@@ -47,11 +55,12 @@ export default function ReferralLink({ userId }: { userId: string }) {
       style={{ borderColor: "#D97706", background: "rgba(217,119,6,.1)" }}
     >
       <p className="text-sm font-semibold" style={{ color: "#B45309" }}>
-        🎁 Invita y ganen los dos
+        🎁 Refiere y ahorra
       </p>
       <p className="mt-1 text-sm text-text">
-        Comparte tu link — quien se registre con él tiene su primer mes completamente gratis, sea Core o Pro. Y
-        cuando empiece a pagar de verdad, tú te ganas un mes gratis de tu propio plan también.
+        Comparte tu link — quien se registre con él tiene su primer mes completamente gratis, sea Core o Pro. Cuando
+        empiece a pagar de verdad, tú te ganas un crédito en tu cuenta: un mes del plan al que entró — si trajiste a
+        alguien a Pro, son $49.99 de crédito aunque tú estés en Core.
       </p>
       <div className="mt-3 flex items-center gap-2">
         <input
@@ -68,6 +77,10 @@ export default function ReferralLink({ userId }: { userId: string }) {
           {copiado ? "¡Copiado!" : "Copiar"}
         </button>
       </div>
+      <p className="mt-3 text-xs text-muted">
+        Puedes acumular hasta $175/año en créditos si estás en Core, o hasta $500/año si estás en Pro. El crédito se
+        aplica solo, automático, a tu próxima factura — es intransferible y no se puede cambiar por efectivo.
+      </p>
     </div>
   );
 }
