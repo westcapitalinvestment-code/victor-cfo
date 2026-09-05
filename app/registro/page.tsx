@@ -90,8 +90,12 @@ function RegistroForm() {
   const planInicial: "core" | "pro" = planQuery === "pro" ? "pro" : "core";
   const ciclo: Ciclo = esCicloValido(cicloQuery) ? cicloQuery : "mensual";
   const refId = refQuery && UUID_RE.test(refQuery) ? refQuery : null;
-  const esReferido = !!refId;
   const socioCodigo = socioQuery && SOCIO_CODIGO_RE.test(socioQuery) ? socioQuery.toUpperCase() : null;
+  // Mes gratis para los dos programas (5 sept 2026, extendido al Programa de
+  // Socios — ver esReferido en app/api/stripe/checkout/route.ts, que es
+  // quien de verdad activa el trial de 30 días; esto solo decide qué
+  // mensaje MOSTRAR en pantalla).
+  const esReferido = !!refId || !!socioCodigo;
 
   const [plan, setPlan] = useState<"core" | "pro">(planInicial);
   const precios = PRECIOS_REGISTRO[plan][ciclo];

@@ -28,21 +28,29 @@ export async function POST(req: NextRequest) {
 
   const { data: perfil } = await supabase
     .from("users")
-    .select("stripe_customer_id, referred_by")
+    .select("stripe_customer_id, referred_by, referido_por_socio_id")
     .eq("id", user.id)
     .maybeSingle();
 
   // Referido (30 agosto 2026, ajustado 4 sept 2026 — pedido de Joel: "que
-  // los 2 sean iguales"). Si a este usuario lo trajo el link de otro
-  // (referred_by no es null — se guarda en el signup, ver migración 0031),
-  // paga el precio NORMAL de Core o Pro, pero con 30 días de trial — mismo
-  // mecanismo para los dos planes, sin Price ID aparte ni env vars nuevas.
-  // Antes Core tenía un descuento permanente ($12.99/mes para siempre) en
-  // vez de mes gratis; se dejó así porque no era simétrico con Pro y le
-  // daba menos beneficio real a quien refiere desde Core. Nunca se confía
-  // en nada que mande el cliente para esto — referred_by se lee de la base
-  // de datos, no del body de este POST.
-  const esReferido = !!perfil?.referred_by;
+  // los 2 sean iguales"; extendido 5 sept 2026 al Programa de Socios —
+  // pedido de Joel: "que reciba su mes gratis... para que vea que es
+  // real"). Si a este usuario lo trajo el link de OTRO usuario
+  // (referred_by, migración 0031) O el código de un socio aprobado
+  // (referido_por_socio_id, migración 0070), paga el precio NORMAL de Core
+  // o Pro, pero con 30 días de trial — mismo mecanismo para los dos
+  // planes y los dos programas, sin Price ID aparte ni env vars nuevas.
+  // Simétrico a propósito: un CPA/influencer que trae un cliente real le da
+  // el mismo empujón que un usuario refiriendo a otro — y de paso, si el
+  // socio se refiere a SÍ MISMO como su primer cliente, siente el programa
+  // completo (mes gratis + su propia comisión cuando empiece a pagar de
+  // verdad) antes de salir a referir gente de verdad. El socio sigue
+  // ganando su $7/$25 normal recién en la PRIMERA factura real (Stripe no
+  // manda invoice.paid durante el trial), así que sigue siendo
+  // autofinanciado igual que antes — nada cambia en esa garantía. Nunca se
+  // confía en nada que mande el cliente para esto — los dos campos se leen
+  // de la base de datos, no del body de este POST.
+  const esReferido = !!perfil?.referred_by || !!perfil?.referido_por_socio_id;
   const priceId = priceIdPara(plan, ciclo);
   if (!priceId) {
     return NextResponse.json(

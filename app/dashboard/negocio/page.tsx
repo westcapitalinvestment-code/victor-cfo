@@ -358,6 +358,24 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
         )}
       </div>
 
+      {/* Tarjeta de referidos — MISMA posición que Personal (dashboard/page.tsx):
+          justo debajo del balance, antes de Gastos Pendientes. Antes vivía al
+          final de la página, después de Resumen y Proyección, así que quedaba
+          fuera de vista sin hacer scroll (5 sept 2026, reportado por Joel:
+          "quedo abajo otra vez el banner en pestaña de negocio"). Sin gate de
+          plan: solo se llega a este Home siendo Pro/Pro+, que ya son planes
+          pagados — ver esPagando en Personal para el equivalente ahí. */}
+      <Link
+        href="/dashboard/config#referidos"
+        className="mb-3 flex items-center justify-between rounded-lg border p-3"
+        style={{ borderColor: "#D97706", background: "rgba(217,119,6,.1)" }}
+      >
+        <p className="text-sm font-semibold" style={{ color: "#B45309" }}>
+          🎁 Refiere y ahorra
+        </p>
+        <span style={{ color: "#B45309" }}>→</span>
+      </Link>
+
       <GastosPendientesCard
         pendientesIniciales={pendientesNegocioConSugerencia}
         totalPendientes={totalPendientesNegocio ?? 0}
@@ -543,26 +561,6 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
         tasaAhorroYTD={tasaAhorroYTDNegocio}
         reservaImpuestos={reservaImpuestosNegocio}
       />
-
-      {/* Tarjeta de referidos (5 sept 2026, pedido de Joel: que también
-          salga en el Home de Negocio, no solo en Personal — antes de esto
-          un usuario que solo vive en el tab de Negocio nunca la veía).
-          Duplicada aquí a propósito, mismo patrón que el resto del código
-          (cada Home trae su propia copia) en vez de moverla al topbar, que
-          se monta también en Facturación/Gastos/Clientes y le añadiría
-          ruido promocional permanente a esas pantallas de trabajo. Sin
-          gate de plan: solo se llega a este Home siendo Pro/Pro+, que ya
-          son planes pagados. */}
-      <Link
-        href="/dashboard/config#referidos"
-        className="mt-3 flex items-center justify-between rounded-lg border p-3"
-        style={{ borderColor: "#D97706", background: "rgba(217,119,6,.1)" }}
-      >
-        <p className="text-sm font-semibold" style={{ color: "#B45309" }}>
-          🎁 Refiere y ahorra
-        </p>
-        <span style={{ color: "#B45309" }}>→</span>
-      </Link>
     </div>
   );
 }
