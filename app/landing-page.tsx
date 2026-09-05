@@ -324,7 +324,7 @@ export default function LandingPage() {
         <p>
           Como Embajador o Afiliado, ganas una comisión real por cada cliente que traigas —
           seas CPA, contador, influencer, o simplemente alguien con la red y las ganas de promocionarlo
-          activamente. Sin límite: mientras más traigas, más ganas. Escríbenos y hablamos de los detalles.
+          activamente. Sin límite: mientras más traigas, más ganas. Escríbenos.
         </p>
         <a
           href="mailto:dr.jvalentin@gmail.com?subject=Quiero%20ser%20Embajador%2FAfiliado%20de%20VICTOR%20CFO"
