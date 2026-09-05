@@ -59,12 +59,6 @@ export default function MfaConfig() {
       return;
     }
     setFactorId(data.id);
-    // DEBUG TEMPORAL (4 sept 2026) — el QR se ve bien a simple vista pero
-    // ninguna app lo escanea. Antes de seguir adivinando, imprimir el string
-    // crudo tal cual lo manda Supabase para inspeccionarlo de verdad. Quitar
-    // este console.log en cuanto se resuelva.
-    console.log("QR crudo de Supabase:", JSON.stringify(data.totp.qr_code));
-    console.log("URI otpauth completa:", data.totp.uri);
     // Render directo del SVG en vez de meterlo en un <img src="data:...">
     // (4 sept 2026, reportado por Joel con screenshot: el QR salía como
     // ícono de imagen rota). dangerouslySetInnerHTML es seguro aquí: el SVG
@@ -215,20 +209,21 @@ export default function MfaConfig() {
             Escanea este código con Google Authenticator, Authy, o cualquier app de autenticación:
           </p>
           {qrSvg && (
-            // Forzar h-full Y w-full a la vez estira el SVG a lo que sea el
-            // alto/ancho del contenedor por separado — si el SVG de Plaid no
-            // es perfectamente 1:1 por dentro, eso deja los cuadritos del QR
-            // rectangulares en vez de cuadrados, y ningún lector lo reconoce
-            // (bug real, 4 sept 2026, reportado por Joel: "quedo medio
-            // virado"). Solo se fija el ancho — el alto se ajusta solo
-            // respetando la proporción real del SVG.
+            // ENCONTRADO (4 sept 2026): el SVG que manda Supabase dibuja
+            // cada módulo del QR como un <rect> de 3x3px individual (no un
+            // solo <path>). Supabase lo genera a 219x219 nativo. Nuestro
+            // contenedor lo reescalaba a 176px (w-44) vía CSS — el
+            // navegador antialiasea el borde entre rects vecinos del mismo
+            // color al reescalar, lo cual se ve bien a simple vista pero
+            // difumina justo los bordes que un lector de QR necesita ver
+            // nítidos (por eso Joel: "se ve bien pero no escanea", en
+            // NINGUNA app, mientras la llave manual sí funciona — la clave
+            // era 100% un problema de render, no del secreto). Fix real:
+            // shape-rendering: crispEdges para que el navegador priorice
+            // bordes nítidos sobre antialiasing al escalar, más un tamaño
+            // más cercano al nativo (219px) para minimizar cuánto reescala.
             <div
-              // Fondo blanco fijo + más margen (4 sept 2026): un QR necesita
-              // suficiente "zona de quietud" (espacio blanco alrededor) para
-              // que un lector lo reconozca — con poco margen o un fondo que
-              // no sea blanco puro (ej. heredado de dark mode) puede verse
-              // bien a simple vista y aun así fallar al escanear.
-              className="mx-auto mb-3 w-44 bg-white p-4 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
+              className="mx-auto mb-3 w-56 bg-white p-4 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full [&>svg]:[shape-rendering:crispEdges]"
               dangerouslySetInnerHTML={{ __html: qrSvg }}
             />
           )}
