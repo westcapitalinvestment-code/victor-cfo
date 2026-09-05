@@ -239,12 +239,15 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "Trae la lista real de transacciones bancarias del usuario que TODAVÍA no tienen categoría — la " +
       "'bandeja pendiente' de verdad, sacada directo de su banco conectado por Plaid. NO le pidas al usuario " +
       "que te copie y pegue lo que ve en pantalla — usa esta herramienta. Úsala cuando te pida revisar, " +
-      "categorizar, o clasificar sus gastos, o pregunte qué le falta categorizar. Cada transacción del listado " +
-      "trae su id real entre corchetes al inicio — guárdalo internamente (nunca lo repitas al usuario) y " +
-      "mándalo como transaction_id en categorizar_transacciones_lote para las que sean genuinamente idénticas " +
-      "entre sí (mismo comercio, monto y fecha — ej. dos transferencias del mismo día a la misma cuenta, que " +
-      "son movimientos reales distintos, no un error de datos) — sin el id, esas nunca se pueden distinguir " +
-      "por texto. Después de ver la lista, categoriza tú mismo, en UNA sola llamada a " +
+      "categorizar, o clasificar sus gastos, o pregunte qué le falta categorizar. Por defecto (sin " +
+      "entidad_nombre) mira solo Personal — si el usuario pregunta por los gastos de una entidad de negocio " +
+      "específica (ej. 'revisa lo de VIP Medical'), manda su nombre en entidad_nombre; si pregunta por TODO " +
+      "junto (Personal + negocio), manda 'todas'. Cada transacción del listado trae su id real entre " +
+      "corchetes al inicio — guárdalo internamente (nunca lo repitas al usuario) y mándalo como " +
+      "transaction_id en categorizar_transacciones_lote para las que sean genuinamente idénticas entre sí " +
+      "(mismo comercio, monto y fecha — ej. dos transferencias del mismo día a la misma cuenta, que son " +
+      "movimientos reales distintos, no un error de datos) — sin el id, esas nunca se pueden distinguir por " +
+      "texto. Después de ver la lista, categoriza tú mismo, en UNA sola llamada a " +
       "categorizar_transacciones_lote con todas juntas, las que reconozcas con alta confianza por el nombre " +
       "del comercio, sin preguntar — nunca uses categorizar_transaccion una por una para esto. Solo " +
       "pregúntale al usuario, agrupadas en un mensaje, las que de verdad sean ambiguas.",
@@ -252,6 +255,10 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {
         limite: { type: "number", description: "Cuántas transacciones traer como máximo. Si no se especifica, usa 40." },
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio a revisar, si el usuario pidió una entidad específica. Usa 'todas' para Personal + todas las entidades juntas. Si se omite, se revisa solo Personal.",
+        },
       },
       required: [],
     },
@@ -591,15 +598,21 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "fechas — úsala para contestar preguntas como '¿cuánto estoy gastando en restaurantes?' o '¿cuánto gasté " +
       "en gasolina este mes?'. Si el usuario no menciona un período, se calcula el mes en curso por default. Si " +
       "menciona 'este año', 'el trimestre', 'todo', etc., calcula tú mismo las fechas desde/hasta con la fecha " +
-      "real de hoy que ya tienes en tu contexto y mándalas. Si la categoría que pide no existe todavía (ni " +
-      "global ni personal suya), dile que no tiene gastos en eso, y si quiere, ofrécele crearla con " +
-      "crear_categoria_personal para el futuro — no la crees tú solo para esta pregunta.",
+      "real de hoy que ya tienes en tu contexto y mándalas. Por defecto (sin entidad_nombre) mira solo " +
+      "Personal — si el usuario pregunta por el gasto de una entidad de negocio específica, manda su nombre " +
+      "en entidad_nombre; si pregunta por TODO junto (Personal + negocio), manda 'todas'. Si la categoría que " +
+      "pide no existe todavía (ni global ni personal suya), dile que no tiene gastos en eso, y si quiere, " +
+      "ofrécele crearla con crear_categoria_personal para el futuro — no la crees tú solo para esta pregunta.",
     input_schema: {
       type: "object",
       properties: {
         nombre_categoria: { type: "string", description: "Nombre (o parte del nombre) de la categoría a sumar, ej. 'restaurantes', 'gasolina'." },
         desde: { type: "string", description: "Fecha de inicio del rango, YYYY-MM-DD. Si no se da, usa el día 1 del mes en curso." },
         hasta: { type: "string", description: "Fecha de fin del rango, YYYY-MM-DD. Si no se da, usa la fecha de hoy." },
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio a consultar, si el usuario pidió una entidad específica. Usa 'todas' para Personal + todas las entidades juntas. Si se omite, se consulta solo Personal.",
+        },
       },
       required: ["nombre_categoria"],
     },
@@ -762,6 +775,68 @@ async function resolverEntidadFacturacion(
   return {
     ok: false,
     message: `El usuario tiene varias entidades de negocio (${entidades.map((e) => e.name).join(", ")}) — pregúntale para cuál es esto, y vuelve a llamar mandando su nombre en "entidad_nombre".`,
+  };
+}
+
+// BUG REAL (4 sept 2026, reportado por Joel — "en que estamos?" cuando VICTOR
+// le dijo que no podía ver las transacciones de su entidad VIP Medical): las
+// herramientas de reportar/revisar transacciones (revisar_gastos_sin_categorizar,
+// reporte_gasto_por_categoria) siempre filtraban entity_id IS NULL a la
+// fuerza — es decir, SOLO veían Personal, sin importar que la cuenta de
+// negocio estuviera perfectamente conectada y sincronizando. VICTOR es "un
+// CFO que se sabe la app de pies a cabeza" (palabras de Joel) — no debe
+// haber ningún rincón de la data del usuario que le quede ciego. Este
+// resolver da alcance explícito: sin nada = Personal (compatibilidad con
+// todo el comportamiento anterior), el nombre de una entidad = solo esa
+// entidad, o "todas"/"todo" = Personal + todas las entidades juntas, para
+// cuando el usuario pregunta algo del panorama completo del negocio.
+async function resolverAlcanceTransacciones(
+  supabase: ReturnType<typeof createClient>,
+  ownerId: string,
+  entidadNombre?: string | null
+): Promise<
+  | { ok: true; modo: "personal"; entityId: null; alcanceLabel: string }
+  | { ok: true; modo: "entidad"; entityId: string; alcanceLabel: string }
+  | { ok: true; modo: "todas"; entityId: null; alcanceLabel: string }
+  | { ok: false; message: string }
+> {
+  const pista = typeof entidadNombre === "string" ? entidadNombre.trim() : "";
+  if (!pista) return { ok: true, modo: "personal", entityId: null, alcanceLabel: "Personal" };
+
+  const normalizada = pista
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+
+  if (["todas", "todo", "todas las entidades", "todo el negocio", "todo junto", "personal y negocio"].includes(normalizada)) {
+    return { ok: true, modo: "todas", entityId: null, alcanceLabel: "Personal + todas las entidades de negocio" };
+  }
+  if (normalizada === "personal") {
+    return { ok: true, modo: "personal", entityId: null, alcanceLabel: "Personal" };
+  }
+
+  const { data: entidades, error } = await supabase
+    .from("business_entities")
+    .select("id, name")
+    .eq("owner_id", ownerId)
+    .eq("active", true);
+  if (error) return { ok: false, message: `No se pudo buscar la entidad de negocio: ${error.message}` };
+
+  const match = (entidades ?? []).filter((e) => e.name.toLowerCase().includes(normalizada));
+  if (match.length === 1) return { ok: true, modo: "entidad", entityId: match[0].id, alcanceLabel: match[0].name };
+  if (match.length > 1) {
+    return {
+      ok: false,
+      message: `Hay varias entidades parecidas a "${pista}" (${match.map((e) => e.name).join(", ")}). Pídele al usuario que aclare cuál.`,
+    };
+  }
+  return {
+    ok: false,
+    message:
+      `No encontré ninguna entidad de negocio activa parecida a "${pista}". ` +
+      (entidades && entidades.length > 0
+        ? `Las entidades activas del usuario son: ${entidades.map((e) => e.name).join(", ")}.`
+        : "El usuario no tiene ninguna entidad de negocio configurada todavía."),
   };
 }
 
@@ -1477,6 +1552,23 @@ export async function executeVictorTool(
         ? Math.min(Number(input.limite), 100)
         : 40;
 
+      const alcance = await resolverAlcanceTransacciones(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!alcance.ok) return { ok: false, message: alcance.message };
+
+      let countQuery = supabase
+        .from("transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", ownerId)
+        .is("hacienda_category_id", null)
+        .eq("es_duplicada", false);
+      if (alcance.modo === "personal") countQuery = countQuery.is("entity_id", null);
+      if (alcance.modo === "entidad") countQuery = countQuery.eq("entity_id", alcance.entityId);
+      // modo "todas": sin filtro de entity_id — Personal + todas las entidades.
+
       // Antes solo se traía este lote (hasta `limite`, tope 100) y el
       // mensaje reportaba nada más `pendientes.length` — si había 142 sin
       // categorizar y venían con el default de 40, VICTOR veía "40 sin
@@ -1485,32 +1577,27 @@ export async function executeVictorTool(
       // serlo. Ahora se pide también el TOTAL real (count exact, sin traer
       // las filas) con el mismo filtro, para que VICTOR sepa siempre cuánto
       // falta de verdad y nunca declare terminado algo que no lo está.
-      const { count: totalPendientes, error: countError } = await supabase
-        .from("transactions")
-        .select("id", { count: "exact", head: true })
-        .eq("owner_id", ownerId)
-        .is("entity_id", null)
-        .is("hacienda_category_id", null)
-        .eq("es_duplicada", false);
+      const { count: totalPendientes, error: countError } = await countQuery;
 
       if (countError) return { ok: false, message: `No se pudo contar las transacciones pendientes: ${countError.message}` };
 
       if (!totalPendientes || totalPendientes === 0) {
         return {
           ok: true,
-          message: "No hay transacciones sin categorizar en este momento — todo lo que ha llegado del banco ya tiene categoría.",
+          message: `No hay transacciones sin categorizar en ${alcance.alcanceLabel} en este momento — todo lo que ha llegado del banco ya tiene categoría.`,
         };
       }
 
-      const { data: pendientes, error } = await supabase
+      let dataQuery = supabase
         .from("transactions")
         .select("id, description_raw, amount, fecha, pending")
         .eq("owner_id", ownerId)
-        .is("entity_id", null)
         .is("hacienda_category_id", null)
-        .eq("es_duplicada", false)
-        .order("fecha", { ascending: false })
-        .limit(limite);
+        .eq("es_duplicada", false);
+      if (alcance.modo === "personal") dataQuery = dataQuery.is("entity_id", null);
+      if (alcance.modo === "entidad") dataQuery = dataQuery.eq("entity_id", alcance.entityId);
+
+      const { data: pendientes, error } = await dataQuery.order("fecha", { ascending: false }).limit(limite);
 
       if (error) return { ok: false, message: `No se pudo traer las transacciones pendientes: ${error.message}` };
 
@@ -1556,7 +1643,7 @@ export async function executeVictorTool(
       return {
         ok: true,
         message:
-          `${pendientes?.length ?? 0} transacción(es) sin categorizar (de ${totalPendientes} en total):\n${lista}\n\n` +
+          `${pendientes?.length ?? 0} transacción(es) sin categorizar en ${alcance.alcanceLabel} (de ${totalPendientes} en total):\n${lista}\n\n` +
           `Categorías disponibles: ${listaCategorias}.\n` +
           `Categoriza ahora mismo, en UNA sola llamada a categorizar_transacciones_lote con todas juntas (NO ` +
           `una por una con categorizar_transaccion), las que reconozcas con alta confianza por el nombre del ` +
@@ -2129,6 +2216,13 @@ export async function executeVictorTool(
         };
       }
 
+      const alcance = await resolverAlcanceTransacciones(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!alcance.ok) return { ok: false, message: alcance.message };
+
       const categoria = categorias[0];
       const hoy = new Date();
       const desde =
@@ -2138,16 +2232,19 @@ export async function executeVictorTool(
       const hasta =
         typeof input.hasta === "string" && input.hasta.trim() ? input.hasta.trim() : hoy.toISOString().slice(0, 10);
 
-      const { data: transacciones, error: txError } = await supabase
+      let txQuery = supabase
         .from("transactions")
         .select("amount, fecha, description_raw, tipo_flujo")
         .eq("owner_id", ownerId)
-        .is("entity_id", null)
         .eq("hacienda_category_id", categoria.id)
         .eq("es_duplicada", false)
         .gte("fecha", desde)
-        .lte("fecha", hasta)
-        .order("fecha", { ascending: false });
+        .lte("fecha", hasta);
+      if (alcance.modo === "personal") txQuery = txQuery.is("entity_id", null);
+      if (alcance.modo === "entidad") txQuery = txQuery.eq("entity_id", alcance.entityId);
+      // modo "todas": sin filtro de entity_id — Personal + todas las entidades.
+
+      const { data: transacciones, error: txError } = await txQuery.order("fecha", { ascending: false });
 
       if (txError) return { ok: false, message: `No se pudo calcular el reporte: ${txError.message}` };
 
@@ -2160,7 +2257,7 @@ export async function executeVictorTool(
       const total = gastos.reduce((sum, t) => sum + Number(t.amount), 0);
 
       if (gastos.length === 0) {
-        return { ok: true, message: `No hay gastos en la categoría "${categoria.nombre}" entre ${desde} y ${hasta}.` };
+        return { ok: true, message: `No hay gastos en la categoría "${categoria.nombre}" entre ${desde} y ${hasta} (${alcance.alcanceLabel}).` };
       }
 
       const detalle = gastos
@@ -2172,7 +2269,7 @@ export async function executeVictorTool(
       return {
         ok: true,
         message:
-          `Gasto total en "${categoria.nombre}" entre ${desde} y ${hasta}: $${total.toFixed(2)} ` +
+          `Gasto total en "${categoria.nombre}" entre ${desde} y ${hasta} (${alcance.alcanceLabel}): $${total.toFixed(2)} ` +
           `(${gastos.length} transacción${gastos.length > 1 ? "es" : ""}).\n${detalle}${nota}`,
       };
     }
