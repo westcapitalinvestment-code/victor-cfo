@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney, formatFecha } from "@/lib/format";
+import ConfirmarPagoModal, { type LineaConfirmacion } from "../confirmar-pago-modal";
 
 type Vendor = {
   id: string;
@@ -87,6 +88,7 @@ export default function PagosPortal({
   vendors,
   retenciones,
   entidadId,
+  entidades = [],
   retencionDefault,
   volverHref = "/dashboard",
   volverLabel = "← VICTOR",
@@ -96,6 +98,11 @@ export default function PagosPortal({
   vendors: Vendor[];
   retenciones: Retencion[];
   entidadId: string | null;
+  // Todas las entidades activas del usuario (no solo la activa del topbar) —
+  // hace falta la lista completa para resolver el nombre de CADA contratista
+  // en "vista global" (varias entidades mezcladas), no solo el de la
+  // entidad actualmente seleccionada. Ver ConfirmarPagoModal.
+  entidades?: { id: string; name: string }[];
   retencionDefault: number;
   volverHref?: string;
   volverLabel?: string;
@@ -153,7 +160,9 @@ export default function PagosPortal({
         </div>
       </div>
 
-      {tab === "pagos" && <PagosTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} ownerIdEfectivo={ownerIdEfectivo} />}
+      {tab === "pagos" && (
+        <PagosTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} entidades={entidades} ownerIdEfectivo={ownerIdEfectivo} />
+      )}
       {tab === "contratistas" && (
         <ContratistasTab vendors={vendors} entidadId={entidadId} retencionDefault={retencionDefault} ownerIdEfectivo={ownerIdEfectivo} />
       )}
@@ -212,11 +221,13 @@ function PagosTab({
   vendors,
   retenciones,
   entidadId,
+  entidades,
   ownerIdEfectivo,
 }: {
   vendors: Vendor[];
   retenciones: Retencion[];
   entidadId: string | null;
+  entidades: { id: string; name: string }[];
   ownerIdEfectivo?: string;
 }) {
   const supabase = createClient();
@@ -228,6 +239,15 @@ function PagosTab({
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ nombre: string; neto: number }[] | null>(null);
   const [copiado, setCopiado] = useState(false);
+  // Confirmación con advertencia de entidad antes de guardar de verdad (4
+  // sept 2026, pedido de Joel: calcado del mockup — "Registrar corrida" ya
+  // no guarda directo, primero muestra bajo qué entidad va a quedar el pago.
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
+
+  const nombreEntidad = useMemo(() => {
+    const mapa = new Map(entidades.map((e) => [e.id, e.name]));
+    return (id: string | null) => (id ? mapa.get(id) ?? "Entidad eliminada" : mapa.get(entidadId ?? "") ?? "Personal");
+  }, [entidades, entidadId]);
 
   const activos = useMemo(() => vendors.filter((v) => v.active).sort((a, b) => a.name.localeCompare(b.name)), [vendors]);
 
@@ -262,6 +282,24 @@ function PagosTab({
     .filter((r) => r.period_end && r.period_end >= desdeTrim && r.period_end <= hastaTrim)
     .reduce((s, r) => s + Number(r.retention_amount), 0);
 
+  // Agrupado por entidad — solo para el modal de confirmación. La inmensa
+  // mayoría de las veces es un solo grupo (una entidad activa normal); solo
+  // aparece más de uno en "vista global" con contratistas de entidades
+  // distintas en la misma corrida.
+  const gruposPorEntidad = useMemo(() => {
+    const mapa = new Map<string, { nombre: string; bruto: number; retenido: number; neto: number; filas: typeof filas }>();
+    for (const f of filas) {
+      const id = f.vendor.entity_id ?? entidadId ?? "";
+      const actual = mapa.get(id) ?? { nombre: nombreEntidad(f.vendor.entity_id), bruto: 0, retenido: 0, neto: 0, filas: [] as typeof filas };
+      actual.bruto += f.bruto;
+      actual.retenido += f.retenido;
+      actual.neto += f.neto;
+      actual.filas.push(f);
+      mapa.set(id, actual);
+    }
+    return [...mapa.values()];
+  }, [filas, entidadId, nombreEntidad]);
+
   async function registrarCorrida() {
     if (filas.length === 0) return;
     setGuardando(true);
@@ -278,7 +316,13 @@ function PagosTab({
 
     const inserts = filas.map((f) => ({
       owner_id: ownerIdEfectivo ?? user.id,
-      entity_id: entidadId,
+      // Entidad del CONTRATISTA, no la entidad activa de la página (4 sept
+      // 2026, fix de raíz junto con el modal de confirmación) — en "vista
+      // global" esta tabla mezcla contratistas de varias entidades, y antes
+      // TODAS las filas de la corrida quedaban registradas bajo una sola
+      // entidad fija (la primera de la lista), sin importar de cuál era
+      // cada contratista de verdad.
+      entity_id: f.vendor.entity_id ?? entidadId,
       vendor_id: f.vendor.id,
       gross_amount: f.bruto,
       retention_pct: f.pct,
@@ -290,6 +334,7 @@ function PagosTab({
 
     const { error: insertError } = await supabase.from("vendor_retenciones").insert(inserts);
     setGuardando(false);
+    setMostrarConfirmacion(false);
     if (insertError) {
       setError(insertError.message);
       return;
@@ -300,6 +345,34 @@ function PagosTab({
     setCopiado(false);
     router.refresh();
   }
+
+  // Contenido del modal de confirmación — un solo contratista de una sola
+  // entidad muestra el desglose tal cual el mockup ("Le pagas"/"Retención");
+  // varios contratistas de la MISMA entidad muestran el total agregado; y si
+  // hay más de una entidad mezclada (vista global), se lista cada una con su
+  // propio subtotal para que quede clarísimo qué le toca a cuál.
+  const soloUnGrupo = gruposPorEntidad.length === 1 ? gruposPorEntidad[0] : null;
+  const descripcionConfirmacion =
+    filas.length === 1
+      ? `Vas a registrar un pago a ${filas[0].vendor.name} por ${formatMoney(filas[0].bruto)}`
+      : `Vas a registrar ${filas.length} pagos por un total de ${formatMoney(totalBruto)}`;
+  const entidadNombreConfirmacion = soloUnGrupo
+    ? soloUnGrupo.nombre
+    : `${gruposPorEntidad.length} entidades distintas`;
+  const lineasConfirmacion: LineaConfirmacion[] = soloUnGrupo
+    ? filas.length === 1
+      ? [
+          { label: "Le pagas", valor: formatMoney(filas[0].neto) },
+          ...(filas[0].retenido > 0
+            ? [{ label: `Retención ${filas[0].pct}% → Hacienda`, valor: formatMoney(filas[0].retenido), tono: "amb" as const }]
+            : []),
+        ]
+      : [
+          { label: "Total bruto", valor: formatMoney(totalBruto) },
+          ...(totalRetenido > 0 ? [{ label: "Retención total → Hacienda", valor: formatMoney(totalRetenido), tono: "amb" as const }] : []),
+          { label: "Total neto a pagar", valor: formatMoney(totalNeto) },
+        ]
+    : gruposPorEntidad.map((g) => ({ label: g.nombre, valor: formatMoney(g.neto) }));
 
   function copiarResultado() {
     if (!resultado) return;
@@ -432,10 +505,20 @@ function PagosTab({
           </div>
         )}
 
-        <button className="vc-btn-primary mt-3" disabled={filas.length === 0 || guardando} onClick={registrarCorrida}>
+        <button className="vc-btn-primary mt-3" disabled={filas.length === 0 || guardando} onClick={() => setMostrarConfirmacion(true)}>
           {guardando ? "Guardando..." : `Registrar corrida${filas.length > 0 ? ` (${filas.length})` : ""}`}
         </button>
       </div>
+
+      <ConfirmarPagoModal
+        abierto={mostrarConfirmacion}
+        descripcion={descripcionConfirmacion}
+        entidadNombre={entidadNombreConfirmacion}
+        lineas={lineasConfirmacion}
+        confirmando={guardando}
+        onConfirmar={registrarCorrida}
+        onCancelar={() => setMostrarConfirmacion(false)}
+      />
 
       {resultado && (
         <div className="vc-card mb-3 border border-teal">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney, formatFecha } from "@/lib/format";
+import ConfirmarPagoModal, { type LineaConfirmacion } from "../confirmar-pago-modal";
 
 type Cliente = {
   id: string;
@@ -188,6 +189,7 @@ export default function FacturacionPortal({
   cotizaciones,
   entidadId,
   entidadesConAth,
+  entidades = [],
   tabInicial,
   basePath = "/dashboard/facturacion",
   clientesBasePath = "/dashboard/clientes",
@@ -202,6 +204,11 @@ export default function FacturacionPortal({
   cotizaciones: Cotizacion[];
   entidadId: string | null;
   entidadesConAth: string[];
+  // Todas las entidades activas (no solo la activa del topbar) — hace falta
+  // para el aviso de "bajo qué entidad" al registrar un pago (4 sept 2026,
+  // pedido de Joel, calcado del mockup) porque en "vista global" la lista de
+  // facturas mezcla varias entidades a la vez, no solo la seleccionada.
+  entidades?: { id: string; name: string }[];
   tabInicial?: string;
   // Portal real de Admin/Secretaria (2 sept 2026) — este componente ya lo
   // usaba solo el dueño desde /dashboard/facturacion, con TODOS sus links
@@ -286,7 +293,9 @@ export default function FacturacionPortal({
         </div>
       </div>
 
-      {tab === "facturas" && <FacturasTab facturas={facturas} entidadesConAth={entidadesConAthSet} basePath={basePath} />}
+      {tab === "facturas" && (
+        <FacturasTab facturas={facturas} entidadesConAth={entidadesConAthSet} entidades={entidades} entidadId={entidadId} basePath={basePath} />
+      )}
       {tab === "clientes" && (
         <ClientesTab clients={clients} basePath={clientesBasePath} volverTab={`${basePath}?tab=clientes`} modoAdmin={modoAdmin} />
       )}
@@ -315,14 +324,23 @@ function Proximamente({ icono, titulo, texto }: { icono: string; titulo: string;
 function FacturasTab({
   facturas,
   entidadesConAth,
+  entidades,
+  entidadId,
   basePath,
 }: {
   facturas: Factura[];
   entidadesConAth: Set<string>;
+  entidades: { id: string; name: string }[];
+  entidadId: string | null;
   basePath: string;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todas");
+
+  const nombreEntidad = useMemo(() => {
+    const mapa = new Map(entidades.map((e) => [e.id, e.name]));
+    return (id: string | null) => (id ? mapa.get(id) ?? "Entidad eliminada" : mapa.get(entidadId ?? "") ?? "Personal");
+  }, [entidades, entidadId]);
 
   const noBorrador = facturas.filter((f) => f.estado !== "borrador");
   const facturado = noBorrador.reduce((s, f) => s + Number(f.total), 0);
@@ -417,7 +435,7 @@ function FacturasTab({
         <p className="mb-2 text-xs uppercase tracking-wide text-muted">Todas las facturas</p>
         {filtradas.length === 0 && <p className="text-xs text-muted">No hay facturas que coincidan.</p>}
         {filtradas.map((f) => (
-          <FilaFactura key={f.id} factura={f} basePath={basePath} />
+          <FilaFactura key={f.id} factura={f} basePath={basePath} entidadNombre={nombreEntidad(f.entity_id)} />
         ))}
       </div>
     </>
@@ -453,12 +471,24 @@ function CerrarSesionAdmin() {
   );
 }
 
-function FilaFactura({ factura, basePath }: { factura: Factura; basePath: string }) {
+function FilaFactura({
+  factura,
+  basePath,
+  entidadNombre,
+}: {
+  factura: Factura;
+  basePath: string;
+  entidadNombre: string;
+}) {
   const supabase = createClient();
   const router = useRouter();
   const nombre = factura.clients?.name ?? "Sin cliente";
   const [pagando, setPagando] = useState(false);
   const [metodoPago, setMetodoPago] = useState(METODOS_PAGO[0]);
+  // Confirmación con advertencia de entidad antes de guardar (4 sept 2026,
+  // pedido de Joel, calcado del mockup) — "Está correcto" ya no marca pagada
+  // directo, primero muestra bajo qué entidad va a quedar el cobro.
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
   // Fecha real del pago (2 sept 2026, pedido de Joel: "el pago salio el dia
   // 1 pero me pago el dia 2 y tal como esta sale que todos pagaran el dia
   // 1") — por defecto hoy, pero editable porque el pago pudo haber llegado
@@ -477,6 +507,7 @@ function FilaFactura({ factura, basePath }: { factura: Factura; basePath: string
       .update({ estado: "pagada", metodo_pago: metodoPago, fecha_pago: fechaPago })
       .eq("id", factura.id);
     setLoading(false);
+    setMostrarConfirmacion(false);
     if (updateError) {
       setError(updateError.message);
       return;
@@ -484,6 +515,19 @@ function FilaFactura({ factura, basePath }: { factura: Factura; basePath: string
     setPagando(false);
     router.refresh();
   }
+
+  // Desglose para el modal de confirmación — mismo cálculo que ya se ve en
+  // la tarjeta de arriba (retención + fee), solo que aquí resumido en lo que
+  // de verdad recibe el negocio.
+  const feeConfirmacion = feeEstimadoPago(Number(factura.total), metodoPago);
+  const netoConfirmacion = Number(factura.total) - Number(factura.retencion_monto || 0) - feeConfirmacion;
+  const lineasConfirmacion: LineaConfirmacion[] = [
+    { label: "Recibes", valor: formatMoney(netoConfirmacion) },
+    ...(Number(factura.retencion_pct) > 0
+      ? [{ label: `Retención ${factura.retencion_pct}% → Hacienda`, valor: formatMoney(Number(factura.retencion_monto)), tono: "amb" as const }]
+      : []),
+    ...(feeConfirmacion > 0 ? [{ label: `Fee ${metodoPago}`, valor: `-${formatMoney(feeConfirmacion)}`, tono: "red" as const }] : []),
+  ];
 
   return (
     <div className="border-b border-border py-2.5 last:border-0">
@@ -580,7 +624,12 @@ function FilaFactura({ factura, basePath }: { factura: Factura; basePath: string
             {/* .vc-btn-primary trae width:100% en globals.css — en este flex
                 row eso gana como flex-basis y aplasta el <select> flex-1 al
                 lado (mismo bug de fondo documentado en varios lugares). */}
-            <button className="vc-btn-primary flex-shrink-0" style={{ width: "auto" }} disabled={loading} onClick={marcarPagada}>
+            <button
+              className="vc-btn-primary flex-shrink-0"
+              style={{ width: "auto" }}
+              disabled={loading}
+              onClick={() => setMostrarConfirmacion(true)}
+            >
               {loading ? "..." : "Está correcto"}
             </button>
             <button className="flex-shrink-0 text-xs text-muted hover:opacity-80" onClick={() => setPagando(false)}>
@@ -589,6 +638,18 @@ function FilaFactura({ factura, basePath }: { factura: Factura; basePath: string
           </div>
         </div>
       )}
+
+      <ConfirmarPagoModal
+        abierto={mostrarConfirmacion}
+        titulo="¿Confirmas este cobro?"
+        descripcion={`Vas a registrar un cobro de ${nombre} por ${formatMoney(Number(factura.total))}`}
+        entidadNombre={entidadNombre}
+        lineas={lineasConfirmacion}
+        confirmando={loading}
+        labelConfirmar="Sí, registrar cobro"
+        onConfirmar={marcarPagada}
+        onCancelar={() => setMostrarConfirmacion(false)}
+      />
     </div>
   );
 }

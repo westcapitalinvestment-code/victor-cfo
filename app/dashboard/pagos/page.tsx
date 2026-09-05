@@ -70,6 +70,7 @@ export default async function PagosPage() {
       vendors={vendors ?? []}
       retenciones={retenciones ?? []}
       entidadId={entidadActivaId ?? entities[0]?.id ?? null}
+      entidades={entities.map((e) => ({ id: e.id, name: e.name }))}
       retencionDefault={entidadActiva?.default_contractor_retention_pct ?? 10}
     />
   );

@@ -105,6 +105,7 @@ export default async function FacturacionPage({
       cotizaciones={(cotizaciones ?? []) as any}
       entidadId={entidadActivaId ?? entities[0]?.id ?? null}
       entidadesConAth={entidadesConAth}
+      entidades={entities.map((e) => ({ id: e.id, name: e.name }))}
       tabInicial={searchParams?.tab}
     />
   );

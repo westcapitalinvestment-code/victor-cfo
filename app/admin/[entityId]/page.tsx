@@ -68,6 +68,7 @@ export default async function AdminEntidadPage({ params }: { params: { entityId:
         cotizaciones={[]}
         entidadId={entityId}
         entidadesConAth={entidad.ath_movil_business_path ? [entityId] : []}
+        entidades={[{ id: entidad.id, name: entidad.name }]}
         basePath={`/admin/${entityId}`}
         clientesBasePath={`/admin/${entityId}/clientes`}
         ownerIdEfectivo={ownerId}

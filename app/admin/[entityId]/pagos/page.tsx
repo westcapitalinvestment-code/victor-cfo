@@ -28,7 +28,7 @@ export default async function AdminPagosPage({ params }: { params: { entityId: s
 
   const { data: entidad } = await supabase
     .from("business_entities")
-    .select("id, default_contractor_retention_pct")
+    .select("id, name, default_contractor_retention_pct")
     .eq("id", entityId)
     .eq("owner_id", ownerId)
     .maybeSingle();
@@ -56,6 +56,7 @@ export default async function AdminPagosPage({ params }: { params: { entityId: s
         vendors={vendors ?? []}
         retenciones={retenciones ?? []}
         entidadId={entityId}
+        entidades={[{ id: entidad.id, name: entidad.name }]}
         retencionDefault={entidad.default_contractor_retention_pct ?? 10}
         volverHref={`/admin/${entityId}`}
         volverLabel="← Facturación"
