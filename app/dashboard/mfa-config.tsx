@@ -72,7 +72,22 @@ export default function MfaConfig() {
     // desde ahí, así funcione haya o no ese prefijo.
     const svgCrudo = data.totp.qr_code;
     const inicioSvg = svgCrudo.indexOf("<svg");
-    setQrSvg(inicioSvg >= 0 ? svgCrudo.slice(inicioSvg) : svgCrudo);
+    let svg = inicioSvg >= 0 ? svgCrudo.slice(inicioSvg) : svgCrudo;
+    // El SVG de Supabase trae width/height fijos (ej. "219") pero SIN
+    // viewBox (4 sept 2026, confirmado con console.log del string crudo).
+    // Sin viewBox, forzar un ancho distinto por CSS no reescala el
+    // contenido proporcionalmente — el navegador lo recorta en vez de
+    // encogerlo (bug real, reportado por Joel con screenshot: el QR salía
+    // cortado en los bordes). Si no trae viewBox, se le agrega uno igual a
+    // su propio width/height para que el reescalado por CSS sí funcione.
+    if (!/viewBox=/.test(svg)) {
+      const anchoMatch = svg.match(/width="(\d+)"/);
+      const altoMatch = svg.match(/height="(\d+)"/);
+      const ancho = anchoMatch ? anchoMatch[1] : "219";
+      const alto = altoMatch ? altoMatch[1] : "219";
+      svg = svg.replace("<svg", `<svg viewBox="0 0 ${ancho} ${alto}"`);
+    }
+    setQrSvg(svg);
     setSecreto(data.totp.secret);
     setCodigo("");
     setEstado("activando");
