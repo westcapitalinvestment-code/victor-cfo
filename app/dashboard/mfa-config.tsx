@@ -139,7 +139,13 @@ export default function MfaConfig() {
 
   return (
     <div className="vc-card mb-4">
-      <p className="text-sm font-semibold">Verificación en dos pasos (MFA)</p>
+      <p className="text-sm font-semibold">
+        Verificación en dos pasos (MFA)
+        {/* "(Recomendado)" solo cuando todavía no está activo — pedido de
+            Joel (4 sept 2026) para darle más peso visual y empujar a que la
+            gente la prenda. Una vez activa, ya no aplica el empujón. */}
+        {estado === "inactivo" && <span className="font-normal text-muted"> (Recomendado)</span>}
+      </p>
 
       {estado === "inactivo" && (
         <div className="mt-2 flex items-center justify-between">
@@ -211,7 +217,12 @@ export default function MfaConfig() {
             // virado"). Solo se fija el ancho — el alto se ajusta solo
             // respetando la proporción real del SVG.
             <div
-              className="mx-auto mb-3 w-40 rounded-lg border border-border p-2 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
+              // Fondo blanco fijo + más margen (4 sept 2026): un QR necesita
+              // suficiente "zona de quietud" (espacio blanco alrededor) para
+              // que un lector lo reconozca — con poco margen o un fondo que
+              // no sea blanco puro (ej. heredado de dark mode) puede verse
+              // bien a simple vista y aun así fallar al escanear.
+              className="mx-auto mb-3 w-44 rounded-lg border border-border bg-white p-4 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
               dangerouslySetInnerHTML={{ __html: qrSvg }}
             />
           )}
