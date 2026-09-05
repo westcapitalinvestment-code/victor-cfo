@@ -61,12 +61,18 @@ export default function MfaConfig() {
     setFactorId(data.id);
     // Render directo del SVG en vez de meterlo en un <img src="data:...">
     // (4 sept 2026, reportado por Joel con screenshot: el QR salía como
-    // ícono de imagen rota, incluso después de escapar el "#" de los
-    // colores hex con encodeURIComponent — seguía sin cargar en
-    // producción). dangerouslySetInnerHTML es seguro aquí: el SVG viene de
-    // Supabase (fuente de confianza, no de un usuario), nunca de input
-    // externo.
-    setQrSvg(data.totp.qr_code);
+    // ícono de imagen rota). dangerouslySetInnerHTML es seguro aquí: el SVG
+    // viene de Supabase (fuente de confianza, no de un usuario).
+    //
+    // Segunda vuelta del mismo bug: en este proyecto, data.totp.qr_code YA
+    // trae pegado el prefijo "data:image/svg+xml;utf-8," delante del <svg>
+    // de verdad (distinto a lo que documenta el SDK) — sin recortarlo,
+    // dangerouslySetInnerHTML pintaba ese prefijo como texto plano arriba
+    // del QR (screenshot real de Joel). Se busca el "<svg" real y se corta
+    // desde ahí, así funcione haya o no ese prefijo.
+    const svgCrudo = data.totp.qr_code;
+    const inicioSvg = svgCrudo.indexOf("<svg");
+    setQrSvg(inicioSvg >= 0 ? svgCrudo.slice(inicioSvg) : svgCrudo);
     setSecreto(data.totp.secret);
     setCodigo("");
     setEstado("activando");
