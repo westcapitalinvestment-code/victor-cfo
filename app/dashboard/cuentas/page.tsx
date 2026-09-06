@@ -7,6 +7,7 @@ import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
 import CuentasManuales from "./cuentas-manuales";
 import SubirEstado from "./subir-csv";
+import EstadosSubidosLista from "./estados-subidos";
 type CuentaPlaid = {
   id: string;
   plaid_account_id: string;
@@ -47,6 +48,10 @@ export default function CuentasPage() {
   // ~45 días) — subir el estado de cuenta directo a una cuenta que YA
   // está conectada, igual que se puede hacer con una cuenta manual.
   const [subiendoEstadoId, setSubiendoEstadoId] = useState<string | null>(null);
+  // Historial de CSV/PDF ya subidos a una cuenta, con botón de borrar
+  // (migración 0072, 6 sept 2026) — independiente del flujo de subir uno
+  // nuevo, para poder volver más tarde a deshacer una subida vieja.
+  const [viendoEstadosId, setViendoEstadosId] = useState<string | null>(null);
   // Renombrar cuenta de Plaid — caso real de Joel: dos cuentas "checking"
   // del mismo banco llegan con nombres iguales o casi iguales, y no hay
   // forma de saber cuál es cuál sin adivinar por el balance. Nunca se toca
@@ -456,6 +461,12 @@ export default function CuentasPage() {
                 </button>
                 <button
                   className="ml-3 mt-1 text-[11px] text-muted hover:opacity-80"
+                  onClick={() => setViendoEstadosId(viendoEstadosId === c.plaid_account_id ? null : c.plaid_account_id)}
+                >
+                  {viendoEstadosId === c.plaid_account_id ? "Ocultar historial" : "Ver estados subidos"}
+                </button>
+                <button
+                  className="ml-3 mt-1 text-[11px] text-muted hover:opacity-80"
                   onClick={() => {
                     if (renombrandoId === c.id) {
                       setRenombrandoId(null);
@@ -519,6 +530,9 @@ export default function CuentasPage() {
                       cargarCuentas();
                     }}
                   />
+                )}
+                {viendoEstadosId === c.plaid_account_id && (
+                  <EstadosSubidosLista origen="plaid" cuentaId={c.plaid_account_id} />
                 )}
               </div>
             ))}

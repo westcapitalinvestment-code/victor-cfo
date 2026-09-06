@@ -66,11 +66,16 @@ export default function SubirEstado({
   const [pasoPdf, setPasoPdf] = useState<PasoPdf>("elegir_archivo");
   const [nombreArchivoPdf, setNombreArchivoPdf] = useState<string>("");
   const [transaccionesPdf, setTransaccionesPdf] = useState<TransaccionExtraida[]>([]);
+  // r2Key/metadata vienen de /pdf/extraer (el PDF ya se guardó en R2 ahí
+  // mismo) — se cargan tal cual al confirmar en /pdf/importar, para que
+  // quede enlazado a la subida y VICTOR pueda leer balance/interés después.
+  const [pdfR2Key, setPdfR2Key] = useState<string | null>(null);
+  const [pdfMetadata, setPdfMetadata] = useState<Record<string, unknown> | null>(null);
 
   // --- compartido ---
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<{ importadas: number; duplicadas: number; errores: number } | null>(null);
+  const [resultado, setResultado] = useState<{ importadas: number; duplicadas: number; errores: number; statementUploadId?: string | null } | null>(null);
 
   // ================= CSV =================
 
@@ -122,6 +127,7 @@ export default function SubirEstado({
           origenCuenta: origen,
           cuentaId,
           csv: csvTexto,
+          nombreArchivo: nombreArchivoCsv,
           columnaFecha: Number(columnaFecha),
           columnaDescripcion: Number(columnaDescripcion),
           columnaMonto: modoMonto === "unico" ? Number(columnaMonto) : null,
@@ -133,7 +139,7 @@ export default function SubirEstado({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo importar el archivo.");
-      setResultado({ importadas: data.importadas, duplicadas: data.duplicadas, errores: data.errores });
+      setResultado({ importadas: data.importadas, duplicadas: data.duplicadas, errores: data.errores, statementUploadId: data.statementUploadId ?? null });
       setPasoCsv("resultado");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo importar el archivo.");
@@ -200,6 +206,8 @@ export default function SubirEstado({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo leer el PDF.");
       setTransaccionesPdf(data.transacciones);
+      setPdfR2Key(data.r2Key ?? null);
+      setPdfMetadata(data.metadata ?? null);
       setPasoPdf("revisar");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo leer el PDF.");
@@ -223,11 +231,18 @@ export default function SubirEstado({
       const res = await fetch("/api/cuentas/estado/pdf/importar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ origenCuenta: origen, cuentaId, transacciones: transaccionesPdf }),
+        body: JSON.stringify({
+          origenCuenta: origen,
+          cuentaId,
+          transacciones: transaccionesPdf,
+          nombreArchivo: nombreArchivoPdf,
+          r2Key: pdfR2Key,
+          metadata: pdfMetadata,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo importar.");
-      setResultado({ importadas: data.importadas, duplicadas: data.duplicadas, errores: data.errores ?? 0 });
+      setResultado({ importadas: data.importadas, duplicadas: data.duplicadas, errores: data.errores ?? 0, statementUploadId: data.statementUploadId ?? null });
       setPasoPdf("resultado");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo importar.");
@@ -516,9 +531,42 @@ function ResultadoImportacion({
   resultado,
   onCerrar,
 }: {
-  resultado: { importadas: number; duplicadas: number; errores: number };
+  resultado: { importadas: number; duplicadas: number; errores: number; statementUploadId?: string | null };
   onCerrar: () => void;
 }) {
+  const [confirmando, setConfirmando] = useState(false);
+  const [deshaciendo, setDeshaciendo] = useState(false);
+  const [deshecho, setDeshecho] = useState(false);
+  const [errorDeshacer, setErrorDeshacer] = useState<string | null>(null);
+
+  async function deshacer() {
+    if (!resultado.statementUploadId) return;
+    setDeshaciendo(true);
+    setErrorDeshacer(null);
+    try {
+      const res = await fetch(`/api/cuentas/estado/${resultado.statementUploadId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "No se pudo deshacer la importación.");
+      setDeshecho(true);
+    } catch (err) {
+      setErrorDeshacer(err instanceof Error ? err.message : "No se pudo deshacer la importación.");
+    } finally {
+      setDeshaciendo(false);
+    }
+  }
+
+  if (deshecho) {
+    return (
+      <div>
+        <p className="mb-1 text-sm font-medium">Importación deshecha</p>
+        <p className="text-xs text-muted">Se borraron las {resultado.importadas} transacción(es) que se habían importado. La cuenta queda como antes de subir este archivo.</p>
+        <button className="mt-3 vc-btn-primary" onClick={onCerrar}>
+          Listo
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div>
       <p className="mb-1 text-sm font-medium text-teal">Importación completa</p>
@@ -528,9 +576,33 @@ function ResultadoImportacion({
         {resultado.errores > 0 && ` ${resultado.errores} fila(s) con error, no se pudieron leer.`}
       </p>
       <p className="mt-2 text-xs text-muted">Ya se están categorizando solas — revísalas en la pantalla de Transacciones.</p>
-      <button className="mt-3 vc-btn-primary" onClick={onCerrar}>
-        Listo
-      </button>
+
+      {errorDeshacer && <p className="mt-2 text-xs text-red">{errorDeshacer}</p>}
+
+      {confirmando ? (
+        <div className="mt-3 rounded border border-red/30 bg-red/[.06] p-2">
+          <p className="mb-2 text-xs">¿Seguro? Se borrarán las {resultado.importadas} transacción(es) que se acaban de importar de esta subida.</p>
+          <div className="flex gap-2">
+            <button className="rounded-lg bg-red px-3 py-1.5 text-xs font-medium text-white" disabled={deshaciendo} onClick={deshacer}>
+              {deshaciendo ? "Borrando…" : "Sí, deshacer"}
+            </button>
+            <button className="text-xs text-muted underline" onClick={() => setConfirmando(false)}>
+              No
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 flex items-center gap-3">
+          <button className="vc-btn-primary" onClick={onCerrar}>
+            Listo
+          </button>
+          {resultado.statementUploadId && resultado.importadas > 0 && (
+            <button className="text-xs text-red underline" onClick={() => setConfirmando(true)}>
+              ¿Subiste esto a la cuenta equivocada? Deshacer
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

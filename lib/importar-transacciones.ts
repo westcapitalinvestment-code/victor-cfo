@@ -39,9 +39,13 @@ export async function importarTransaccionesDedup(
     cuentaId: string;
     origen: "csv" | "pdf";
     filas: FilaTransaccionImportar[];
+    // A qué fila de statement_uploads (migración 0072) enlazar las filas
+    // insertadas — permite luego "deshacer" esta subida exacta borrando esa
+    // fila (cascade). Opcional para no romper ningún llamador viejo.
+    statementUploadId?: string | null;
   }
 ): Promise<{ importadas: number; duplicadas: number }> {
-  const { ownerId, origenCuenta, cuentaId, origen, filas } = params;
+  const { ownerId, origenCuenta, cuentaId, origen, filas, statementUploadId = null } = params;
   const columnaCuenta = origenCuenta === "manual" ? "manual_account_id" : "plaid_account_id";
   const clave = (f: FilaTransaccionImportar) => `${f.fecha}|${f.description_raw}|${f.amount}`;
 
@@ -80,6 +84,7 @@ export async function importarTransaccionesDedup(
     manual_account_id: origenCuenta === "manual" ? cuentaId : null,
     plaid_account_id: origenCuenta === "plaid" ? cuentaId : null,
     origen,
+    statement_upload_id: statementUploadId,
     description_raw: f.description_raw,
     amount: f.amount,
     fecha: f.fecha,

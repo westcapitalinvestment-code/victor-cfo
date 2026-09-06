@@ -511,6 +511,31 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["nombre_cuenta"],
     },
   },
+  {
+    name: "consultar_estados_cuenta_subidos",
+    description:
+      "Consulta en vivo los estados de cuenta (CSV/Excel/PDF) que el usuario ha subido a sus cuentas de " +
+      "tarjeta/banco, para poder analizar balance, APR (tasa de interés), pago mínimo, límite de crédito y " +
+      "período de facturación. OBLIGATORIO: llama esta herramienta SIEMPRE que el usuario pregunte por el " +
+      "balance, el interés/APR, el pago mínimo o el límite de una tarjeta, o pida un análisis de sus tarjetas " +
+      "de crédito — NUNCA inventes esos números ni los calcules de memoria; solo existen si vinieron de un " +
+      "estado de cuenta en PDF que sí los mostraba explícitamente. Si el estado fue un CSV (no PDF), no habrá " +
+      "APR/límite (esos datos no vienen en el CSV de transacciones) — en ese caso la herramienta también " +
+      "devuelve un resumen de los cargos de interés/mora encontrados en las transacciones de esa cuenta, como " +
+      "respaldo. Si no manda nombre_cuenta, devuelve un resumen de TODAS las cuentas (Plaid y manuales) que " +
+      "tengan al menos un estado subido. Si la herramienta no devuelve nada para una cuenta, dile al usuario " +
+      "que suba un estado de cuenta (idealmente en PDF, para capturar APR y límite) en vez de adivinar esos datos.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre_cuenta: {
+          type: "string",
+          description: "Nombre (o parte) de la cuenta/tarjeta a consultar, tal como aparece en Cuentas — ej. 'Apple Card' o 'Chase'. Si se omite, se revisan todas las cuentas con estados subidos.",
+        },
+      },
+      required: [],
+    },
+  },
   // ---------------------------------------------------------------------
   // Facturación (Pro) — 1 sept 2026, pedido de Joel: "victor tiene la
   // capacidad de que si le dicto creame un cliente o una factura con tal
@@ -2353,6 +2378,172 @@ export async function executeVictorTool(
       if (deleteError) return { ok: false, message: `No se pudo eliminar la cuenta: ${deleteError.message}` };
 
       return { ok: true, message: `Eliminé la cuenta manual "${cuenta.name}" y sus transacciones importadas.` };
+    }
+
+    case "consultar_estados_cuenta_subidos": {
+      // 6 sept 2026 — pedido de Joel: "necesito que Victor pueda leer esos
+      // CSV/excel o PDF para que pueda analizar y ver balances y los
+      // intereses de esas tarjetas". Los estados ya se guardan (migración
+      // 0072) con metadata_extraida (APR/balance/mínimo/límite/período) para
+      // PDFs, capturada en el mismo tool-call de Claude que ya extraía las
+      // transacciones — no hace falta volver a mandarle el PDF a Claude
+      // aquí. Para CSV (que no trae esos campos) se usa un respaldo: buscar
+      // cargos de interés/mora entre las transacciones ya importadas de esa
+      // cuenta. Mismo principio de siempre: VICTOR consulta datos ya
+      // guardados en vivo, nunca re-procesa el documento original ni inventa
+      // cifras.
+      type FilaEstado = {
+        id: string;
+        origen: "csv" | "pdf";
+        nombre_archivo: string | null;
+        total_importadas: number;
+        created_at: string;
+        metadata_extraida: { apr?: string; balance_nuevo?: number; pago_minimo?: number; limite_credito?: number; periodo?: string } | null;
+      };
+
+      function formatearMetadata(m: FilaEstado["metadata_extraida"]): string | null {
+        if (!m) return null;
+        const partes: string[] = [];
+        if (m.apr) partes.push(`APR ${m.apr}`);
+        if (m.balance_nuevo != null) partes.push(`Balance $${Number(m.balance_nuevo).toFixed(2)}`);
+        if (m.pago_minimo != null) partes.push(`Pago mínimo $${Number(m.pago_minimo).toFixed(2)}`);
+        if (m.limite_credito != null) partes.push(`Límite $${Number(m.limite_credito).toFixed(2)}`);
+        if (m.periodo) partes.push(`Período ${m.periodo}`);
+        return partes.length > 0 ? partes.join(", ") : null;
+      }
+
+      async function resumenCargosInteres(columna: "plaid_account_id" | "manual_account_id", cuentaId: string): Promise<string | null> {
+        const patrones = ["%INTEREST%", "%FINANCE CHARGE%", "%INTERES%", "%RECARGO%", "%MORA%"];
+        const orFiltro = patrones.map((p) => `description_raw.ilike.${p}`).join(",");
+        const { data: cargos } = await supabase
+          .from("transactions")
+          .select("fecha, description_raw, amount")
+          .eq("owner_id", ownerId)
+          .eq(columna, cuentaId)
+          .or(orFiltro)
+          .order("fecha", { ascending: false })
+          .limit(12);
+        if (!cargos || cargos.length === 0) return null;
+        const total = cargos.reduce((acc: number, c: { amount: number | string }) => acc + Math.abs(Number(c.amount) || 0), 0);
+        return `${cargos.length} cargo(s) de interés/mora encontrados en las transacciones importadas (últimos, no necesariamente el ciclo completo), total $${total.toFixed(2)}. Ejemplo más reciente: "${cargos[0].description_raw}" el ${cargos[0].fecha}.`;
+      }
+
+      const nombreBuscado = typeof input.nombre_cuenta === "string" ? input.nombre_cuenta.trim() : "";
+
+      if (nombreBuscado) {
+        const [{ data: candidatosPlaid }, { data: candidatosManual }] = await Promise.all([
+          supabase.from("plaid_accounts").select("plaid_account_id, name, nickname").eq("owner_id", ownerId).or(`name.ilike.%${nombreBuscado}%,nickname.ilike.%${nombreBuscado}%`),
+          supabase.from("manual_accounts").select("id, name").eq("owner_id", ownerId).ilike("name", `%${nombreBuscado}%`),
+        ]);
+
+        const opciones: { columna: "plaid_account_id" | "manual_account_id"; id: string; label: string }[] = [
+          ...(candidatosPlaid ?? []).map((c: { plaid_account_id: string; name: string | null; nickname: string | null }) => ({
+            columna: "plaid_account_id" as const,
+            id: c.plaid_account_id,
+            label: c.nickname || c.name || "Cuenta Plaid",
+          })),
+          ...(candidatosManual ?? []).map((c: { id: string; name: string | null }) => ({
+            columna: "manual_account_id" as const,
+            id: c.id,
+            label: c.name || "Cuenta manual",
+          })),
+        ];
+
+        if (opciones.length === 0) {
+          return { ok: false, message: `No encontré ninguna cuenta parecida a "${nombreBuscado}". Verifica el nombre en Cuentas.` };
+        }
+        if (opciones.length > 1) {
+          return {
+            ok: false,
+            message: `Hay varias cuentas parecidas a "${nombreBuscado}" (${opciones.map((o) => o.label).join(", ")}). Pídele al usuario que aclare cuál.`,
+          };
+        }
+
+        const { columna, id, label } = opciones[0];
+        const { data: estados, error: errorEstados } = await supabase
+          .from("statement_uploads")
+          .select("id, origen, nombre_archivo, total_importadas, created_at, metadata_extraida")
+          .eq("owner_id", ownerId)
+          .eq(columna, id)
+          .order("created_at", { ascending: false })
+          .limit(6);
+
+        if (errorEstados) return { ok: false, message: `No se pudo consultar los estados subidos: ${errorEstados.message}` };
+        if (!estados || estados.length === 0) {
+          return {
+            ok: true,
+            message: `"${label}" no tiene ningún estado de cuenta (CSV/PDF) subido todavía. Sugiérele al usuario subir uno (idealmente en PDF) en Cuentas para poder analizar APR, balance y límite — sin eso no hay forma de saber esos datos, no los inventes.`,
+          };
+        }
+
+        const filas = estados as FilaEstado[];
+        const lineas = filas.map((e) => {
+          const meta = formatearMetadata(e.metadata_extraida);
+          const fecha = new Date(e.created_at).toLocaleDateString("es-PR");
+          return `${fecha} · ${e.origen.toUpperCase()} "${e.nombre_archivo || "(sin nombre)"}" — ${e.total_importadas} transacción(es)${meta ? ` — ${meta}` : " — sin datos de tarjeta extraídos (solo transacciones)"}`;
+        });
+
+        const hayMetadata = filas.some((e) => formatearMetadata(e.metadata_extraida));
+        let fallback: string | null = null;
+        if (!hayMetadata) fallback = await resumenCargosInteres(columna, id);
+
+        return {
+          ok: true,
+          message:
+            `Estados subidos para "${label}" (${filas.length} más reciente(s)):\n${lineas.join("\n")}` +
+            (fallback ? `\n\nComo ningún estado en PDF trajo APR/balance explícitos, este respaldo de las transacciones: ${fallback}` : "") +
+            (!hayMetadata && !fallback
+              ? "\n\nNinguno de estos estados trae APR/balance/límite explícitos (probablemente son CSV, o el PDF no los mostraba), y tampoco encontré cargos de interés en las transacciones. No inventes esos números — dile al usuario que suba el estado en PDF si los necesita."
+              : ""),
+        };
+      }
+
+      // Sin nombre_cuenta: resumen de TODAS las cuentas con al menos un estado subido.
+      const { data: todosLosEstados, error: errorTodos } = await supabase
+        .from("statement_uploads")
+        .select("id, origen, nombre_archivo, total_importadas, created_at, metadata_extraida, plaid_account_id, manual_account_id")
+        .eq("owner_id", ownerId)
+        .order("created_at", { ascending: false });
+
+      if (errorTodos) return { ok: false, message: `No se pudo consultar los estados subidos: ${errorTodos.message}` };
+      if (!todosLosEstados || todosLosEstados.length === 0) {
+        return { ok: true, message: "El usuario no tiene ningún estado de cuenta (CSV/PDF) subido todavía en ninguna cuenta." };
+      }
+
+      type FilaEstadoConCuenta = FilaEstado & { plaid_account_id: string | null; manual_account_id: string | null };
+      const porCuenta = new Map<string, FilaEstadoConCuenta>();
+      for (const e of todosLosEstados as FilaEstadoConCuenta[]) {
+        const clave = e.plaid_account_id ? `plaid:${e.plaid_account_id}` : `manual:${e.manual_account_id}`;
+        if (!porCuenta.has(clave)) porCuenta.set(clave, e); // ya viene ordenado desc, así que el primero es el más reciente
+      }
+
+      const idsPlaid = [...porCuenta.values()].map((e) => e.plaid_account_id).filter((v): v is string => !!v);
+      const idsManual = [...porCuenta.values()].map((e) => e.manual_account_id).filter((v): v is string => !!v);
+
+      const [{ data: nombresPlaid }, { data: nombresManual }] = await Promise.all([
+        idsPlaid.length > 0
+          ? supabase.from("plaid_accounts").select("plaid_account_id, name, nickname").in("plaid_account_id", idsPlaid)
+          : Promise.resolve({ data: [] as { plaid_account_id: string; name: string | null; nickname: string | null }[] }),
+        idsManual.length > 0
+          ? supabase.from("manual_accounts").select("id, name").in("id", idsManual)
+          : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
+      ]);
+
+      const mapaNombres = new Map<string, string>();
+      for (const c of nombresPlaid ?? []) mapaNombres.set(`plaid:${c.plaid_account_id}`, c.nickname || c.name || "Cuenta Plaid");
+      for (const c of nombresManual ?? []) mapaNombres.set(`manual:${c.id}`, c.name || "Cuenta manual");
+
+      const lineas = [...porCuenta.entries()].map(([clave, e]) => {
+        const label = mapaNombres.get(clave) || "Cuenta";
+        const meta = formatearMetadata(e.metadata_extraida);
+        const fecha = new Date(e.created_at).toLocaleDateString("es-PR");
+        return `"${label}" — más reciente ${fecha} (${e.origen.toUpperCase()})${meta ? `: ${meta}` : " — sin datos de tarjeta extraídos"}`;
+      });
+
+      return {
+        ok: true,
+        message: `Cuentas con estados de cuenta subidos:\n${lineas.join("\n")}\n\nPara el detalle completo o el respaldo de cargos de interés de una cuenta específica, vuelve a llamar esta herramienta con nombre_cuenta.`,
+      };
     }
 
     case "crear_cliente": {

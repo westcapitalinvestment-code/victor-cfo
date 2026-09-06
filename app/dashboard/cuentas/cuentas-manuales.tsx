@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
 import SubirEstado from "./subir-csv";
+import EstadosSubidosLista from "./estados-subidos";
 
 type CuentaManual = {
   id: string;
@@ -53,6 +54,9 @@ export default function CuentasManuales() {
   const [editandoBalanceId, setEditandoBalanceId] = useState<string | null>(null);
   const [nuevoBalance, setNuevoBalance] = useState("");
   const [subiendoCsvId, setSubiendoCsvId] = useState<string | null>(null);
+  // Historial de CSV/PDF ya subidos, con botón de borrar (migración 0072,
+  // 6 sept 2026) — ver misma nota en cuentas/page.tsx.
+  const [viendoEstadosId, setViendoEstadosId] = useState<string | null>(null);
 
   // Editar cuenta completa (nombre + tipo + balance) — separado del click
   // rápido sobre el balance de arriba, que sigue existiendo para el caso
@@ -270,6 +274,12 @@ export default function CuentasManuales() {
           </button>
           <button
             className="ml-3 mt-1 text-[11px] text-muted hover:opacity-80"
+            onClick={() => setViendoEstadosId(viendoEstadosId === c.id ? null : c.id)}
+          >
+            {viendoEstadosId === c.id ? "Ocultar historial" : "Ver estados subidos"}
+          </button>
+          <button
+            className="ml-3 mt-1 text-[11px] text-muted hover:opacity-80"
             onClick={() => (editandoCuentaId === c.id ? setEditandoCuentaId(null) : abrirEdicion(c))}
           >
             {editandoCuentaId === c.id ? "Cancelar" : "Editar"}
@@ -335,6 +345,7 @@ export default function CuentasManuales() {
               }}
             />
           )}
+          {viendoEstadosId === c.id && <EstadosSubidosLista origen="manual" cuentaId={c.id} />}
         </div>
       ))}
 

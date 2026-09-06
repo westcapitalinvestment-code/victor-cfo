@@ -3,6 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { costoEnCentavos } from "@/lib/costo-ia";
 import { fechaHoyPR } from "@/lib/hora-pr";
+import { subirArchivoR2 } from "@/lib/r2";
+import { randomUUID } from "crypto";
 
 // Un PDF de estado de cuenta no tiene columnas fijas como un CSV — cada
 // banco/tarjeta lo formatea distinto (BPPR no se parece a Citibank, y
@@ -25,7 +27,8 @@ const anthropic = new Anthropic({
 const HERRAMIENTA_EXTRAER = {
   name: "reportar_transacciones",
   description:
-    "Reporta la lista completa de transacciones individuales encontradas en el estado de cuenta.",
+    "Reporta la lista completa de transacciones individuales encontradas en el estado de cuenta, más un resumen " +
+    "del estado si el documento lo trae (típico de tarjetas de crédito: tasa de interés, balance, pago mínimo).",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -56,6 +59,39 @@ const HERRAMIENTA_EXTRAER = {
             },
           },
           required: ["fecha", "descripcion", "monto", "tipo"],
+        },
+      },
+      // Resumen del estado (6 sept 2026, pedido de Joel: que VICTOR pueda
+      // analizar balance e intereses de tarjetas de crédito) — casi todo
+      // estado de tarjeta trae estos datos en la primera página, aparte de
+      // la lista de transacciones. Todo opcional: un estado de cuenta de
+      // banco normal (checking/savings) casi nunca trae APR ni pago mínimo.
+      resumen_estado: {
+        type: "object" as const,
+        description:
+          "Datos de resumen del estado, SOLO si el documento los muestra explícitamente — no calcules ni " +
+          "inventes ninguno de estos campos, omite el campo si no aparece impreso en el documento.",
+        properties: {
+          apr: {
+            type: "string" as const,
+            description: "Tasa de interés anual (APR) tal como aparece impresa, ej. '24.99%'. Si hay varias (compras vs. avances), usa la de compras/purchases.",
+          },
+          balance_nuevo: {
+            type: "number" as const,
+            description: "'New Balance' / balance nuevo del estado — lo que se debe al cierre de este período.",
+          },
+          pago_minimo: {
+            type: "number" as const,
+            description: "'Minimum Payment Due' / pago mínimo requerido.",
+          },
+          limite_credito: {
+            type: "number" as const,
+            description: "'Credit Limit' / límite de crédito de la tarjeta.",
+          },
+          periodo: {
+            type: "string" as const,
+            description: "Período que cubre el estado, tal como aparece impreso (ej. '08/09/2026 - 09/08/2026').",
+          },
         },
       },
     },
@@ -166,7 +202,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const input = toolUse.input as { transacciones?: unknown[] };
+    const input = toolUse.input as {
+      transacciones?: unknown[];
+      resumen_estado?: { apr?: string; balance_nuevo?: number; pago_minimo?: number; limite_credito?: number; periodo?: string };
+    };
     const crudas = Array.isArray(input.transacciones) ? input.transacciones : [];
 
     // Convierte al mismo formato con signo que usa el resto de la app
@@ -193,7 +232,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ transacciones, totalEncontradas: transacciones.length });
+    // Limpia el resumen del estado (solo se guardan campos que Claude
+    // reportó de verdad — nunca inventamos ceros ni strings vacíos).
+    const resumen = input.resumen_estado;
+    const metadata =
+      resumen && (resumen.apr || resumen.balance_nuevo != null || resumen.pago_minimo != null || resumen.limite_credito != null || resumen.periodo)
+        ? {
+            ...(resumen.apr ? { apr: resumen.apr } : {}),
+            ...(resumen.balance_nuevo != null ? { balance_nuevo: resumen.balance_nuevo } : {}),
+            ...(resumen.pago_minimo != null ? { pago_minimo: resumen.pago_minimo } : {}),
+            ...(resumen.limite_credito != null ? { limite_credito: resumen.limite_credito } : {}),
+            ...(resumen.periodo ? { periodo: resumen.periodo } : {}),
+          }
+        : null;
+
+    // Guarda el PDF original en R2 (migración 0072, 6 sept 2026) — hasta hoy
+    // se mandaba a Claude y se descartaba. Se sube aquí, antes de que el
+    // usuario confirme el import, porque este es el único punto donde el
+    // servidor tiene los bytes; si el usuario cancela después de revisar,
+    // el archivo queda huérfano en R2 (aceptable — son PDFs pequeños, y es
+    // mucho más simple que reenviar el base64 completo otra vez en el paso
+    // de importar). r2Key viaja con la respuesta y el cliente lo reenvía
+    // tal cual al confirmar.
+    let r2Key: string | null = null;
+    try {
+      r2Key = `estados-cuenta/${user.id}/${randomUUID()}.pdf`;
+      await subirArchivoR2(r2Key, Buffer.from(pdfBase64, "base64"), "application/pdf");
+    } catch (err) {
+      console.error("No se pudo guardar el PDF original en R2 (no afecta la extracción):", err);
+      r2Key = null;
+    }
+
+    return NextResponse.json({ transacciones, totalEncontradas: transacciones.length, metadata, r2Key });
   } catch (err) {
     console.error("Error extrayendo transacciones de PDF:", err);
     return NextResponse.json(

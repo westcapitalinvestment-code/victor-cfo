@@ -18,6 +18,9 @@ export async function POST(req: NextRequest) {
   const origenCuenta: "plaid" | "manual" | undefined = body?.origenCuenta;
   const cuentaId: string | undefined = body?.cuentaId;
   const transacciones: unknown[] | undefined = body?.transacciones;
+  const nombreArchivo: string = body?.nombreArchivo || "estado.pdf";
+  const r2Key: string | null = body?.r2Key ?? null;
+  const metadata: Record<string, unknown> | null = body?.metadata ?? null;
 
   if (origenCuenta !== "plaid" && origenCuenta !== "manual") {
     return NextResponse.json({ error: "Falta indicar a qué tipo de cuenta va (plaid o manual)." }, { status: 400 });
@@ -59,15 +62,42 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Fila propia por subida (migración 0072) — mismo patrón que el import
+    // de CSV. Aquí el archivo ya está en R2 (subido en /pdf/extraer, antes
+    // de que el usuario revisara/confirmara), así que solo se referencia.
+    const { data: subida, error: errorSubida } = await supabase
+      .from("statement_uploads")
+      .insert({
+        owner_id: user.id,
+        origen_cuenta: origenCuenta,
+        plaid_account_id: origenCuenta === "plaid" ? cuentaId : null,
+        manual_account_id: origenCuenta === "manual" ? cuentaId : null,
+        origen: "pdf",
+        nombre_archivo: nombreArchivo,
+        r2_key: r2Key,
+        metadata_extraida: metadata,
+      })
+      .select("id")
+      .single();
+    if (errorSubida || !subida) {
+      throw new Error(errorSubida?.message || "No se pudo registrar la subida.");
+    }
+
     const { importadas, duplicadas } = await importarTransaccionesDedup(supabase, {
       ownerId: user.id,
       origenCuenta,
       cuentaId,
       origen: "pdf",
       filas: filasValidas,
+      statementUploadId: subida.id,
     });
 
-    return NextResponse.json({ importadas, duplicadas, errores });
+    await supabase
+      .from("statement_uploads")
+      .update({ total_importadas: importadas, total_duplicadas: duplicadas })
+      .eq("id", subida.id);
+
+    return NextResponse.json({ importadas, duplicadas, errores, statementUploadId: subida.id });
   } catch (err) {
     return NextResponse.json(
       { error: `No se pudo importar: ${err instanceof Error ? err.message : "error desconocido"}` },
