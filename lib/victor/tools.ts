@@ -1958,13 +1958,15 @@ export async function executeVictorTool(
         ok: true,
         message:
           `Confirmado en vivo sobre el uso de IA de este usuario:\n${partes.map((p) => `- ${p}`).join("\n")}\n\n` +
-          `Usa estos números tal cual para contestar — no inventes cifras. Si pregunta CÓMO funciona el sistema ` +
-          `en general, explícale con estas ideas (en tus propias palabras, sin sonar a copia-pega): esto NO es un ` +
-          `conteo de "tokens" como en ChatGPT — es un presupuesto de GASTO real en dólares por ciclo de ` +
-          `facturación (el mismo ciclo mensual que se le cobra el plan), repartido a ritmo parejo durante el ` +
-          `ciclo para que no se le acabe todo de golpe al principio. Si lo agota, VICTOR nunca lo deja sin poder ` +
-          `hablar del todo — sigue funcionando pero limitado a 1 mensaje por hora hasta que se renueve el ciclo. ` +
-          `Puede subir de plan o comprar créditos extra de IA desde Configuración si necesita más antes de eso.`,
+          `Usa estos números tal cual para contestar — no inventes cifras. IMPORTANTE: sé transparente SIEMPRE, no ` +
+          `solo si pregunta explícitamente "cómo funciona" — aunque solo haya preguntado cuánto le queda, ` +
+          `explícale también brevemente cómo funciona el sistema en la misma respuesta (en tus propias palabras, ` +
+          `sin sonar a copia-pega): esto NO es un conteo de "tokens" como en ChatGPT — es un presupuesto de GASTO ` +
+          `real en dólares por ciclo de facturación (el mismo ciclo mensual que se le cobra el plan), repartido a ` +
+          `ritmo parejo durante el ciclo para que no se le acabe todo de golpe al principio. Si lo agota, VICTOR ` +
+          `nunca lo deja sin poder hablar del todo — sigue funcionando pero limitado a 1 mensaje por hora hasta ` +
+          `que se renueve el ciclo. Puede subir de plan o comprar créditos extra de IA desde Configuración si ` +
+          `necesita más antes de eso.`,
       };
     }
 
