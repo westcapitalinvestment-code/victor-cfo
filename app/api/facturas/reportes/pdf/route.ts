@@ -228,7 +228,7 @@ export async function GET(req: NextRequest) {
     encabezadoSeccion("Cuadre de recaudo (facturas cobradas)");
     filaTabla("Facturación bruta cobrada", formatMoney(brutoCobrado));
     if (totalRetenido > 0) filaTabla("Retenciones en la fuente", `-${formatMoney(totalRetenido)}`, { color: rgb(0.83, 0.62, 0.05) });
-    filaTabla("Recaudado (cuentas por cobrar)", formatMoney(totalCobrado));
+    filaTabla("Recaudado (neto de retención)", formatMoney(totalCobrado));
     if (gastoProcesamiento > 0) filaTabla("Comisiones de pasarela (ATH/Stripe)", `-${formatMoney(gastoProcesamiento)}`, { color: rgb(0.83, 0.62, 0.05) });
     filaTabla("Depósito neto en banco", formatMoney(depositoNetoBanco), { bold: true, color: teal });
   }

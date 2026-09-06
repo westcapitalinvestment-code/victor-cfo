@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
 
   const buffer = await generarReporteExcel({
     tituloEmpresa: nombreTitular,
-    tituloReporte: "Reporte de Gastos",
+    tituloReporte: "Reporte de Ingresos/Gastos",
     periodo: desde || hasta ? `${desde ? formatFecha(desde) : "inicio"} — ${hasta ? formatFecha(hasta) : "hoy"}` : "Historial completo",
     logo,
     resumen: [

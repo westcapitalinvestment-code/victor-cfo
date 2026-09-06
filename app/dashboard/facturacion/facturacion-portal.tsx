@@ -1801,6 +1801,14 @@ function ReportesTab({
             Limpiar
           </button>
           <a
+            href={pdfHref}
+            target="_blank"
+            rel="noreferrer"
+            className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-teal px-3 text-xs font-medium text-teal hover:opacity-80"
+          >
+            <i className="ti ti-file-text" /> PDF
+          </a>
+          <a
             href={excelHref}
             className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-teal px-3 text-xs font-medium text-teal hover:opacity-80"
           >
@@ -1939,7 +1947,7 @@ function ReportesTab({
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Cuadre de recaudo (facturas cobradas)</p>
           <FilaResumen label="Facturación bruta cobrada" valor={formatMoney(brutoCobrado)} />
           {totalRetenido > 0 && <FilaResumen label="Retenciones en la fuente" valor={`-${formatMoney(totalRetenido)}`} tono="a" />}
-          <FilaResumen label="Recaudado (cuentas por cobrar)" valor={formatMoney(totalCobrado)} />
+          <FilaResumen label="Recaudado (neto de retención)" valor={formatMoney(totalCobrado)} />
           {gastoProcesamientoPeriodo > 0 && (
             <FilaResumen label="Comisiones de pasarela (ATH/Stripe)" valor={`-${formatMoney(gastoProcesamientoPeriodo)}`} tono="a" />
           )}

@@ -162,7 +162,7 @@ export async function GET(req: NextRequest) {
   const xTexto = logoImg ? margin + logoDims.width + 14 : margin;
   texto(nombreTitular, xTexto, y, { f: bold, size: 16 });
   y -= 18;
-  texto("Reporte de Gastos", xTexto, y, { size: 11, color: gris });
+  texto("Reporte de Ingresos/Gastos", xTexto, y, { size: 11, color: gris });
   y -= 14;
   const periodoTexto = desde || hasta ? `Período: ${desde ? formatFecha(desde) : "inicio"} — ${hasta ? formatFecha(hasta) : "hoy"}` : "Período: historial completo";
   texto(periodoTexto, xTexto, y, { size: 9, color: gris });
