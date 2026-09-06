@@ -6,6 +6,9 @@ import { buscarConocimiento } from "@/lib/victor/conocimiento-financiero";
 import { buscarIdentidadCultural } from "@/lib/victor/identidad-cultural";
 import { direccionCategoriaValida } from "@/lib/direccion-categoria";
 import { fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
+import { claveCicloUso, progresoCicloUso } from "@/lib/ciclo-uso";
+import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
+import { esFounder } from "@/lib/founder";
 
 // El texto real del banco (description_raw) casi nunca coincide palabra
 // por palabra con cómo el usuario describe una transacción en el chat —
@@ -297,6 +300,24 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "que VICTOR no tenía forma de ver esto y adivinaba o decía que no sabía. Devuelve: su link personal, " +
       "cuántos referidos ya generaron crédito y el total acumulado este año calendario, el tope anual según " +
       "su plan y cuánto le queda disponible, y si él fue referido por alguien más.",
+    input_schema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "verificar_uso_ia",
+    description:
+      "Consulta en vivo cuánto presupuesto de IA (el 'tope de uso' de VICTOR) le queda al usuario en su ciclo de " +
+      "facturación actual. OBLIGATORIO: llama esta herramienta SIEMPRE que el usuario pregunte cuántos 'tokens' o " +
+      "mensajes le quedan, cuánto ha gastado hablando con VICTOR, por qué VICTOR lo limitó o le puso un aviso, o " +
+      "cómo funciona el sistema de límites en general — NUNCA contestes esas preguntas de memoria ni inventes un " +
+      "número; ya ha pasado que VICTOR no tenía forma de ver esto y admitía no saber. Devuelve el plan actual, el " +
+      "presupuesto total del ciclo (incluyendo créditos extra comprados si aplica), cuánto lleva gastado, cuánto " +
+      "le queda disponible, y en qué punto del ciclo de facturación está. Úsala también de forma PROACTIVA — si " +
+      "ves en tu contexto que el usuario está en estado 'aviso' o 'restringido_hora', puedes ofrecer explicarle " +
+      "sin que pregunte.",
     input_schema: {
       type: "object",
       properties: {},
@@ -1846,6 +1867,104 @@ export async function executeVictorTool(
         message:
           `Confirmado en vivo sobre el programa de referidos (Victor-a-Victor):\n${partes.map((p) => `- ${p}`).join("\n")}\n\n` +
           `Usa estos datos tal cual para contestar — no inventes montos ni digas que no tienes forma de verlo.`,
+      };
+    }
+
+    case "verificar_uso_ia": {
+      // 5 sept 2026 — Joel vio una conversación real donde un usuario le
+      // preguntó a VICTOR cuántos "tokens" le quedaban y VICTOR no tenía
+      // forma de verlo ni de explicar cómo funciona el sistema — pidió
+      // explícitamente que se le diera esta visibilidad, igual que ya se
+      // hizo con cuentas conectadas y el programa de referidos. Reusa
+      // exactamente el mismo cálculo (mismas tablas, mismo ritmo-parejo)
+      // que app/api/victor/route.ts usa para decidir si el turno se
+      // bloquea — si eso cambia allá, hay que cambiarlo aquí también.
+      const { data: yo, error: errorYo } = await supabase
+        .from("users")
+        .select("plan, email, ciclo_inicio, ciclo_fin")
+        .eq("id", ownerId)
+        .maybeSingle();
+      if (errorYo || !yo) {
+        return { ok: false, message: "No se pudo verificar el uso de IA en este momento." };
+      }
+
+      if (esFounder(yo.email)) {
+        return {
+          ok: true,
+          message:
+            "Este usuario es el founder de VICTOR CFO — no tiene tope de gasto de IA aplicado (uso libre para " +
+            "poder probar la app). No hace falta explicarle un límite que no le aplica a él, salvo que pregunte " +
+            "específicamente cómo funciona el sistema para los demás usuarios.",
+        };
+      }
+
+      // OJO: este cálculo tiene que ser un espejo EXACTO del gate real en
+      // app/api/victor/route.ts (ritmo-parejo + umbral de 85% para "aviso"
+      // + PRESUPUESTO_MINIMO_CENTAVOS) — si los dos divergen, VICTOR le
+      // podría decir a alguien que está bien cuando en realidad ya está en
+      // "aviso" o "restringido_hora", o viceversa. Si ese archivo cambia
+      // estos números, hay que actualizarlos aquí también.
+      const PRESUPUESTO_MINIMO_CENTAVOS = 100;
+      const cicloClave = claveCicloUso(yo);
+      const { diaDelPeriodo, diasEnElPeriodo } = progresoCicloUso(yo);
+      const planActual = yo.plan ?? "core";
+      const limiteMensual = LIMITES_MENSUALES_CENTAVOS[planActual] ?? LIMITES_MENSUALES_CENTAVOS.core;
+
+      const [{ data: usoCiclo }, { data: creditosCiclo }] = await Promise.all([
+        supabase.from("uso_ia_mensual").select("costo_centavos").eq("owner_id", ownerId).eq("ciclo_clave", cicloClave).maybeSingle(),
+        supabase.from("creditos_ia_ciclo").select("credito_centavos").eq("owner_id", ownerId).eq("ciclo_clave", cicloClave).maybeSingle(),
+      ]);
+
+      const costoCicloHastaAhora = Number(usoCiclo?.costo_centavos ?? 0);
+      const creditosCicloCentavos = Number(creditosCiclo?.credito_centavos ?? 0);
+      const presupuestoHastaHoy =
+        Math.max((limiteMensual * diaDelPeriodo) / diasEnElPeriodo, PRESUPUESTO_MINIMO_CENTAVOS) + creditosCicloCentavos;
+      const presupuestoTotalCiclo = limiteMensual + creditosCicloCentavos;
+      const disponibleHoy = Math.max(0, presupuestoHastaHoy - costoCicloHastaAhora);
+      const pctUsadoDelCiclo = presupuestoTotalCiclo > 0 ? Math.round((costoCicloHastaAhora / presupuestoTotalCiclo) * 100) : 0;
+      const diasRestantes = Math.max(0, diasEnElPeriodo - diaDelPeriodo);
+      const nombrePlan = planActual === "pro" ? "Pro" : "Core";
+
+      let estado: "normal" | "aviso" | "restringido_hora" = "normal";
+      if (costoCicloHastaAhora >= presupuestoHastaHoy) estado = "restringido_hora";
+      else if (costoCicloHastaAhora >= presupuestoHastaHoy * 0.85) estado = "aviso";
+
+      const partes: string[] = [];
+      partes.push(`Plan actual: ${nombrePlan}.`);
+      partes.push(
+        `Presupuesto de todo este ciclo de facturación: $${(limiteMensual / 100).toFixed(2)}` +
+          (creditosCicloCentavos > 0
+            ? ` + $${(creditosCicloCentavos / 100).toFixed(2)} en créditos extra comprados = $${(presupuestoTotalCiclo / 100).toFixed(2)} total.`
+            : ".")
+      );
+      partes.push(
+        `Lleva gastado $${(costoCicloHastaAhora / 100).toFixed(2)} en lo que va de este ciclo (${pctUsadoDelCiclo}% del presupuesto total del ciclo).`
+      );
+      partes.push(
+        `Le queda disponible AHORA MISMO $${(disponibleHoy / 100).toFixed(2)} — este número ya tiene en cuenta que el presupuesto se reparte a ritmo parejo durante el ciclo (no todo se libera desde el día 1), así que puede ser menor que el total del ciclo si aún faltan días por correr.`
+      );
+      partes.push(
+        `Va en el día ${diaDelPeriodo} de ${diasEnElPeriodo} de este ciclo de facturación — le quedan ${diasRestantes} día(s) antes de que se renueve y el presupuesto vuelva a empezar.`
+      );
+      partes.push(
+        estado === "normal"
+          ? "Estado actual: normal, sin restricción."
+          : estado === "aviso"
+            ? "Estado actual: aviso — ya pasó el 85% de lo que le toca gastado hasta hoy, pero todavía puede seguir hablando sin límite de mensajes."
+            : "Estado actual: restringido — ya llegó o pasó su presupuesto de hoy, así que está limitado a 1 mensaje por hora hasta que se renueve el ciclo (o hasta que pase una hora desde su último mensaje)."
+      );
+
+      return {
+        ok: true,
+        message:
+          `Confirmado en vivo sobre el uso de IA de este usuario:\n${partes.map((p) => `- ${p}`).join("\n")}\n\n` +
+          `Usa estos números tal cual para contestar — no inventes cifras. Si pregunta CÓMO funciona el sistema ` +
+          `en general, explícale con estas ideas (en tus propias palabras, sin sonar a copia-pega): esto NO es un ` +
+          `conteo de "tokens" como en ChatGPT — es un presupuesto de GASTO real en dólares por ciclo de ` +
+          `facturación (el mismo ciclo mensual que se le cobra el plan), repartido a ritmo parejo durante el ` +
+          `ciclo para que no se le acabe todo de golpe al principio. Si lo agota, VICTOR nunca lo deja sin poder ` +
+          `hablar del todo — sigue funcionando pero limitado a 1 mensaje por hora hasta que se renueve el ciclo. ` +
+          `Puede subir de plan o comprar créditos extra de IA desde Configuración si necesita más antes de eso.`,
       };
     }
 
