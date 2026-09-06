@@ -1,20 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { generarReporteExcel, cargarLogoExcel, ColumnaReporte, FilaTotal } from "@/lib/reporte-excel";
+import { formatFecha, slugificar } from "@/lib/format";
 
-// CSV descargable del tab Reportes de Facturación (2 sept 2026) — calcado
-// del botón "CSV" del mockup. Igual que /api/transacciones/exportar: se
-// vuelve a calcular todo server-side a partir de los mismos filtros que
-// aplicó la pantalla (desde/hasta/clienteId/servicioId/categoria/estado/
-// email/vista), en vez de mandar por query las filas ya armadas — así el
-// link es corto y siempre refleja los datos reales, no lo que había en
-// pantalla en el momento de hacer clic.
-function escaparCsv(valor: string): string {
-  if (valor.includes(",") || valor.includes('"') || valor.includes("\n")) {
-    return `"${valor.replace(/"/g, '""')}"`;
-  }
-  return valor;
-}
-
+// Excel descargable del tab Reportes de Facturación — antes era un CSV
+// plano (mismos datos, sin ningún estilo); Joel lo subió como ejemplo de
+// "reporte que da pena" (5 sept 2026) al lado de la app, que sí se ve
+// impecable. Se reemplaza por .xlsx con la misma identidad visual del PDF
+// de este mismo tab (teal, totales en negrita, marca VICTOR CFO al pie) —
+// ver lib/reporte-excel.ts. La lógica de datos (mismos filtros/vistas que
+// aplicó la pantalla) es igual a la del CSV original, solo cambia cómo se
+// escribe el archivo.
 function estaVencida(estado: string, fechaVencimiento: string | null): boolean {
   return estado !== "pagada" && estado !== "borrador" && !!fechaVencimiento && fechaVencimiento < new Date().toISOString().slice(0, 10);
 }
@@ -46,7 +42,7 @@ export async function GET(req: NextRequest) {
 
   let facturasQuery = supabase
     .from("invoices")
-    .select("id, numero, subtotal, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, fecha_pago, client_id, clients(name, email)")
+    .select("id, numero, subtotal, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name, email)")
     .eq("owner_id", user.id)
     .neq("estado", "borrador")
     .gte("fecha_emision", desde)
@@ -60,6 +56,13 @@ export async function GET(req: NextRequest) {
   let facturas = (facturasData ?? []) as any[];
   if (estadoFiltro) facturas = facturas.filter((f) => estadoMostrado(f.estado, f.fecha_vencimiento) === estadoFiltro);
   if (email) facturas = facturas.filter((f) => (f.clients?.email ?? "").toLowerCase().includes(email.toLowerCase()));
+
+  const { data: entidad } = entityId
+    ? await supabase.from("business_entities").select("name, logo_r2_key").eq("id", entityId).eq("owner_id", user.id).maybeSingle()
+    : { data: null };
+  const { data: owner } = entityId ? { data: null } : await supabase.from("users").select("full_name").eq("id", user.id).maybeSingle();
+  const nombreTitular = entidad?.name || owner?.full_name || "VICTOR CFO";
+  const logo = await cargarLogoExcel(entidad?.logo_r2_key);
 
   const idsFacturas = facturas.map((f) => f.id);
 
@@ -76,10 +79,25 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const filas: string[] = [];
+  const TITULOS_VISTA: Record<string, string> = {
+    cliente: "Reporte de Facturación — Por cliente",
+    servicio: "Reporte de Facturación — Por servicio",
+    categoria: "Reporte de Facturación — Por categoría",
+    clienteServicio: "Reporte de Facturación — Cliente + servicio",
+    retenciones: "Reporte de Facturación — Retenciones SURI",
+    flujo: "Reporte de Facturación — Flujo de cobro",
+  };
+
+  let columnas: ColumnaReporte[] = [];
+  let filas: Record<string, string | number>[] = [];
+  let totales: FilaTotal[] = [];
 
   if (vista === "servicio") {
-    filas.push(["Servicio", "Líneas", "Total"].join(","));
+    columnas = [
+      { header: "Servicio", key: "nombre", width: 40 },
+      { header: "Líneas", key: "count", width: 12, numero: true },
+      { header: "Total", key: "total", width: 16, moneda: true },
+    ];
     const mapa = new Map<string, { nombre: string; total: number; count: number }>();
     for (const it of items) {
       const key = it.service_id ?? `desc:${it.descripcion}`;
@@ -90,11 +108,18 @@ export async function GET(req: NextRequest) {
       actual.count += 1;
       mapa.set(key, actual);
     }
-    for (const s of [...mapa.values()].sort((a, b) => b.total - a.total)) {
-      filas.push([escaparCsv(s.nombre), String(s.count), s.total.toFixed(2)].join(","));
-    }
+    const lista = [...mapa.values()].sort((a, b) => b.total - a.total);
+    filas = lista.map((s) => ({ nombre: s.nombre, count: s.count, total: s.total }));
+    totales = [
+      { key: "count", valor: lista.reduce((s, x) => s + x.count, 0) },
+      { key: "total", valor: lista.reduce((s, x) => s + x.total, 0) },
+    ];
   } else if (vista === "categoria") {
-    filas.push(["Categoría", "Líneas", "Total"].join(","));
+    columnas = [
+      { header: "Categoría", key: "tipo", width: 32 },
+      { header: "Líneas", key: "count", width: 12, numero: true },
+      { header: "Total", key: "total", width: 16, moneda: true },
+    ];
     const mapa = new Map<string, { total: number; count: number }>();
     for (const it of items) {
       const key = it.services?.tipo ?? "Sin categoría";
@@ -103,11 +128,18 @@ export async function GET(req: NextRequest) {
       actual.count += 1;
       mapa.set(key, actual);
     }
-    for (const [tipo, c] of [...mapa.entries()].sort((a, b) => b[1].total - a[1].total)) {
-      filas.push([escaparCsv(tipo), String(c.count), c.total.toFixed(2)].join(","));
-    }
+    const lista = [...mapa.entries()].sort((a, b) => b[1].total - a[1].total);
+    filas = lista.map(([tipo, c]) => ({ tipo, count: c.count, total: c.total }));
+    totales = [
+      { key: "count", valor: lista.reduce((s, [, c]) => s + c.count, 0) },
+      { key: "total", valor: lista.reduce((s, [, c]) => s + c.total, 0) },
+    ];
   } else if (vista === "clienteServicio") {
-    filas.push(["Cliente", "Servicio", "Total"].join(","));
+    columnas = [
+      { header: "Cliente", key: "cliente", width: 32 },
+      { header: "Servicio", key: "servicio", width: 32 },
+      { header: "Total", key: "total", width: 16, moneda: true },
+    ];
     const facturaPorId = new Map(facturas.map((f) => [f.id, f]));
     const mapa = new Map<string, { cliente: string; servicio: string; total: number }>();
     for (const it of items) {
@@ -119,11 +151,17 @@ export async function GET(req: NextRequest) {
       actual.total += Number(it.subtotal_linea ?? it.cantidad * it.precio_unitario);
       mapa.set(key, actual);
     }
-    for (const r of [...mapa.values()].sort((a, b) => b.total - a.total)) {
-      filas.push([escaparCsv(r.cliente), escaparCsv(r.servicio), r.total.toFixed(2)].join(","));
-    }
+    const lista = [...mapa.values()].sort((a, b) => b.total - a.total);
+    filas = lista.map((r) => ({ cliente: r.cliente, servicio: r.servicio, total: r.total }));
+    totales = [{ key: "total", valor: lista.reduce((s, x) => s + x.total, 0) }];
   } else if (vista === "retenciones") {
-    filas.push(["Cliente", "Facturas pagadas", "% retención", "Facturado", "Retenido"].join(","));
+    columnas = [
+      { header: "Cliente", key: "nombre", width: 32 },
+      { header: "Facturas pagadas", key: "count", width: 16, numero: true },
+      { header: "% retención", key: "pctTexto", width: 12 },
+      { header: "Facturado", key: "facturado", width: 16, moneda: true },
+      { header: "Retenido", key: "retenido", width: 16, moneda: true },
+    ];
     const mapa = new Map<string, { nombre: string; retenido: number; facturado: number; pct: number; count: number }>();
     for (const f of facturas) {
       if (f.estado !== "pagada") continue;
@@ -136,11 +174,19 @@ export async function GET(req: NextRequest) {
       actual.count += 1;
       mapa.set(nombre, actual);
     }
-    for (const c of [...mapa.values()].sort((a, b) => b.retenido - a.retenido)) {
-      filas.push([escaparCsv(c.nombre), String(c.count), `${c.pct}%`, c.facturado.toFixed(2), c.retenido.toFixed(2)].join(","));
-    }
+    const lista = [...mapa.values()].sort((a, b) => b.retenido - a.retenido);
+    filas = lista.map((c) => ({ nombre: c.nombre, count: c.count, pctTexto: `${c.pct}%`, facturado: c.facturado, retenido: c.retenido }));
+    totales = [
+      { key: "count", valor: lista.reduce((s, x) => s + x.count, 0) },
+      { key: "facturado", valor: lista.reduce((s, x) => s + x.facturado, 0) },
+      { key: "retenido", valor: lista.reduce((s, x) => s + x.retenido, 0) },
+    ];
   } else if (vista === "flujo") {
-    filas.push(["Mes", "Facturado", "Cobrado"].join(","));
+    columnas = [
+      { header: "Mes", key: "mes", width: 16 },
+      { header: "Facturado", key: "facturado", width: 16, moneda: true },
+      { header: "Cobrado", key: "cobrado", width: 16, moneda: true },
+    ];
     const mapa = new Map<string, { facturado: number; cobrado: number }>();
     for (const f of facturas) {
       const mes = String(f.fecha_emision).slice(0, 7);
@@ -148,22 +194,27 @@ export async function GET(req: NextRequest) {
       actual.facturado += Number(f.subtotal);
       mapa.set(mes, actual);
     }
-    // "Cobrado" por el mes real del pago (fecha_pago), no el de emisión —
-    // mismo fix que ReportesTab (2 sept 2026). Fallback a fecha_emision
-    // para facturas pagadas antes de que existiera este campo.
     for (const f of facturas) {
       if (f.estado !== "pagada") continue;
-      const mesCobro = String(f.fecha_pago ?? f.fecha_emision).slice(0, 7);
+      const mesCobro = String((f as any).fecha_pago ?? f.fecha_emision).slice(0, 7);
       const actual = mapa.get(mesCobro) ?? { facturado: 0, cobrado: 0 };
       actual.cobrado += Number(f.total);
       mapa.set(mesCobro, actual);
     }
-    for (const [mes, m] of [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-      filas.push([mes, m.facturado.toFixed(2), m.cobrado.toFixed(2)].join(","));
-    }
+    const lista = [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    filas = lista.map(([mes, m]) => ({ mes, facturado: m.facturado, cobrado: m.cobrado }));
+    totales = [
+      { key: "facturado", valor: lista.reduce((s, [, m]) => s + m.facturado, 0) },
+      { key: "cobrado", valor: lista.reduce((s, [, m]) => s + m.cobrado, 0) },
+    ];
   } else {
     // "cliente" (default)
-    filas.push(["Cliente", "Facturas", "Facturado", "Cobrado"].join(","));
+    columnas = [
+      { header: "Cliente", key: "nombre", width: 32 },
+      { header: "Facturas", key: "count", width: 12, numero: true },
+      { header: "Facturado", key: "facturado", width: 16, moneda: true },
+      { header: "Cobrado", key: "cobrado", width: 16, moneda: true },
+    ];
     const mapa = new Map<string, { nombre: string; facturado: number; cobrado: number; count: number }>();
     for (const f of facturas) {
       const nombre = f.clients?.name ?? "Sin cliente";
@@ -173,18 +224,32 @@ export async function GET(req: NextRequest) {
       actual.count += 1;
       mapa.set(nombre, actual);
     }
-    for (const c of [...mapa.values()].sort((a, b) => b.facturado - a.facturado)) {
-      filas.push([escaparCsv(c.nombre), String(c.count), c.facturado.toFixed(2), c.cobrado.toFixed(2)].join(","));
-    }
+    const lista = [...mapa.values()].sort((a, b) => b.facturado - a.facturado);
+    filas = lista.map((c) => ({ nombre: c.nombre, count: c.count, facturado: c.facturado, cobrado: c.cobrado }));
+    totales = [
+      { key: "count", valor: lista.reduce((s, x) => s + x.count, 0) },
+      { key: "facturado", valor: lista.reduce((s, x) => s + x.facturado, 0) },
+      { key: "cobrado", valor: lista.reduce((s, x) => s + x.cobrado, 0) },
+    ];
   }
 
-  const csv = filas.join("\n");
-  const nombreArchivo = `victor-cfo-reporte-${vista}_${desde}_a_${hasta}.csv`;
+  const buffer = await generarReporteExcel({
+    tituloEmpresa: nombreTitular,
+    tituloReporte: TITULOS_VISTA[vista] ?? "Reporte de Facturación",
+    periodo: `${formatFecha(desde)} — ${formatFecha(hasta)}`,
+    logo,
+    columnas,
+    filas,
+    totales,
+    nombreHoja: "Facturación",
+  });
 
-  return new NextResponse(csv, {
+  const nombreArchivo = `${slugificar(nombreTitular)}-facturacion-${vista}_${desde}_a_${hasta}.xlsx`;
+
+  return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${nombreArchivo}"`,
     },
   });

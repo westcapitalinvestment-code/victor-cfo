@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney, formatFecha } from "@/lib/format";
+import { descargarBytesR2 } from "@/lib/r2";
+import { formatMoney, formatFecha, slugificar } from "@/lib/format";
 
 // PDF del reporte de Facturación (2 sept 2026) — a diferencia del CSV (que
 // exporta la tabla exacta de la "vista" activa), este PDF es un resumen fijo
@@ -51,8 +52,10 @@ export async function GET(req: NextRequest) {
   if (email) facturas = facturas.filter((f) => (f.clients?.email ?? "").toLowerCase().includes(email.toLowerCase()));
 
   const { data: entidad } = entityId
-    ? await supabase.from("business_entities").select("name").eq("id", entityId).eq("owner_id", user.id).maybeSingle()
+    ? await supabase.from("business_entities").select("name, logo_r2_key").eq("id", entityId).eq("owner_id", user.id).maybeSingle()
     : { data: null };
+  const { data: owner } = entityId ? { data: null } : await supabase.from("users").select("full_name").eq("id", user.id).maybeSingle();
+  const nombreTitular = entidad?.name || owner?.full_name || "VICTOR CFO";
 
   // pATH de ATH Móvil Business configurado, para el mismo gate de fee que
   // usa la pantalla (ver facturacion-portal.tsx: feeProcesamiento) — este
@@ -145,6 +148,22 @@ export async function GET(req: NextRequest) {
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
+  // Logo de la entidad (pedido de Joel, 5 sept 2026: "el logo de la entidad
+  // también, como la factura") — mismo patrón que app/api/facturas/[id]/pdf:
+  // si no hay logo subido, simplemente no se dibuja nada.
+  let logoImg = null;
+  let logoDims = { width: 0, height: 0 };
+  if (entidad?.logo_r2_key) {
+    try {
+      const bytes = await descargarBytesR2(entidad.logo_r2_key);
+      logoImg = entidad.logo_r2_key.endsWith(".png") ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
+      const escala = Math.min(120 / logoImg.width, 44 / logoImg.height, 1);
+      logoDims = { width: logoImg.width * escala, height: logoImg.height * escala };
+    } catch (err) {
+      console.error("No se pudo incrustar el logo en el PDF de reportes:", err);
+    }
+  }
+
   const margin = 50;
   const width = 612;
   const teal = rgb(0.114, 0.62, 0.459);
@@ -185,12 +204,17 @@ export async function GET(req: NextRequest) {
     y -= 15;
   }
 
-  texto(entidad?.name || "VICTOR CFO", margin, y, { f: bold, size: 16 });
+  if (logoImg) {
+    page.drawImage(logoImg, { x: margin, y: y - logoDims.height, width: logoDims.width, height: logoDims.height });
+  }
+  const xTexto = logoImg ? margin + logoDims.width + 14 : margin;
+  texto(nombreTitular, xTexto, y, { f: bold, size: 16 });
   y -= 18;
-  texto("Reporte de Facturación", margin, y, { size: 11, color: gris });
+  texto("Reporte de Facturación", xTexto, y, { size: 11, color: gris });
   y -= 14;
-  texto(`Período: ${formatFecha(desde)} — ${formatFecha(hasta)}`, margin, y, { size: 9, color: gris });
+  texto(`Período: ${formatFecha(desde)} — ${formatFecha(hasta)}`, xTexto, y, { size: 9, color: gris });
   y -= 6;
+  if (logoImg) y = Math.min(y, 792 - margin - logoDims.height - 6);
   page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1.5, color: teal });
   y -= 24;
 
@@ -239,11 +263,22 @@ export async function GET(req: NextRequest) {
     filaTabla("Total retenido (crédito en Hacienda)", formatMoney(totalRetenido), { bold: true, color: teal });
   }
 
+  // Marca al pie de cada página (pedido de Joel, 5 sept 2026: "ponle la
+  // marca de Victor para que el que vea el reporte bonito lo quiera") —
+  // este PDF es lo que Joel le manda a clientes/CPA, así que es el mejor
+  // vehículo de marca que tiene la app.
+  for (const p of pdf.getPages()) {
+    const marca = "Generado con VICTOR CFO  ·  victorcfo.com";
+    const size = 8;
+    const w = font.widthOfTextAtSize(marca, size);
+    p.drawText(marca, { x: (width - w) / 2, y: 24, size, font, color: gris });
+  }
+
   const bytes = await pdf.save();
   return new NextResponse(Buffer.from(bytes), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="reporte-facturacion_${desde}_a_${hasta}.pdf"`,
+      "Content-Disposition": `inline; filename="${slugificar(nombreTitular)}-facturacion_${desde}_a_${hasta}.pdf"`,
     },
   });
 }

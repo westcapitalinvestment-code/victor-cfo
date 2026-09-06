@@ -23,3 +23,17 @@ export function formatFecha(fechaISO: string | null | undefined): string {
   if (!anio || !mes || !dia) return fechaISO;
   return `${mes}/${dia}/${anio}`;
 }
+
+// Para nombres de archivo de reportes descargables (pedido de Joel, 5 sept
+// 2026: que el archivo salga con el nombre de la persona o la entidad, no
+// un genérico "victor-cfo-gastos.xlsx") — quita acentos/ñ, deja solo
+// alfanumérico y guiones, todo en minúscula.
+export function slugificar(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}

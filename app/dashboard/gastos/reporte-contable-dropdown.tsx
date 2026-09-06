@@ -35,7 +35,7 @@ export default function ReporteContableDropdown({ rangos, entityId }: { rangos: 
         ↓ Reporte para tu contable ▾
       </button>
       {open && (
-        <div className="vc-card absolute left-0 top-9 z-10 flex w-72 flex-col gap-1">
+        <div className="vc-card absolute left-0 top-9 z-10 flex w-80 flex-col gap-1">
           {rangos.map((r) => {
             const params = new URLSearchParams();
             if (r.desde) params.set("desde", r.desde);
@@ -43,17 +43,21 @@ export default function ReporteContableDropdown({ rangos, entityId }: { rangos: 
             if (entityId) params.set("entityId", entityId);
             const qs = params.toString();
             return (
-              <a
-                key={r.label}
-                href={`/api/transacciones/exportar${qs ? `?${qs}` : ""}`}
-                className="rounded-lg px-2 py-1.5 text-left text-xs text-muted hover:bg-teal/[.08] hover:text-teal"
-              >
-                ↓ {r.label}
-              </a>
+              <div key={r.label} className="flex items-center justify-between rounded-lg px-2 py-1.5 text-xs text-muted hover:bg-teal/[.08]">
+                <span>↓ {r.label}</span>
+                <span className="flex flex-shrink-0 gap-2">
+                  <a href={`/api/transacciones/exportar/excel${qs ? `?${qs}` : ""}`} className="font-medium hover:text-teal">
+                    Excel
+                  </a>
+                  <a href={`/api/transacciones/exportar/pdf${qs ? `?${qs}` : ""}`} className="font-medium hover:text-teal">
+                    PDF
+                  </a>
+                </span>
+              </div>
             );
           })}
           <div className="my-1 h-px bg-border" />
-          <form method="GET" action="/api/transacciones/exportar" className="flex flex-col gap-2 px-2 pb-1">
+          <form method="GET" action="/api/transacciones/exportar/excel" className="flex flex-col gap-2 px-2 pb-1">
             {entityId && <input type="hidden" name="entityId" value={entityId} />}
             <p className="text-xs uppercase tracking-wide text-muted">Rango personalizado</p>
             <div>
@@ -64,9 +68,14 @@ export default function ReporteContableDropdown({ rangos, entityId }: { rangos: 
               <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Hasta</label>
               <input className="vc-input" type="date" name="hasta" required />
             </div>
-            <button type="submit" className="vc-btn-primary mt-1">
-              Descargar
-            </button>
+            <div className="mt-1 flex gap-2">
+              <button type="submit" formAction="/api/transacciones/exportar/excel" className="vc-btn-primary flex-1">
+                Excel
+              </button>
+              <button type="submit" formAction="/api/transacciones/exportar/pdf" className="flex-1 rounded-lg border border-border text-xs font-medium text-muted hover:opacity-80">
+                PDF
+              </button>
+            </div>
           </form>
         </div>
       )}

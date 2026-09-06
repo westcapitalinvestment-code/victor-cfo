@@ -1674,7 +1674,7 @@ function ReportesTab({
     p.set("vista", vista);
     return p.toString();
   }, [desde, hasta, filtros, entidadId, vista]);
-  const csvHref = `/api/facturas/reportes/csv?${paramsExport}`;
+  const excelHref = `/api/facturas/reportes/excel?${paramsExport}`;
   const pdfHref = `/api/facturas/reportes/pdf?${paramsExport}`;
 
   return (
@@ -1801,10 +1801,10 @@ function ReportesTab({
             Limpiar
           </button>
           <a
-            href={csvHref}
+            href={excelHref}
             className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-teal px-3 text-xs font-medium text-teal hover:opacity-80"
           >
-            <i className="ti ti-download" /> CSV
+            <i className="ti ti-download" /> Excel
           </a>
         </div>
       </div>
@@ -1991,10 +1991,10 @@ function ReportesTab({
           <i className="ti ti-file-text" /> Exportar PDF
         </a>
         <a
-          href={csvHref}
+          href={excelHref}
           className="flex-1 rounded-lg border border-border py-2.5 text-center text-xs font-medium text-muted hover:opacity-80"
         >
-          Exportar CSV
+          Exportar Excel
         </a>
       </div>
     </>
