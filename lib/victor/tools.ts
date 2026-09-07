@@ -736,6 +736,30 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "reporte_flujo_mensual",
+    description:
+      "Trae el desglose de ingreso, gasto y margen MES A MES (agrupado automáticamente) en un solo llamado — " +
+      "úsala SIEMPRE que el usuario pida comparar varios meses ('enero vs. febrero vs. septiembre', 'cómo ha ido " +
+      "cada mes', 'dame la tendencia', 'compara este trimestre') en vez de llamar reporte_top_categorias o " +
+      "reporte_gasto_por_categoria una vez por cada mes — esta herramienta ya te da TODOS los meses del rango en " +
+      "una sola respuesta, ordenados cronológicamente, con el cambio en $ contra el mes anterior calculado para " +
+      "ti. Funciona igual para Personal que para negocio. Si el usuario no da un rango, trae los últimos 6 meses " +
+      "hasta hoy. Por defecto (sin entidad_nombre) mira solo Personal — manda el nombre de la entidad para una " +
+      "específica, o 'todas' para Personal + todas las entidades juntas.",
+    input_schema: {
+      type: "object",
+      properties: {
+        desde: { type: "string", description: "Fecha de inicio del rango, YYYY-MM-DD. Si no se da, usa 6 meses atrás." },
+        hasta: { type: "string", description: "Fecha de fin del rango, YYYY-MM-DD. Si no se da, usa la fecha de hoy." },
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio a consultar. Usa 'todas' para Personal + todas las entidades juntas. Si se omite, se consulta solo Personal.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "reporte_ingresos_por_cliente",
     description:
       "Trae el desglose REAL de Facturación (Pro) por cliente — cuánto se le ha facturado (ingreso bruto, antes " +
@@ -783,6 +807,28 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
           description: "Nombre (o parte) de la entidad de negocio a consultar. Si se omite y el usuario tiene varias, se consultan todas juntas.",
         },
         vendor_nombre: { type: "string", description: "Nombre (o parte) de un contratista específico, si el usuario preguntó solo por uno." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "proyeccion_margen_negocio",
+    description:
+      "Proyecta el margen (ganancia) del negocio combinando lo YTD real, el ritmo de ingreso/gasto de lo que va " +
+      "del año, y las cuentas por cobrar PENDIENTES de Facturación (facturado no cobrado) — úsala cuando el " +
+      "usuario pregunte cosas como 'si cobro esas facturas pendientes, dónde queda mi margen', 'cómo me va a ir " +
+      "el resto del año si sigo así', o pida un análisis operacional/proyección de negocio con metas. Combina en " +
+      "un solo llamado datos que antes había que juntar a mano entre reporte_ingresos_por_cliente y el bloque " +
+      "'Resumen financiero' de tu contexto — NUNCA hagas esa combinación de memoria, usa esta herramienta. Es " +
+      "EXCLUSIVAMENTE de negocio (no existe alcance Personal) — si el usuario tiene varias entidades y no " +
+      "especifica, se consultan todas juntas.",
+    input_schema: {
+      type: "object",
+      properties: {
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio a proyectar. Si se omite y el usuario tiene varias, se consultan todas juntas.",
+        },
       },
       required: [],
     },
@@ -2958,6 +3004,86 @@ export async function executeVictorTool(
       };
     }
 
+    case "reporte_flujo_mensual": {
+      // 7 sept 2026 — Joel: "tengo que llamar la herramienta 9 veces para
+      // ver enero vs. febrero vs. septiembre" — hueco real confirmado (el
+      // propio system-prompt.txt ya lo admitía: "hoy eso requiere que tú lo
+      // calcules a mano llamando las herramientas dos veces"). Esta
+      // herramienta agrupa ingreso/gasto/margen por mes en UN SOLO query,
+      // mismo alcance/filtros que reporte_top_categorias (tipo_flujo,
+      // es_duplicada, entity_id) — nunca un cálculo aparte que se pueda
+      // desalinear del real.
+      const alcance = await resolverAlcanceTransacciones(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!alcance.ok) return { ok: false, message: alcance.message };
+
+      const hoy = new Date();
+      const hasta =
+        typeof input.hasta === "string" && input.hasta.trim() ? input.hasta.trim() : hoy.toISOString().slice(0, 10);
+      const desde =
+        typeof input.desde === "string" && input.desde.trim()
+          ? input.desde.trim()
+          : new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1).toISOString().slice(0, 10);
+
+      let txQuery = supabase
+        .from("transactions")
+        .select("amount, tipo_flujo, fecha")
+        .eq("owner_id", ownerId)
+        .in("tipo_flujo", ["gasto", "ingreso"])
+        .eq("es_duplicada", false)
+        .gte("fecha", desde)
+        .lte("fecha", hasta);
+      if (alcance.modo === "personal") txQuery = txQuery.is("entity_id", null);
+      if (alcance.modo === "entidad") txQuery = txQuery.eq("entity_id", alcance.entityId);
+      // modo "todas": sin filtro de entity_id — Personal + todas las entidades.
+
+      const { data: transacciones, error: txError } = await txQuery;
+      if (txError) return { ok: false, message: `No se pudo calcular el flujo mensual: ${txError.message}` };
+
+      if (!transacciones || transacciones.length === 0) {
+        return { ok: true, message: `No hay transacciones entre ${desde} y ${hasta} (${alcance.alcanceLabel}).` };
+      }
+
+      const porMes = new Map<string, { ingreso: number; gasto: number }>();
+      for (const t of transacciones as { amount: number; tipo_flujo: string; fecha: string }[]) {
+        const mes = String(t.fecha).slice(0, 7);
+        const actual = porMes.get(mes) ?? { ingreso: 0, gasto: 0 };
+        const monto = Math.abs(Number(t.amount));
+        if (t.tipo_flujo === "ingreso") actual.ingreso += monto;
+        else actual.gasto += monto;
+        porMes.set(mes, actual);
+      }
+
+      const meses = [...porMes.keys()].sort();
+      let margenAnterior: number | null = null;
+      const lineas = meses.map((mes) => {
+        const { ingreso, gasto } = porMes.get(mes)!;
+        const margen = ingreso - gasto;
+        const etiquetaMes = new Date(`${mes}-01T12:00:00Z`).toLocaleDateString("es-PR", { month: "long", year: "numeric" });
+        let cambio = "";
+        if (margenAnterior != null) {
+          const delta = margen - margenAnterior;
+          const flecha = delta >= 0 ? "▲" : "▼";
+          cambio = ` (${flecha} ${delta >= 0 ? "+" : ""}$${delta.toFixed(2)} vs. mes anterior)`;
+        }
+        margenAnterior = margen;
+        return `${etiquetaMes}: Ingreso $${ingreso.toFixed(2)}, Gasto $${gasto.toFixed(2)}, Margen $${margen.toFixed(2)}${cambio}`;
+      });
+
+      const totalIngreso = meses.reduce((s, m) => s + porMes.get(m)!.ingreso, 0);
+      const totalGasto = meses.reduce((s, m) => s + porMes.get(m)!.gasto, 0);
+
+      return {
+        ok: true,
+        message:
+          `Flujo mensual entre ${desde} y ${hasta} (${alcance.alcanceLabel}), ${meses.length} mes(es):\n${lineas.join("\n")}\n\n` +
+          `Total del rango: Ingreso $${totalIngreso.toFixed(2)}, Gasto $${totalGasto.toFixed(2)}, Margen $${(totalIngreso - totalGasto).toFixed(2)}.`,
+      };
+    }
+
     case "reporte_ingresos_por_cliente": {
       // 7 sept 2026 — Joel preguntó si VICTOR podía hacer "un análisis
       // completo de negocio" y VICTOR contestó (correctamente) que no
@@ -3045,6 +3171,12 @@ export async function executeVictorTool(
       const top = ranking.slice(0, limite);
       const totalFacturado = ranking.reduce((s, c) => s + c.facturado, 0);
       const totalCobrado = ranking.reduce((s, c) => s + c.cobrado, 0);
+      // 7 sept 2026, pedido de Joel: dejar el "pendiente por cobrar" ya
+      // calculado explícitamente en vez de que VICTOR tenga que restar
+      // facturado-cobrado de memoria cada vez que alguien pregunta "si
+      // cobro eso, dónde queda mi margen" — mismo dato, menos riesgo de que
+      // se equivoque haciendo la resta él mismo.
+      const totalPendiente = Math.max(0, totalFacturado - totalCobrado);
 
       const lineasClientes = top.map((c, i) => {
         const pct = totalFacturado > 0 ? Math.round((c.facturado / totalFacturado) * 100) : 0;
@@ -3060,7 +3192,7 @@ export async function executeVictorTool(
         ok: true,
         message:
           `Ingresos por cliente entre ${desde} y ${hasta} (${alcance.alcanceLabel}): Facturado total $${totalFacturado.toFixed(2)}, ` +
-          `Cobrado $${totalCobrado.toFixed(2)}.\n\nTop clientes:\n${lineasClientes.join("\n")}` +
+          `Cobrado $${totalCobrado.toFixed(2)}, Pendiente por cobrar $${totalPendiente.toFixed(2)}.\n\nTop clientes:\n${lineasClientes.join("\n")}` +
           (vencidas.length > 0
             ? `\n\nFacturas VENCIDAS (${vencidas.length}):\n${lineasVencidas.join("\n")}${vencidas.length > 10 ? `\n(+ ${vencidas.length - 10} más)` : ""}`
             : "\n\nNo hay facturas vencidas en este rango."),
@@ -3152,6 +3284,120 @@ export async function executeVictorTool(
         message:
           `Pagos a contratistas entre ${desde} y ${hasta} (${alcance.alcanceLabel}): Bruto $${totalBruto.toFixed(2)}, ` +
           `Retenido (crédito para remesar) $${totalRetenido.toFixed(2)}, Neto pagado $${totalNeto.toFixed(2)}.\n\n${lineas.join("\n")}`,
+      };
+    }
+
+    case "proyeccion_margen_negocio": {
+      // 7 sept 2026 — Joel: "no me dice dónde queda el margen si cobro esos
+      // $2,333" — hueco real: nadie combinaba las cuentas por cobrar
+      // pendientes de Facturación con el ritmo de gasto real del negocio
+      // para proyectar el margen resultante. Mismo cálculo de proyección de
+      // fin de año que usa el bloque "Resumen financiero" de cada turno
+      // (app/api/victor/route.ts: ritmo diario real YTD * días restantes
+      // del año), pero aquí SUMÁNDOLE lo que aún falta por cobrar de
+      // Facturación, que ese resumen no incluye porque es efectivo YTD, no
+      // facturado.
+      const nombrePista = typeof input.entidad_nombre === "string" ? input.entidad_nombre.trim() : "";
+      const { data: entidadesActivas, error: errorEntidades } = await supabase
+        .from("business_entities")
+        .select("id, name")
+        .eq("owner_id", ownerId)
+        .eq("active", true);
+      if (errorEntidades) return { ok: false, message: `No se pudo buscar las entidades de negocio: ${errorEntidades.message}` };
+      if (!entidadesActivas || entidadesActivas.length === 0) {
+        return {
+          ok: false,
+          message: "El usuario no tiene ninguna entidad de negocio configurada todavía — esta proyección es exclusivamente de negocio.",
+        };
+      }
+
+      let entidadesObjetivo = entidadesActivas;
+      let alcanceLabel = "todas las entidades de negocio";
+      const normalizadaPista = nombrePista
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .toLowerCase();
+      if (nombrePista && !["todas", "todo", "todas las entidades", "todo el negocio"].includes(normalizadaPista)) {
+        const match = entidadesActivas.filter((e) => e.name.toLowerCase().includes(normalizadaPista));
+        if (match.length === 0) {
+          return {
+            ok: false,
+            message: `No encontré ninguna entidad de negocio activa parecida a "${nombrePista}". Las entidades activas son: ${entidadesActivas.map((e) => e.name).join(", ")}.`,
+          };
+        }
+        if (match.length > 1) {
+          return {
+            ok: false,
+            message: `Hay varias entidades parecidas a "${nombrePista}" (${match.map((e) => e.name).join(", ")}). Pídele al usuario que aclare cuál.`,
+          };
+        }
+        entidadesObjetivo = match;
+        alcanceLabel = match[0].name;
+      }
+      const idsObjetivo = entidadesObjetivo.map((e) => e.id);
+
+      const hoyStrLocal = fechaHoyPR();
+      const [anioActualStrLocal] = hoyStrLocal.split("-");
+      const anioActualLocal = Number(anioActualStrLocal);
+      const inicioAñoStrLocal = `${anioActualStrLocal}-01-01`;
+      const MS_POR_DIA = 24 * 60 * 60 * 1000;
+      const inicioAñoUTC = new Date(`${inicioAñoStrLocal}T00:00:00Z`).getTime();
+      const finAñoExclusivoUTC = new Date(`${anioActualLocal + 1}-01-01T00:00:00Z`).getTime();
+      const hoyUTC = new Date(`${hoyStrLocal}T00:00:00Z`).getTime();
+      const diasEnAño = Math.round((finAñoExclusivoUTC - inicioAñoUTC) / MS_POR_DIA);
+      const diasTranscurridosAño = Math.max(1, Math.round((hoyUTC - inicioAñoUTC) / MS_POR_DIA) + 1);
+      const diasRestantesAño = Math.max(0, diasEnAño - diasTranscurridosAño);
+
+      const { data: transYTD, error: txError } = await supabase
+        .from("transactions")
+        .select("amount, tipo_flujo, entity_id")
+        .eq("owner_id", ownerId)
+        .eq("es_duplicada", false)
+        .in("entity_id", idsObjetivo)
+        .gte("fecha", inicioAñoStrLocal)
+        .lte("fecha", hoyStrLocal);
+      if (txError) return { ok: false, message: `No se pudo calcular la proyección: ${txError.message}` };
+
+      const filasTx = transYTD ?? [];
+      const ingresoYTD = filasTx.reduce((s, t) => (t.tipo_flujo === "ingreso" ? s + Math.abs(Number(t.amount)) : s), 0);
+      const gastoYTD = filasTx.reduce((s, t) => (t.tipo_flujo === "gasto" ? s + Math.abs(Number(t.amount)) : s), 0);
+      const ritmoDiarioIngreso = ingresoYTD / diasTranscurridosAño;
+      const ritmoDiarioGasto = gastoYTD / diasTranscurridosAño;
+      const ingresoProyectado = ingresoYTD + ritmoDiarioIngreso * diasRestantesAño;
+      const gastoProyectado = gastoYTD + ritmoDiarioGasto * diasRestantesAño;
+      const margenYTD = ingresoYTD - gastoYTD;
+      const margenProyectado = ingresoProyectado - gastoProyectado;
+
+      // Cuentas por cobrar pendientes (Facturación) — facturado - cobrado
+      // de facturas no-borrador, mismo cálculo que reporte_ingresos_por_cliente
+      // pero sin desglose por cliente, solo el total pendiente.
+      const { data: facturas, error: facturasError } = await supabase
+        .from("invoices")
+        .select("subtotal, total, estado, entity_id")
+        .eq("owner_id", ownerId)
+        .neq("estado", "borrador")
+        .in("entity_id", idsObjetivo);
+      if (facturasError) return { ok: false, message: `No se pudo calcular las cuentas por cobrar: ${facturasError.message}` };
+
+      const totalFacturado = (facturas ?? []).reduce((s, f) => s + Number(f.subtotal), 0);
+      const totalCobrado = (facturas ?? []).reduce((s, f) => (f.estado === "pagada" ? s + Number(f.total) : s), 0);
+      const pendienteCobrar = Math.max(0, totalFacturado - totalCobrado);
+
+      const margenSiCobraPendiente = margenYTD + pendienteCobrar;
+      const margenProyectadoConPendiente = margenProyectado + pendienteCobrar;
+
+      return {
+        ok: true,
+        message:
+          `Proyección de margen para ${alcanceLabel} (año ${anioActualStrLocal}):\n` +
+          `- YTD real: Ingreso $${ingresoYTD.toFixed(2)}, Gasto $${gastoYTD.toFixed(2)}, Margen $${margenYTD.toFixed(2)}.\n` +
+          `- Cuentas por cobrar pendientes (facturado no cobrado): $${pendienteCobrar.toFixed(2)}.\n` +
+          `- Si cobra TODO lo pendiente hoy, el margen YTD quedaría en $${margenSiCobraPendiente.toFixed(2)}.\n` +
+          `- Proyección a fin de año (ritmo real de ingreso/gasto de los últimos ${diasTranscurridosAño} días, sin contar el pendiente): ` +
+          `Ingreso $${ingresoProyectado.toFixed(2)}, Gasto $${gastoProyectado.toFixed(2)}, Margen $${margenProyectado.toFixed(2)}.\n` +
+          `- Proyección a fin de año SUMANDO el cobro del pendiente: Margen $${margenProyectadoConPendiente.toFixed(2)}.\n\n` +
+          `Aclárale al usuario que la proyección de fin de año asume que el ritmo de ingreso/gasto de lo que va del año se mantiene igual — ` +
+          `es un estimado, no una promesa, y que el pendiente por cobrar solo se hace realidad si el cliente efectivamente paga.`,
       };
     }
 
