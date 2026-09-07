@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney, formatFecha } from "@/lib/format";
+import { descargarBytesR2 } from "@/lib/r2";
+import { formatMoney, formatFecha, slugificar } from "@/lib/format";
 
 // PDF del resumen de Pagos a contratistas (2 sept 2026, pedido de Joel) —
 // mismo patrón que /api/facturas/reportes/pdf (pdf-lib, misma paginación),
@@ -34,9 +35,18 @@ export async function GET(req: NextRequest) {
   const { data } = await query;
   const filas = (data ?? []) as any[];
 
+  // 7 sept 2026, pedido de Joel: "que en todos los reportes... aparezca el
+  // Logo de la empresa... pq en lo que arreglaste ahorita de reportes de
+  // pago no aparece" — cierto, este PDF nunca tuvo logo ni la marca
+  // victorcfo.com al pie, a diferencia de los otros 3 reportes (Gastos y
+  // Facturación) que ya la llevan desde el 5 sept. Mismo patrón exacto que
+  // /api/facturas/reportes/pdf: logo_r2_key de la entidad si hay una
+  // seleccionada, o el nombre del usuario como fallback en Vista global.
   const { data: entidad } = entityId
-    ? await supabase.from("business_entities").select("name").eq("id", entityId).eq("owner_id", user.id).maybeSingle()
+    ? await supabase.from("business_entities").select("name, logo_r2_key").eq("id", entityId).eq("owner_id", user.id).maybeSingle()
     : { data: null };
+  const { data: owner } = entityId ? { data: null } : await supabase.from("users").select("full_name").eq("id", user.id).maybeSingle();
+  const nombreTitular = entidad?.name || owner?.full_name || "VICTOR CFO";
 
   const porContratista = (() => {
     const mapa = new Map<string, { nombre: string; taxId: string; bruto: number; retenido: number; neto: number; count: number }>();
@@ -60,6 +70,19 @@ export async function GET(req: NextRequest) {
   let page = pdf.addPage([612, 792]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+
+  let logoImg = null;
+  let logoDims = { width: 0, height: 0 };
+  if (entidad?.logo_r2_key) {
+    try {
+      const bytes = await descargarBytesR2(entidad.logo_r2_key);
+      logoImg = entidad.logo_r2_key.endsWith(".png") ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
+      const escala = Math.min(120 / logoImg.width, 44 / logoImg.height, 1);
+      logoDims = { width: logoImg.width * escala, height: logoImg.height * escala };
+    } catch (err) {
+      console.error("No se pudo incrustar el logo en el PDF de reportes de Pagos:", err);
+    }
+  }
 
   const margin = 50;
   const width = 612;
@@ -102,12 +125,17 @@ export async function GET(req: NextRequest) {
     y -= 15;
   }
 
-  texto(entidad?.name || "VICTOR CFO", margin, y, { f: bold, size: 16 });
+  if (logoImg) {
+    page.drawImage(logoImg, { x: margin, y: y - logoDims.height, width: logoDims.width, height: logoDims.height });
+  }
+  const xTexto = logoImg ? margin + logoDims.width + 14 : margin;
+  texto(nombreTitular, xTexto, y, { f: bold, size: 16 });
   y -= 18;
-  texto("Reporte de Pagos a Contratistas", margin, y, { size: 11, color: gris });
+  texto("Reporte de Pagos a Contratistas", xTexto, y, { size: 11, color: gris });
   y -= 14;
-  texto(`Período: ${formatFecha(desde)} — ${formatFecha(hasta)}`, margin, y, { size: 9, color: gris });
+  texto(`Período: ${formatFecha(desde)} — ${formatFecha(hasta)}`, xTexto, y, { size: 9, color: gris });
   y -= 6;
+  if (logoImg) y = Math.min(y, 792 - margin - logoDims.height - 6);
   page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1.5, color: teal });
   y -= 24;
 
@@ -134,11 +162,20 @@ export async function GET(req: NextRequest) {
     filaTabla("Total retenido", formatMoney(totalRetenido), { bold: true, color: teal });
   }
 
+  // Marca al pie de cada página — mismo pie que ya llevan los otros 3
+  // reportes (Gastos y Facturación, PDF+Excel).
+  for (const p of pdf.getPages()) {
+    const marca = "Generado con VICTOR CFO  ·  victorcfo.com";
+    const size = 8;
+    const w = font.widthOfTextAtSize(marca, size);
+    p.drawText(marca, { x: (width - w) / 2, y: 24, size, font, color: gris });
+  }
+
   const bytes = await pdf.save();
   return new NextResponse(Buffer.from(bytes), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="reporte-pagos_${desde}_a_${hasta}.pdf"`,
+      "Content-Disposition": `inline; filename="${slugificar(nombreTitular)}-pagos_${desde}_a_${hasta}.pdf"`,
     },
   });
 }

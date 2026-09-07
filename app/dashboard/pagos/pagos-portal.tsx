@@ -951,7 +951,7 @@ function ComboBuscableVendor<T extends { id: string }>({
 
 // ============================================================================
 // Tab: Reportes — resumen trimestral por contratista (lo que Joel necesita
-// para llenar el 480.6A/B) + export CSV.
+// para llenar el 480.6A/B) + export PDF/Excel.
 // ============================================================================
 function ReportesTab({
   vendors,
@@ -1030,7 +1030,11 @@ function ReportesTab({
   // traer exactamente lo mismo que ya se ve en pantalla (ver comentario en
   // el prop vistaGlobal de PagosPortal, arriba).
   const paramsExport = `desde=${desde}&hasta=${hasta}${!vistaGlobal && entidadId ? `&entityId=${entidadId}` : ""}${vendorFiltro ? `&vendorIds=${vendorFiltro}` : ""}`;
-  const csvHref = `/api/pagos/reportes/csv?${paramsExport}`;
+  // 7 sept 2026, pedido de Joel: que todo reporte descargable lleve el logo
+  // de la empresa + la marca victorcfo.com. El CSV no puede llevar logo, así
+  // que se reemplaza el botón por el Excel nuevo (mismo patrón que ya se
+  // hizo en Facturación) — el CSV route se deja intacto pero sin usar.
+  const excelHref = `/api/pagos/reportes/excel?${paramsExport}`;
   const pdfHref = `/api/pagos/reportes/pdf?${paramsExport}`;
 
   return (
@@ -1164,8 +1168,8 @@ function ReportesTab({
         <a href={pdfHref} target="_blank" rel="noopener noreferrer" className="vc-btn-secondary flex-1 text-center">
           Exportar PDF
         </a>
-        <a href={csvHref} className="vc-btn-secondary flex-1 text-center">
-          Exportar CSV
+        <a href={excelHref} className="vc-btn-secondary flex-1 text-center">
+          Exportar Excel
         </a>
       </div>
     </>
