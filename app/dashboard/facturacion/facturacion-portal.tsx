@@ -294,7 +294,14 @@ export default function FacturacionPortal({
       </div>
 
       {tab === "facturas" && (
-        <FacturasTab facturas={facturas} entidadesConAth={entidadesConAthSet} entidades={entidades} entidadId={entidadId} basePath={basePath} />
+        <FacturasTab
+          facturas={facturas}
+          entidadesConAth={entidadesConAthSet}
+          entidades={entidades}
+          entidadId={entidadId}
+          basePath={basePath}
+          modoAdmin={modoAdmin}
+        />
       )}
       {tab === "clientes" && (
         <ClientesTab clients={clients} basePath={clientesBasePath} volverTab={`${basePath}?tab=clientes`} modoAdmin={modoAdmin} />
@@ -327,12 +334,14 @@ function FacturasTab({
   entidades,
   entidadId,
   basePath,
+  modoAdmin = false,
 }: {
   facturas: Factura[];
   entidadesConAth: Set<string>;
   entidades: { id: string; name: string }[];
   entidadId: string | null;
   basePath: string;
+  modoAdmin?: boolean;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todas");
@@ -432,7 +441,22 @@ function FacturasTab({
       </div>
 
       <div className="vc-card">
-        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Todas las facturas</p>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs uppercase tracking-wide text-muted">Todas las facturas</p>
+          {/* 7 sept 2026, pedido de Joel: "poder subir todo lo que he
+              facturado en el año pq Victor me esta tirando numeros con lo
+              que he procesado el 1 sept hasta hoy" — Facturación solo tenía
+              lo creado DENTRO de la app. No aplica en modo admin (mismo
+              criterio que Importar CSV de Clientes). */}
+          {!modoAdmin && (
+            <Link
+              href={`/dashboard/facturacion/importar${entidadId ? `?entidadId=${entidadId}` : ""}`}
+              className="text-xs font-medium text-muted hover:text-teal"
+            >
+              Importar CSV
+            </Link>
+          )}
+        </div>
         {filtradas.length === 0 && <p className="text-xs text-muted">No hay facturas que coincidan.</p>}
         {filtradas.map((f) => (
           <FilaFactura key={f.id} factura={f} basePath={basePath} entidadNombre={nombreEntidad(f.entity_id)} />
