@@ -124,6 +124,28 @@ export async function GET(req: NextRequest) {
     textoDerecha(der, width - margin, y, { size: 10, f: opts.bold ? bold : font, color: opts.color ?? negro });
     y -= 15;
   }
+  // 7 sept 2026, pedido de Joel (mandó screenshot marcando dos columnas
+  // vacías entre el nombre y Retenido): "Por contratista" solo mostraba
+  // Retenido — faltaban Bruto y Neto para ver el pago completo por
+  // contratista, no solo el crédito de retención. Mismas 3 cifras que ya
+  // tiene el Excel de este mismo reporte (Bruto, Retenido 480.6, Neto).
+  const xBruto = width - margin - 160;
+  const xNeto = width - margin - 80;
+  function filaContratista(
+    nombre: string,
+    bruto: string,
+    neto: string,
+    retenido: string,
+    opts: { bold?: boolean; color?: ReturnType<typeof rgb> } = {}
+  ) {
+    espacio(50);
+    const f = opts.bold ? bold : font;
+    texto(nombre, margin, y, { size: 10, f, color: opts.color ?? negro });
+    textoDerecha(bruto, xBruto, y, { size: 10, f, color: opts.color ?? negro });
+    textoDerecha(neto, xNeto, y, { size: 10, f, color: opts.color ?? negro });
+    textoDerecha(retenido, width - margin, y, { size: 10, f, color: opts.color ?? negro });
+    y -= 15;
+  }
 
   if (logoImg) {
     page.drawImage(logoImg, { x: margin, y: y - logoDims.height, width: logoDims.width, height: logoDims.height });
@@ -148,18 +170,19 @@ export async function GET(req: NextRequest) {
   if (porContratista.length === 0) {
     filaTabla("No hay pagos registrados en este período.", "");
   } else {
-    // 7 sept 2026, pedido de Joel: dejar claro que el monto de esta lista
-    // es lo RETENIDO (no el neto pagado) — mismo ajuste que se hizo en la
-    // pantalla, aquí como encabezado de columna ya que el PDF no tiene
-    // espacio para repetir la etiqueta en cada fila.
-    filaTabla("Contratista", "Retenido", { color: gris });
+    filaContratista("Contratista", "Bruto", "Neto", "Retenido", { color: gris });
     for (const c of porContratista) {
-      filaTabla(`${c.nombre}${c.taxId ? ` (${c.taxId})` : ""} — ${c.count} pago${c.count === 1 ? "" : "s"}`, formatMoney(c.retenido));
+      filaContratista(
+        `${c.nombre}${c.taxId ? ` (${c.taxId})` : ""} — ${c.count} pago${c.count === 1 ? "" : "s"}`,
+        formatMoney(c.bruto),
+        formatMoney(c.neto),
+        formatMoney(c.retenido)
+      );
     }
     espacio(40);
     y -= 4;
     page.drawLine({ start: { x: margin, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 0.75, color: lineaGris });
-    filaTabla("Total retenido", formatMoney(totalRetenido), { bold: true, color: teal });
+    filaContratista("Total", formatMoney(totalBruto), formatMoney(totalNeto), formatMoney(totalRetenido), { bold: true, color: teal });
   }
 
   // Marca al pie de cada página — mismo pie que ya llevan los otros 3
