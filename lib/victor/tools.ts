@@ -736,6 +736,58 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "reporte_ingresos_por_cliente",
+    description:
+      "Trae el desglose REAL de Facturación (Pro) por cliente — cuánto se le ha facturado (ingreso bruto, antes " +
+      "de retención), cuánto ya pagó, cuánto le falta, y si tiene facturas VENCIDAS (con cuántos días de atraso) " +
+      "— para un rango de fechas y una entidad de negocio. OBLIGATORIO: úsala SIEMPRE que el usuario pregunte " +
+      "por sus clientes principales, quién le debe dinero, facturas vencidas/atrasadas, o pida un análisis de " +
+      "ingresos del negocio por cliente — NUNCA inventes esos números ni asumas que 'todo está al día' sin " +
+      "consultarlo. Si el usuario tiene más de una entidad y no especifica cuál, esta herramienta consulta " +
+      "TODAS las entidades juntas por default (a diferencia de reporte_top_categorias, aquí no existe un " +
+      "alcance 'Personal' porque Facturación es exclusivamente de negocio) — manda entidad_nombre solo si el " +
+      "usuario pidió una entidad específica. Si no da un período, usa el mes en curso; si dice 'este año', 'el " +
+      "trimestre', etc., calcula tú las fechas con la fecha real de hoy que ya tienes en tu contexto.",
+    input_schema: {
+      type: "object",
+      properties: {
+        desde: { type: "string", description: "Fecha de inicio del rango (por fecha de emisión), YYYY-MM-DD. Si no se da, usa el día 1 del mes en curso." },
+        hasta: { type: "string", description: "Fecha de fin del rango, YYYY-MM-DD. Si no se da, usa la fecha de hoy." },
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio a consultar. Si se omite y el usuario tiene varias, se consultan todas juntas.",
+        },
+        limite: { type: "number", description: "Cuántos clientes traer como máximo en el ranking. Si no se especifica, usa 8." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "reporte_pagos_contratistas",
+    description:
+      "Trae el desglose REAL del módulo Pagos (Pro) por contratista — bruto pagado, retenido (crédito 480.6/480.6A " +
+      "para Hacienda), y neto pagado — para un rango de fechas y una entidad de negocio. Mismo cálculo exacto que " +
+      "usa la pantalla Pagos → Reportes y su export CSV/PDF. OBLIGATORIO: úsala SIEMPRE que el usuario pregunte " +
+      "cuánto le ha pagado a un contratista, cuánto ha retenido en total para el 480.6A/B, o pida un análisis de " +
+      "gastos de contratistas/nómina externa del negocio — NUNCA inventes esos números. Si el usuario tiene más " +
+      "de una entidad y no especifica cuál, esta herramienta consulta TODAS las entidades juntas por default (no " +
+      "existe alcance 'Personal' aquí, Pagos es exclusivamente de negocio). Si no da un período, usa el mes en " +
+      "curso; si dice 'este trimestre', 'este año', etc., calcula tú las fechas con la fecha real de hoy.",
+    input_schema: {
+      type: "object",
+      properties: {
+        desde: { type: "string", description: "Fecha de inicio del rango (por fin de período de la retención), YYYY-MM-DD. Si no se da, usa el día 1 del mes en curso." },
+        hasta: { type: "string", description: "Fecha de fin del rango, YYYY-MM-DD. Si no se da, usa la fecha de hoy." },
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio a consultar. Si se omite y el usuario tiene varias, se consultan todas juntas.",
+        },
+        vendor_nombre: { type: "string", description: "Nombre (o parte) de un contratista específico, si el usuario preguntó solo por uno." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "consultar_estrategia_financiera",
     description:
       "Trae el desarrollo COMPLETO de una de las 23 estrategias financieras avanzadas del catálogo de " +
@@ -2903,6 +2955,203 @@ export async function executeVictorTool(
           `Ranking de ${tipo === "gasto" ? "gastos" : "ingresos"} por categoría entre ${desde} y ${hasta} (${alcance.alcanceLabel}), ` +
           `total $${totalGeneral.toFixed(2)}:\n${lineas.join("\n")}${notaResto}\n\n` +
           `El de mayor monto es "${top[0].nombre}" con $${top[0].monto.toFixed(2)}.`,
+      };
+    }
+
+    case "reporte_ingresos_por_cliente": {
+      // 7 sept 2026 — Joel preguntó si VICTOR podía hacer "un análisis
+      // completo de negocio" y VICTOR contestó (correctamente) que no
+      // tenía NINGUNA visibilidad de Facturación — cero tools tocaban
+      // invoices/clients. Mismo cálculo exacto que ReportesTab de
+      // facturacion-portal.tsx: "Facturado" = subtotal (ingreso bruto,
+      // antes de retención — invoices.total ya viene neto de retención,
+      // ver nota junto a feeProcesamiento en ese archivo), "Cobrado" =
+      // total de facturas pagadas, y "vencida" = misma función
+      // estaVencida() de esa pantalla (no pagada, no borrador, fecha de
+      // vencimiento ya pasó).
+      let alcance = await resolverAlcanceTransacciones(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!alcance.ok) return { ok: false, message: alcance.message };
+      // Facturación no tiene alcance "Personal" (es exclusivamente de
+      // negocio) — si no se especificó entidad, se asumen todas juntas en
+      // vez del default "Personal" de resolverAlcanceTransacciones (que
+      // aquí siempre estaría vacío).
+      if (alcance.modo === "personal" && typeof input.entidad_nombre !== "string") {
+        alcance = { ok: true, modo: "todas", entityId: null, alcanceLabel: "todas las entidades de negocio" };
+      }
+
+      const limite = Number.isFinite(Number(input.limite)) && Number(input.limite) > 0 ? Math.floor(Number(input.limite)) : 8;
+      const hoy = new Date();
+      const desde =
+        typeof input.desde === "string" && input.desde.trim()
+          ? input.desde.trim()
+          : new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+      const hasta =
+        typeof input.hasta === "string" && input.hasta.trim() ? input.hasta.trim() : hoy.toISOString().slice(0, 10);
+      const hoyStr = fechaHoyPR();
+
+      let query = supabase
+        .from("invoices")
+        .select("id, numero, subtotal, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
+        .eq("owner_id", ownerId)
+        .neq("estado", "borrador")
+        .gte("fecha_emision", desde)
+        .lte("fecha_emision", hasta);
+      if (alcance.modo === "entidad") query = query.eq("entity_id", alcance.entityId);
+      // modo "todas": sin filtro de entity_id.
+
+      const { data: facturas, error: facturasError } = await query;
+      if (facturasError) return { ok: false, message: `No se pudo calcular el reporte: ${facturasError.message}` };
+
+      if (!facturas || facturas.length === 0) {
+        return { ok: true, message: `No hay facturas (enviadas o más) entre ${desde} y ${hasta} en ${alcance.alcanceLabel}.` };
+      }
+
+      function estaVencidaFactura(f: { estado: string; fecha_vencimiento: string | null }): boolean {
+        return f.estado !== "pagada" && !!f.fecha_vencimiento && f.fecha_vencimiento < hoyStr;
+      }
+
+      const porCliente = new Map<string, { nombre: string; facturado: number; cobrado: number; count: number }>();
+      const vencidas: { cliente: string; numero: string; monto: number; dias: number }[] = [];
+      for (const f of facturas as unknown as {
+        numero: string;
+        subtotal: number;
+        total: number;
+        estado: string;
+        fecha_vencimiento: string | null;
+        client_id: string | null;
+        clients: { name: string } | null;
+      }[]) {
+        const key = f.client_id ?? "sin-cliente";
+        const nombre = f.clients?.name ?? "Sin cliente";
+        const actual = porCliente.get(key) ?? { nombre, facturado: 0, cobrado: 0, count: 0 };
+        actual.facturado += Number(f.subtotal);
+        if (f.estado === "pagada") actual.cobrado += Number(f.total);
+        actual.count += 1;
+        porCliente.set(key, actual);
+
+        if (estaVencidaFactura(f)) {
+          const dias = Math.round(
+            (new Date(`${hoyStr}T00:00:00Z`).getTime() - new Date(`${f.fecha_vencimiento}T00:00:00Z`).getTime()) / (24 * 60 * 60 * 1000)
+          );
+          vencidas.push({ cliente: nombre, numero: f.numero, monto: Number(f.total), dias });
+        }
+      }
+
+      const ranking = [...porCliente.values()].sort((a, b) => b.facturado - a.facturado);
+      const top = ranking.slice(0, limite);
+      const totalFacturado = ranking.reduce((s, c) => s + c.facturado, 0);
+      const totalCobrado = ranking.reduce((s, c) => s + c.cobrado, 0);
+
+      const lineasClientes = top.map((c, i) => {
+        const pct = totalFacturado > 0 ? Math.round((c.facturado / totalFacturado) * 100) : 0;
+        return `${i + 1}. ${c.nombre} — Facturado $${c.facturado.toFixed(2)} (${pct}%), Cobrado $${c.cobrado.toFixed(2)}, ${c.count} factura(s)`;
+      });
+
+      vencidas.sort((a, b) => b.dias - a.dias);
+      const lineasVencidas = vencidas
+        .slice(0, 10)
+        .map((v) => `- ${v.cliente} — factura ${v.numero}, $${v.monto.toFixed(2)}, vencida hace ${v.dias} día${v.dias === 1 ? "" : "s"}`);
+
+      return {
+        ok: true,
+        message:
+          `Ingresos por cliente entre ${desde} y ${hasta} (${alcance.alcanceLabel}): Facturado total $${totalFacturado.toFixed(2)}, ` +
+          `Cobrado $${totalCobrado.toFixed(2)}.\n\nTop clientes:\n${lineasClientes.join("\n")}` +
+          (vencidas.length > 0
+            ? `\n\nFacturas VENCIDAS (${vencidas.length}):\n${lineasVencidas.join("\n")}${vencidas.length > 10 ? `\n(+ ${vencidas.length - 10} más)` : ""}`
+            : "\n\nNo hay facturas vencidas en este rango."),
+      };
+    }
+
+    case "reporte_pagos_contratistas": {
+      // 7 sept 2026, mismo hueco reportado por Joel — VICTOR tampoco veía
+      // NADA del módulo Pagos (vendors/vendor_retenciones). Mismo cálculo
+      // exacto que ReportesTab de pagos-portal.tsx (y su export CSV/PDF):
+      // agrupa por contratista sumando gross_amount/retention_amount/net_paid.
+      let alcance = await resolverAlcanceTransacciones(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!alcance.ok) return { ok: false, message: alcance.message };
+      if (alcance.modo === "personal" && typeof input.entidad_nombre !== "string") {
+        alcance = { ok: true, modo: "todas", entityId: null, alcanceLabel: "todas las entidades de negocio" };
+      }
+
+      const hoy = new Date();
+      const desde =
+        typeof input.desde === "string" && input.desde.trim()
+          ? input.desde.trim()
+          : new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+      const hasta =
+        typeof input.hasta === "string" && input.hasta.trim() ? input.hasta.trim() : hoy.toISOString().slice(0, 10);
+
+      const vendorNombre = typeof input.vendor_nombre === "string" ? input.vendor_nombre.trim() : "";
+      let vendorIds: string[] | null = null;
+      if (vendorNombre) {
+        const { data: vendorsMatch, error: vendorError } = await supabase
+          .from("vendors")
+          .select("id, name")
+          .eq("owner_id", ownerId)
+          .ilike("name", `%${vendorNombre}%`);
+        if (vendorError) return { ok: false, message: `No se pudo buscar el contratista: ${vendorError.message}` };
+        if (!vendorsMatch || vendorsMatch.length === 0) {
+          return { ok: true, message: `No encontré ningún contratista parecido a "${vendorNombre}".` };
+        }
+        vendorIds = vendorsMatch.map((v) => v.id);
+      }
+
+      let query = supabase
+        .from("vendor_retenciones")
+        .select("vendor_id, gross_amount, retention_amount, net_paid, period_end, vendors(name, tax_id)")
+        .eq("owner_id", ownerId)
+        .gte("period_end", desde)
+        .lte("period_end", hasta);
+      if (alcance.modo === "entidad") query = query.eq("entity_id", alcance.entityId);
+      if (vendorIds) query = query.in("vendor_id", vendorIds);
+
+      const { data: retenciones, error: retencionesError } = await query;
+      if (retencionesError) return { ok: false, message: `No se pudo calcular el reporte: ${retencionesError.message}` };
+
+      if (!retenciones || retenciones.length === 0) {
+        return { ok: true, message: `No hay pagos a contratistas registrados entre ${desde} y ${hasta} en ${alcance.alcanceLabel}.` };
+      }
+
+      const porContratista = new Map<string, { nombre: string; bruto: number; retenido: number; neto: number; count: number }>();
+      for (const r of retenciones as unknown as {
+        vendor_id: string;
+        gross_amount: number;
+        retention_amount: number;
+        net_paid: number;
+        vendors: { name: string; tax_id: string | null } | null;
+      }[]) {
+        const nombre = r.vendors?.name ?? "Contratista eliminado";
+        const actual = porContratista.get(r.vendor_id) ?? { nombre, bruto: 0, retenido: 0, neto: 0, count: 0 };
+        actual.bruto += Number(r.gross_amount);
+        actual.retenido += Number(r.retention_amount);
+        actual.neto += Number(r.net_paid);
+        actual.count += 1;
+        porContratista.set(r.vendor_id, actual);
+      }
+
+      const ranking = [...porContratista.values()].sort((a, b) => b.retenido - a.retenido);
+      const totalBruto = ranking.reduce((s, c) => s + c.bruto, 0);
+      const totalRetenido = ranking.reduce((s, c) => s + c.retenido, 0);
+      const totalNeto = ranking.reduce((s, c) => s + c.neto, 0);
+
+      const lineas = ranking.map(
+        (c) => `- ${c.nombre} — Bruto $${c.bruto.toFixed(2)}, Retenido $${c.retenido.toFixed(2)}, Neto $${c.neto.toFixed(2)} (${c.count} pago(s))`
+      );
+
+      return {
+        ok: true,
+        message:
+          `Pagos a contratistas entre ${desde} y ${hasta} (${alcance.alcanceLabel}): Bruto $${totalBruto.toFixed(2)}, ` +
+          `Retenido (crédito para remesar) $${totalRetenido.toFixed(2)}, Neto pagado $${totalNeto.toFixed(2)}.\n\n${lineas.join("\n")}`,
       };
     }
 
