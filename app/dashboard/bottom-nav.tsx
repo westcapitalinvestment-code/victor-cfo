@@ -73,12 +73,23 @@ export default function BottomNav({ esFounder = false }: { esFounder?: boolean }
   const isActive = (href: string) =>
     href === "/dashboard" || href === "/dashboard/negocio" ? pathname === href : pathname.startsWith(href);
 
-  // /dashboard/facturacion, /dashboard/clientes y /dashboard/entidades
-  // también son "negocio", pero no cuelgan de /dashboard/negocio — por eso
-  // el swap de Inicio/Gastos/Metas/Bóveda/Cuentas solo pasa cuando el
-  // pathname empieza exactamente con /dashboard/negocio (donde sí existen
-  // esas 5 páginas hermanas de Personal).
-  const enNegocio = pathname.startsWith("/dashboard/negocio");
+  // /dashboard/facturacion, /dashboard/pagos, /dashboard/equipo,
+  // /dashboard/clientes, /dashboard/entidades y /dashboard/admin también
+  // son "negocio" (exclusivamente — nunca aplican a Personal), pero no
+  // cuelgan de /dashboard/negocio. 7 sept 2026, bug reportado por Joel:
+  // esta comprobación solo miraba /dashboard/negocio, así que en Facturas,
+  // Pagos o Equipo el primer grupo de íconos (Inicio/Transacciones/Metas/
+  // Bóveda/Cuentas) se quedaba mostrando las versiones de PERSONAL — el
+  // usuario tocaba "Inicio" desde Pagos y caía en el Home Personal en vez
+  // del de Negocio.
+  const enNegocio =
+    pathname.startsWith("/dashboard/negocio") ||
+    pathname.startsWith("/dashboard/facturacion") ||
+    pathname.startsWith("/dashboard/clientes") ||
+    pathname.startsWith("/dashboard/entidades") ||
+    pathname.startsWith("/dashboard/pagos") ||
+    pathname.startsWith("/dashboard/equipo") ||
+    pathname.startsWith("/dashboard/admin");
   const tabsPrimerGrupo = enNegocio ? TABS_NEGOCIO_INICIO : TABS_PERSONAL;
 
   return (

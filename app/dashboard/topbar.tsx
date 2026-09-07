@@ -78,11 +78,21 @@ export default function Topbar({
   const nombreCorto = (fullName || "").split(" ")[0];
   const pathname = usePathname();
   const router = useRouter();
+  // 7 sept 2026, pedido de Joel: "cuando voy a la parte de facturas, pagos
+  // y equipo el tab se queda en personal y nunca debe estar en personal pq
+  // eso forma parte de negocio y entidades" — Pagos y Equipo son módulos
+  // EXCLUSIVAMENTE de negocio (igual que Facturación/Clientes/Entidades)
+  // pero faltaban en esta lista, así que el tab "Personal" se quedaba
+  // marcado "on" mientras el usuario estaba en Pagos o Equipo. Admin
+  // (gestión de Admin/Secretaria) también es exclusivamente de negocio.
   const enNegocio =
     pathname.startsWith("/dashboard/negocio") ||
     pathname.startsWith("/dashboard/facturacion") ||
     pathname.startsWith("/dashboard/clientes") ||
-    pathname.startsWith("/dashboard/entidades");
+    pathname.startsWith("/dashboard/entidades") ||
+    pathname.startsWith("/dashboard/pagos") ||
+    pathname.startsWith("/dashboard/equipo") ||
+    pathname.startsWith("/dashboard/admin");
 
   const [openNegocio, setOpenNegocio] = useState(false);
   const [cambiando, setCambiando] = useState(false);
