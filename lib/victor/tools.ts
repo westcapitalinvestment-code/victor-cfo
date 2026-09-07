@@ -704,6 +704,38 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "reporte_top_categorias",
+    description:
+      "Trae el RANKING de categorías (de mayor a menor monto) en un rango de fechas — úsala SIEMPRE que el " +
+      "usuario pregunte '¿en qué estoy gastando más?', '¿cuál es mi mayor gasto?', 'dame un análisis de mis " +
+      "gastos/ingresos', o algo similar donde NO te dio ya el nombre de una categoría específica (si ya te dio " +
+      "el nombre, usa reporte_gasto_por_categoria en su lugar, que trae el detalle transacción por transacción). " +
+      "Funciona igual para Personal que para una entidad de negocio — con negocio (entidad_nombre) es la " +
+      "herramienta correcta para un análisis real de la situación financiera: qué categorías se están comiendo " +
+      "el ingreso, para poder proyectar y fijar metas con el usuario. Si el usuario no menciona un período, usa " +
+      "el mes en curso por default; si menciona 'este año', 'el trimestre', etc., calcula tú mismo las fechas " +
+      "con la fecha real de hoy que ya tienes en tu contexto. Por defecto trae gastos (tipo='gasto') — usa " +
+      "tipo='ingreso' si el usuario pregunta de dónde viene más su dinero. Por defecto (sin entidad_nombre) mira " +
+      "solo Personal — manda el nombre de la entidad para una entidad específica, o 'todas' para Personal + " +
+      "todas las entidades juntas. Muéstrale al usuario el ranking real que te devuelve esta herramienta (con " +
+      "los % del total) — no lo resumas de más ni te quedes solo con el primero si el usuario pidió un análisis " +
+      "completo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tipo: { type: "string", description: "'gasto' (default) o 'ingreso' — qué tipo de flujo rankear." },
+        desde: { type: "string", description: "Fecha de inicio del rango, YYYY-MM-DD. Si no se da, usa el día 1 del mes en curso." },
+        hasta: { type: "string", description: "Fecha de fin del rango, YYYY-MM-DD. Si no se da, usa la fecha de hoy." },
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio a consultar, si el usuario pidió una entidad específica. Usa 'todas' para Personal + todas las entidades juntas. Si se omite, se consulta solo Personal.",
+        },
+        limite: { type: "number", description: "Cuántas categorías traer como máximo en el ranking. Si no se especifica, usa 8." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "consultar_estrategia_financiera",
     description:
       "Trae el desarrollo COMPLETO de una de las 23 estrategias financieras avanzadas del catálogo de " +
@@ -2780,6 +2812,97 @@ export async function executeVictorTool(
         message:
           `Gasto total en "${categoria.nombre}" entre ${desde} y ${hasta} (${alcance.alcanceLabel}): $${total.toFixed(2)} ` +
           `(${gastos.length} transacción${gastos.length > 1 ? "es" : ""}).\n${detalle}${nota}`,
+      };
+    }
+
+    case "reporte_top_categorias": {
+      // 7 sept 2026 — pedido de Joel: "que en la parte de cuentas... le
+      // pueda decir es que mayor gasto es xx en tal categoria... y lo mismo
+      // en negocios que puedas hacer un analisis de la situacion actual".
+      // Hueco real: reporte_gasto_por_categoria (arriba) exige que VICTOR ya
+      // sepa el NOMBRE de la categoría — no había forma de preguntarle "¿en
+      // qué gasto más?" sin que VICTOR adivinara o inventara una respuesta.
+      // Mismo cálculo de agrupar+ordenar que usa la pantalla de Gastos
+      // (app/dashboard/gastos/page.tsx, gastoPorCategoria/reporteCategoria)
+      // — Personal y Negocio siempre vienen de la MISMA lógica, solo cambia
+      // el alcance (resolverAlcanceTransacciones), nunca un cálculo aparte
+      // "para negocio" que se pueda desalinear del real.
+      const tipo = input.tipo === "ingreso" ? "ingreso" : "gasto";
+      const limite = Number.isFinite(Number(input.limite)) && Number(input.limite) > 0 ? Math.floor(Number(input.limite)) : 8;
+
+      const alcance = await resolverAlcanceTransacciones(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!alcance.ok) return { ok: false, message: alcance.message };
+
+      const hoy = new Date();
+      const desde =
+        typeof input.desde === "string" && input.desde.trim()
+          ? input.desde.trim()
+          : new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+      const hasta =
+        typeof input.hasta === "string" && input.hasta.trim() ? input.hasta.trim() : hoy.toISOString().slice(0, 10);
+
+      let txQuery = supabase
+        .from("transactions")
+        .select("amount, tipo_flujo, hacienda_category_id")
+        .eq("owner_id", ownerId)
+        .eq("tipo_flujo", tipo)
+        .eq("es_duplicada", false)
+        .gte("fecha", desde)
+        .lte("fecha", hasta);
+      if (alcance.modo === "personal") txQuery = txQuery.is("entity_id", null);
+      if (alcance.modo === "entidad") txQuery = txQuery.eq("entity_id", alcance.entityId);
+      // modo "todas": sin filtro de entity_id — Personal + todas las entidades.
+
+      const { data: transacciones, error: txError } = await txQuery;
+      if (txError) return { ok: false, message: `No se pudo calcular el ranking: ${txError.message}` };
+
+      if (!transacciones || transacciones.length === 0) {
+        return {
+          ok: true,
+          message: `No hay ${tipo === "gasto" ? "gastos" : "ingresos"} registrados entre ${desde} y ${hasta} (${alcance.alcanceLabel}).`,
+        };
+      }
+
+      const idsCategorias = Array.from(
+        new Set(transacciones.map((t) => t.hacienda_category_id).filter((id): id is number => id != null))
+      );
+      let nombrePorCategoria = new Map<number, string>();
+      if (idsCategorias.length > 0) {
+        const { data: cats } = await supabase.from("hacienda_categories").select("id, nombre").in("id", idsCategorias);
+        nombrePorCategoria = new Map((cats ?? []).map((c) => [c.id, c.nombre]));
+      }
+
+      const porCategoria = new Map<string, { nombre: string; monto: number; cuenta: number }>();
+      let totalGeneral = 0;
+      for (const t of transacciones) {
+        const montoAbs = Math.abs(Number(t.amount));
+        totalGeneral += montoAbs;
+        const catKey = t.hacienda_category_id != null ? String(t.hacienda_category_id) : "sin_categorizar";
+        const nombre = t.hacienda_category_id != null ? nombrePorCategoria.get(t.hacienda_category_id) ?? "Sin categorizar" : "Sin categorizar";
+        const actual = porCategoria.get(catKey) ?? { nombre, monto: 0, cuenta: 0 };
+        actual.monto += montoAbs;
+        actual.cuenta += 1;
+        porCategoria.set(catKey, actual);
+      }
+
+      const ranking = Array.from(porCategoria.values()).sort((a, b) => b.monto - a.monto);
+      const top = ranking.slice(0, limite);
+      const lineas = top.map((c, i) => {
+        const pct = totalGeneral > 0 ? Math.round((c.monto / totalGeneral) * 100) : 0;
+        return `${i + 1}. ${c.nombre} — $${c.monto.toFixed(2)} (${pct}%, ${c.cuenta} transacción${c.cuenta > 1 ? "es" : ""})`;
+      });
+      const notaResto = ranking.length > top.length ? `\n(+ ${ranking.length - top.length} categoría(s) más pequeña(s), no mostradas)` : "";
+
+      return {
+        ok: true,
+        message:
+          `Ranking de ${tipo === "gasto" ? "gastos" : "ingresos"} por categoría entre ${desde} y ${hasta} (${alcance.alcanceLabel}), ` +
+          `total $${totalGeneral.toFixed(2)}:\n${lineas.join("\n")}${notaResto}\n\n` +
+          `El de mayor monto es "${top[0].nombre}" con $${top[0].monto.toFixed(2)}.`,
       };
     }
 
