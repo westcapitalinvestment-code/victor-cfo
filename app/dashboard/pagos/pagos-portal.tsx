@@ -88,6 +88,7 @@ export default function PagosPortal({
   vendors,
   retenciones,
   entidadId,
+  vistaGlobal = false,
   entidades = [],
   retencionDefault,
   volverHref = "/dashboard",
@@ -98,6 +99,15 @@ export default function PagosPortal({
   vendors: Vendor[];
   retenciones: Retencion[];
   entidadId: string | null;
+  // 7 sept 2026 — bug real reportado por Joel ("no me esta trayendo los
+  // reportes"): entidadId SIEMPRE traía un valor (con fallback a
+  // entities[0].id incluso en "Vista global" del topbar), así que el
+  // export CSV/PDF de Reportes filtraba de más — solo la PRIMERA entidad
+  // — mientras la lista en pantalla (que no filtra por entidad, mezcla
+  // todas) sí mostraba los contratistas de TODAS las entidades. Este flag
+  // le dice a ReportesTab cuándo NO debe mandar entityId al exportar, para
+  // que el PDF/CSV traiga exactamente lo mismo que ya se ve en pantalla.
+  vistaGlobal?: boolean;
   // Todas las entidades activas del usuario (no solo la activa del topbar) —
   // hace falta la lista completa para resolver el nombre de CADA contratista
   // en "vista global" (varias entidades mezcladas), no solo el de la
@@ -166,7 +176,7 @@ export default function PagosPortal({
       {tab === "contratistas" && (
         <ContratistasTab vendors={vendors} entidadId={entidadId} retencionDefault={retencionDefault} ownerIdEfectivo={ownerIdEfectivo} />
       )}
-      {tab === "reportes" && <ReportesTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} />}
+      {tab === "reportes" && <ReportesTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} vistaGlobal={vistaGlobal} />}
     </div>
   );
 }
@@ -947,10 +957,12 @@ function ReportesTab({
   vendors,
   retenciones,
   entidadId,
+  vistaGlobal = false,
 }: {
   vendors: Vendor[];
   retenciones: Retencion[];
   entidadId: string | null;
+  vistaGlobal?: boolean;
 }) {
   // Mismos botones de periodo que Reportes de Facturación (2 sept 2026,
   // pedido de Joel: "como estaba con trimestres pero que le añadieras un
@@ -1013,7 +1025,11 @@ function ReportesTab({
   const totalRetenido = porContratista.reduce((s, c) => s + c.retenido, 0);
   const totalNeto = porContratista.reduce((s, c) => s + c.neto, 0);
 
-  const paramsExport = `desde=${desde}&hasta=${hasta}${entidadId ? `&entityId=${entidadId}` : ""}${vendorFiltro ? `&vendorIds=${vendorFiltro}` : ""}`;
+  // vistaGlobal: NUNCA mandar entityId — la lista de arriba (porContratista)
+  // tampoco filtra por entidad en ese modo, así que el export tiene que
+  // traer exactamente lo mismo que ya se ve en pantalla (ver comentario en
+  // el prop vistaGlobal de PagosPortal, arriba).
+  const paramsExport = `desde=${desde}&hasta=${hasta}${!vistaGlobal && entidadId ? `&entityId=${entidadId}` : ""}${vendorFiltro ? `&vendorIds=${vendorFiltro}` : ""}`;
   const csvHref = `/api/pagos/reportes/csv?${paramsExport}`;
   const pdfHref = `/api/pagos/reportes/pdf?${paramsExport}`;
 
@@ -1122,11 +1138,19 @@ function ReportesTab({
         {porContratista.length === 0 && <p className="text-xs text-muted">No hay pagos registrados con estos filtros.</p>}
         {porContratista.map((c) => (
           <div key={c.nombre} className="border-b border-border py-2 text-sm last:border-0">
-            <div className="flex justify-between">
+            <div className="flex items-start justify-between gap-2">
               <span className="truncate">
                 {c.nombre} <span className="text-xs text-muted">({c.count})</span>
               </span>
-              <span className="font-medium">{formatMoney(c.retenido)}</span>
+              {/* 7 sept 2026, pedido de Joel (mandó screenshot marcando esta
+                  columna): el número solo no dejaba claro a qué correspondía
+                  — se podía confundir con el neto pagado. La etiqueta
+                  "Retenido" arriba del monto lo deja explícito, igual que ya
+                  dice la tarjeta de Resumen justo arriba de esta lista. */}
+              <span className="flex-shrink-0 text-right">
+                <span className="block text-[10px] uppercase tracking-wide text-muted">Retenido</span>
+                <span className="font-medium">{formatMoney(c.retenido)}</span>
+              </span>
             </div>
             <p className="text-xs text-muted">
               Bruto {formatMoney(c.bruto)} · Neto {formatMoney(c.neto)}

@@ -120,6 +120,11 @@ export async function GET(req: NextRequest) {
   if (porContratista.length === 0) {
     filaTabla("No hay pagos registrados en este período.", "");
   } else {
+    // 7 sept 2026, pedido de Joel: dejar claro que el monto de esta lista
+    // es lo RETENIDO (no el neto pagado) — mismo ajuste que se hizo en la
+    // pantalla, aquí como encabezado de columna ya que el PDF no tiene
+    // espacio para repetir la etiqueta en cada fila.
+    filaTabla("Contratista", "Retenido", { color: gris });
     for (const c of porContratista) {
       filaTabla(`${c.nombre}${c.taxId ? ` (${c.taxId})` : ""} — ${c.count} pago${c.count === 1 ? "" : "s"}`, formatMoney(c.retenido));
     }
