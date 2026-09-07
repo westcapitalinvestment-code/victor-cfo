@@ -1,5 +1,44 @@
 import type { createClient } from "@/lib/supabase/server";
 
+// Resuelve a qué entidad (negocio) pertenecen las transacciones que se van
+// a importar — antes esto se dejaba SIEMPRE en null (Personal), sin
+// importar de qué cuenta venían (bug real reportado por Joel, 7 sept
+// 2026: subió un CSV a "Flexicuenta Negocio BPPR" y las transacciones
+// aparecieron en el widget de Personal, no en VIP Medical Development).
+//
+// - Cuenta Plaid: plaid_accounts.entity_id ya es la fuente de verdad
+//   (null = personal, un uuid = esa entidad) — se usa tal cual.
+// - Cuenta manual: manual_accounts NO tiene columna entity_id, solo el
+//   booleano es_negocio. Si es_negocio=false, es Personal. Si es true,
+//   solo se puede atribuir con certeza si el usuario tiene UNA sola
+//   entidad de negocio activa (mismo criterio que ya usan
+//   verificar_cuentas_conectadas y app/api/victor/route.ts para el mismo
+//   problema) — con 2+ entidades activas no hay forma de saber cuál, así
+//   que se deja en Personal en vez de adivinar.
+async function resolverEntityIdDeCuenta(
+  supabase: ReturnType<typeof createClient>,
+  ownerId: string,
+  origenCuenta: "plaid" | "manual",
+  cuentaId: string
+): Promise<string | null> {
+  if (origenCuenta === "plaid") {
+    const { data } = await supabase
+      .from("plaid_accounts")
+      .select("entity_id")
+      .eq("plaid_account_id", cuentaId)
+      .eq("owner_id", ownerId)
+      .maybeSingle();
+    return data?.entity_id ?? null;
+  }
+
+  const { data: cuenta } = await supabase.from("manual_accounts").select("es_negocio").eq("id", cuentaId).eq("owner_id", ownerId).maybeSingle();
+  if (!cuenta?.es_negocio) return null;
+
+  const { data: entidades } = await supabase.from("business_entities").select("id").eq("owner_id", ownerId).eq("active", true);
+  if (entidades && entidades.length === 1) return entidades[0].id;
+  return null;
+}
+
 // Compartido por los dos flujos de "subir estado de cuenta" (CSV/QuickBooks
 // y PDF), y usable tanto para una cuenta conectada por Plaid (rellenar el
 // hueco de historial que Plaid no trajo) como para una cuenta manual (ej.
@@ -78,9 +117,11 @@ export async function importarTransaccionesDedup(
     return { importadas: 0, duplicadas };
   }
 
+  const entityId = await resolverEntityIdDeCuenta(supabase, ownerId, origenCuenta, cuentaId);
+
   const filasParaInsertar = filasNuevas.map((f) => ({
     owner_id: ownerId,
-    entity_id: null,
+    entity_id: entityId,
     manual_account_id: origenCuenta === "manual" ? cuentaId : null,
     plaid_account_id: origenCuenta === "plaid" ? cuentaId : null,
     origen,
