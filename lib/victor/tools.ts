@@ -290,6 +290,32 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "consultar_transacciones_de_cuenta",
+    description:
+      "Trae las transacciones reales de UNA cuenta específica (Plaid o manual), buscándola por nombre — ej. " +
+      "'Flexicuenta Negocio BPPR', 'Apple Card', 'la cuenta de ahorros'. OBLIGATORIO: úsala SIEMPRE que el " +
+      "usuario pregunte qué hay en una cuenta puntual, qué se importó al subir un CSV/PDF de estado de cuenta, " +
+      "o pida ver/revisar las transacciones de un banco por nombre — NUNCA contestes que no tienes forma de " +
+      "verlo ni le pidas al founder que confirme si existe una herramienta; esta es esa herramienta. A " +
+      "diferencia de buscar_transacciones_por_comercio (que busca un texto/patrón en CUALQUIER cuenta) y de " +
+      "consultar_estados_cuenta_subidos (que es solo el historial de archivos subidos, no las transacciones en " +
+      "sí), esta busca por el NOMBRE DE LA CUENTA y trae su actividad real tal cual quedó guardada, venga de " +
+      "Plaid o de un CSV/PDF importado a mano. Si el nombre no hace match con ninguna cuenta, dile al usuario " +
+      "el nombre exacto que sí tienes conectado (usa verificar_cuentas_conectadas si hace falta) en vez de " +
+      "asumir que no existe.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre_cuenta: {
+          type: "string",
+          description: "Nombre (o parte) de la cuenta a buscar, tal como el usuario la mencionó — ej. 'Flexicuenta Negocio BPPR', 'BPPR', 'Apple Card'.",
+        },
+        limite: { type: "number", description: "Cuántas transacciones traer como máximo, más recientes primero. Si no se especifica, usa 40 (tope 150)." },
+      },
+      required: ["nombre_cuenta"],
+    },
+  },
+  {
     name: "verificar_programa_referidos",
     description:
       "Consulta en vivo los datos reales del programa de referidos de Victor-a-Victor (el link personal " +
@@ -1953,6 +1979,123 @@ export async function executeVictorTool(
         message:
           `Confirmado en vivo — esto SÍ está conectado ahora mismo en ${alcance.alcanceLabel}:\n${lineas.map((l) => `- ${l}`).join("\n")}\n\n` +
           `Usa esta lista tal cual para contestar — no digas que falta conectar algo que ya aparece aquí arriba.`,
+      };
+    }
+
+    case "consultar_transacciones_de_cuenta": {
+      // 7 sept 2026 — Joel subió un CSV de estado de cuenta directo en la
+      // Flexicuenta de Negocios BPPR y le preguntó a VICTOR por esas
+      // transacciones; VICTOR no tenía ninguna herramienta que buscara por
+      // NOMBRE DE CUENTA (solo por comercio/patrón, o solo la lista de
+      // archivos subidos) y terminó preguntándole al founder si hacía
+      // falta construir algo — cuando lo que hacía falta era esto: buscar
+      // la cuenta por nombre (Plaid o manual) y traer su actividad real,
+      // venga de Plaid o de un CSV/PDF importado.
+      const nombreCuenta = typeof input.nombre_cuenta === "string" ? input.nombre_cuenta.trim() : "";
+      if (!nombreCuenta) return { ok: false, message: "Falta el nombre de la cuenta a buscar." };
+
+      const limite = Number.isFinite(Number(input.limite)) && Number(input.limite) > 0 ? Math.min(Number(input.limite), 150) : 40;
+
+      const [{ data: plaidMatches }, { data: manualMatches }] = await Promise.all([
+        supabase
+          .from("plaid_accounts")
+          .select("id, plaid_account_id, name, nickname, official_name, mask, entity_id")
+          .eq("owner_id", ownerId)
+          .or(`name.ilike.%${nombreCuenta}%,nickname.ilike.%${nombreCuenta}%,official_name.ilike.%${nombreCuenta}%`),
+        supabase
+          .from("manual_accounts")
+          .select("id, name, mask, es_negocio")
+          .eq("owner_id", ownerId)
+          .ilike("name", `%${nombreCuenta}%`),
+      ]);
+
+      const plaidIds = (plaidMatches ?? []).map((c) => c.plaid_account_id).filter(Boolean);
+      const manualIds = (manualMatches ?? []).map((c) => c.id);
+
+      if (plaidIds.length === 0 && manualIds.length === 0) {
+        return {
+          ok: true,
+          message:
+            `No encontré ninguna cuenta conectada con un nombre parecido a "${nombreCuenta}". Usa verificar_cuentas_conectadas para ` +
+            `ver el nombre exacto de lo que sí está conectado, y confírmaselo al usuario en vez de asumir que no existe nada.`,
+        };
+      }
+
+      // Etiqueta de cada cuenta encontrada (para el mensaje final, y para
+      // distinguirlas si el nombre matcheó más de una).
+      const entityIds = Array.from(new Set((plaidMatches ?? []).map((c) => c.entity_id).filter((id): id is string => !!id)));
+      let nombrePorEntidad = new Map<string, string>();
+      if (entityIds.length > 0) {
+        const { data: entidades } = await supabase.from("business_entities").select("id, name").in("id", entityIds);
+        nombrePorEntidad = new Map((entidades ?? []).map((e) => [e.id, e.name]));
+      }
+      const etiquetaPorPlaidId = new Map(
+        (plaidMatches ?? []).map((c) => [
+          c.plaid_account_id,
+          `${c.nickname || c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""} (${c.entity_id ? nombrePorEntidad.get(c.entity_id) ?? "negocio" : "Personal"})`,
+        ])
+      );
+      const etiquetaPorManualId = new Map(
+        (manualMatches ?? []).map((c) => [c.id, `${c.name || "Cuenta manual"}${c.mask ? ` ···${c.mask}` : ""} (${c.es_negocio ? "negocio" : "Personal"})`])
+      );
+
+      const filtroOr = [
+        plaidIds.length > 0 ? `plaid_account_id.in.(${plaidIds.join(",")})` : null,
+        manualIds.length > 0 ? `manual_account_id.in.(${manualIds.join(",")})` : null,
+      ]
+        .filter(Boolean)
+        .join(",");
+
+      const { data: transacciones, error } = await supabase
+        .from("transactions")
+        .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, origen")
+        .eq("owner_id", ownerId)
+        .or(filtroOr)
+        .order("fecha", { ascending: false })
+        .limit(limite);
+
+      if (error) return { ok: false, message: `No se pudo consultar las transacciones de esa cuenta: ${error.message}` };
+
+      const cuentasEncontradas = [...(plaidMatches ?? []).map((c) => c.nickname || c.name), ...(manualMatches ?? []).map((c) => c.name)];
+
+      if (!transacciones || transacciones.length === 0) {
+        return {
+          ok: true,
+          message:
+            `Encontré la cuenta (${cuentasEncontradas.join(", ")}) pero no tiene ninguna transacción guardada todavía — si el usuario ` +
+            `dice que subió un CSV o PDF, puede que la subida haya fallado o esté en otra cuenta; usa consultar_estados_cuenta_subidos ` +
+            `para revisar el historial de archivos subidos a esta cuenta.`,
+        };
+      }
+
+      const idsCategorias = Array.from(new Set(transacciones.map((t) => t.hacienda_category_id).filter((id): id is number => !!id)));
+      let nombrePorCategoriaId = new Map<number, string>();
+      if (idsCategorias.length > 0) {
+        const { data: cats } = await supabase.from("hacienda_categories").select("id, nombre").in("id", idsCategorias);
+        nombrePorCategoriaId = new Map((cats ?? []).map((c) => [c.id, c.nombre]));
+      }
+
+      const totalMonto = transacciones.reduce((s, t) => s + Number(t.amount), 0);
+
+      const lista = transacciones
+        .map((t) => {
+          const categoria = t.hacienda_category_id ? nombrePorCategoriaId.get(t.hacienda_category_id) ?? "categoría desconocida" : "sin categoría";
+          const etiquetaCuenta = t.plaid_account_id
+            ? etiquetaPorPlaidId.get(t.plaid_account_id)
+            : t.manual_account_id
+              ? etiquetaPorManualId.get(t.manual_account_id)
+              : "";
+          return `- ${t.fecha} · "${t.description_raw}" · $${Number(t.amount).toFixed(2)} · ${categoria}${etiquetaCuenta ? ` · ${etiquetaCuenta}` : ""}`;
+        })
+        .join("\n");
+
+      return {
+        ok: true,
+        message:
+          `${transacciones.length} transacción(es) encontrada(s) en "${cuentasEncontradas.join(", ")}" (las más recientes primero, neto: ` +
+          `$${totalMonto.toFixed(2)}):\n${lista}\n\n` +
+          `Si el usuario esperaba ver algo que subió y no aparece aquí, puede que lo haya subido a OTRA cuenta por error — pregúntale ` +
+          `el nombre exacto de la cuenta a la que quiso subirlo, o usa verificar_cuentas_conectadas para mostrarle todas.`,
       };
     }
 
