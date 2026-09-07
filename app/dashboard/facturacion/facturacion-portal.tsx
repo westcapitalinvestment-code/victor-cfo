@@ -449,12 +449,20 @@ function FacturasTab({
               lo creado DENTRO de la app. No aplica en modo admin (mismo
               criterio que Importar CSV de Clientes). */}
           {!modoAdmin && (
-            <Link
-              href={`/dashboard/facturacion/importar${entidadId ? `?entidadId=${entidadId}` : ""}`}
-              className="text-xs font-medium text-muted hover:text-teal"
-            >
-              Importar CSV
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                href={`/dashboard/facturacion/importaciones${entidadId ? `?entidadId=${entidadId}` : ""}`}
+                className="text-xs font-medium text-muted hover:text-teal"
+              >
+                Ver importaciones
+              </Link>
+              <Link
+                href={`/dashboard/facturacion/importar${entidadId ? `?entidadId=${entidadId}` : ""}`}
+                className="text-xs font-medium text-muted hover:text-teal"
+              >
+                Importar CSV
+              </Link>
+            </div>
           )}
         </div>
         {filtradas.length === 0 && <p className="text-xs text-muted">No hay facturas que coincidan.</p>}

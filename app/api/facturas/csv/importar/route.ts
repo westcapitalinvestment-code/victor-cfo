@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { parseCsv, normalizarFecha, normalizarMonto } from "@/lib/csv";
 
@@ -79,13 +80,29 @@ export async function POST(req: NextRequest) {
   const { data: clientesExistentes } = await supabase.from("clients").select("id, name").eq("entity_id", entityId);
   const clientePorNombre = new Map((clientesExistentes ?? []).map((c) => [c.name.trim().toLowerCase(), c.id]));
 
-  const { data: facturasExistentes } = await supabase.from("invoices").select("numero, client_id").eq("entity_id", entityId);
-  const clavesExistentes = new Set((facturasExistentes ?? []).map((f) => `${f.client_id}::${f.numero.trim().toLowerCase()}`));
+  const { data: facturasExistentes } = await supabase.from("invoices").select("numero, client_id, subtotal").eq("entity_id", entityId);
+  // La clave de dedup incluye el monto además de cliente+número: dos
+  // facturas reales del mismo cliente pueden terminar con el mismo
+  // "número" (auto-generado, o repetido en el archivo del usuario porque
+  // ambas caen el mismo día) sin ser la misma factura. Antes esto hacía
+  // que la 2da se descartara como "duplicado" y se perdiera un monto real
+  // (bug reportado por Joel: Caribbean Health Solution $3,572.00 se comió
+  // la de $228.00 del mismo día). Con el monto en la clave, solo se trata
+  // como duplicado cuando cliente+número+monto coinciden exactamente —
+  // que es el caso real de "subí el mismo archivo dos veces".
+  const clavesExistentes = new Set(
+    (facturasExistentes ?? []).map((f) => `${f.client_id}::${f.numero.trim().toLowerCase()}::${Number(f.subtotal).toFixed(2)}`)
+  );
 
   // Números auto-generados para filas sin columna de número — sigue la
   // cuenta de facturas que ya tiene la entidad para no chocar con "F-0001"
   // que ya exista si el usuario ya había creado alguna a mano.
   let contadorAuto = (facturasExistentes ?? []).length + 1;
+
+  // Cada corrida de importación se marca con un import_batch_id — así
+  // Joel puede borrar de un solo golpe todo lo que trajo un CSV
+  // equivocado sin tener que buscar factura por factura.
+  const importBatchId = randomUUID();
 
   let importados = 0;
   let clientesCreados = 0;
@@ -133,7 +150,7 @@ export async function POST(req: NextRequest) {
       contadorAuto++;
     }
 
-    const claveDedup = `${clientId}::${numero.toLowerCase()}`;
+    const claveDedup = `${clientId}::${numero.toLowerCase()}::${subtotal.toFixed(2)}`;
     if (clavesExistentes.has(claveDedup)) {
       duplicados++;
       continue;
@@ -175,6 +192,7 @@ export async function POST(req: NextRequest) {
         fecha_vencimiento: fechaVencimiento,
         fecha_pago: fechaPago,
         notas: `Importada por CSV el ${hoyStr}.`,
+        import_batch_id: importBatchId,
       })
       .select("id")
       .single();
@@ -195,5 +213,5 @@ export async function POST(req: NextRequest) {
     importados++;
   }
 
-  return NextResponse.json({ importados, clientesCreados, duplicados, errores });
+  return NextResponse.json({ importados, clientesCreados, duplicados, errores, importBatchId: importados > 0 ? importBatchId : null });
 }

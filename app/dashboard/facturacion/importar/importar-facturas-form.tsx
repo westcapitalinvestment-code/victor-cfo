@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import * as XLSX from "xlsx";
 
 // Importar facturas históricas desde CSV/Excel (7 sept 2026) — mismo
@@ -108,9 +109,15 @@ export default function ImportarFacturasForm({
 
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<{ importados: number; clientesCreados: number; duplicados: number; errores: number } | null>(
-    null
-  );
+  const [resultado, setResultado] = useState<{
+    importados: number;
+    clientesCreados: number;
+    duplicados: number;
+    errores: number;
+    importBatchId: string | null;
+  } | null>(null);
+  const [deshaciendo, setDeshaciendo] = useState(false);
+  const [deshecho, setDeshecho] = useState(false);
 
   async function leerArchivoComoCsv(file: File): Promise<string> {
     const esExcel = /\.(xlsx|xls)$/i.test(file.name);
@@ -196,12 +203,33 @@ export default function ImportarFacturasForm({
         clientesCreados: data.clientesCreados,
         duplicados: data.duplicados,
         errores: data.errores,
+        importBatchId: data.importBatchId ?? null,
       });
       setPaso("resultado");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo importar el archivo.");
     } finally {
       setCargando(false);
+    }
+  }
+
+  // Deshacer esta importación de una vez, sin tener que ir a otra pantalla
+  // — para el caso de "subí el archivo equivocado" que reportó Joel: ver
+  // el resultado y de inmediato poder devolverlo.
+  async function deshacerImportacion() {
+    if (!resultado?.importBatchId) return;
+    if (!confirm(`¿Borrar las ${resultado.importados} factura(s) que se acaban de importar? Esto no se puede deshacer.`)) return;
+    setDeshaciendo(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/facturas/csv/importaciones/${resultado.importBatchId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "No se pudo deshacer la importación.");
+      setDeshecho(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo deshacer la importación.");
+    } finally {
+      setDeshaciendo(false);
     }
   }
 
@@ -213,6 +241,17 @@ export default function ImportarFacturasForm({
           Cancelar
         </button>
       </div>
+
+      {paso === "elegir_archivo" && (
+        <div className="mb-3 text-right">
+          <Link
+            href={`/dashboard/facturacion/importaciones${entityId ? `?entidadId=${entityId}` : ""}`}
+            className="text-xs font-medium text-muted hover:text-teal"
+          >
+            Ver importaciones anteriores →
+          </Link>
+        </div>
+      )}
 
       <div className="vc-card flex flex-col gap-3">
         {entities.length > 1 && paso !== "resultado" && (
@@ -348,12 +387,29 @@ export default function ImportarFacturasForm({
             <p className="text-xs text-muted">
               {resultado.importados} factura(s) importada(s).
               {resultado.clientesCreados > 0 && ` ${resultado.clientesCreados} cliente(s) nuevo(s) creado(s) sobre la marcha.`}
-              {resultado.duplicados > 0 && ` ${resultado.duplicados} ya existían (mismo cliente + número, omitidas).`}
+              {resultado.duplicados > 0 && ` ${resultado.duplicados} ya existían (mismo cliente + número + monto, omitidas).`}
               {resultado.errores > 0 && ` ${resultado.errores} fila(s) con datos incompletos, no se pudieron importar.`}
             </p>
-            <button className="mt-3 vc-btn-primary" onClick={() => router.push(destino)}>
-              {returnTo ? "Volver" : "Ver facturas"}
-            </button>
+
+            {deshecho ? (
+              <p className="mt-3 text-xs text-teal">Importación deshecha — esas facturas ya no están.</p>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button className="vc-btn-primary" onClick={() => router.push(destino)}>
+                  {returnTo ? "Volver" : "Ver facturas"}
+                </button>
+                {resultado.importados > 0 && resultado.importBatchId && (
+                  <button
+                    className="rounded border border-red px-3 py-1.5 text-xs text-red hover:bg-red/10"
+                    disabled={deshaciendo}
+                    onClick={deshacerImportacion}
+                  >
+                    {deshaciendo ? "Deshaciendo…" : "¿Archivo equivocado? Deshacer esta importación"}
+                  </button>
+                )}
+              </div>
+            )}
+            {error && <p className="mt-2 text-xs text-red">{error}</p>}
           </div>
         )}
       </div>
