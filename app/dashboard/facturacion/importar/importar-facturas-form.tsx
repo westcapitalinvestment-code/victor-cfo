@@ -29,6 +29,14 @@ const ALIAS_RETENCION = ["retention", "retencion", "retención", "withholding", 
 const ALIAS_IVU = ["tax", "ivu", "sales tax", "tax %", "% ivu"];
 const ALIAS_ESTADO = ["status", "estado"];
 const ALIAS_FECHA_PAGO = ["paid date", "payment date", "fecha de pago", "fecha pago"];
+const ALIAS_DESCRIPCION = ["description", "descripcion", "descripción", "memo", "notes"];
+
+// Si el archivo trae estas columnas (típicas del reporte "Payments
+// Collected" de FreshBooks), es muy probable que sea 1-2 filas POR PAGO
+// de cada factura (no 1 fila = 1 factura) — se sugiere automáticamente
+// el modo "Pagos recibidos".
+const ALIAS_METODO = ["method", "metodo", "método"];
+const ALIAS_PAYMENT_FOR = ["payment for"];
 
 function indiceDeAlias(columnas: string[], alias: string[]): number | "" {
   const normalizadas = columnas.map((c) => c.trim().toLowerCase());
@@ -103,9 +111,16 @@ export default function ImportarFacturasForm({
   const [columnaIvuPct, setColumnaIvuPct] = useState<number | "">("");
   const [columnaEstado, setColumnaEstado] = useState<number | "">("");
   const [columnaFechaPago, setColumnaFechaPago] = useState<number | "">("");
+  const [columnaDescripcion, setColumnaDescripcion] = useState<number | "">("");
 
   const [formatoFecha, setFormatoFecha] = useState<"MDY" | "DMY" | "YMD">("MDY");
   const [estadoDefault, setEstadoDefault] = useState<"pagada" | "enviada">("pagada");
+
+  // "estandar": 1 fila = 1 factura. "pagos_recibidos": el reporte
+  // "Payments Collected" de FreshBooks, donde una factura puede traer 2
+  // filas (monto neto + retención) o varias (pagos parciales), todas con
+  // el mismo número — se agrupan por Número antes de crear la factura.
+  const [modo, setModo] = useState<"estandar" | "pagos_recibidos">("estandar");
 
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +174,15 @@ export default function ImportarFacturasForm({
       setColumnaIvuPct(indiceDeAlias(data.columnas, ALIAS_IVU));
       setColumnaEstado(indiceDeAlias(data.columnas, ALIAS_ESTADO));
       setColumnaFechaPago(indiceDeAlias(data.columnas, ALIAS_FECHA_PAGO));
+      setColumnaDescripcion(indiceDeAlias(data.columnas, ALIAS_DESCRIPCION));
+
+      // Auto-detectar el reporte "Payments Collected" de FreshBooks: trae
+      // columnas de Método de pago y "Payment for" que un listado normal
+      // de facturas no tiene. Si las encontramos, sugerimos el modo
+      // correcto de una vez en lugar de dejar que Joel se coma la mitad
+      // de sus facturas otra vez.
+      const pareceReportePagos = indiceDeAlias(data.columnas, ALIAS_METODO) !== "" && indiceDeAlias(data.columnas, ALIAS_PAYMENT_FOR) !== "";
+      setModo(pareceReportePagos ? "pagos_recibidos" : "estandar");
 
       setPaso("mapear");
     } catch (err) {
@@ -170,7 +194,11 @@ export default function ImportarFacturasForm({
 
   async function confirmarImportacion() {
     if (columnaCliente === "" || columnaFecha === "" || columnaSubtotal === "") {
-      setError("Faltan columnas requeridas: Cliente, Fecha de emisión y Subtotal.");
+      setError(modo === "pagos_recibidos" ? "Faltan columnas requeridas: Cliente, Fecha y Monto." : "Faltan columnas requeridas: Cliente, Fecha de emisión y Subtotal.");
+      return;
+    }
+    if (modo === "pagos_recibidos" && columnaNumero === "") {
+      setError("En modo 'Pagos recibidos' la columna Número de factura es requerida — se usa para agrupar las filas del mismo pago.");
       return;
     }
     setError(null);
@@ -184,6 +212,7 @@ export default function ImportarFacturasForm({
           csv: csvTexto,
           formatoFecha,
           estadoDefault,
+          modo,
           columnaCliente: Number(columnaCliente),
           columnaFecha: Number(columnaFecha),
           columnaSubtotal: Number(columnaSubtotal),
@@ -194,6 +223,7 @@ export default function ImportarFacturasForm({
           columnaIvuPct: columnaIvuPct === "" ? null : Number(columnaIvuPct),
           columnaEstado: columnaEstado === "" ? null : Number(columnaEstado),
           columnaFechaPago: columnaFechaPago === "" ? null : Number(columnaFechaPago),
+          columnaDescripcion: columnaDescripcion === "" ? null : Number(columnaDescripcion),
         }),
       });
       const data = await res.json();
@@ -319,9 +349,27 @@ export default function ImportarFacturasForm({
               </table>
             </div>
 
+            <div className="mb-3 rounded border border-border p-2">
+              <label className="mb-1 flex items-center gap-2 text-[11px] font-medium">
+                <input type="checkbox" checked={modo === "pagos_recibidos"} onChange={(e) => setModo(e.target.checked ? "pagos_recibidos" : "estandar")} />
+                Este archivo es un reporte de &quot;Pagos recibidos&quot; (FreshBooks)
+              </label>
+              <p className="text-[11px] text-muted">
+                Úsalo si el archivo trae 1-2 filas <strong>por pago</strong> en vez de 1 fila por factura — por ejemplo, una fila con el
+                monto cobrado y otra aparte con la retención (columna Descripción dice &quot;Retención 6%&quot;). VICTOR agrupa las filas
+                que compartan el mismo Número de factura y marca todo como Pagada.
+              </p>
+            </div>
+
             <div className="mb-2 grid grid-cols-2 gap-2">
               <SelectorColumna etiqueta="Cliente" requerido columnas={columnas} valor={columnaCliente} onChange={setColumnaCliente} />
-              <SelectorColumna etiqueta="Fecha de emisión" requerido columnas={columnas} valor={columnaFecha} onChange={setColumnaFecha} />
+              <SelectorColumna
+                etiqueta={modo === "pagos_recibidos" ? "Fecha del pago" : "Fecha de emisión"}
+                requerido
+                columnas={columnas}
+                valor={columnaFecha}
+                onChange={setColumnaFecha}
+              />
             </div>
 
             <div className="mb-2">
@@ -334,39 +382,68 @@ export default function ImportarFacturasForm({
             </div>
 
             <div className="mb-2 grid grid-cols-2 gap-2">
-              <SelectorColumna etiqueta="Subtotal (bruto)" requerido columnas={columnas} valor={columnaSubtotal} onChange={setColumnaSubtotal} />
               <SelectorColumna
-                etiqueta="Total (si ya viene con IVU/retención aplicados)"
+                etiqueta={modo === "pagos_recibidos" ? "Monto de esta fila (Amount)" : "Subtotal (bruto)"}
+                requerido
                 columnas={columnas}
-                valor={columnaTotal}
-                onChange={setColumnaTotal}
+                valor={columnaSubtotal}
+                onChange={setColumnaSubtotal}
+              />
+              <SelectorColumna
+                etiqueta={modo === "pagos_recibidos" ? "Número de factura" : "Número de factura (opcional)"}
+                requerido={modo === "pagos_recibidos"}
+                columnas={columnas}
+                valor={columnaNumero}
+                onChange={setColumnaNumero}
               />
             </div>
 
-            <div className="mb-2 grid grid-cols-2 gap-2">
-              <SelectorColumna etiqueta="Número de factura" columnas={columnas} valor={columnaNumero} onChange={setColumnaNumero} />
-              <SelectorColumna etiqueta="Fecha de vencimiento" columnas={columnas} valor={columnaFechaVencimiento} onChange={setColumnaFechaVencimiento} />
-            </div>
+            {modo === "pagos_recibidos" ? (
+              <div className="mb-3">
+                <SelectorColumna
+                  etiqueta="Descripción (para detectar la fila de retención, ej. 'Retención 6%')"
+                  columnas={columnas}
+                  valor={columnaDescripcion}
+                  onChange={setColumnaDescripcion}
+                />
+                <p className="mt-2 text-[11px] text-muted">
+                  Todas las facturas de este archivo se marcarán como <strong>Pagadas</strong>, con la fecha de pago tomada de la fila más
+                  reciente de cada factura.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="mb-2 grid grid-cols-2 gap-2">
+                  <SelectorColumna
+                    etiqueta="Total (si ya viene con IVU/retención aplicados)"
+                    columnas={columnas}
+                    valor={columnaTotal}
+                    onChange={setColumnaTotal}
+                  />
+                  <SelectorColumna etiqueta="Fecha de vencimiento" columnas={columnas} valor={columnaFechaVencimiento} onChange={setColumnaFechaVencimiento} />
+                </div>
 
-            <div className="mb-2 grid grid-cols-2 gap-2">
-              <SelectorColumna etiqueta="% Retención" columnas={columnas} valor={columnaRetencionPct} onChange={setColumnaRetencionPct} />
-              <SelectorColumna etiqueta="% IVU" columnas={columnas} valor={columnaIvuPct} onChange={setColumnaIvuPct} />
-            </div>
+                <div className="mb-2 grid grid-cols-2 gap-2">
+                  <SelectorColumna etiqueta="% Retención" columnas={columnas} valor={columnaRetencionPct} onChange={setColumnaRetencionPct} />
+                  <SelectorColumna etiqueta="% IVU" columnas={columnas} valor={columnaIvuPct} onChange={setColumnaIvuPct} />
+                </div>
 
-            <div className="mb-2 grid grid-cols-2 gap-2">
-              <SelectorColumna etiqueta="Estado (pagada/enviada)" columnas={columnas} valor={columnaEstado} onChange={setColumnaEstado} />
-              <SelectorColumna etiqueta="Fecha de pago" columnas={columnas} valor={columnaFechaPago} onChange={setColumnaFechaPago} />
-            </div>
+                <div className="mb-2 grid grid-cols-2 gap-2">
+                  <SelectorColumna etiqueta="Estado (pagada/enviada)" columnas={columnas} valor={columnaEstado} onChange={setColumnaEstado} />
+                  <SelectorColumna etiqueta="Fecha de pago" columnas={columnas} valor={columnaFechaPago} onChange={setColumnaFechaPago} />
+                </div>
 
-            <div className="mb-3">
-              <label className="mb-1 block text-[11px] text-muted">
-                Estado por defecto (para filas sin columna de Estado, o con un texto que no se reconozca)
-              </label>
-              <select className="vc-input !py-1.5 !text-xs" value={estadoDefault} onChange={(e) => setEstadoDefault(e.target.value as "pagada" | "enviada")}>
-                <option value="pagada">Pagada</option>
-                <option value="enviada">Enviada (pendiente de cobro)</option>
-              </select>
-            </div>
+                <div className="mb-3">
+                  <label className="mb-1 block text-[11px] text-muted">
+                    Estado por defecto (para filas sin columna de Estado, o con un texto que no se reconozca)
+                  </label>
+                  <select className="vc-input !py-1.5 !text-xs" value={estadoDefault} onChange={(e) => setEstadoDefault(e.target.value as "pagada" | "enviada")}>
+                    <option value="pagada">Pagada</option>
+                    <option value="enviada">Enviada (pendiente de cobro)</option>
+                  </select>
+                </div>
+              </>
+            )}
 
             {error && <p className="mb-2 text-xs text-red">{error}</p>}
 
