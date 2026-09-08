@@ -70,9 +70,6 @@ async function purgarCuenta(supabase: ReturnType<typeof createAdminClient>, owne
   const { data: entidades } = await supabase.from("business_entities").select("id, logo_r2_key, relevo_certificate_r2_key").eq("owner_id", ownerId);
   const entityIds = (entidades ?? []).map((e) => e.id);
 
-  const { data: tecnicos } = await supabase.from("technicians").select("id").eq("owner_id", ownerId);
-  const technicianIds = (tecnicos ?? []).map((t) => t.id);
-
   // --- 1. Borrar archivos de R2 primero (antes de borrar las filas que
   // tienen la referencia a la key) ---
   const tablasConR2: { tabla: string; columna: string }[] = [
@@ -112,10 +109,15 @@ async function purgarCuenta(supabase: ReturnType<typeof createAdminClient>, owne
 
   // --- 2. Borrar filas — hijos antes que padres donde no hay CASCADE
   // garantizado, tablas directas de owner_id primero ---
-  if (technicianIds.length > 0) {
-    await supabase.from("technician_visit_items").delete().in("technician_id", technicianIds);
-    await supabase.from("technician_visits").delete().in("technician_id", technicianIds);
-  }
+  //
+  // 8 sept 2026 — technician_visits y technician_visit_items NO se borran
+  // aquí explícitamente (y technician_visit_items nunca debió filtrarse
+  // por "technician_id" — esa tabla solo tiene visit_id, ese filtro
+  // habría lanzado un error de columna inexistente y tumbado la purga
+  // COMPLETA de cualquier cuenta con técnicos). No hace falta: ambas
+  // tienen ON DELETE CASCADE encadenado desde technicians (ver migración
+  // 0003) — al borrar la fila de technicians más abajo en este mismo
+  // método, Postgres las arrastra solo.
   if (entityIds.length > 0) {
     await supabase.from("technician_service_catalog").delete().in("entity_id", entityIds);
     await supabase.from("merchant_patterns").delete().in("entity_id", entityIds);
