@@ -316,6 +316,32 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "consultar_transacciones_de_subida",
+    description:
+      "Aísla EXACTAMENTE las transacciones de UNA subida de CSV/PDF específica (por defecto la más reciente de " +
+      "esa cuenta) — úsala cuando el usuario diga cosas como 'el CSV que subí hoy', 'lo que acabo de importar', " +
+      "o pida recategorizar/revisar específicamente una subida (no toda la cuenta). A diferencia de " +
+      "consultar_transacciones_de_cuenta (trae las N más recientes de la cuenta SIN distinguir de dónde " +
+      "vinieron — mezcla Plaid con CSV) y de revisar_gastos_sin_categorizar (solo trae lo que NO tiene ninguna " +
+      "categoría — si el trigger automático ya les puso una al importarlas, aunque sea una que no calce bien, " +
+      "no las vas a ver ahí), esta usa el registro real de la subida (statement_uploads) para traer TODAS las " +
+      "filas de esa subida exacta, tengan categoría o no — así puedes recategorizarlas en lote con " +
+      "categorizar_transacciones_lote aunque el sistema ya les haya asignado algo automáticamente. Si el " +
+      "archivo trae más filas de las que caben en un límite, pide la siguiente página con offset.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre_cuenta: {
+          type: "string",
+          description: "Nombre (o parte) de la cuenta a la que se le subió el archivo — ej. 'Flexicuenta Negocio BPPR'.",
+        },
+        offset: { type: "number", description: "Cuántas filas saltar (para pedir la siguiente página de una subida grande). Por defecto 0." },
+        limite: { type: "number", description: "Cuántas transacciones traer como máximo en esta página. Si no se especifica, usa 150 (tope 250)." },
+      },
+      required: ["nombre_cuenta"],
+    },
+  },
+  {
     name: "verificar_programa_referidos",
     description:
       "Consulta en vivo los datos reales del programa de referidos de Victor-a-Victor (el link personal " +
@@ -2096,6 +2122,116 @@ export async function executeVictorTool(
           `$${totalMonto.toFixed(2)}):\n${lista}\n\n` +
           `Si el usuario esperaba ver algo que subió y no aparece aquí, puede que lo haya subido a OTRA cuenta por error — pregúntale ` +
           `el nombre exacto de la cuenta a la que quiso subirlo, o usa verificar_cuentas_conectadas para mostrarle todas.`,
+      };
+    }
+
+    case "consultar_transacciones_de_subida": {
+      // 7 sept 2026 — Joel subió un CSV de Flexicuenta Negocio BPPR
+      // (enero-junio, para rellenar lo que Plaid no trajo) y le pidió a
+      // VICTOR que lo ayudara a categorizarlo. VICTOR llamó
+      // revisar_gastos_sin_categorizar y encontró solo 1 pendiente —
+      // porque el trigger de auto-categorización ya les había puesto
+      // categoría a casi todas al importarlas (aunque fuera una genérica
+      // por patrón, no necesariamente la correcta) — y llamó
+      // consultar_transacciones_de_cuenta, pero esa trae las N más
+      // recientes DE TODA LA CUENTA (mezclando Plaid con CSV, sin poder
+      // distinguir "esto es del archivo de hoy" de forma exacta, y
+      // topándose con el límite antes de cubrir las 391 filas reales).
+      // Esta tool usa statement_uploads (migración 0072, ya diseñada para
+      // "deshacer" una subida exacta) para lo mismo pero de lectura: traer
+      // TODAS las filas de la subida más reciente de esa cuenta, tengan
+      // categoría o no, paginando si hace falta.
+      const nombreCuentaSubida = typeof input.nombre_cuenta === "string" ? input.nombre_cuenta.trim() : "";
+      if (!nombreCuentaSubida) return { ok: false, message: "Falta el nombre de la cuenta." };
+
+      const offset = Number.isFinite(Number(input.offset)) && Number(input.offset) >= 0 ? Number(input.offset) : 0;
+      const limiteSubida = Number.isFinite(Number(input.limite)) && Number(input.limite) > 0 ? Math.min(Number(input.limite), 250) : 150;
+
+      const [{ data: plaidMatchesSub }, { data: manualMatchesSub }] = await Promise.all([
+        supabase.from("plaid_accounts").select("plaid_account_id, name, nickname").eq("owner_id", ownerId).or(`name.ilike.%${nombreCuentaSubida}%,nickname.ilike.%${nombreCuentaSubida}%`),
+        supabase.from("manual_accounts").select("id, name").eq("owner_id", ownerId).ilike("name", `%${nombreCuentaSubida}%`),
+      ]);
+
+      const plaidIdsSub = (plaidMatchesSub ?? []).map((c) => c.plaid_account_id).filter(Boolean);
+      const manualIdsSub = (manualMatchesSub ?? []).map((c) => c.id);
+
+      if (plaidIdsSub.length === 0 && manualIdsSub.length === 0) {
+        return { ok: true, message: `No encontré ninguna cuenta con un nombre parecido a "${nombreCuentaSubida}". Usa verificar_cuentas_conectadas para confirmar el nombre exacto.` };
+      }
+
+      const filtroOrCuentas = [
+        plaidIdsSub.length > 0 ? `plaid_account_id.in.(${plaidIdsSub.join(",")})` : null,
+        manualIdsSub.length > 0 ? `manual_account_id.in.(${manualIdsSub.join(",")})` : null,
+      ]
+        .filter(Boolean)
+        .join(",");
+
+      const { data: subida, error: errorSubida } = await supabase
+        .from("statement_uploads")
+        .select("id, origen, nombre_archivo, created_at, total_importadas, total_duplicadas")
+        .eq("owner_id", ownerId)
+        .or(filtroOrCuentas)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (errorSubida) return { ok: false, message: `No se pudo consultar el historial de subidas: ${errorSubida.message}` };
+
+      if (!subida) {
+        return {
+          ok: true,
+          message:
+            `Esa cuenta no tiene ninguna subida de CSV/PDF registrada (statement_uploads) — sus transacciones vinieron directo de Plaid, ` +
+            `o se importaron antes de que este registro existiera. Usa consultar_transacciones_de_cuenta en su lugar para ver su actividad.`,
+        };
+      }
+
+      const { count: totalFilasSubida } = await supabase
+        .from("transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("statement_upload_id", subida.id);
+
+      const { data: filasSubida, error: errorFilas } = await supabase
+        .from("transactions")
+        .select("id, description_raw, amount, fecha, hacienda_category_id")
+        .eq("statement_upload_id", subida.id)
+        .order("fecha", { ascending: true })
+        .range(offset, offset + limiteSubida - 1);
+
+      if (errorFilas) return { ok: false, message: `No se pudo traer las transacciones de esa subida: ${errorFilas.message}` };
+
+      const idsCategoriasSub = Array.from(new Set((filasSubida ?? []).map((t) => t.hacienda_category_id).filter((id): id is number => !!id)));
+      let nombrePorCategoriaIdSub = new Map<number, string>();
+      if (idsCategoriasSub.length > 0) {
+        const { data: cats } = await supabase.from("hacienda_categories").select("id, nombre").in("id", idsCategoriasSub);
+        nombrePorCategoriaIdSub = new Map((cats ?? []).map((c) => [c.id, c.nombre]));
+      }
+
+      const listaSubida = (filasSubida ?? [])
+        .map((t) => {
+          const categoria = t.hacienda_category_id ? nombrePorCategoriaIdSub.get(t.hacienda_category_id) ?? "categoría desconocida" : "sin categoría";
+          return `- [${t.id}] ${t.fecha} · "${t.description_raw}" · $${Number(t.amount).toFixed(2)} · ${categoria}`;
+        })
+        .join("\n");
+
+      const traidas = filasSubida?.length ?? 0;
+      const quedanFueraSubida = (totalFilasSubida ?? 0) - offset - traidas;
+      const avisoSubida =
+        quedanFueraSubida > 0
+          ? `\n\nOJO: esta subida tiene ${totalFilasSubida} filas en total — esta página trajo ${traidas} (offset ${offset}). Vuelve a llamar ` +
+            `consultar_transacciones_de_subida con offset=${offset + traidas} para traer las ${quedanFueraSubida} que quedan.`
+          : "";
+
+      return {
+        ok: true,
+        message:
+          `Subida: "${subida.nombre_archivo ?? "sin nombre"}" (${subida.origen.toUpperCase()}), del ${subida.created_at.slice(0, 10)} — ` +
+          `${subida.total_importadas} importadas en su momento, ${subida.total_duplicadas} duplicadas. ${totalFilasSubida} fila(s) reales hoy en la base de datos.\n\n` +
+          `${listaSubida}${avisoSubida}\n\n` +
+          `El [id] al inicio de cada línea es para uso interno tuyo (transaction_id en categorizar_transacciones_lote) — nunca lo repitas ` +
+          `en el chat. Estas SÍ pueden tener categoría ya puesta por el trigger automático (por patrón de comercio) — si el usuario quiere ` +
+          `recategorizarlas a las categorías reales de Hacienda, usa categorizar_transacciones_lote con todas las que reconozcas con ` +
+          `confianza, en una sola llamada (funciona aunque ya tuvieran otra categoría antes), y pregúntale agrupadas las que sean ambiguas.`,
       };
     }
 
