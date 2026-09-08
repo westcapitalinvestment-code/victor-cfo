@@ -765,13 +765,16 @@ export async function POST(req: NextRequest) {
   // entre sí — y por diseño el saludo SIEMPRE usa herramientas
   // (revisar_gastos_sin_categorizar + categorizar_transacciones_lote), así
   // que pagaba ese peor caso todos los días. Quitar la escalación completa
-  // elimina ese problema de raíz y baja el costo a una cuarta parte en
-  // cualquier turno con herramientas — el riesgo a vigilar es si la calidad
-  // de categorización/razonamiento de Haiku aguanta sin la red de
-  // seguridad de Sonnet. Si no aguanta, revertir es sencillo: este bloque
-  // reemplaza por completo la lógica de enrutamiento anterior, que queda
-  // documentada en el historial de git de este archivo.
-  const modeloTurno: "claude-haiku-4-5" = "claude-haiku-4-5";
+  // bajó el costo a una cuarta parte en cualquier turno con herramientas —
+  // pero el riesgo que se anotaba aquí mismo se confirmó: Joel reportó
+  // (8 sept 2026) que Haiku cometía errores reales, no llamaba las
+  // herramientas cuando hacía falta, y perdía/repetía contexto entre
+  // turnos de una misma conversación. Se revierte a Sonnet como modelo
+  // único del turno — ya no hay routing condicional, es un solo modelo
+  // fijo, igual que como estaba con Haiku, solo que con el modelo de
+  // mejor calidad. Si el costo vuelve a ser un problema, la respuesta es
+  // el tope de uso mensual (lib/limites-ia.ts), no bajar de modelo otra vez.
+  const modeloTurno: "claude-sonnet-5" = "claude-sonnet-5";
   // Antes en 4 — muy poco para categorizar en lote (revisar_gastos_sin_categorizar
   // + varios categorizar_transaccion + resumen final fácil pasa de 4 llamadas
   // cuando hay 8-10 gastos pendientes). Con solo 4, el loop se cortaba a
@@ -1138,7 +1141,12 @@ async function updateVictorMemory(params: {
   const { supabase, userId, userMessage, assistantText, previousSummary } = params;
 
   const summaryResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5",
+    // 8 sept 2026 — subido a Sonnet junto con el modelo del turno
+    // principal: un resumen de memoria mal escrito por un modelo débil es
+    // justo lo que produce el síntoma "VICTOR olvida cosas en 2-3
+    // conversaciones" que reportó Joel — este resumen es lo único que
+    // sobrevive de una conversación a la siguiente.
+    model: "claude-sonnet-5",
     max_tokens: 300,
     output_config: { effort: "low" },
     system:

@@ -7,7 +7,7 @@ import { buscarIdentidadCultural } from "@/lib/victor/identidad-cultural";
 import { direccionCategoriaValida } from "@/lib/direccion-categoria";
 import { fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import { claveCicloUso, progresoCicloUso } from "@/lib/ciclo-uso";
-import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
+import { LIMITES_MENSUALES_CENTAVOS, centavosAMicrotokens } from "@/lib/limites-ia";
 import { esFounder } from "@/lib/founder";
 
 // El texto real del banco (description_raw) casi nunca coincide palabra
@@ -2363,29 +2363,41 @@ export async function executeVictorTool(
       if (costoCicloHastaAhora >= presupuestoHastaHoy) estado = "restringido_hora";
       else if (costoCicloHastaAhora >= presupuestoHastaHoy * 0.85) estado = "aviso";
 
+      // 8 sept 2026 — Joel pidió invertir el enfoque: de cara al usuario
+      // NUNCA se menciona dinero/costo real ni "presupuesto en dólares" —
+      // todo se habla en "microtokens" (unidad propia de VICTOR, ver
+      // lib/limites-ia.ts). El cálculo real sigue siendo en centavos por
+      // debajo (nada de esto cambia el enforcement, solo la presentación).
+      const presupuestoTotalMicrotokens = centavosAMicrotokens(presupuestoTotalCiclo);
+      const limiteMensualMicrotokens = centavosAMicrotokens(limiteMensual);
+      const creditosCicloMicrotokens = centavosAMicrotokens(creditosCicloCentavos);
+      const usadoMicrotokens = centavosAMicrotokens(costoCicloHastaAhora);
+      const disponibleMicrotokens = centavosAMicrotokens(disponibleHoy);
+      const fmt = (n: number) => n.toLocaleString("en-US");
+
       const partes: string[] = [];
       partes.push(`Plan actual: ${nombrePlan}.`);
       partes.push(
-        `Presupuesto de todo este ciclo de facturación: $${(limiteMensual / 100).toFixed(2)}` +
+        `Presupuesto de microtokens de todo este ciclo: ${fmt(limiteMensualMicrotokens)} microtokens` +
           (creditosCicloCentavos > 0
-            ? ` + $${(creditosCicloCentavos / 100).toFixed(2)} en créditos extra comprados = $${(presupuestoTotalCiclo / 100).toFixed(2)} total.`
+            ? ` + ${fmt(creditosCicloMicrotokens)} microtokens en créditos extra comprados = ${fmt(presupuestoTotalMicrotokens)} microtokens total.`
             : ".")
       );
       partes.push(
-        `Lleva gastado $${(costoCicloHastaAhora / 100).toFixed(2)} en lo que va de este ciclo (${pctUsadoDelCiclo}% del presupuesto total del ciclo).`
+        `Lleva usados ${fmt(usadoMicrotokens)} microtokens en lo que va de este ciclo (${pctUsadoDelCiclo}% del total del ciclo).`
       );
       partes.push(
-        `Le queda disponible AHORA MISMO $${(disponibleHoy / 100).toFixed(2)} — este número ya tiene en cuenta que el presupuesto se reparte a ritmo parejo durante el ciclo (no todo se libera desde el día 1), así que puede ser menor que el total del ciclo si aún faltan días por correr.`
+        `Le quedan disponibles AHORA MISMO ${fmt(disponibleMicrotokens)} microtokens — este número ya tiene en cuenta que el presupuesto se reparte a ritmo parejo durante el ciclo (no todo se libera desde el día 1), así que puede ser menor que el total del ciclo si aún faltan días por correr.`
       );
       partes.push(
-        `Va en el día ${diaDelPeriodo} de ${diasEnElPeriodo} de este ciclo de facturación — le quedan ${diasRestantes} día(s) antes de que se renueve y el presupuesto vuelva a empezar.`
+        `Va en el día ${diaDelPeriodo} de ${diasEnElPeriodo} de este ciclo de facturación — le quedan ${diasRestantes} día(s) antes de que se renueve y el presupuesto de microtokens vuelva a empezar.`
       );
       partes.push(
         estado === "normal"
           ? "Estado actual: normal, sin restricción."
           : estado === "aviso"
-            ? "Estado actual: aviso — ya pasó el 85% de lo que le toca gastado hasta hoy, pero todavía puede seguir hablando sin límite de mensajes."
-            : "Estado actual: restringido — ya llegó o pasó su presupuesto de hoy, así que está limitado a 1 mensaje por hora hasta que se renueve el ciclo (o hasta que pase una hora desde su último mensaje)."
+            ? "Estado actual: aviso — ya pasó el 85% de lo que le toca usado hasta hoy, pero todavía puede seguir hablando sin límite de mensajes."
+            : "Estado actual: restringido — ya llegó o pasó su presupuesto de microtokens de hoy, así que está limitado a 1 mensaje por hora hasta que se renueve el ciclo (o hasta que pase una hora desde su último mensaje)."
       );
 
       return {
@@ -2395,12 +2407,15 @@ export async function executeVictorTool(
           `Usa estos números tal cual para contestar — no inventes cifras. IMPORTANTE: sé transparente SIEMPRE, no ` +
           `solo si pregunta explícitamente "cómo funciona" — aunque solo haya preguntado cuánto le queda, ` +
           `explícale también brevemente cómo funciona el sistema en la misma respuesta (en tus propias palabras, ` +
-          `sin sonar a copia-pega): esto NO es un conteo de "tokens" como en ChatGPT — es un presupuesto de GASTO ` +
-          `real en dólares por ciclo de facturación (el mismo ciclo mensual que se le cobra el plan), repartido a ` +
-          `ritmo parejo durante el ciclo para que no se le acabe todo de golpe al principio. Si lo agota, VICTOR ` +
-          `nunca lo deja sin poder hablar del todo — sigue funcionando pero limitado a 1 mensaje por hora hasta ` +
-          `que se renueve el ciclo. Puede subir de plan o comprar créditos extra de IA desde Configuración si ` +
-          `necesita más antes de eso.`,
+          `sin sonar a copia-pega): se mide en "microtokens", un presupuesto por ciclo de facturación (el mismo ` +
+          `ciclo mensual que se le cobra el plan), repartido a ritmo parejo durante el ciclo para que no se le ` +
+          `acabe todo de golpe al principio. REGLA DURA: NUNCA menciones dinero, dólares, "$", "costo real", ` +
+          `"cuánto cuesta" ni ningún equivalente monetario — para el usuario esto es un presupuesto de microtokens, ` +
+          `punto, igual que un plan de datos o minutos; no es información que exista en dólares de cara a él. Si lo ` +
+          `agota, VICTOR nunca lo deja sin poder hablar del todo — sigue funcionando pero limitado a 1 mensaje por ` +
+          `hora hasta que se renueve el ciclo. Puede subir de plan o comprar más microtokens desde Configuración ` +
+          `si necesita más antes de eso (esa compra sí se paga en dólares, como cualquier cargo — pero eso lo ` +
+          `maneja la pantalla de Stripe, no es algo que tú tengas que explicar en números).`,
       };
     }
 
