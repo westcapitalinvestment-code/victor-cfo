@@ -9,6 +9,7 @@ import PinConfig from "../pin-config";
 import MfaConfig from "../mfa-config";
 import SessionTimeoutConfig from "../session-timeout-config";
 import ReferralLink from "../referral-link";
+import EliminarCuenta from "../eliminar-cuenta";
 
 export default async function ConfigPage() {
   const supabase = createClient();
@@ -24,7 +25,7 @@ export default async function ConfigPage() {
   // mostrar el fallback "core"/"trialing" de abajo.
   const { data: profile } = await supabase
     .from("users")
-    .select("full_name, plan, plan_status")
+    .select("full_name, plan, plan_status, deletion_scheduled_for")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -99,6 +100,8 @@ export default async function ConfigPage() {
       <GestionarPlan />
 
       <CreditosIA />
+
+      <EliminarCuenta deletionScheduledFor={profile?.deletion_scheduled_for ?? null} />
 
       <div className="vc-card">
         <LogoutButton />
