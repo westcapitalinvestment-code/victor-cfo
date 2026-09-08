@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { hashPin } from "@/lib/pin";
+import { verificarPin } from "@/lib/pin";
 import { crearSesionTecnico, COOKIE_SESION_TECNICO, MAX_AGE_SESION_TECNICO } from "@/lib/tecnico-session";
 import { contextoDesdeTechnicianId, construirRespuestaSesion } from "@/lib/tecnico-contexto";
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Este link no es válido o ya no está activo." }, { status: 401 });
   }
 
-  if (hashPin(pin, tecnico.id) !== tecnico.pin_hash) {
+  if (!verificarPin(pin, tecnico.id, tecnico.pin_hash)) {
     return NextResponse.json({ error: "PIN incorrecto." }, { status: 401 });
   }
 

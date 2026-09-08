@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { hashPin } from "@/lib/pin";
+import { verificarPin } from "@/lib/pin";
 
 // Verifica el PIN escrito contra el hash guardado. Requiere sesión de
 // Supabase activa (no es un endpoint público) — eso, junto con el
@@ -19,6 +19,6 @@ export async function POST(req: NextRequest) {
   if (!/^\d{4}$/.test(pin)) return NextResponse.json({ ok: false }, { status: 400 });
 
   const { data } = await supabase.from("users").select("pin_hash").eq("id", user.id).maybeSingle();
-  const correcto = !!data?.pin_hash && data.pin_hash === hashPin(pin, user.id);
+  const correcto = !!data?.pin_hash && verificarPin(pin, user.id, data.pin_hash);
   return NextResponse.json({ ok: correcto });
 }
