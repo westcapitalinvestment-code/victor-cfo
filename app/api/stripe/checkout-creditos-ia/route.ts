@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getStripe, priceIdCreditosIA, CREDITO_IA_CENTAVOS_POR_COMPRA } from "@/lib/stripe";
+import { getStripe, configPaqueteCreditosIA, type PaqueteCreditosIA } from "@/lib/stripe";
 import { claveCicloUso } from "@/lib/ciclo-uso";
 
 // Checkout de créditos de IA — 3 sept 2026, migración 0064. A diferencia de
@@ -20,10 +20,15 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
 
-  const priceId = priceIdCreditosIA();
+  // 8 sept 2026 — segundo pack ($20, más crédito) además del original de
+  // $10. El cliente escoge cuál quiere desde creditos-ia.tsx; por defecto
+  // (body vacío o valor inesperado) cae al pack de $10 de siempre.
+  const body = await req.json().catch(() => null);
+  const paquete: PaqueteCreditosIA = body?.paquete === "20" ? "20" : "10";
+  const { priceId, creditoCentavos } = configPaqueteCreditosIA(paquete);
   if (!priceId) {
     return NextResponse.json(
-      { error: "Falta configurar el Price ID de créditos de IA en las variables de entorno." },
+      { error: `Falta configurar el Price ID del pack de $${paquete} de créditos de IA en las variables de entorno.` },
       { status: 500 }
     );
   }
@@ -48,7 +53,7 @@ export async function POST(req: NextRequest) {
         tipo: "creditos_ia",
         supabase_user_id: user.id,
         ciclo_clave: cicloClave,
-        credito_centavos: String(CREDITO_IA_CENTAVOS_POR_COMPRA),
+        credito_centavos: String(creditoCentavos),
       },
       success_url: `${origin}/dashboard/config?creditos=comprados`,
       cancel_url: `${origin}/dashboard/config`,

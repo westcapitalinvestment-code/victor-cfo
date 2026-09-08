@@ -153,3 +153,25 @@ export function priceIdCreditosIA(): string | null {
 // exponga. Si el precio del pack cambia en Stripe, este número hay que
 // ajustarlo a mano para mantener el mismo ~30% de margen.
 export const CREDITO_IA_CENTAVOS_POR_COMPRA = 700;
+
+// 8 sept 2026 — segundo pack de créditos, más grande: $20 → $14.70 de
+// crédito. No es solo el doble limpio del pack de $10 ($14.00) — Joel pidió
+// un empujoncito extra (+5%) como incentivo para llevar el pack grande, así
+// que $14.70 = $14.00 × 1.05. Mismo ~30% de margen base que el pack de
+// $10, con ese 5% de bono encima. Requiere su propio Price ID en Stripe
+// (STRIPE_PRICE_CREDITOS_IA_20) — el checkout deja elegir cuál de los dos
+// packs comprar (ver app/api/stripe/checkout-creditos-ia/route.ts).
+export function priceIdCreditosIA20(): string | null {
+  return process.env.STRIPE_PRICE_CREDITOS_IA_20 || null;
+}
+
+export const CREDITO_IA_CENTAVOS_POR_COMPRA_20 = 1470;
+
+export type PaqueteCreditosIA = "10" | "20";
+
+export function configPaqueteCreditosIA(paquete: PaqueteCreditosIA): { priceId: string | null; creditoCentavos: number } {
+  if (paquete === "20") {
+    return { priceId: priceIdCreditosIA20(), creditoCentavos: CREDITO_IA_CENTAVOS_POR_COMPRA_20 };
+  }
+  return { priceId: priceIdCreditosIA(), creditoCentavos: CREDITO_IA_CENTAVOS_POR_COMPRA };
+}
