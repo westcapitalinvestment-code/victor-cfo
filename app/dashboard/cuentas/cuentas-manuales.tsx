@@ -15,8 +15,11 @@ type CuentaManual = {
   mask: string | null;
   current_balance: number;
   es_negocio: boolean;
+  entity_id: string | null;
   balance_actualizado_en: string | null;
 };
+
+type EntidadNegocio = { id: string; name: string };
 
 function esPasivo(type: string): boolean {
   return type === "credit" || type === "loan";
@@ -35,7 +38,14 @@ const TIPOS = [
 // separada de las cuentas de Plaid, porque el balance no se sincroniza
 // solo — el usuario lo actualiza, y las transacciones (si las hay) se
 // suben por CSV en vez de llegar automáticas.
-export default function CuentasManuales() {
+//
+// 8 sept 2026 — acepta entityId opcional para usarse también dentro del tab
+// de una entidad de negocio (/dashboard/negocio/cuentas): sin el prop se
+// comporta exactamente igual que siempre (todas las cuentas del usuario,
+// usado en /dashboard/cuentas); con él, solo lista/crea cuentas de ESA
+// entidad — la nueva cuenta queda asignada ahí desde el momento de crearla,
+// sin el paso manual de "Pertenece a" que hace falta desde la vista global.
+export default function CuentasManuales({ entityId }: { entityId?: string | null }) {
   const supabase = createClient();
   const [cuentas, setCuentas] = useState<CuentaManual[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +56,13 @@ export default function CuentasManuales() {
   // subir-csv.tsx) — se necesita aquí porque esta sección tiene su propio
   // fetch de datos, no recibe el plan como prop del padre (cuentas/page.tsx).
   const [plan, setPlan] = useState<string | null>(null);
+  // 8 sept 2026 — lista de entidades activas para el dropdown "Pertenece a"
+  // en el formulario de editar (mismo hueco que ya se había cerrado para
+  // cuentas Plaid hace días: antes una cuenta manual no tenía NINGUNA forma
+  // de cambiar de entidad una vez creada). Solo se pide/usa cuando este
+  // componente vive en la vista global (sin entityId prop) — dentro del tab
+  // de una entidad no tiene sentido reasignar, esa cuenta ya nació ahí.
+  const [entidadesNegocio, setEntidadesNegocio] = useState<EntidadNegocio[]>([]);
 
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("depository");
@@ -66,24 +83,35 @@ export default function CuentasManuales() {
   const [nombreEditado, setNombreEditado] = useState("");
   const [tipoEditado, setTipoEditado] = useState("depository");
   const [balanceEditado, setBalanceEditado] = useState("");
+  const [entidadEditada, setEntidadEditada] = useState("");
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
 
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/cuentas-manuales");
+      const url = entityId ? `/api/cuentas-manuales?entityId=${entityId}` : "/api/cuentas-manuales";
+      const res = await fetch(url);
       const data = await res.json();
       if (res.ok) setCuentas(data.cuentas ?? []);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [entityId]);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
       const { data: perfil } = await supabase.from("users").select("plan").eq("id", user.id).maybeSingle();
       setPlan(perfil?.plan ?? null);
+      if (!entityId) {
+        const { data: entidadesData } = await supabase
+          .from("business_entities")
+          .select("id, name")
+          .eq("owner_id", user.id)
+          .eq("active", true)
+          .order("name", { ascending: true });
+        setEntidadesNegocio(entidadesData ?? []);
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -122,7 +150,7 @@ export default function CuentasManuales() {
       const res = await fetch("/api/cuentas-manuales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre, tipo, balanceInicial: balance }),
+        body: JSON.stringify({ nombre, tipo, balanceInicial: balance, entityId: entityId ?? null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo crear la cuenta.");
@@ -165,6 +193,7 @@ export default function CuentasManuales() {
     setNombreEditado(c.name);
     setTipoEditado(c.type);
     setBalanceEditado(String(c.current_balance));
+    setEntidadEditada(c.entity_id ?? "");
     setError(null);
   }
 
@@ -184,7 +213,12 @@ export default function CuentasManuales() {
       const res = await fetch(`/api/cuentas-manuales/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre: nombreEditado.trim(), tipo: tipoEditado, balance }),
+        body: JSON.stringify({
+          nombre: nombreEditado.trim(),
+          tipo: tipoEditado,
+          balance,
+          ...(entidadesNegocio.length > 0 ? { entityId: entidadEditada || null } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo actualizar la cuenta.");
@@ -323,6 +357,23 @@ export default function CuentasManuales() {
                   />
                 </div>
               </div>
+              {entidadesNegocio.length > 0 && (
+                <div className="mb-2">
+                  <label className="mb-1 block text-[11px] text-muted">Pertenece a</label>
+                  <select
+                    className="vc-input !py-1.5 !text-xs"
+                    value={entidadEditada}
+                    onChange={(e) => setEntidadEditada(e.target.value)}
+                  >
+                    <option value="">Personal</option>
+                    {entidadesNegocio.map((ent) => (
+                      <option key={ent.id} value={ent.id}>
+                        {ent.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="flex gap-2">
                 <button className="vc-btn-primary" disabled={guardandoEdicion} onClick={() => guardarEdicion(c.id)}>
                   {guardandoEdicion ? "Guardando…" : "Guardar cambios"}

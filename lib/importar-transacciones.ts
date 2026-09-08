@@ -8,13 +8,14 @@ import type { createClient } from "@/lib/supabase/server";
 //
 // - Cuenta Plaid: plaid_accounts.entity_id ya es la fuente de verdad
 //   (null = personal, un uuid = esa entidad) — se usa tal cual.
-// - Cuenta manual: manual_accounts NO tiene columna entity_id, solo el
-//   booleano es_negocio. Si es_negocio=false, es Personal. Si es true,
-//   solo se puede atribuir con certeza si el usuario tiene UNA sola
-//   entidad de negocio activa (mismo criterio que ya usan
-//   verificar_cuentas_conectadas y app/api/victor/route.ts para el mismo
-//   problema) — con 2+ entidades activas no hay forma de saber cuál, así
-//   que se deja en Personal en vez de adivinar.
+// - Cuenta manual: manual_accounts ahora también tiene entity_id real
+//   (migración 0075, 8 sept 2026 — antes solo tenía el booleano es_negocio).
+//   Si la cuenta ya tiene entity_id, es la fuente de verdad y se usa tal
+//   cual. Si es una cuenta manual VIEJA (es_negocio=true pero entity_id
+//   NULL, creada antes de la migración), cae al fallback anterior: solo se
+//   puede atribuir con certeza si el usuario tiene UNA sola entidad de
+//   negocio activa — con 2+ no hay forma de saber cuál, así que se deja en
+//   Personal en vez de adivinar.
 async function resolverEntityIdDeCuenta(
   supabase: ReturnType<typeof createClient>,
   ownerId: string,
@@ -31,8 +32,14 @@ async function resolverEntityIdDeCuenta(
     return data?.entity_id ?? null;
   }
 
-  const { data: cuenta } = await supabase.from("manual_accounts").select("es_negocio").eq("id", cuentaId).eq("owner_id", ownerId).maybeSingle();
+  const { data: cuenta } = await supabase
+    .from("manual_accounts")
+    .select("es_negocio, entity_id")
+    .eq("id", cuentaId)
+    .eq("owner_id", ownerId)
+    .maybeSingle();
   if (!cuenta?.es_negocio) return null;
+  if (cuenta.entity_id) return cuenta.entity_id;
 
   const { data: entidades } = await supabase.from("business_entities").select("id").eq("owner_id", ownerId).eq("active", true);
   if (entidades && entidades.length === 1) return entidades[0].id;

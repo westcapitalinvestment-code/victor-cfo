@@ -31,9 +31,27 @@ export async function POST(req: NextRequest) {
   // recomendada y la más segura para no dejar a nadie a medias de cara
   // a las planillas de abril.
   const historialCompleto: boolean = body?.historialCompleto !== false;
+  // 8 sept 2026 — Joel pidió poder conectar un banco directo desde el tab
+  // de una entidad específica y que las cuentas queden asignadas ahí desde
+  // el primer momento (sin el paso manual de "Pertenece a" después). Si el
+  // login mezcla cuentas personales con de negocio, el usuario reasigna las
+  // que no correspondan con ese mismo dropdown — sigue existiendo, esto
+  // solo cambia el default.
+  const entityId: string | null = typeof body?.entityId === "string" && body.entityId ? body.entityId : null;
 
   if (!publicToken) {
     return NextResponse.json({ error: "Falta el public_token de Plaid." }, { status: 400 });
+  }
+
+  if (entityId) {
+    const { data: entidad } = await supabase
+      .from("business_entities")
+      .select("id")
+      .eq("id", entityId)
+      .eq("owner_id", user.id)
+      .eq("active", true)
+      .maybeSingle();
+    if (!entidad) return NextResponse.json({ error: "Esa entidad no existe o no te pertenece." }, { status: 400 });
   }
 
   // "Año completo" = desde el 1 de enero del año en curso, en hora de
@@ -52,7 +70,7 @@ export async function POST(req: NextRequest) {
       .from("plaid_items")
       .insert({
         owner_id: user.id,
-        entity_id: null, // conexión personal — igual convención que goals/documents
+        entity_id: entityId,
         plaid_item_id: plaidItemId,
         access_token: encryptSecret(accessToken), // nunca se guarda en texto plano
         institution_id: institutionId,
@@ -82,7 +100,8 @@ export async function POST(req: NextRequest) {
       current_balance: acc.balances.current,
       available_balance: acc.balances.available,
       iso_currency_code: acc.balances.iso_currency_code || "USD",
-      es_negocio: pareceCuentaDeNegocio(acc.name, acc.official_name, acc.subtype),
+      es_negocio: entityId ? true : pareceCuentaDeNegocio(acc.name, acc.official_name, acc.subtype),
+      entity_id: entityId,
     }));
 
     if (accountRows.length > 0) {

@@ -44,6 +44,11 @@ function etiquetaMes(mesYYYYMM: string): string {
 // — el usuario asigna cada cuenta a su entidad desde /dashboard/cuentas
 // ("Pertenece a"). Antes de esto no había forma de saber qué cuenta era de
 // qué entidad, así que esta tarjeta no existía.
+//
+// 8 sept 2026 — ahora también suma manual_accounts.entity_id (migración
+// 0075): antes esa columna no existía, así que una cuenta manual (ej. una
+// tarjeta de crédito de negocio sin Plaid) asignada a esta entidad no
+// contaba aquí para nada — el balance/deuda de Negocio quedaba incompleto.
 export default async function InicioNegocioPage({ searchParams }: { searchParams: { mes?: string } }) {
   const supabase = createClient();
   const {
@@ -104,7 +109,8 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
     { data: facturasRaw },
     { data: goals },
     { data: documentos },
-    { data: cuentasNegocio },
+    { data: cuentasPlaidNegocio },
+    { data: cuentasManualesNegocio },
     { data: citasProximasRaw },
     { data: transaccionesNegocioMes },
     { data: fechasTransaccionesNegocio },
@@ -129,6 +135,11 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
         .order("fecha_vencimiento", { ascending: true }),
       supabase
         .from("plaid_accounts")
+        .select("current_balance, type, subtype")
+        .eq("owner_id", user.id)
+        .eq("entity_id", entidadId),
+      supabase
+        .from("manual_accounts")
         .select("current_balance, type, subtype")
         .eq("owner_id", user.id)
         .eq("entity_id", entidadId),
@@ -211,21 +222,34 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
   ]);
 
   // Nombres para mostrar junto a cada pendiente (mismo patrón que Personal,
-  // dashboard/page.tsx) — solo cuentas Plaid YA asignadas a esta entidad.
-  // Las cuentas manuales no tienen columna entity_id (solo es_negocio global,
-  // ver nota en lib/victor/tools.ts), así que aquí se omiten a propósito en
-  // vez de arriesgarse a etiquetar mal con la cuenta manual de otra entidad.
-  const { data: cuentasPlaidParaLabelNegocio } = await supabase
-    .from("plaid_accounts")
-    .select("plaid_account_id, name, nickname, mask")
-    .eq("owner_id", user.id)
-    .eq("entity_id", entidadId);
+  // dashboard/page.tsx) — cuentas Plaid Y manuales YA asignadas a esta
+  // entidad. 8 sept 2026 — antes las manuales se omitían aquí a propósito
+  // porque manual_accounts no tenía columna entity_id (solo es_negocio
+  // global, sin forma de saber DE CUÁL entidad); ahora que sí la tiene
+  // (migración 0075) ya se puede etiquetar igual que Plaid, sin adivinar.
+  const [{ data: cuentasPlaidParaLabelNegocio }, { data: cuentasManualesParaLabelNegocio }] = await Promise.all([
+    supabase
+      .from("plaid_accounts")
+      .select("plaid_account_id, name, nickname, mask")
+      .eq("owner_id", user.id)
+      .eq("entity_id", entidadId),
+    supabase
+      .from("manual_accounts")
+      .select("id, name, mask")
+      .eq("owner_id", user.id)
+      .eq("entity_id", entidadId),
+  ]);
   const nombrePorCuentaNegocio = new Map<string, string>();
   for (const c of cuentasPlaidParaLabelNegocio ?? []) {
     nombrePorCuentaNegocio.set(`plaid:${c.plaid_account_id}`, `${c.nickname || c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`);
   }
+  for (const c of cuentasManualesParaLabelNegocio ?? []) {
+    nombrePorCuentaNegocio.set(`manual:${c.id}`, `${c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`);
+  }
   const etiquetaDeTransaccionNegocio = (t: { plaid_account_id: string | null; manual_account_id: string | null }) =>
-    (t.plaid_account_id && nombrePorCuentaNegocio.get(`plaid:${t.plaid_account_id}`)) || null;
+    (t.plaid_account_id && nombrePorCuentaNegocio.get(`plaid:${t.plaid_account_id}`)) ||
+    (t.manual_account_id && nombrePorCuentaNegocio.get(`manual:${t.manual_account_id}`)) ||
+    null;
 
   const pendientesNegocioConSugerencia = await Promise.all(
     (pendientesNegocioRaw ?? []).map(async (t) => {
@@ -236,7 +260,7 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
     })
   );
 
-  const cuentasDeLaEntidad = cuentasNegocio ?? [];
+  const cuentasDeLaEntidad = [...(cuentasPlaidNegocio ?? []), ...(cuentasManualesNegocio ?? [])];
   const cuentasLiquidasNegocio = cuentasDeLaEntidad.filter((c) => c.type === "depository");
   const balanceNegocio = cuentasLiquidasNegocio.reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
   // Ahorrado (4 sept 2026, paridad con Personal) — mismo criterio: solo el

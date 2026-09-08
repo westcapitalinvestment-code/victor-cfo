@@ -108,12 +108,27 @@ export default async function GastosNegocioPage({
   // Cuentas de esta entidad (asignadas desde /dashboard/cuentas). A
   // diferencia de Personal, aquí no hay filtro de es_negocio/Core — estar
   // dentro de Negocio ya implica Pro.
-  const { data: cuentasPlaid } = await supabase
-    .from("plaid_accounts")
-    .select("plaid_account_id, name, nickname, mask, type, subtype")
-    .eq("owner_id", user.id)
-    .eq("entity_id", entidadId)
-    .order("name");
+  //
+  // 8 sept 2026 — se añaden también las cuentas MANUALES de esta entidad
+  // (migración 0075 le dio entity_id real a manual_accounts). Antes esta
+  // página solo miraba plaid_accounts, así que una tarjeta manual (ej.
+  // Apple Card de negocio) asignada aquí no aparecía ni en el filtro de
+  // cuentas ni en la etiqueta de cada transacción — paridad con el mismo
+  // fix ya hecho en /dashboard/gastos (Personal).
+  const [{ data: cuentasPlaid }, { data: cuentasManuales }] = await Promise.all([
+    supabase
+      .from("plaid_accounts")
+      .select("plaid_account_id, name, nickname, mask, type, subtype")
+      .eq("owner_id", user.id)
+      .eq("entity_id", entidadId)
+      .order("name"),
+    supabase
+      .from("manual_accounts")
+      .select("id, name, mask, type, subtype")
+      .eq("owner_id", user.id)
+      .eq("entity_id", entidadId)
+      .order("name"),
+  ]);
 
   const cuentasSeleccionadas = parsearCuentasSeleccionadas(searchParams.cuentas);
   const categoriaSeleccionada = parsearCategoriaSeleccionada(searchParams.categoria);
@@ -180,7 +195,8 @@ export default async function GastosNegocioPage({
     `${c.nickname || c.name || "Cuenta sin nombre"}${c.mask ? ` ···${c.mask}` : ""}`;
   const nombrePorCuenta = new Map<string, string>();
   for (const c of cuentasPlaid ?? []) nombrePorCuenta.set(idConPrefijo("plaid", c.plaid_account_id), etiquetaCuenta(c));
-  const totalCuentas = cuentasPlaid?.length ?? 0;
+  for (const c of cuentasManuales ?? []) nombrePorCuenta.set(idConPrefijo("manual", c.id), etiquetaCuenta(c));
+  const totalCuentas = (cuentasPlaid?.length ?? 0) + (cuentasManuales?.length ?? 0);
 
   const hoy = new Date();
   const nombrePorCategoria = new Map((categorias ?? []).map((c) => [c.id, c.nombre]));

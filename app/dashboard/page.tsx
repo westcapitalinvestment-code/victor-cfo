@@ -154,10 +154,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   // Cuentas manuales (sin Plaid — ej. Apple Card) cuentan igual que las de
   // Plaid en todos estos totales. Mismo filtro de negocio para Core.
+  //
+  // 8 sept 2026 — igual que las de Plaid arriba, ahora también se excluyen
+  // las que ya tienen entity_id asignado (migración 0075): antes
+  // manual_accounts no tenía esa columna, así que esto no hacía falta, pero
+  // desde que una cuenta manual se puede asignar a una entidad de negocio
+  // (ej. crearla desde el tab de VIP Medical), sin este filtro su balance
+  // contaba dos veces — aquí en Personal Y en el Inicio de esa entidad.
   let manualesQuery = supabase
     .from("manual_accounts")
-    .select("current_balance, es_negocio, type, subtype")
-    .eq("owner_id", user.id);
+    .select("current_balance, es_negocio, type, subtype, entity_id")
+    .eq("owner_id", user.id)
+    .is("entity_id", null);
   if (!esPro) manualesQuery = manualesQuery.eq("es_negocio", false);
   const { data: cuentasManuales } = await manualesQuery;
 

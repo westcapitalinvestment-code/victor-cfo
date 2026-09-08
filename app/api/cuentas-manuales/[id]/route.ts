@@ -39,12 +39,34 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     patch.current_balance = balance;
     patch.balance_actualizado_en = new Date().toISOString();
   }
+  // 8 sept 2026 — reasignar "Pertenece a" (misma idea que ya existía para
+  // cuentas Plaid vía /api/plaid/asignar-entidad-cuenta). Antes las cuentas
+  // manuales no tenían NINGUNA forma de cambiar de entidad una vez creadas
+  // — si el usuario se equivocaba al escoger el tipo o la creaba parado en
+  // el tab equivocado, se quedaba pegada ahí para siempre. entityId=""
+  // o null = Personal (desasignar); un uuid = esa entidad, validando
+  // ownership igual que en POST.
+  if (body?.entityId !== undefined) {
+    const entityId: string | null = typeof body.entityId === "string" && body.entityId ? body.entityId : null;
+    if (entityId) {
+      const { data: entidad } = await supabase
+        .from("business_entities")
+        .select("id")
+        .eq("id", entityId)
+        .eq("owner_id", user.id)
+        .eq("active", true)
+        .maybeSingle();
+      if (!entidad) return NextResponse.json({ error: "Esa entidad no existe o no te pertenece." }, { status: 400 });
+    }
+    patch.entity_id = entityId;
+    if (entityId) patch.es_negocio = true;
+  }
 
   const { data, error } = await supabase
     .from("manual_accounts")
     .update(patch)
     .eq("id", params.id)
-    .select("id, name, type, subtype, mask, current_balance, es_negocio, balance_actualizado_en")
+    .select("id, name, type, subtype, mask, current_balance, es_negocio, entity_id, balance_actualizado_en")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

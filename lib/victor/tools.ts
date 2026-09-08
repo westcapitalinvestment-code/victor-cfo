@@ -518,6 +518,10 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
         tipo: { type: "string", description: "Uno de: depository (cuenta de banco), credit (tarjeta de crédito), loan (préstamo), investment (inversión)." },
         saldo_inicial: { type: "number", description: "Balance actual de la cuenta. Si no lo da el usuario, usa 0." },
         es_negocio: { type: "boolean", description: "true solo si el usuario deja claro que es una cuenta de su negocio, no personal. Si no dice nada, usa false." },
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio dueña de esta cuenta, SOLO si es_negocio=true y el usuario tiene más de una entidad — si tiene una sola entidad, omite este campo (se asigna solo).",
+        },
       },
       required: ["nombre", "tipo"],
     },
@@ -1974,17 +1978,27 @@ export async function executeVictorTool(
             .eq("entity_id", e.id);
           for (const c of plaidEntidad ?? []) lineas.push(`"${e.name}" — ${etiquetaCuenta(c, "Plaid")}`);
 
-          // manual_accounts no tiene columna entity_id (solo es_negocio
-          // global) — solo se puede atribuir con certeza si esta es la
-          // ÚNICA entidad de negocio activa del usuario. Mismo criterio que
-          // usa app/api/victor/route.ts para el mismo problema.
+          // manual_accounts ya tiene entity_id real (migración 0075, 8 sept
+          // 2026) — se usa directo cuando está puesto. Las cuentas manuales
+          // VIEJAS de negocio sin entity_id (creadas antes de esa migración)
+          // solo se pueden atribuir con certeza si esta es la ÚNICA entidad
+          // activa del usuario — mismo criterio de siempre, ahora solo como
+          // fallback para lo viejo, no para todo.
+          const { data: manualesEntidad } = await supabase
+            .from("manual_accounts")
+            .select("name, mask, type, current_balance")
+            .eq("owner_id", ownerId)
+            .eq("entity_id", e.id);
+          for (const c of manualesEntidad ?? []) lineas.push(`"${e.name}" — ${etiquetaCuenta(c, "manual")}`);
+
           if (soloUnaEntidad) {
-            const { data: manualesEntidad } = await supabase
+            const { data: manualesSinAsignar } = await supabase
               .from("manual_accounts")
               .select("name, mask, type, current_balance")
               .eq("owner_id", ownerId)
-              .eq("es_negocio", true);
-            for (const c of manualesEntidad ?? []) lineas.push(`"${e.name}" — ${etiquetaCuenta(c, "manual")}`);
+              .eq("es_negocio", true)
+              .is("entity_id", null);
+            for (const c of manualesSinAsignar ?? []) lineas.push(`"${e.name}" — ${etiquetaCuenta(c, "manual")}`);
           }
 
           if (e.ath_movil_business_path) lineas.push(`"${e.name}" — pATH de ATH Móvil Business: ${e.ath_movil_business_path}`);
@@ -2713,16 +2727,39 @@ export async function executeVictorTool(
       const saldoInicial = Number.isFinite(Number(input.saldo_inicial)) ? Number(input.saldo_inicial) : 0;
       const esNegocio = input.es_negocio === true;
 
+      // 8 sept 2026 — manual_accounts ya tiene entity_id real (migración
+      // 0075). Si es de negocio, se resuelve la entidad igual que en
+      // crear_cliente/crear_factura: si el owner solo tiene una entidad
+      // activa se usa esa sola, si tiene varias hace falta entidad_nombre
+      // (y si no vino, la cuenta queda creada igual pero sin entidad — el
+      // usuario la asigna después desde /dashboard/cuentas).
+      let entityId: string | null = null;
+      if (esNegocio) {
+        const { data: entidades } = await supabase.from("business_entities").select("id, name").eq("owner_id", ownerId).eq("active", true);
+        const nombrePista = typeof input.entidad_nombre === "string" ? input.entidad_nombre.trim() : "";
+        if (entidades && entidades.length === 1) {
+          entityId = entidades[0].id;
+        } else if (entidades && entidades.length > 1 && nombrePista) {
+          const match = entidades.filter((e) => e.name.toLowerCase().includes(nombrePista.toLowerCase()));
+          if (match.length === 1) entityId = match[0].id;
+        }
+      }
+
       const { error } = await supabase.from("manual_accounts").insert({
         owner_id: ownerId,
         name: nombre,
         type: tipo,
         current_balance: saldoInicial,
         es_negocio: esNegocio,
+        entity_id: entityId,
       });
 
       if (error) return { ok: false, message: `No se pudo crear la cuenta: ${error.message}` };
-      return { ok: true, message: `Cuenta manual "${nombre}" creada en Cuentas con balance $${saldoInicial}.` };
+      const aviso =
+        esNegocio && !entityId
+          ? ` Como el usuario tiene varias entidades y no dijo cuál, quedó sin asignar a ninguna — dile que la puede asignar desde el tab de esa entidad en Cuentas, o pregúntale a cuál entidad pertenece y créala de nuevo con entidad_nombre.`
+          : "";
+      return { ok: true, message: `Cuenta manual "${nombre}" creada en Cuentas con balance $${saldoInicial}.${aviso}` };
     }
 
     case "actualizar_saldo_cuenta_manual": {

@@ -412,10 +412,16 @@ export async function POST(req: NextRequest) {
   // Cuentas manuales (sin Plaid — ej. Apple Card) cuentan igual que las de
   // Plaid para que VICTOR vea el cuadro completo, no solo lo conectado
   // automáticamente.
+  //
+  // 8 sept 2026 — mismo fix que dashboard/page.tsx: excluir las ya
+  // asignadas a una entidad (entity_id, migración 0075) para que no se
+  // cuenten dos veces en el contexto Personal de VICTOR — ahora se
+  // atribuyen exacto más abajo (cuentasManualesPorEntidad).
   let manualesQuery = supabase
     .from("manual_accounts")
     .select("name, type, subtype, current_balance, es_negocio")
-    .eq("owner_id", user.id);
+    .eq("owner_id", user.id)
+    .is("entity_id", null);
   if (!esPro) manualesQuery = manualesQuery.eq("es_negocio", false);
 
   // Fecha de la transacción más antigua que tenemos guardada (de cualquier
@@ -457,15 +463,16 @@ export async function POST(req: NextRequest) {
       : { data: [] as { name: string; entity_id: string | null }[] };
 
   // Cuentas manuales de negocio (ej. Apple Card, o un checking que Joel
-  // metió a mano) — manual_accounts NUNCA tuvo columna entity_id, solo un
-  // booleano es_negocio global por usuario. Con 1 sola entidad activa la
-  // atribución es segura (todo lo que es_negocio=true es de esa entidad);
-  // con 2+ entidades no hay forma de saber de cuál es cada una, así que se
-  // omiten para no atribuir mal — VICTOR no debe inventar a cuál pertenece.
-  const { data: cuentasManualesNegocio } =
-    entidadIds.length === 1
-      ? await supabase.from("manual_accounts").select("name").eq("owner_id", user.id).eq("es_negocio", true)
-      : { data: [] as { name: string }[] };
+  // metió a mano) — atribución exacta vía entity_id (migración 0075, 8
+  // sept 2026). Antes manual_accounts NUNCA tuvo esa columna, solo un
+  // booleano es_negocio global por usuario, así que con 2+ entidades no
+  // había forma de saber de cuál era cada una y se omitían por completo
+  // para no inventar. Ya no hace falta ese fallback — se atribuye igual
+  // que las cuentas Plaid de arriba, aunque haya varias entidades activas.
+  const { data: cuentasManualesPorEntidad } =
+    entidadIds.length > 0
+      ? await supabase.from("manual_accounts").select("name, entity_id").eq("owner_id", user.id).in("entity_id", entidadIds)
+      : { data: [] as { name: string; entity_id: string | null }[] };
 
   // Resumen financiero (mes en curso + YTD + proyección de fin de año) —
   // MISMO cálculo que muestra la tarjeta desplegable "Resumen y proyección"
@@ -616,10 +623,7 @@ export async function POST(req: NextRequest) {
       : null,
     entidadesNegocio: (entidadesNegocioRaw ?? []).map((e) => {
       const cuentasPlaid = (cuentasPlaidPorEntidad ?? []).filter((c) => c.entity_id === e.id).map((c) => c.name);
-      // Las manuales solo se atribuyeron a esta entidad si es la ÚNICA
-      // entidad activa (ver comentario arriba de la query) — mismo caso
-      // (entidadIds.length === 1) implica que esta es esa única entidad.
-      const cuentasManuales = entidadIds.length === 1 ? (cuentasManualesNegocio ?? []).map((c) => c.name) : [];
+      const cuentasManuales = (cuentasManualesPorEntidad ?? []).filter((c) => c.entity_id === e.id).map((c) => c.name);
       return {
         name: e.name,
         entityType: e.entity_type,

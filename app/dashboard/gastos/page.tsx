@@ -122,10 +122,15 @@ export default async function GastosPage({
     .order("name");
   if (!esPro) cuentasQuery = cuentasQuery.eq("es_negocio", false);
 
+  // 8 sept 2026 — mismo fix que dashboard/page.tsx: excluir cuentas
+  // manuales ya asignadas a una entidad de negocio (entity_id, migración
+  // 0075) — si no, aparecían también en el filtro de cuentas de
+  // Transacciones (Personal) aunque ya vivieran en su propia entidad.
   let manualesQuery = supabase
     .from("manual_accounts")
     .select("id, name, mask, type, subtype")
     .eq("owner_id", user.id)
+    .is("entity_id", null)
     .order("name");
   if (!esPro) manualesQuery = manualesQuery.eq("es_negocio", false);
 

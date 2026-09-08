@@ -1,21 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { formatMoney } from "@/lib/format";
-import { Sensitive } from "@/lib/privacy";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
+import CuentasEntidadClient from "./cuentas-entidad-client";
 
-function esPasivo(type: string | null): boolean {
-  return type === "credit" || type === "loan";
-}
-
-// Cuentas de negocio (1 sept 2026) — ya no es cascarón: lee las cuentas de
-// Plaid que el usuario asignó a esta entidad desde /dashboard/cuentas
-// ("Pertenece a"). No conecta un banco nuevo aquí — una cuenta bancaria de
-// PR normalmente ya trae mezcladas cuentas personales y de negocio bajo un
-// mismo login (caso real de Joel con BPPR), así que asignar entidad pasa
-// por Personal → Cuentas, no por un botón "Conectar" aparte dentro de
-// Negocio (evita conectar el mismo banco dos veces).
+// Cuentas de negocio (1 sept 2026, ampliado 8 sept 2026) — ya no es solo
+// lectura. Antes solo mostraba las cuentas de Plaid que el usuario había
+// asignado a mano a esta entidad desde /dashboard/cuentas ("Pertenece a"),
+// y para conectar un banco nuevo o crear una cuenta manual mandaba a
+// Personal → Cuentas. Joel pidió que cada entidad tenga su propio botón de
+// conectar/añadir para que todo quede separado en su tab de una — ver
+// cuentas-entidad-client.tsx (Plaid Link con entityId + cuentas manuales
+// con entityId, ambos ya soportados en las rutas correspondientes). Si un
+// banco conectado desde aquí trae cuentas personales mezcladas, se siguen
+// pudiendo reasignar con el mismo dropdown de siempre en Cuentas (Personal).
 export default async function CuentasNegocioPage() {
   const supabase = createClient();
   const {
@@ -47,11 +44,6 @@ export default async function CuentasNegocioPage() {
     .eq("entity_id", entidadId)
     .order("name", { ascending: true });
 
-  const todasLasCuentas = cuentas ?? [];
-  const totalBalance = todasLasCuentas
-    .filter((c) => c.type === "depository")
-    .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
-
   return (
     <div className="vc-shell">
       <div className="mb-4">
@@ -59,51 +51,7 @@ export default async function CuentasNegocioPage() {
         <p className="text-xs text-muted">{entidadActiva?.name} · Negocio</p>
       </div>
 
-      {todasLasCuentas.length === 0 ? (
-        <div className="vc-card text-center">
-          <p className="mb-3 text-sm text-muted">
-            Todavía no tienes ninguna cuenta bancaria asignada a {entidadActiva?.name ?? "esta entidad"}.
-          </p>
-          <Link href="/dashboard/cuentas" className="vc-btn-primary inline-block !w-auto px-4">
-            Ir a Cuentas (Personal) →
-          </Link>
-          <p className="mt-2 text-[11px] text-muted">
-            Ahí, junto a cada cuenta, elige &quot;Pertenece a&quot; y selecciona {entidadActiva?.name ?? "esta entidad"}.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="vc-bal mb-3">
-            <p className="vc-bal-lbl">Balance total</p>
-            <p className="vc-bal-amt">
-              <Sensitive>{formatMoney(totalBalance)}</Sensitive>
-            </p>
-          </div>
-
-          <div className="vc-card mb-3 !p-0">
-            {todasLasCuentas.map((c) => (
-              <div key={c.id} className="flex items-center justify-between border-b border-border px-4 py-3 last:border-b-0">
-                <div>
-                  <p className="text-sm text-text">{c.nickname || c.name}</p>
-                  <p className="text-xs capitalize text-muted">
-                    {c.subtype} {c.mask && `••${c.mask}`}
-                  </p>
-                </div>
-                <p className={`text-sm font-medium ${esPasivo(c.type) ? "!text-red" : ""}`}>
-                  <Sensitive>
-                    {esPasivo(c.type) ? "-" : ""}
-                    {formatMoney(Number(c.current_balance || 0))}
-                  </Sensitive>
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <Link href="/dashboard/cuentas" className="text-xs font-medium text-teal hover:opacity-80">
-            Administrar cuentas / asignaciones →
-          </Link>
-        </>
-      )}
+      <CuentasEntidadClient entidadId={entidadId} cuentasIniciales={cuentas ?? []} />
     </div>
   );
 }
