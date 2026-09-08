@@ -11,6 +11,13 @@ function esPasivo(type: string | null): boolean {
 // Cuentas de negocio — exclusivo del nivel Administrador, SOLO LECTURA
 // (ver balances, nunca conectar/editar/borrar un banco — migración 0056
 // solo otorga SELECT en plaid_accounts a este nivel, a propósito).
+//
+// 8 sept 2026 — se añaden también las cuentas MANUALES de esta entidad
+// (ej. Apple Card de negocio) — antes esta pantalla solo miraba
+// plaid_accounts, así que una cuenta manual asignada a la entidad ni
+// aparecía en el balance ni en la lista. Requiere la política RLS nueva
+// manual_accounts_admin_administrador_read (migración 0076) — sin ella,
+// Postgres devuelve 0 filas aunque el código pida la cuenta.
 export default async function AdminCuentasPage({ params }: { params: { entityId: string } }) {
   const supabase = createClient();
   const {
@@ -26,14 +33,27 @@ export default async function AdminCuentasPage({ params }: { params: { entityId:
   const ownerId = efectivo.ownerId;
   const entityId = efectivo.entityIdForzado;
 
-  const { data: cuentas } = await supabase
-    .from("plaid_accounts")
-    .select("id, name, nickname, mask, type, subtype, current_balance")
-    .eq("owner_id", ownerId)
-    .eq("entity_id", entityId)
-    .order("name", { ascending: true });
+  const [{ data: cuentasPlaid }, { data: cuentasManuales }] = await Promise.all([
+    supabase
+      .from("plaid_accounts")
+      .select("id, name, nickname, mask, type, subtype, current_balance")
+      .eq("owner_id", ownerId)
+      .eq("entity_id", entityId)
+      .order("name", { ascending: true }),
+    supabase
+      .from("manual_accounts")
+      .select("id, name, mask, type, subtype, current_balance")
+      .eq("owner_id", ownerId)
+      .eq("entity_id", entityId)
+      .order("name", { ascending: true }),
+  ]);
 
-  const todasLasCuentas = cuentas ?? [];
+  // manual_accounts no tiene columna nickname (solo plaid_accounts) — se
+  // normaliza aquí a null para que ambas listas compartan la misma forma.
+  const todasLasCuentas = [
+    ...(cuentasPlaid ?? []),
+    ...(cuentasManuales ?? []).map((c) => ({ ...c, nickname: null as string | null })),
+  ];
   const totalBalance = todasLasCuentas.filter((c) => c.type === "depository").reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
 
   return (
