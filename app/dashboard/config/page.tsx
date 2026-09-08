@@ -10,6 +10,7 @@ import MfaConfig from "../mfa-config";
 import SessionTimeoutConfig from "../session-timeout-config";
 import ReferralLink from "../referral-link";
 import EliminarCuenta from "../eliminar-cuenta";
+import EditarCuenta from "../editar-cuenta";
 
 export default async function ConfigPage() {
   const supabase = createClient();
@@ -35,6 +36,12 @@ export default async function ConfigPage() {
     .eq("owner_id", user.id)
     .eq("active", true);
 
+  const { data: perfilExtendido } = await supabase
+    .from("user_profiles")
+    .select("phone")
+    .eq("id", user.id)
+    .maybeSingle();
+
   return (
     <div className="vc-shell">
       <h1 className="mb-4 text-lg font-medium">Configuración</h1>
@@ -46,6 +53,11 @@ export default async function ConfigPage() {
         <p className="mt-2 inline-block rounded bg-teal/10 px-2 py-1 text-xs font-medium text-teal">
           Plan {profile?.plan ?? "core"} · {profile?.plan_status ?? "trialing"}
         </p>
+        <EditarCuenta
+          fullName={profile?.full_name || ""}
+          email={user.email || ""}
+          phone={perfilExtendido?.phone || ""}
+        />
       </div>
 
       {/* Área de soporte (30 agosto 2026, pedido de Joel): que ningún
