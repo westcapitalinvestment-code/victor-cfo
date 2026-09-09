@@ -469,10 +469,13 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     name: "actualizar_cita",
     description:
       "Actualiza una cita existente — úsala cuando el usuario reagende, cambie la hora, actualice el costo " +
-      "real después de que pasó, o la marque como completada (marcar_hecha: true). Busca la cita por título — " +
-      "si hay más de una coincidencia, pregúntale al usuario cuál es antes de actualizar. Si cambias la fecha " +
-      "u hora, los avisos (día antes / mismo día) arrancan de cero automáticamente. Nunca inventes un dato que " +
-      "el usuario no te dio.",
+      "real después de que pasó, la marque como completada (marcar_hecha: true), o quiera guardar una nota " +
+      "sobre cómo fue (ej. qué dijo el doctor, qué se acordó en la reunión, próximos pasos). Busca la cita por " +
+      "título — si hay más de una coincidencia, pregúntale al usuario cuál es antes de actualizar. Si cambias " +
+      "la fecha u hora, los avisos (día antes / mismo día) arrancan de cero automáticamente. IMPORTANTE: " +
+      "nueva_nota siempre se AÑADE al historial de esa cita, nunca reemplaza ni borra una nota anterior — así " +
+      "con el tiempo queda un registro real de cada seguimiento (útil sobre todo en relaciones recurrentes, " +
+      "como un mismo médico o un mismo contacto de negocio). Nunca inventes un dato que el usuario no te dio.",
     input_schema: {
       type: "object",
       properties: {
@@ -482,8 +485,26 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
         nuevo_costo_estimado: { type: "number", description: "Costo actualizado (estimado o real), si el usuario lo dio." },
         nuevo_titulo: { type: "string", description: "Nuevo título, solo si el usuario pidió cambiarlo." },
         marcar_hecha: { type: "boolean", description: "true si el usuario confirma que la cita ya pasó/se completó — deja de generar avisos." },
+        nueva_nota: { type: "string", description: "Nota nueva sobre esta cita — se AÑADE al historial (cita_notas), nunca reemplaza las anteriores." },
       },
       required: ["titulo_cita"],
+    },
+  },
+  {
+    name: "historial_notas_cita",
+    description:
+      "Busca el historial de notas de citas — pasadas Y futuras — que coincidan con un título o contacto. " +
+      "Úsala cuando el usuario pregunte algo como '¿qué pasó la última vez con Javier?' o '¿qué me dijo el " +
+      "doctor la vez pasada?', o cuando vayas a crear una cita nueva con un título parecido a una que ya " +
+      "existe y quieras recordarle al usuario el contexto de la anterior antes de anotar la nueva. A " +
+      "diferencia de revisar_citas_proximas, esta SÍ incluye citas ya marcadas como hechas — es la única " +
+      "forma de ver el seguimiento completo de una relación recurrente (mismo médico, mismo cliente/socio).",
+    input_schema: {
+      type: "object",
+      properties: {
+        titulo_o_contacto: { type: "string", description: "Palabra clave del título o nombre de la persona/lugar a buscar, ej. 'Javier' o 'endodoncista'." },
+      },
+      required: ["titulo_o_contacto"],
     },
   },
   {
@@ -2637,7 +2658,7 @@ export async function executeVictorTool(
 
       const { data: citasProximas, error } = await supabase
         .from("citas")
-        .select("titulo, fecha, hora, costo_estimado")
+        .select("id, titulo, fecha, hora, costo_estimado, notas")
         .eq("owner_id", ownerId)
         .eq("hecha", false)
         .gte("fecha", hoyStr)
@@ -2649,13 +2670,32 @@ export async function executeVictorTool(
         return { ok: true, message: `No hay citas pendientes en los próximos ${diasVentana} días.` };
       }
 
+      // Historial acumulado (0080) — para que VICTOR "recuerde" notas de
+      // seguimiento (diagnóstico, acuerdos) sin que el usuario tenga que
+      // repetirlas cada vez que pregunta por sus próximas citas.
+      const citaIds = citasProximas.map((c) => c.id);
+      const { data: notasHistorial } = await supabase
+        .from("cita_notas")
+        .select("cita_id, nota, created_at")
+        .in("cita_id", citaIds)
+        .order("created_at", { ascending: true });
+
+      const notasPorCita = new Map<string, string[]>();
+      for (const n of notasHistorial ?? []) {
+        const lista = notasPorCita.get(n.cita_id as string) ?? [];
+        lista.push(n.nota as string);
+        notasPorCita.set(n.cita_id as string, lista);
+      }
+
       const lista = citasProximas
         .map((c) => {
           const dias = diasHastaPR(c.fecha as string);
           const cuando = dias === 0 ? "hoy" : dias === 1 ? "mañana" : `en ${dias} días (${c.fecha})`;
+          const todasLasNotas = [c.notas as string | null, ...(notasPorCita.get(c.id as string) ?? [])].filter(Boolean);
           return (
             `"${c.titulo}" ${cuando}${c.hora ? ` a las ${c.hora}` : ""}` +
-            `${c.costo_estimado !== null ? ` (costo estimado $${c.costo_estimado})` : ""}`
+            `${c.costo_estimado !== null ? ` (costo estimado $${c.costo_estimado})` : ""}` +
+            `${todasLasNotas.length > 0 ? ` [historial de notas: ${todasLasNotas.join(" | ")}]` : ""}`
           );
         })
         .join("; ");
@@ -2672,8 +2712,9 @@ export async function executeVictorTool(
       const nuevoCosto = Number.isFinite(Number(input.nuevo_costo_estimado)) ? Number(input.nuevo_costo_estimado) : null;
       const nuevoTitulo = input.nuevo_titulo ? String(input.nuevo_titulo).trim() : null;
       const marcarHecha = typeof input.marcar_hecha === "boolean" ? input.marcar_hecha : null;
+      const nuevaNota = typeof input.nueva_nota === "string" && input.nueva_nota.trim() ? input.nueva_nota.trim() : null;
 
-      if (!nuevaFecha && !nuevaHora && nuevoCosto === null && !nuevoTitulo && marcarHecha === null) {
+      if (!nuevaFecha && !nuevaHora && nuevoCosto === null && !nuevoTitulo && marcarHecha === null && !nuevaNota) {
         return { ok: false, message: "No hay ningún cambio que hacer en la cita." };
       }
 
@@ -2714,10 +2755,65 @@ export async function executeVictorTool(
       const { error: updateError } = await supabase.from("citas").update(cambios).eq("id", cita.id);
       if (updateError) return { ok: false, message: `No se pudo actualizar la cita: ${updateError.message}` };
 
+      // Historial acumulado (0080) — nunca sobreescribe citas.notas, siempre
+      // añade una fila nueva a cita_notas. Ver comentario grande en la
+      // migración sobre por qué esto vive separado del campo notas original.
+      let notaFallo = false;
+      if (nuevaNota) {
+        const { error: notaError } = await supabase.from("cita_notas").insert({ cita_id: cita.id, nota: nuevaNota });
+        notaFallo = !!notaError;
+      }
+
       return {
         ok: true,
-        message: `Actualicé "${nuevoTitulo ?? cita.titulo}"${nuevaFecha ? ` — nueva fecha: ${nuevaFecha}` : ""}${nuevaHora ? ` a las ${nuevaHora}` : ""}${marcarHecha ? " — marcada como hecha" : ""}.`,
+        message:
+          `Actualicé "${nuevoTitulo ?? cita.titulo}"${nuevaFecha ? ` — nueva fecha: ${nuevaFecha}` : ""}${nuevaHora ? ` a las ${nuevaHora}` : ""}${marcarHecha ? " — marcada como hecha" : ""}` +
+          `${nuevaNota ? (notaFallo ? " (no se pudo guardar la nota nueva)" : " — nota añadida al historial") : ""}.`,
       };
+    }
+
+    case "historial_notas_cita": {
+      const busqueda = String(input.titulo_o_contacto ?? "").trim();
+      if (!busqueda) return { ok: false, message: "Falta qué cita o contacto buscar." };
+
+      const { data: citasEncontradas, error: buscarError } = await supabase
+        .from("citas")
+        .select("id, titulo, fecha, hora, notas, hecha")
+        .eq("owner_id", ownerId)
+        .ilike("titulo", `%${busqueda}%`)
+        .order("fecha", { ascending: false })
+        .limit(10);
+
+      if (buscarError) return { ok: false, message: `No se pudo buscar el historial: ${buscarError.message}` };
+      if (!citasEncontradas || citasEncontradas.length === 0) {
+        return { ok: true, message: `No encontré ninguna cita (pasada o futura) parecida a "${busqueda}".` };
+      }
+
+      const citaIds = citasEncontradas.map((c) => c.id);
+      const { data: notasHistorial } = await supabase
+        .from("cita_notas")
+        .select("cita_id, nota, created_at")
+        .in("cita_id", citaIds)
+        .order("created_at", { ascending: true });
+
+      const notasPorCita = new Map<string, string[]>();
+      for (const n of notasHistorial ?? []) {
+        const lista = notasPorCita.get(n.cita_id as string) ?? [];
+        lista.push(n.nota as string);
+        notasPorCita.set(n.cita_id as string, lista);
+      }
+
+      const lista = citasEncontradas
+        .map((c) => {
+          const todasLasNotas = [c.notas as string | null, ...(notasPorCita.get(c.id as string) ?? [])].filter(Boolean);
+          return (
+            `"${c.titulo}" (${c.fecha}${c.hora ? ` ${c.hora}` : ""}, ${c.hecha ? "hecha" : "pendiente"})` +
+            `${todasLasNotas.length > 0 ? ` — notas: ${todasLasNotas.join(" | ")}` : " — sin notas guardadas"}`
+          );
+        })
+        .join("; ");
+
+      return { ok: true, message: `Historial encontrado: ${lista}.` };
     }
 
     case "eliminar_cita": {
