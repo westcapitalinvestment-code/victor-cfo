@@ -18,10 +18,14 @@ export default function EditarCuenta({
   fullName,
   email,
   phone,
+  plan,
+  planStatus,
 }: {
   fullName: string;
   email: string;
   phone: string;
+  plan: string;
+  planStatus: string;
 }) {
   const router = useRouter();
   const [editando, setEditando] = useState(false);
@@ -108,18 +112,32 @@ export default function EditarCuenta({
             {avisoEmail}
           </p>
         )}
-        <button
-          onClick={() => setEditando(true)}
-          className="mt-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium"
-        >
-          Editar
-        </button>
+        {/* Pill de plan + botón Editar en la misma fila, Editar a la derecha
+            (8 sept 2026, pedido de Joel: "ponme ese editar al lado derecho
+            como todos y de color verde al igual que el de desactivar, que
+            quede todo uniforme los verdes") — mismo estilo verde que
+            "Editar negocio" y "Activar" MFA en vez del gris que tenía antes. */}
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="inline-block rounded bg-teal/10 px-2 py-1 text-xs font-medium text-teal">
+            Plan {plan} · {planStatus}
+          </p>
+          <button
+            onClick={() => setEditando(true)}
+            className="shrink-0 rounded-pill border border-teal px-3 py-1.5 text-xs font-medium text-teal"
+            style={{ background: "rgba(29,158,117,.1)" }}
+          >
+            Editar
+          </button>
+        </div>
       </>
     );
   }
 
   return (
     <div className="mt-3">
+      <p className="mb-3 inline-block rounded bg-teal/10 px-2 py-1 text-xs font-medium text-teal">
+        Plan {plan} · {planStatus}
+      </p>
       <label className="mb-1 block text-xs font-medium text-muted">Nombre</label>
       <input
         type="text"

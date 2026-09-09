@@ -76,13 +76,12 @@ export default async function ConfigPage() {
         <p className="text-sm font-semibold">Cuenta</p>
         <p className="mt-1 text-sm font-medium">{profile?.full_name || user.email}</p>
         <p className="text-xs text-muted">{user.email}</p>
-        <p className="mt-2 inline-block rounded bg-teal/10 px-2 py-1 text-xs font-medium text-teal">
-          Plan {profile?.plan ?? "core"} · {profile?.plan_status ?? "trialing"}
-        </p>
         <EditarCuenta
           fullName={profile?.full_name || ""}
           email={user.email || ""}
           phone={perfilExtendido?.phone || ""}
+          plan={profile?.plan ?? "core"}
+          planStatus={profile?.plan_status ?? "trialing"}
         />
       </div>
 

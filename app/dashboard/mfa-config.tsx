@@ -182,10 +182,15 @@ export default function MfaConfig() {
       {estado === "activo" && (
         <div className="mt-2 flex items-center justify-between">
           <p className="text-sm text-text">Activada — cada vez que entres te vamos a pedir un código de 6 dígitos.</p>
+          {/* Verde igual que "Activar" arriba y "Editar negocio"/"Editar"
+              de Cuenta (8 sept 2026, pedido de Joel: "que quede todo
+              uniforme los verdes") — antes era gris, distinto al resto de
+              los botones de acción de esta misma pantalla. */}
           <button
             onClick={() => setEstado("desactivar_confirm")}
             disabled={procesando}
-            className="ml-3 flex-shrink-0 rounded-pill border border-border px-3 py-1.5 text-xs font-medium text-muted"
+            className="ml-3 flex-shrink-0 rounded-pill border border-teal px-3 py-1.5 text-xs font-medium text-teal"
+            style={{ background: "rgba(29,158,117,.1)" }}
           >
             Desactivar
           </button>
