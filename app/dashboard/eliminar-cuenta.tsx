@@ -94,9 +94,16 @@ export default function EliminarCuenta({ deletionScheduledFor }: { deletionSched
             Eliminar tu cuenta borra tu información personal y financiera de forma permanente (conservamos solo
             facturas y pagos ya emitidos, si aplica, por obligación contable).
           </p>
+          {/* Relleno rojo clarito a propósito (8 sept 2026, pedido de Joel:
+              "que de panico oprimirla para q nunca se salgan jajaja") — antes
+              era solo el borde rojo, igual que cualquier botón secundario.
+              Con fondo rojo se ve más "zona de peligro" de verdad, sin llegar
+              a ser un botón sólido rojo fuerte (ese nivel de alarma se
+              reserva para el modal de confirmación que sigue). */}
           <button
             onClick={() => setAbierto(true)}
             className="mt-3 w-full rounded-lg border border-red p-3 text-sm font-medium text-red"
+            style={{ background: "rgba(207,34,46,.08)" }}
           >
             Eliminar mi cuenta
           </button>
