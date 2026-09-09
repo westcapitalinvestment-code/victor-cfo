@@ -57,6 +57,7 @@ export default async function CfoPage() {
     { data: creditosCompras },
     { data: socios },
     { data: comisionesSocios },
+    { data: creditosReferidos },
   ] = await Promise.all([
     admin
       .from("users")
@@ -87,6 +88,15 @@ export default async function CfoPage() {
     admin
       .from("socios_comisiones")
       .select("id, socio_id, plan, comision_centavos, estado, created_at"),
+    // Créditos de referidos peer-to-peer (migración 0062, 8 sept 2026,
+    // pedido de Joel: "¿como yo veo eso para efectos contables?"). OJO: esto
+    // NO es un gasto en efectivo — es un descuento sobre la próxima factura
+    // del referidor, aplicado como saldo negativo en Stripe (createBalanceTransaction
+    // en app/api/stripe/webhook/route.ts). Contablemente va como
+    // contra-ingreso ("descuentos por referidos"), no como costo operativo
+    // — a diferencia del Programa de Socios (comisiones en efectivo, sí
+    // sale plata real, ver socios_comisiones arriba).
+    admin.from("referral_rewards").select("credit_cents, created_at"),
   ]);
 
   const todos = usuarios ?? [];
@@ -126,6 +136,17 @@ export default async function CfoPage() {
   const ingresoCreditosIA = (creditosCompras ?? []).reduce((sum, c) => sum + Number(c.precio_pagado_centavos), 0) / 100;
   const creditoOtorgadoCentavos = (creditosCompras ?? []).reduce((sum, c) => sum + Number(c.credito_centavos), 0);
   const margenCreditosIA = ingresoCreditosIA - creditoOtorgadoCentavos / 100;
+
+  // ---- Descuentos por referidos peer-to-peer (contra-ingreso, no gasto) ----
+  // Este mes y acumulado del año, mismo patrón que Créditos IA arriba.
+  const inicioAnioPR = new Date(`${anioPR}-01-01T00:00:00-04:00`);
+  const referidosTodos = creditosReferidos ?? [];
+  const descuentoReferidosMesCentavos = referidosTodos
+    .filter((r) => new Date(r.created_at as string) >= inicioMesPR)
+    .reduce((sum, r) => sum + Number(r.credit_cents), 0);
+  const descuentoReferidosAnioCentavos = referidosTodos
+    .filter((r) => new Date(r.created_at as string) >= inicioAnioPR)
+    .reduce((sum, r) => sum + Number(r.credit_cents), 0);
 
   // ---- Desglose real de tokens/costo, este mes (uso_ia_log) ----
   // Esto es para responder la duda de Joel sobre el Anthropic Console: ahí
@@ -273,8 +294,8 @@ export default async function CfoPage() {
         </div>
       </div>
 
-      {/* 5 métricas */}
-      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
+      {/* 6 métricas */}
+      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-6">
         <div className="vc-card">
           <p className="text-[10px] uppercase tracking-wide text-muted">Cancelados este mes</p>
           <p className="text-xl font-medium">{canceladosEsteMes.length}</p>
@@ -302,6 +323,18 @@ export default async function CfoPage() {
           <p className="text-xl font-medium">{fmt(ingresoCreditosIA)}</p>
           {ingresoCreditosIA > 0 && (
             <p className="mt-0.5 text-[11px] text-muted">margen {fmt(margenCreditosIA)}</p>
+          )}
+        </div>
+        {/* Descuentos por referidos peer-to-peer (8 sept 2026, pedido de
+            Joel: "¿como yo veo eso para efectos contables?"). NO es un gasto
+            en efectivo — es contra-ingreso (descuento sobre la próxima
+            factura del referidor), por eso el label dice "descontado", no
+            "gastado". Ver nota en la query arriba y en referral-link.tsx. */}
+        <div className="vc-card">
+          <p className="text-[10px] uppercase tracking-wide text-muted">Referidos: descontado</p>
+          <p className="text-xl font-medium">{fmt(descuentoReferidosMesCentavos / 100)}</p>
+          {descuentoReferidosAnioCentavos > 0 && (
+            <p className="mt-0.5 text-[11px] text-muted">{fmt(descuentoReferidosAnioCentavos / 100)} en el año — contra-ingreso, no gasto</p>
           )}
         </div>
       </div>
