@@ -239,6 +239,15 @@ export async function sendAdminInvitationEmail(params: {
 export async function sendReferralCreditEmail(params: {
   toEmail: string;
   toName: string | null;
+  // Nombre de la persona referida (8 sept 2026, pedido explícito de Joel:
+  // "aqui los nombre son importante... si Luis Perez refirio a Juan Lopez,
+  // entonces debería decir 'tu referido Juan Lopez comenzó...'"). Esto SOLO
+  // aplica al programa peer-to-peer (amigos/conocidos que ya se conocen
+  // entre sí) — el Programa de Socios (comisión en efectivo con
+  // CPAs/influencers) se queda anónimo, por eso este email nunca lo usa
+  // (procesarComisionSocio no llama esta función). Si por lo que sea no hay
+  // nombre guardado, cae de vuelta al genérico "tu referido".
+  referredName: string | null;
   creditoCentavos: number;
   parcialPorTope: boolean;
 }): Promise<{ sent: boolean; reason?: string }> {
@@ -246,10 +255,11 @@ export async function sendReferralCreditEmail(params: {
     return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
   }
 
-  const { toEmail, toName, creditoCentavos, parcialPorTope } = params;
+  const { toEmail, toName, referredName, creditoCentavos, parcialPorTope } = params;
   const saludoNombre = toName || "";
   const montoTexto = `$${(creditoCentavos / 100).toFixed(2)}`;
   const configUrl = `${SITE_URL}/dashboard/config#referidos`;
+  const referidoTexto = referredName ? `tu referido ${referredName}` : "tu referido";
 
   const notaTope = parcialPorTope
     ? " (esta vez fue un crédito parcial — ya casi llegas al tope anual de tu plan; se reinicia el 1 de enero)"
@@ -257,14 +267,17 @@ export async function sendReferralCreditEmail(params: {
 
   const textoPlano =
     `Hola${saludoNombre ? ` ${saludoNombre}` : ""},\n\n` +
-    `Buenas noticias: alguien que referiste a VICTOR CFO acaba de empezar a pagar de verdad, y ya te ` +
+    `Buenas noticias: ${referidoTexto} comenzó con su plan (el plan Core o Pro) en Victor CFO y ya te ` +
     `ganaste ${montoTexto} de crédito${notaTope} — se descuenta solo de tu próxima factura, no tienes ` +
     `que hacer nada.\n\n` +
     `Puedes ver tu total acumulado y tu link para seguir refiriendo aquí:\n${configUrl}\n\n` +
     `— VICTOR CFO\n` +
     `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
 
-  const htmlSeguro = { saludo: saludoNombre ? escapeHtml(saludoNombre) : "" };
+  const htmlSeguro = {
+    saludo: saludoNombre ? escapeHtml(saludoNombre) : "",
+    referido: referredName ? `tu referido ${escapeHtml(referredName)}` : "tu referido",
+  };
 
   const htmlCorreo = `
 <div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
@@ -273,7 +286,7 @@ export async function sendReferralCreditEmail(params: {
     <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
   </div>
   <p>Hola${htmlSeguro.saludo ? ` ${htmlSeguro.saludo}` : ""},</p>
-  <p>🎉 Buenas noticias: alguien que referiste a VICTOR CFO acaba de empezar a pagar de verdad.</p>
+  <p>🎉 Buenas noticias: ${htmlSeguro.referido} comenzó con su plan (el plan Core o Pro) en Victor CFO.</p>
   <div style="text-align: center; margin: 24px 0;">
     <div style="display: inline-block; background: #eefaf4; border: 1px solid #1D9E75; border-radius: 12px; padding: 16px 28px;">
       <div style="font-size: 28px; font-weight: 700; color: #14543d;">${montoTexto}</div>

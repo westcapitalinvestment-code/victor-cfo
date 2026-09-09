@@ -349,7 +349,7 @@ export async function POST(req: NextRequest) {
 
         const { data: referido } = await supabase
           .from("users")
-          .select("id, referred_by, referido_por_socio_id, plan, stripe_subscription_id")
+          .select("id, full_name, referred_by, referido_por_socio_id, plan, stripe_subscription_id")
           .eq("stripe_customer_id", customerId)
           .maybeSingle();
         // Ninguno de los dos programas aplica — nada más que hacer.
@@ -427,7 +427,7 @@ export async function POST(req: NextRequest) {
 async function procesarCreditoReferido(
   supabase: ReturnType<typeof createAdminClient>,
   invoice: Stripe.Invoice,
-  referido: { id: string; referred_by: string | null; stripe_subscription_id: string | null }
+  referido: { id: string; full_name: string | null; referred_by: string | null; stripe_subscription_id: string | null }
 ) {
   if (!referido.referred_by) return;
 
@@ -511,6 +511,15 @@ async function procesarCreditoReferido(
       await sendReferralCreditEmail({
         toEmail: referidor.email,
         toName: referidor.full_name,
+        // Nombre del referido SÍ se menciona aquí a propósito (8 sept 2026,
+        // pedido explícito de Joel) — este es el programa peer-to-peer
+        // (amigos/conocidos que ya se conocen entre sí, el que refiere ya
+        // sabe exactamente a quién le mandó el link), a diferencia del
+        // Programa de Socios (comisión en efectivo con CPAs/influencers),
+        // que se queda anónimo por ser una relación más profesional/menos
+        // personal. Si por lo que sea el referido nunca puso su nombre,
+        // cae al genérico "tu referido".
+        referredName: referido.full_name,
         creditoCentavos: montoCreditoConTope,
         parcialPorTope: montoCreditoConTope < montoCredito,
       });
