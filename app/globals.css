@@ -52,7 +52,13 @@ body {
 }
 
 /* Topbar — calcado de VICTOR — Dashboard Core.html (.topbar) */
-.vc-topbar-wrap { border-bottom: .5px solid var(--border); background: var(--card); }
+/* Fija el topbar arriba al hacer scroll (9 sept 2026, reportado por Joel:
+   "se mueve toda, sería bueno que se quedara estática") — el bottom nav
+   (.vc-bnav) ya era position:fixed, pero el topbar de arriba scrolleaba
+   junto con el contenido en vez de quedarse fijo como el de abajo. z-index
+   90 (menor que el 100 del bottom nav) por consistencia, aunque en la
+   práctica no se solapan. */
+.vc-topbar-wrap { position: sticky; top: 0; z-index: 90; border-bottom: .5px solid var(--border); background: var(--card); }
 .vc-topbar { margin: 0 auto; max-width: 1100px; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
 .vc-topbar-top { display: flex; align-items: center; justify-content: space-between; }
 @media (min-width: 640px) {
