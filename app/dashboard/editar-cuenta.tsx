@@ -133,6 +133,14 @@ export default function EditarCuenta({
     );
   }
 
+  // Fix dark mode (9 sept 2026, pedido de Joel de viaje: "no se ve el
+  // nombre ni el telefono ni el email, esta muy claro") — estos 3 inputs
+  // tenían clases de Tailwind sueltas sin background/color explícito, así
+  // que caían en el fondo blanco por defecto del navegador con texto
+  // heredado de --text (claro en modo oscuro) = texto casi invisible sobre
+  // blanco. "vc-input" (globals.css) ya resuelve esto en toda la app
+  // (background: var(--bg), color: var(--text)) — estos 3 eran los únicos
+  // que no lo usaban.
   return (
     <div className="mt-3">
       <p className="mb-3 inline-block rounded bg-teal/10 px-2 py-1 text-xs font-medium text-teal">
@@ -143,7 +151,7 @@ export default function EditarCuenta({
         type="text"
         value={nombre}
         onChange={(e) => setNombre(e.target.value)}
-        className="w-full rounded-lg border border-border p-2.5 text-sm"
+        className="vc-input"
       />
 
       <label className="mb-1 mt-3 block text-xs font-medium text-muted">Email</label>
@@ -151,7 +159,7 @@ export default function EditarCuenta({
         type="email"
         value={correo}
         onChange={(e) => setCorreo(e.target.value)}
-        className="w-full rounded-lg border border-border p-2.5 text-sm"
+        className="vc-input"
       />
 
       <label className="mb-1 mt-3 block text-xs font-medium text-muted">Teléfono</label>
@@ -160,7 +168,7 @@ export default function EditarCuenta({
         value={telefono}
         onChange={(e) => setTelefono(e.target.value)}
         placeholder="(787) 000-0000"
-        className="w-full rounded-lg border border-border p-2.5 text-sm"
+        className="vc-input"
       />
 
       {error && <p className="mt-2 text-xs text-red">{error}</p>}

@@ -362,14 +362,16 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     name: "verificar_uso_ia",
     description:
       "Consulta en vivo cuánto presupuesto de IA (el 'tope de uso' de VICTOR) le queda al usuario en su ciclo de " +
-      "facturación actual. OBLIGATORIO: llama esta herramienta SIEMPRE que el usuario pregunte cuántos 'tokens' o " +
-      "mensajes le quedan, cuánto ha gastado hablando con VICTOR, por qué VICTOR lo limitó o le puso un aviso, o " +
-      "cómo funciona el sistema de límites en general — NUNCA contestes esas preguntas de memoria ni inventes un " +
+      "facturación actual — Y TAMBIÉN cuánto ha gastado específicamente HOY (desde medianoche, hora de Puerto " +
+      "Rico), separado del total del ciclo. OBLIGATORIO: llama esta herramienta SIEMPRE que el usuario pregunte " +
+      "cuántos 'tokens' o mensajes le quedan, cuánto ha gastado hablando con VICTOR (ya sea 'en total' o " +
+      "específicamente 'hoy'/'desde que me levanté'), por qué VICTOR lo limitó o le puso un aviso, o cómo " +
+      "funciona el sistema de límites en general — NUNCA contestes esas preguntas de memoria ni inventes un " +
       "número; ya ha pasado que VICTOR no tenía forma de ver esto y admitía no saber. Devuelve el plan actual, el " +
-      "presupuesto total del ciclo (incluyendo créditos extra comprados si aplica), cuánto lleva gastado, cuánto " +
-      "le queda disponible, y en qué punto del ciclo de facturación está. Úsala también de forma PROACTIVA — si " +
-      "ves en tu contexto que el usuario está en estado 'aviso' o 'restringido_hora', puedes ofrecer explicarle " +
-      "sin que pregunte.",
+      "presupuesto total del ciclo (incluyendo créditos extra comprados si aplica), cuánto lleva gastado en total " +
+      "y cuánto específicamente hoy, cuánto le queda disponible, y en qué punto del ciclo de facturación está. " +
+      "Úsala también de forma PROACTIVA — si ves en tu contexto que el usuario está en estado 'aviso' o " +
+      "'restringido_hora', puedes ofrecer explicarle sin que pregunte.",
     input_schema: {
       type: "object",
       properties: {},
@@ -2336,13 +2338,38 @@ export async function executeVictorTool(
         return { ok: false, message: "No se pudo verificar el uso de IA en este momento." };
       }
 
+      // Gasto de HOY en centavos reales (9 sept 2026, pedido de Joel de
+      // viaje: "vamos a verificar cuanto Victor ha gastado hoy desde que
+      // me levante" — no sabía cuánto llevaba ayer para restar a mano del
+      // total del ciclo). uso_ia_log guarda costo_centavos YA calculado por
+      // turno (costoEnCentavos() en app/api/victor/route.ts, vía la RPC
+      // registrar_uso_ia_detalle) — sumar esa columna es más simple y
+      // siempre correcto que recalcular desde tokens, porque no depende de
+      // qué modelo se usó ese turno. "Hoy" es medianoche en hora de Puerto
+      // Rico, no UTC (mismo criterio que fechaHoyPR() en todo el resto de
+      // la app).
+      const inicioHoyPR = `${fechaHoyPR()}T00:00:00-04:00`;
+      const { data: logHoy } = await supabase
+        .from("uso_ia_log")
+        .select("costo_centavos")
+        .eq("owner_id", ownerId)
+        .gte("creado_en", inicioHoyPR);
+      const gastoHoyCentavos = (logHoy ?? []).reduce((sum, fila) => sum + Number(fila.costo_centavos ?? 0), 0);
+
       if (esFounder(yo.email)) {
+        // El founder SÍ puede hablar en dólares reales (es el dueño del
+        // negocio revisando costo operativo, no un cliente al que se le
+        // vende un plan de microtokens) — la regla de "nunca menciones
+        // dinero" de más abajo es específicamente para el usuario cliente.
+        const gastoHoyDolares = (gastoHoyCentavos / 100).toFixed(2);
         return {
           ok: true,
           message:
-            "Este usuario es el founder de VICTOR CFO — no tiene tope de gasto de IA aplicado (uso libre para " +
-            "poder probar la app). No hace falta explicarle un límite que no le aplica a él, salvo que pregunte " +
-            "específicamente cómo funciona el sistema para los demás usuarios.",
+            `Este usuario es el founder de VICTOR CFO — no tiene tope de gasto de IA aplicado (uso libre para ` +
+            `poder probar la app). Gasto REAL de IA de hoy (desde medianoche, hora de Puerto Rico): $${gastoHoyDolares}. ` +
+            `Contéstale este número en dólares tal cual — para él sí aplica hablar de costo real, es el dueño ` +
+            `revisando gasto operativo, no un cliente. No hace falta explicarle el límite de microtokens que no le ` +
+            `aplica a él, salvo que pregunte específicamente cómo funciona el sistema para los demás usuarios.`,
         };
       }
 
@@ -2387,6 +2414,7 @@ export async function executeVictorTool(
       const creditosCicloMicrotokens = centavosAMicrotokens(creditosCicloCentavos);
       const usadoMicrotokens = centavosAMicrotokens(costoCicloHastaAhora);
       const disponibleMicrotokens = centavosAMicrotokens(disponibleHoy);
+      const gastoHoyMicrotokens = centavosAMicrotokens(gastoHoyCentavos);
       const fmt = (n: number) => n.toLocaleString("en-US");
 
       const partes: string[] = [];
@@ -2405,6 +2433,9 @@ export async function executeVictorTool(
       );
       partes.push(
         `Va en el día ${diaDelPeriodo} de ${diasEnElPeriodo} de este ciclo de facturación — le quedan ${diasRestantes} día(s) antes de que se renueve y el presupuesto de microtokens vuelva a empezar.`
+      );
+      partes.push(
+        `Hoy específicamente (desde medianoche, hora de Puerto Rico) lleva usados ${fmt(gastoHoyMicrotokens)} microtokens.`
       );
       partes.push(
         estado === "normal"
