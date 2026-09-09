@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import LogoutButton from "../logout-button";
@@ -41,6 +42,31 @@ export default async function ConfigPage() {
     .select("phone")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Estadísticas reales de crédito de referidos, para la tarjeta visible en
+  // ReferralLink (8 sept 2026, pedido de Joel: "seria bueno... que
+  // aparecieran los creditos ahí, seria un palo pq asi es visible pq mucha
+  // gente ni check casi el email"). referral_rewards tiene RLS encendido
+  // SIN políticas (migración 0062) — a propósito, solo el service role
+  // puede leerla — así que hace falta el cliente admin aquí, igual que en
+  // el tool verificar_programa_referidos (lib/victor/tools.ts), filtrado
+  // explícitamente por el id de ESTE usuario, nunca por datos sueltos.
+  // Mismos topes que allá y que el webhook — si cambian en uno, cambian en
+  // los tres lugares.
+  const admin = createAdminClient();
+  const TOPE_ANUAL_CORE_CENTAVOS = 17_500; // $175/año
+  const TOPE_ANUAL_PRO_CENTAVOS = 50_000; // $500/año
+  const inicioAñoISO = `${new Date().getUTCFullYear()}-01-01T00:00:00.000Z`;
+  const { data: creditosReferidos } = await admin
+    .from("referral_rewards")
+    .select("credit_cents, created_at")
+    .eq("referrer_id", user.id);
+  const acumuladoEsteAñoCentavos = (creditosReferidos ?? [])
+    .filter((r) => (r.created_at as string) >= inicioAñoISO)
+    .reduce((sum, r) => sum + Number(r.credit_cents), 0);
+  const topeAnualCentavos =
+    profile?.plan === "pro" || profile?.plan === "proplus" ? TOPE_ANUAL_PRO_CENTAVOS : TOPE_ANUAL_CORE_CENTAVOS;
+  const referidosConCredito = (creditosReferidos ?? []).length;
 
   return (
     <div className="vc-shell">
@@ -99,7 +125,12 @@ export default async function ConfigPage() {
         </div>
       )}
 
-      <ReferralLink userId={user.id} />
+      <ReferralLink
+        userId={user.id}
+        acumuladoEsteAñoCentavos={acumuladoEsteAñoCentavos}
+        topeAnualCentavos={topeAnualCentavos}
+        referidosConCredito={referidosConCredito}
+      />
 
       <NotificacionesToggle />
 

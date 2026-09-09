@@ -29,7 +29,23 @@ import { useState } from "react";
 // plataforma — nunca es un pago en efectivo ni una comisión. Solo aplica
 // si el referidor ya paga; si está en plan gratis no hay factura a la
 // cual aplicarle el crédito.
-export default function ReferralLink({ userId }: { userId: string }) {
+// Estadísticas reales visibles en la tarjeta (8 sept 2026, pedido de Joel:
+// además del correo — ver sendReferralCreditEmail en lib/email.ts — que
+// también se vea aquí mismo sin tener que revisar el email, "pq mucha
+// gente ni check casi el email"). Se calculan server-side en
+// app/dashboard/config/page.tsx (necesita el cliente admin, referral_rewards
+// no tiene políticas de RLS) y llegan ya listas como props.
+export default function ReferralLink({
+  userId,
+  acumuladoEsteAñoCentavos,
+  topeAnualCentavos,
+  referidosConCredito,
+}: {
+  userId: string;
+  acumuladoEsteAñoCentavos: number;
+  topeAnualCentavos: number;
+  referidosConCredito: number;
+}) {
   const [copiado, setCopiado] = useState(false);
 
   const link =
@@ -77,6 +93,29 @@ export default function ReferralLink({ userId }: { userId: string }) {
           {copiado ? "¡Copiado!" : "Copiar"}
         </button>
       </div>
+
+      {referidosConCredito > 0 ? (
+        <div
+          className="mt-3 flex items-center justify-between rounded-lg border p-2.5"
+          style={{ borderColor: "#1D9E75", background: "rgba(29,158,117,.08)" }}
+        >
+          <div>
+            <p className="text-xs font-semibold" style={{ color: "#14543d" }}>
+              ${(acumuladoEsteAñoCentavos / 100).toFixed(2)} ganados este año
+            </p>
+            <p className="text-xs text-muted">
+              {referidosConCredito} {referidosConCredito === 1 ? "referido pagando" : "referidos pagando"} · de $
+              {(topeAnualCentavos / 100).toFixed(2)} disponibles al año
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-muted">
+          Todavía no tienes créditos ganados — en cuanto el primero que refieras empiece a pagar de verdad, aparece
+          aquí (y te avisamos por correo).
+        </p>
+      )}
+
       <p className="mt-3 text-xs text-muted">
         Puedes acumular hasta $175/año en créditos si estás en Core, o hasta $500/año si estás en Pro. El crédito se
         aplica solo, automático, a tu próxima factura — es intransferible y no se puede cambiar por efectivo.

@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { getStripe, esPlanValido, priceIdAddonTecnicos, todosLosPriceIdsDePlanes } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
+import { sendReferralCreditEmail } from "@/lib/email";
 
 // Rollover de créditos de IA (migración 0064, 3 sept 2026, pedido de Joel:
 // "me gustaria que se renueve que no lo pierda pq asi no se siente
@@ -439,7 +440,7 @@ async function procesarCreditoReferido(
 
   const { data: referidor } = await supabase
     .from("users")
-    .select("id, stripe_customer_id, stripe_subscription_id, plan")
+    .select("id, stripe_customer_id, stripe_subscription_id, plan, email, full_name")
     .eq("id", referido.referred_by)
     .maybeSingle();
   // Si el que refirió nunca ha pagado (plan gratis, sin suscripción real en
@@ -499,6 +500,21 @@ async function procesarCreditoReferido(
       referred_id: referido.id,
       credit_cents: montoCreditoConTope,
     });
+
+    // Aviso por correo (8 sept 2026, pedido de Joel) — segundo canal además
+    // de la tarjeta visible en Configuración (ReferralLink), porque "mucha
+    // gente ni check casi el email" pero de todas formas vale la pena
+    // avisar por los dos lados. Solo se manda DESPUÉS de que el crédito ya
+    // quedó aplicado de verdad arriba — si el correo falla, no revierte
+    // nada ni tumba el webhook, es un aviso, no la fuente de verdad.
+    if (referidor.email) {
+      await sendReferralCreditEmail({
+        toEmail: referidor.email,
+        toName: referidor.full_name,
+        creditoCentavos: montoCreditoConTope,
+        parcialPorTope: montoCreditoConTope < montoCredito,
+      });
+    }
   } catch (err) {
     // No relanzamos — perder un crédito de referido no debe tumbar el
     // webhook ni afectar la activación de la cuenta del referido.

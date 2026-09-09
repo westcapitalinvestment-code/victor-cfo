@@ -228,6 +228,82 @@ export async function sendAdminInvitationEmail(params: {
   }
 }
 
+// Aviso de crédito de referido ganado (8 sept 2026, pedido de Joel: "seria
+// bueno si se puede que llegara un email... asi es visible pq mucha gente
+// ni check casi el email" — de ahí que TAMBIÉN se muestre en una tarjeta
+// dentro de la app, ver ReferralLink; este correo es el segundo canal, no
+// el único). Lo llama procesarCreditoReferido en
+// app/api/stripe/webhook/route.ts justo después de registrar el crédito en
+// referral_rewards — nunca antes de que el crédito ya esté aplicado de
+// verdad en Stripe, para no avisar de algo que todavía no pasó.
+export async function sendReferralCreditEmail(params: {
+  toEmail: string;
+  toName: string | null;
+  creditoCentavos: number;
+  parcialPorTope: boolean;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName, creditoCentavos, parcialPorTope } = params;
+  const saludoNombre = toName || "";
+  const montoTexto = `$${(creditoCentavos / 100).toFixed(2)}`;
+  const configUrl = `${SITE_URL}/dashboard/config#referidos`;
+
+  const notaTope = parcialPorTope
+    ? " (esta vez fue un crédito parcial — ya casi llegas al tope anual de tu plan; se reinicia el 1 de enero)"
+    : "";
+
+  const textoPlano =
+    `Hola${saludoNombre ? ` ${saludoNombre}` : ""},\n\n` +
+    `Buenas noticias: alguien que referiste a VICTOR CFO acaba de empezar a pagar de verdad, y ya te ` +
+    `ganaste ${montoTexto} de crédito${notaTope} — se descuenta solo de tu próxima factura, no tienes ` +
+    `que hacer nada.\n\n` +
+    `Puedes ver tu total acumulado y tu link para seguir refiriendo aquí:\n${configUrl}\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = { saludo: saludoNombre ? escapeHtml(saludoNombre) : "" };
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; background: #1D9E75; color: #fff; font-weight: 600; font-size: 14px; vertical-align: middle;">V</span>
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>Hola${htmlSeguro.saludo ? ` ${htmlSeguro.saludo}` : ""},</p>
+  <p>🎉 Buenas noticias: alguien que referiste a VICTOR CFO acaba de empezar a pagar de verdad.</p>
+  <div style="text-align: center; margin: 24px 0;">
+    <div style="display: inline-block; background: #eefaf4; border: 1px solid #1D9E75; border-radius: 12px; padding: 16px 28px;">
+      <div style="font-size: 28px; font-weight: 700; color: #14543d;">${montoTexto}</div>
+      <div style="font-size: 13px; color: #14543d;">de crédito ganado</div>
+    </div>
+  </div>
+  ${parcialPorTope ? `<p style="font-size: 13px; color: #B45309;">Esta vez fue un crédito parcial — ya casi llegas al tope anual de tu plan; se reinicia el 1 de enero.</p>` : ""}
+  <p>Se descuenta solo de tu próxima factura — no tienes que pedirlo ni hacer nada.</p>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${configUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Ver mi total acumulado</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: `🎉 Ganaste ${montoTexto} de crédito por un referido`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
 // Envío automático de factura al cliente (3 sept 2026, pedido de Joel: "en
 // FreshBooks cuando ponía que una factura era recurrente, automáticamente
 // todos los 1 y 15 se enviaban solas") — lo llama el cron de
