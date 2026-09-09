@@ -7,7 +7,7 @@ export default async function EditarEntidadPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { bienvenida?: string };
+  searchParams: { bienvenida?: string; relevoError?: string; logoError?: string };
 }) {
   const supabase = createClient();
   const {
@@ -41,6 +41,8 @@ export default async function EditarEntidadPage({
       entidad={entidad as any}
       esPrimeraEntidad={esPrimeraEntidad}
       bienvenida={searchParams?.bienvenida === "1"}
+      relevoError={searchParams?.relevoError === "1"}
+      logoError={searchParams?.logoError === "1"}
     />
   );
 }

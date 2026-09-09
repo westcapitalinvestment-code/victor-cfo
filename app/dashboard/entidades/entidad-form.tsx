@@ -92,11 +92,15 @@ export default function EntidadForm({
   entidad,
   esPrimeraEntidad,
   bienvenida: bienvenidaProp,
+  relevoError,
+  logoError,
 }: {
   modo: "crear" | "editar";
   entidad?: EntidadCompleta;
   esPrimeraEntidad: boolean;
   bienvenida?: boolean;
+  relevoError?: boolean;
+  logoError?: boolean;
 }) {
   const router = useRouter();
   const bienvenida = modo === "editar" && !!bienvenidaProp;
@@ -140,11 +144,78 @@ export default function EntidadForm({
   // mostrar el estimado de cuánto le llega neto con el 2.25% que cobra BPPR.
   const [athMovilPath, setAthMovilPath] = useState(entidad?.ath_movil_business_path ?? "");
 
-  // Certificado de relevo — solo se puede subir con una entidad que ya
-  // existe (necesita el id real para la key de R2), igual que el logo.
+  // Certificado de relevo — la SUBIDA a R2 solo puede pasar con una entidad
+  // que ya existe (necesita el id real para la key), igual que el logo. Pero
+  // en modo "crear" sí dejamos ESCOGER el archivo de una vez (relevoFile) y
+  // lo subimos automáticamente justo después del insert en guardar() — así
+  // el dueño no tiene que acordarse de volver luego a una segunda pantalla.
+  // (Antes decía "podrás subirlo después" y ese "después" nunca llegaba
+  // para varios usuarios — bug reportado por Joel, 9 sept 2026.)
   const relevoInputRef = useRef<HTMLInputElement>(null);
   const [tieneRelevo, setTieneRelevo] = useState(!!entidad?.relevo_certificate_r2_key);
   const [subiendoRelevo, setSubiendoRelevo] = useState(false);
+  const [relevoFile, setRelevoFile] = useState<File | null>(null);
+
+  function escogerRelevo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      setError("El certificado debe ser un PDF.");
+      return;
+    }
+    setError(null);
+    setRelevoFile(file);
+  }
+
+  async function subirRelevoParaEntidad(entityId: string, file: File): Promise<boolean> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("entityId", entityId);
+    try {
+      const res = await fetch("/api/entidades/relevo/upload", { method: "POST", body: formData });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  // Logo — mismo patrón que el certificado de relevo arriba: en modo
+  // "crear" solo se ESCOGE (logoFile) y se sube apenas exista un id real de
+  // entidad, dentro de guardar(). logoPreview es la vista previa local
+  // (object URL) mientras tanto, para que se vea igual de "ya quedó" que en
+  // modo editar aunque todavía no se haya subido a R2.
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+
+  function escogerLogo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/jpg"].includes(file.type)) {
+      setError("El logo debe ser PNG o JPG.");
+      return;
+    }
+    setError(null);
+    setLogoFile(file);
+    setLogoPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+  }
+
+  async function subirLogoParaEntidad(entityId: string, file: File): Promise<boolean> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("entityId", entityId);
+    try {
+      const res = await fetch("/api/entidades/logo/upload", { method: "POST", body: formData });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
 
   function toggleMetodo(m: string) {
     setMetodosCobro((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
@@ -247,12 +318,28 @@ export default function EntidadForm({
     if (!esPrimeraEntidad) {
       fetch("/api/stripe/addon-entidades/sincronizar", { method: "POST" }).catch(() => {});
     }
-    // Al logo y al certificado de relevo les hace falta un id real de
-    // entidad para subirse (ver LogoUploader y el input de relevo arriba,
-    // ambos deshabilitados en modo "crear") — por eso, en vez de mandar
-    // directo a Facturación, se manda a la página de editar de la entidad
-    // recién creada, donde esos dos uploads ya sí funcionan.
-    router.push(`/dashboard/entidades/${nueva.id}/editar?bienvenida=1`);
+    // Si escogieron el certificado de relevo durante la creación (arriba,
+    // solo se podía ESCOGER, no subir — hacía falta el id real de la
+    // entidad), lo subimos ahora mismo que ya existe ese id. Si por lo que
+    // sea falla, no bloqueamos la creación (la entidad ya quedó guardada) —
+    // se lo marcamos con relevoError=1 para que la página de editar avise y
+    // pueda reintentar ahí mismo, en vez de perder el negocio recién creado.
+    let relevoFallo = false;
+    if (relevoFile) {
+      const ok = await subirRelevoParaEntidad(nueva.id, relevoFile);
+      relevoFallo = !ok;
+    }
+    // Mismo trato para el logo: si lo escogieron en el formulario de crear,
+    // se sube ahora que ya hay id real de entidad.
+    let logoFallo = false;
+    if (logoFile) {
+      const ok = await subirLogoParaEntidad(nueva.id, logoFile);
+      logoFallo = !ok;
+    }
+    const params = ["bienvenida=1"];
+    if (relevoFallo) params.push("relevoError=1");
+    if (logoFallo) params.push("logoError=1");
+    router.push(`/dashboard/entidades/${nueva.id}/editar?${params.join("&")}`);
     router.refresh();
   }
 
@@ -276,10 +363,19 @@ export default function EntidadForm({
         )}
       </div>
 
-      {bienvenida && (
+      {(relevoError || logoError) && (
+        <div className="mb-4 rounded-lg border border-red bg-red/5 p-3 text-xs text-red">
+          <strong>Tu negocio quedó creado, pero {relevoError && logoError ? "el logo y el Certificado de Relevo no se pudieron subir" : relevoError ? "el Certificado de Relevo no se pudo subir" : "el logo no se pudo subir"}.</strong>{" "}
+          {relevoError && "Ve a la pestaña Fiscal para reintentar el certificado. "}
+          {logoError && "Ve a la pestaña Perfil para reintentar el logo. "}
+          No se perdió nada más.
+        </div>
+      )}
+
+      {bienvenida && !relevoError && !logoError && (
         <div className="mb-4 rounded-lg border border-teal bg-teal/5 p-3 text-xs text-teal">
-          <strong>¡Tu negocio quedó creado!</strong> Aquí puedes subir el logo y, si aplica, tu Certificado de Relevo — pestaña Perfil
-          y Fiscal. Cuando termines, dale a "Ir a Facturación" arriba.
+          <strong>¡Tu negocio quedó creado!</strong> Si no adjuntaste el logo o tu Certificado de Relevo al crearlo, puedes hacerlo
+          aquí mismo — pestañas Perfil y Fiscal. Cuando termines, dale a "Ir a Facturación" arriba.
         </div>
       )}
 
@@ -301,7 +397,23 @@ export default function EntidadForm({
 
       {tab === "perfil" && (
         <div className="vc-card flex flex-col gap-3">
-          {modo === "editar" && entidad && <LogoUploader entidad={entidad} />}
+          {modo === "editar" && entidad ? (
+            <LogoUploader entidad={entidad} />
+          ) : (
+            <div className="mb-1 flex flex-col items-center gap-2">
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-dashed border-border bg-bg">
+                {logoPreview ? (
+                  <img src={logoPreview} alt="Logo" className="h-full w-full object-contain" />
+                ) : (
+                  <i className="ti ti-building-store text-muted" style={{ fontSize: 20 }} />
+                )}
+              </div>
+              <input ref={logoInputRef} type="file" accept="image/png,image/jpeg" className="hidden" onChange={escogerLogo} />
+              <button type="button" className="text-xs font-medium text-teal hover:opacity-80" onClick={() => logoInputRef.current?.click()}>
+                {logoFile ? "Cambiar logo" : "Añadir logo · PNG, JPG · Máx 5MB"}
+              </button>
+            </div>
+          )}
 
           <SelectorColorFactura color={brandColor} onChange={setBrandColor} />
 
@@ -390,17 +502,41 @@ export default function EntidadForm({
                           {modo === "editar" && entidad ? (
                             <>
                               <input ref={relevoInputRef} type="file" accept="application/pdf" className="hidden" onChange={subirRelevo} />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={subiendoRelevo}
+                                  className="rounded-lg border border-dashed border-border px-3 py-2 text-left text-xs text-muted hover:opacity-80"
+                                  onClick={() => relevoInputRef.current?.click()}
+                                >
+                                  {subiendoRelevo ? "Subiendo..." : tieneRelevo ? "✓ Certificado subido — toca para reemplazar" : "Subir Certificado de Relevo (PDF)"}
+                                </button>
+                                {tieneRelevo && (
+                                  <a
+                                    href={`/api/entidades/${entidad.id}/relevo`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs font-medium text-teal hover:opacity-80"
+                                  >
+                                    Ver / imprimir
+                                  </a>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <input ref={relevoInputRef} type="file" accept="application/pdf" className="hidden" onChange={escogerRelevo} />
                               <button
                                 type="button"
-                                disabled={subiendoRelevo}
                                 className="rounded-lg border border-dashed border-border px-3 py-2 text-left text-xs text-muted hover:opacity-80"
                                 onClick={() => relevoInputRef.current?.click()}
                               >
-                                {subiendoRelevo ? "Subiendo..." : tieneRelevo ? "✓ Certificado subido — toca para reemplazar" : "Subir Certificado de Relevo (PDF)"}
+                                {relevoFile ? `✓ ${relevoFile.name} — toca para cambiar` : "Adjuntar Certificado de Relevo (PDF)"}
                               </button>
+                              <p className="text-xs text-muted">
+                                Se sube junto con el negocio al darle Guardar. Si no lo tienes a mano, puedes añadirlo después desde Configuración.
+                              </p>
                             </>
-                          ) : (
-                            <p className="text-xs text-muted">Podrás subir el PDF del certificado después de crear el negocio.</p>
                           )}
                         </div>
                       )}

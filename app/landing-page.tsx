@@ -19,6 +19,7 @@ export default function LandingPage() {
           <a href="#">Inicio</a>
           <a href="#como-funciona">Cómo funciona</a>
           <a href="#victor">VICTOR</a>
+          <a href="#confianza">Confianza</a>
           <a href="#precios">Precios</a>
           <a href="#embajadores">Embajadores</a>
           <Link href="/registro" className={styles.navCta}>
@@ -232,6 +233,72 @@ export default function LandingPage() {
               <div className={styles.victorFeatureIcon}>🤝</div>
               <div className={styles.victorFeatureTitle}>Guía paso a paso</div>
               <div className={styles.victorFeatureDesc}>Te recomiendo cada servicio cuando tu negocio lo necesita. Nunca antes, nunca después.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Trust bar — pedido de Joel (9 sept 2026): quien no conoce Plaid o
+          Stripe puede desconfiar de conectar su banco o su tarjeta. Esto le
+          da un preview de quiénes son, qué hacen, y qué apps conocidas ya
+          los usan — para que se vea como un producto serio, no un invento.
+          Números y ejemplos de clientes tomados directo de plaid.com y
+          stripe.com (9 sept 2026) — no logos ajenos, solo texto, para no
+          usar marcas de terceros sin permiso. */}
+      <div className={styles.section} id="confianza" style={{ paddingTop: 0 }}>
+        <div className={styles.sectionLabel}>// tecnología de confianza</div>
+        <h2 className={styles.sectionTitle}>Tu banco y tu tarjeta, en manos serias.</h2>
+        <p className={styles.sectionSub}>
+          VICTOR no inventa su propia infraestructura para tocar tu dinero — usa la misma que ya corre por debajo de
+          las apps financieras más grandes de Estados Unidos.
+        </p>
+        <div className={styles.trustGrid}>
+          <div className={styles.trustCard}>
+            <div className={styles.trustHead}>
+              <span className={styles.trustLogo}>Plaid</span>
+            </div>
+            <p className={styles.trustDesc}>
+              Es quien conecta tu cuenta de banco con VICTOR de forma segura — tu contraseña del banco nunca la vemos
+              ni la guardamos, solo Plaid habla directo con tu banco. La usan Robinhood, Acorns, H&R Block y
+              Rocket, entre miles de apps más.
+            </p>
+            <div className={styles.trustStats}>
+              <div className={styles.trustStat}>
+                <div className={styles.trustStatNum}>9,000+</div>
+                <div className={styles.trustStatLabel}>apps la usan</div>
+              </div>
+              <div className={styles.trustStat}>
+                <div className={styles.trustStatNum}>12,000+</div>
+                <div className={styles.trustStatLabel}>bancos conectados</div>
+              </div>
+              <div className={styles.trustStat}>
+                <div className={styles.trustStatNum}>1 de 2</div>
+                <div className={styles.trustStatLabel}>adultos en EEUU la ha usado</div>
+              </div>
+            </div>
+          </div>
+          <div className={styles.trustCard}>
+            <div className={styles.trustHead}>
+              <span className={styles.trustLogo}>Stripe</span>
+            </div>
+            <p className={styles.trustDesc}>
+              Es quien procesa los cobros con tarjeta de tus facturas — tus clientes pagan directo a través de
+              Stripe, nunca nos pasa a nosotros el número de la tarjeta. Es la misma infraestructura de pagos que
+              usan más de 5 millones de negocios alrededor del mundo.
+            </p>
+            <div className={styles.trustStats}>
+              <div className={styles.trustStat}>
+                <div className={styles.trustStatNum}>5M+</div>
+                <div className={styles.trustStatLabel}>negocios la usan</div>
+              </div>
+              <div className={styles.trustStat}>
+                <div className={styles.trustStatNum}>Trillones</div>
+                <div className={styles.trustStatLabel}>de dólares procesados al año</div>
+              </div>
+              <div className={styles.trustStat}>
+                <div className={styles.trustStatNum}>PCI</div>
+                <div className={styles.trustStatLabel}>nivel máximo de seguridad</div>
+              </div>
             </div>
           </div>
         </div>
