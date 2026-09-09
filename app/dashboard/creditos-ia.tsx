@@ -13,10 +13,18 @@ import { useState } from "react";
 // 8 sept 2026 — se añade un segundo pack ($20) además del original de $10.
 // El de $20 no es solo el doble limpio — trae un 5% extra de microtokens
 // como incentivo por llevar el pack grande (ver lib/stripe.ts,
-// CREDITO_IA_CENTAVOS_POR_COMPRA_20). Los números de microtokens de aquí
-// abajo son fijos en el frontend (mismo criterio que el resto de la app:
-// nunca mostrarle $ al usuario, solo microtokens) — si cambia el margen o
-// el bono en lib/stripe.ts, hay que actualizar estos dos también a mano.
+// CREDITO_IA_CENTAVOS_POR_COMPRA_20).
+//
+// 9 sept 2026 — pedido de Joel: "quitale los microtokens... no lo pongas
+// visible en Config, solo deja lo de 'Mejor valor - 5% de bono'". El
+// número de microtokens dejó de mostrarse en la tarjeta (solo el precio y
+// la nota de "Mejor valor"), pero VICTOR SÍ puede seguir hablando de
+// microtokens en el chat si el usuario pregunta directamente — eso vive
+// en lib/victor/tools.ts (verificar_uso_ia), no aquí. El campo
+// `microtokens` de PAQUETES se queda declarado (era solo cosmético, el
+// crédito real que aplica lo decide el backend en
+// /api/stripe/checkout-creditos-ia vía configPaqueteCreditosIA(), no este
+// número) aunque ya no se pinte en pantalla.
 const PAQUETES = [
   { id: "10" as const, precioLabel: "$10", microtokens: 7_000_000, nota: null as string | null },
   { id: "20" as const, precioLabel: "$20", microtokens: 14_700_000, nota: "Mejor valor — 5% de bono" },
@@ -64,9 +72,6 @@ export default function CreditosIA() {
             style={{ background: "rgba(29,158,117,.1)" }}
           >
             <span className="block text-base font-semibold">{p.precioLabel}</span>
-            <span className="block text-[11px] font-normal text-muted">
-              {p.microtokens.toLocaleString("es-PR")} microtokens
-            </span>
             {p.nota && <span className="mt-1 block text-[11px] font-normal">{p.nota}</span>}
             {loading === p.id && <span className="block text-[11px] font-normal">Abriendo...</span>}
           </button>
