@@ -16,6 +16,9 @@ type Tarea = { id: string; numero: string; total: number; fechaEmision: string; 
 // misma forma que Tarea, pero todavía no es una factura: el técnico la
 // convierte él mismo con un tap cuando llega al trabajo.
 type CotizacionAsignada = { id: string; numero: string; total: number; fechaEmision: string; clienteNombre: string | null };
+// Tipo de gasto con evidencia requerida (10 sept 2026, migración 0081) —
+// configurado por el dueño en Equipo. Ej. "Gasolina", "Peajes".
+type TipoGasto = { id: string; nombre: string };
 type Sesion = {
   tecnico: { id: string; name: string };
   entidad: { name: string };
@@ -24,6 +27,7 @@ type Sesion = {
   catalogo: CatalogoItem[];
   tareas: Tarea[];
   cotizaciones: CotizacionAsignada[];
+  tiposGasto: TipoGasto[];
 };
 type ClienteLite = { id: string; name: string; phone: string | null };
 type ItemFactura = { id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal_linea: number };
@@ -175,7 +179,7 @@ export default function TecnicoApp({ token }: { token: string }) {
 // factura (crear/completar una).
 // ============================================================================
 function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: () => void; onRecargar: () => void }) {
-  const [vista, setVista] = useState<"home" | "cliente_nueva" | "cliente_cobrar" | "factura" | "cliente_cotizar" | "cotizacion">("home");
+  const [vista, setVista] = useState<"home" | "cliente_nueva" | "cliente_cobrar" | "factura" | "cliente_cotizar" | "cotizacion" | "gasto">("home");
   const [facturaId, setFacturaId] = useState<string | null>(null);
   const [cotizacionId, setCotizacionId] = useState<string | null>(null);
   const [convirtiendoId, setConvirtiendoId] = useState<string | null>(null);
@@ -295,6 +299,12 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
     );
   }
 
+  // Reportar gasto con evidencia (10 sept 2026, migración 0081) — solo
+  // aparece si el dueño configuró al menos un tipo de gasto en Equipo.
+  if (vista === "gasto") {
+    return <PantallaGasto tipos={sesion.tiposGasto} onVolver={() => setVista("home")} />;
+  }
+
   return (
     <div className="vc-shell pb-10">
       <div className="mb-4 flex items-center justify-between pt-4">
@@ -337,6 +347,19 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
           <i className="ti ti-file-description" /> Cotizar algo nuevo
         </button>
       </div>
+
+      {/* Reportar gasto con evidencia (10 sept 2026, migración 0081) — solo
+      aparece si el dueño configuró tipos de gasto en Equipo. */}
+      {sesion.tiposGasto.length > 0 && (
+        <div className="mb-3">
+          <button
+            className="flex w-full items-center justify-center gap-1 rounded-lg border border-border py-2.5 text-sm font-medium text-muted"
+            onClick={() => setVista("gasto")}
+          >
+            <i className="ti ti-receipt" /> Reportar gasto
+          </button>
+        </div>
+      )}
 
       {errorConvertir && <p className="mb-3 text-xs text-red">{errorConvertir}</p>}
 
@@ -387,6 +410,133 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Reportar gasto con evidencia (10 sept 2026, migración 0081) — foto de la
+// factura/recibo + monto + fecha, mismo patrón de captura que la evidencia
+// de facturas (input file con capture="environment" + FileReader a dataUrl).
+// ============================================================================
+function PantallaGasto({ tipos, onVolver }: { tipos: TipoGasto[]; onVolver: () => void }) {
+  const [tipoId, setTipoId] = useState(tipos[0]?.id ?? "");
+  const [monto, setMonto] = useState("");
+  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  const [nota, setNota] = useState("");
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [enviado, setEnviado] = useState(false);
+
+  function alTomarFoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const lector = new FileReader();
+    lector.onload = () => setDataUrl(lector.result as string);
+    lector.readAsDataURL(file);
+  }
+
+  async function enviar() {
+    setError(null);
+    const montoNum = Number(monto);
+    if (!tipoId) return setError("Escoge el tipo de gasto.");
+    if (!Number.isFinite(montoNum) || montoNum <= 0) return setError("Escribe un monto válido.");
+    if (!fecha) return setError("Falta la fecha.");
+    if (!dataUrl) return setError("Toma una foto de la factura o recibo.");
+
+    setEnviando(true);
+    const res = await fetch("/api/tecnico/gastos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipoId, monto: montoNum, fecha, nota: nota.trim() || undefined, dataUrl }),
+    });
+    setEnviando(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.ok) {
+      setError(data?.error ?? "No se pudo enviar el reporte. Intenta de nuevo.");
+      return;
+    }
+    setEnviado(true);
+  }
+
+  if (enviado) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-bg px-6 text-center">
+        <p className="mb-1 text-lg font-medium">✓ Reportado</p>
+        <p className="mb-6 max-w-xs text-xs text-muted">
+          Se guardó tu evidencia. Cuando la transacción llegue del banco, se cruza automáticamente.
+        </p>
+        <button className="vc-btn-primary" onClick={onVolver}>
+          Volver
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="vc-shell pb-10">
+      <div className="mb-4 flex items-center justify-between pt-4">
+        <p className="text-lg font-medium">Reportar gasto</p>
+        <button onClick={onVolver} className="text-xs text-muted hover:opacity-80">
+          Cancelar
+        </button>
+      </div>
+
+      <div className="vc-card mb-3 flex flex-col gap-3">
+        <div>
+          <label className="mb-1 block text-xs text-muted">Tipo de gasto</label>
+          <select className="vc-input" value={tipoId} onChange={(e) => setTipoId(e.target.value)}>
+            {tipos.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted">Monto</label>
+          <input
+            className="vc-input"
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            placeholder="0.00"
+            value={monto}
+            onChange={(e) => setMonto(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted">Fecha</label>
+          <input className="vc-input" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted">Nota (opcional)</label>
+          <input className="vc-input" placeholder="ej. tanque lleno antes de viaje largo" value={nota} onChange={(e) => setNota(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="vc-card mb-3">
+        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Foto de la factura/recibo</p>
+        {dataUrl ? (
+          <div className="mb-2 overflow-hidden rounded-lg border border-border">
+            <img src={dataUrl} alt="Evidencia" className="w-full object-contain" />
+          </div>
+        ) : (
+          <p className="mb-2 text-xs text-muted">Obligatoria — sin foto no se puede reconciliar contra el banco.</p>
+        )}
+        <label className="flex w-full cursor-pointer items-center justify-center gap-1 rounded-lg border border-teal py-2.5 text-sm font-medium text-teal">
+          <i className="ti ti-camera" /> {dataUrl ? "Tomar otra foto" : "Tomar foto"}
+          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={alTomarFoto} disabled={enviando} />
+        </label>
+      </div>
+
+      {error && <p className="mb-3 text-xs text-red">{error}</p>}
+
+      <button className="vc-btn-primary w-full" onClick={enviar} disabled={enviando}>
+        {enviando ? "Enviando..." : "Enviar reporte"}
+      </button>
     </div>
   );
 }

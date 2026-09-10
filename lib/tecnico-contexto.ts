@@ -72,6 +72,16 @@ export async function construirRespuestaSesion(ctx: ContextoTecnico) {
     .eq("estado", "aprobada")
     .order("fecha_emision", { ascending: false });
 
+  // Tipos de gasto con evidencia requerida (10 sept 2026, migración 0081) —
+  // configurados por el dueño en Equipo. Si viene vacío, el botón "Reportar
+  // gasto" simplemente no aparece en la app del técnico.
+  const { data: tiposGasto } = await ctx.admin
+    .from("expense_evidence_types")
+    .select("id, nombre")
+    .eq("entity_id", ctx.tecnico.entity_id)
+    .eq("activo", true)
+    .order("nombre", { ascending: true });
+
   return {
     ok: true,
     tecnico: { id: ctx.tecnico.id, name: ctx.tecnico.name },
@@ -79,6 +89,7 @@ export async function construirRespuestaSesion(ctx: ContextoTecnico) {
     permisos: ctx.permisos,
     approvalMode: ctx.approvalMode,
     catalogo: catalogo ?? [],
+    tiposGasto: tiposGasto ?? [],
     tareas: (tareas ?? []).map((t: any) => ({
       id: t.id,
       numero: t.numero,
