@@ -168,30 +168,43 @@ export default async function GastosNegocioPage({
 
   // Búsqueda de transacciones (10 sept 2026) — mismo comportamiento que
   // /dashboard/gastos (Personal): ignora mes/categoría/tipo a propósito,
-  // scoped a esta entidad. Ver comentario extenso en la versión Personal.
+  // busca por texto O por monto aproximado (±$0.50), scoped a esta entidad.
+  // Ver comentario extenso en la versión Personal.
   const buscarTexto = (searchParams.buscar ?? "").trim();
   const LIMITE_BUSQUEDA = 500;
   let resultadosBusqueda: typeof transacciones = [];
   if (buscarTexto) {
+    const comoNumero = buscarTexto.replace(",", ".");
+    const esNumero = /^-?\d+(\.\d{1,2})?$/.test(comoNumero);
+
     let busquedaQuery = supabase
       .from("transactions")
       .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo, pending")
       .eq("owner_id", user.id)
       .eq("entity_id", entidadId)
       .eq("es_duplicada", false)
-      .ilike("description_raw", `%${buscarTexto}%`)
       .order("fecha", { ascending: false })
       .limit(LIMITE_BUSQUEDA);
-    if (cuentasSeleccionadas.length > 0) {
-      const plaidIds = cuentasSeleccionadas.filter((c) => c.origen === "plaid").map((c) => c.id);
-      const manualIds = cuentasSeleccionadas.filter((c) => c.origen === "manual").map((c) => c.id);
-      const condiciones: string[] = [];
-      if (plaidIds.length > 0) condiciones.push(`plaid_account_id.in.(${plaidIds.join(",")})`);
-      if (manualIds.length > 0) condiciones.push(`manual_account_id.in.(${manualIds.join(",")})`);
-      if (condiciones.length > 0) busquedaQuery = busquedaQuery.or(condiciones.join(","));
+
+    if (esNumero) {
+      const monto = Math.abs(Number(comoNumero));
+      const tolerancia = 0.5;
+      const lo = Math.max(0, monto - tolerancia);
+      const hi = monto + tolerancia;
+      busquedaQuery = busquedaQuery.or(
+        `description_raw.ilike.%${buscarTexto}%,and(amount.gte.${lo},amount.lte.${hi}),and(amount.gte.${-hi},amount.lte.${-lo})`
+      );
+    } else {
+      busquedaQuery = busquedaQuery.ilike("description_raw", `%${buscarTexto}%`);
     }
+
     const { data: datosBusqueda } = await busquedaQuery;
-    resultadosBusqueda = datosBusqueda ?? [];
+    resultadosBusqueda =
+      cuentasSeleccionadas.length > 0
+        ? (datosBusqueda ?? []).filter((t) =>
+            cuentasSeleccionadas.some((c) => (c.origen === "plaid" ? t.plaid_account_id === c.id : t.manual_account_id === c.id))
+          )
+        : (datosBusqueda ?? []);
   }
 
   const idsTransacciones = (transacciones ?? []).map((t) => t.id);
@@ -346,43 +359,6 @@ export default async function GastosNegocioPage({
         <CategoriaDropdown opciones={opcionesCategoria} basePath={BASE_PATH} />
       </div>
 
-      {/* Búsqueda de transacciones (10 sept 2026) — ver /dashboard/gastos
-      (Personal) para el comentario extenso. Scoped a esta entidad. */}
-      <form method="GET" action={BASE_PATH} className="mb-4 flex gap-2">
-        {searchParams.cuentas && <input type="hidden" name="cuentas" value={searchParams.cuentas} />}
-        <input
-          type="text"
-          name="buscar"
-          defaultValue={buscarTexto}
-          placeholder="Buscar en la descripción de las transacciones (ej. vehiculo, telefonia)..."
-          className="vc-input flex-1 !text-sm"
-        />
-        <button type="submit" className="vc-btn-primary flex-shrink-0 px-4 text-sm">
-          🔍 Buscar
-        </button>
-        {buscarTexto && (
-          <Link
-            href={BASE_PATH}
-            className="flex flex-shrink-0 items-center rounded-lg border px-3 text-xs font-medium text-muted hover:opacity-80"
-            style={{ borderColor: "var(--border)" }}
-          >
-            ✕ Limpiar
-          </Link>
-        )}
-      </form>
-
-      {buscarTexto && (
-        <div className="mb-3 flex items-center justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2 text-xs">
-          <span>
-            🔍 Resultados de &quot;{buscarTexto}&quot; en todo el historial (cualquier mes, cualquier categoría) ·{" "}
-            {transaccionesMostradas.length} transacción(es)
-          </span>
-          <Link href={BASE_PATH} className="font-medium text-teal hover:opacity-80">
-            ✕ Quitar búsqueda
-          </Link>
-        </div>
-      )}
-
       {!buscarTexto && (
       <>
       {/* Mismo segmented control de ancho completo que /dashboard/gastos —
@@ -510,6 +486,52 @@ export default async function GastosNegocioPage({
         </div>
       )}
       </>
+      )}
+
+      {/* Búsqueda de transacciones (10 sept 2026, reposicionada 10 sept 2026
+      pq Joel: "debe de ir en las transacciones... que la pueda buscar por
+      nombre o monto aprox") — vive justo encima de la lista en vez de
+      arriba de la página, para corregir una transacción mal categorizada
+      viéndola al lado de la lista. !w-auto en el botón corrige un bug real:
+      .vc-btn-primary trae width:100% de globals.css, y sin !w-auto el botón
+      se comía el ancho del row y dejaba el input inservible. Conserva
+      cuenta/tipo/mes con inputs ocultos pq el fragmento de arriba
+      (toggle/mes/reporte) se esconde mientras hay una búsqueda activa. */}
+      <form method="GET" action={BASE_PATH} className="mb-3 flex gap-2">
+        {searchParams.cuentas && <input type="hidden" name="cuentas" value={searchParams.cuentas} />}
+        {searchParams.tipo && <input type="hidden" name="tipo" value={searchParams.tipo} />}
+        {searchParams.mes && <input type="hidden" name="mes" value={searchParams.mes} />}
+        <input
+          type="text"
+          name="buscar"
+          defaultValue={buscarTexto}
+          placeholder="Buscar por nombre o monto (ej. Leasing, 245.00)..."
+          className="vc-input flex-1 !text-xs"
+        />
+        <button type="submit" className="vc-btn-primary !w-auto flex-shrink-0 !py-1.5 px-4 !text-xs">
+          🔍 Buscar
+        </button>
+        {buscarTexto && (
+          <Link
+            href={BASE_PATH}
+            className="flex flex-shrink-0 items-center rounded-lg border px-3 text-xs font-medium text-muted hover:opacity-80"
+            style={{ borderColor: "var(--border)" }}
+          >
+            ✕ Limpiar
+          </Link>
+        )}
+      </form>
+
+      {buscarTexto && (
+        <div className="mb-3 flex items-center justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2 text-xs">
+          <span>
+            🔍 Resultados de &quot;{buscarTexto}&quot; en todo el historial (cualquier mes, cualquier categoría) ·{" "}
+            {transaccionesMostradas.length} transacción(es)
+          </span>
+          <Link href={BASE_PATH} className="font-medium text-teal hover:opacity-80">
+            ✕ Quitar búsqueda
+          </Link>
+        </div>
       )}
 
       <div className="vc-card">

@@ -203,36 +203,59 @@ export default async function GastosPage({
 
   // Búsqueda de transacciones (10 sept 2026, pedido de Joel: "creo que hay
   // que poner un search a transacciones por si hay alguna mal
-  // categorizada") — a propósito NO respeta mes/categoría/tipo, porque el
-  // punto es encontrar cosas fuera de donde uno esperaría verlas (ej.
-  // buscar "vehiculo" para confirmar que el gasto recurrente del vehículo
-  // corporativo no se coló en otra categoría, o no quedó sin categorizar,
-  // en CUALQUIER mes). Consulta aparte de transaccionesQuery de arriba —
-  // esa sigue alimentando el reporte por categoría y los totales del mes
-  // tal como estaban, sin verse afectada por la búsqueda.
+  // categorizada", y luego "que la pueda buscar por nombre o monto aprox")
+  // — a propósito NO respeta mes/categoría/tipo, porque el punto es
+  // encontrar cosas fuera de donde uno esperaría verlas (ej. buscar
+  // "Leasing" para confirmar que ese gasto recurrente no se coló en otra
+  // categoría, o no quedó sin categorizar, en CUALQUIER mes). Consulta
+  // aparte de transaccionesQuery de arriba — esa sigue alimentando el
+  // reporte por categoría y los totales del mes tal como estaban, sin
+  // verse afectada por la búsqueda.
   const buscarTexto = (searchParams.buscar ?? "").trim();
   const LIMITE_BUSQUEDA = 500;
   let resultadosBusqueda: typeof transacciones = [];
   if (buscarTexto) {
+    // Si lo escrito parece un monto (ej. "245", "245.00"), se busca TAMBIÉN
+    // por monto aproximado (±$0.50) además del texto — muchas descripciones
+    // del banco no dicen nada reconocible ("PAYPAL *INST XFER"), pero el
+    // monto sí se recuerda. Los dos lados del OR: positivo (gasto) y
+    // negativo (ingreso, ver convención de signo en tipo_flujo).
+    const comoNumero = buscarTexto.replace(",", ".");
+    const esNumero = /^-?\d+(\.\d{1,2})?$/.test(comoNumero);
+
     let busquedaQuery = supabase
       .from("transactions")
       .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo, pending")
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .eq("es_duplicada", false)
-      .ilike("description_raw", `%${buscarTexto}%`)
       .order("fecha", { ascending: false })
       .limit(LIMITE_BUSQUEDA);
-    if (cuentasSeleccionadas.length > 0) {
-      const plaidIds = cuentasSeleccionadas.filter((c) => c.origen === "plaid").map((c) => c.id);
-      const manualIds = cuentasSeleccionadas.filter((c) => c.origen === "manual").map((c) => c.id);
-      const condiciones: string[] = [];
-      if (plaidIds.length > 0) condiciones.push(`plaid_account_id.in.(${plaidIds.join(",")})`);
-      if (manualIds.length > 0) condiciones.push(`manual_account_id.in.(${manualIds.join(",")})`);
-      if (condiciones.length > 0) busquedaQuery = busquedaQuery.or(condiciones.join(","));
+
+    if (esNumero) {
+      const monto = Math.abs(Number(comoNumero));
+      const tolerancia = 0.5;
+      const lo = Math.max(0, monto - tolerancia);
+      const hi = monto + tolerancia;
+      busquedaQuery = busquedaQuery.or(
+        `description_raw.ilike.%${buscarTexto}%,and(amount.gte.${lo},amount.lte.${hi}),and(amount.gte.${-hi},amount.lte.${-lo})`
+      );
+    } else {
+      busquedaQuery = busquedaQuery.ilike("description_raw", `%${buscarTexto}%`);
     }
+
     const { data: datosBusqueda } = await busquedaQuery;
-    resultadosBusqueda = datosBusqueda ?? [];
+    // Filtro de cuenta aplicado en JS, no en la query — combinar el OR de
+    // texto/monto de arriba con el OR de cuenta (plaid vs manual) en una
+    // sola llamada .or() de supabase-js requeriría anidar and()/or() a
+    // mano en un string; más simple y suficientemente rápido filtrar aquí
+    // (ya viene acotado a LIMITE_BUSQUEDA filas).
+    resultadosBusqueda =
+      cuentasSeleccionadas.length > 0
+        ? (datosBusqueda ?? []).filter((t) =>
+            cuentasSeleccionadas.some((c) => (c.origen === "plaid" ? t.plaid_account_id === c.id : t.manual_account_id === c.id))
+          )
+        : (datosBusqueda ?? []);
   }
 
   // Historial de "esto cambió después de guardarse" (transaction_sync_log,
@@ -496,45 +519,6 @@ export default async function GastosPage({
         <CategoriaDropdown opciones={opcionesCategoria} />
       </div>
 
-      {/* Búsqueda de transacciones (10 sept 2026) — ver comentario junto a
-      resultadosBusqueda arriba. Form GET simple, sin JS, para que funcione
-      igual de bien que el resto de los filtros de esta pantalla (todos son
-      navegación por URL). Conserva el filtro de cuenta si había uno. */}
-      <form method="GET" action="/dashboard/gastos" className="mb-4 flex gap-2">
-        {searchParams.cuentas && <input type="hidden" name="cuentas" value={searchParams.cuentas} />}
-        <input
-          type="text"
-          name="buscar"
-          defaultValue={buscarTexto}
-          placeholder="Buscar en la descripción de tus transacciones (ej. vehiculo, telefonia)..."
-          className="vc-input flex-1 !text-sm"
-        />
-        <button type="submit" className="vc-btn-primary flex-shrink-0 px-4 text-sm">
-          🔍 Buscar
-        </button>
-        {buscarTexto && (
-          <Link
-            href="/dashboard/gastos"
-            className="flex flex-shrink-0 items-center rounded-lg border px-3 text-xs font-medium text-muted hover:opacity-80"
-            style={{ borderColor: "var(--border)" }}
-          >
-            ✕ Limpiar
-          </Link>
-        )}
-      </form>
-
-      {buscarTexto && (
-        <div className="mb-3 flex items-center justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2 text-xs">
-          <span>
-            🔍 Resultados de &quot;{buscarTexto}&quot; en todo el historial (cualquier mes, cualquier categoría) ·{" "}
-            {transaccionesMostradas.length} transacción(es)
-          </span>
-          <Link href="/dashboard/gastos" className="font-medium text-teal hover:opacity-80">
-            ✕ Quitar búsqueda
-          </Link>
-        </div>
-      )}
-
       {!buscarTexto && (
       <>
       {/* Toggle Gastos/Ingresos — mismo rol que "Debits"/"Credits" en el
@@ -692,6 +676,54 @@ export default async function GastosPage({
         </div>
       )}
       </>
+      )}
+
+      {/* Búsqueda de transacciones (10 sept 2026, pedido de Joel: "poner un
+      search a transacciones por si hay alguna mal categorizada") — vive
+      pegada a la lista de abajo, no arriba de la pantalla, porque el punto
+      es encontrar UNA transacción puntual (ej. "Leasing" o su monto,
+      "245.00") y corregirla ahí mismo. Busca por texto O por monto
+      aproximado (±$0.50) — ver comentario junto a resultadosBusqueda
+      arriba. El botón usa !w-auto a propósito: vc-btn-primary trae
+      width:100% de globals.css (pensado para botones de una sola columna
+      en formularios), que sin este override se pelea con flex y deja el
+      input de al lado aplastado a casi nada — eso fue el bug que Joel
+      reportó ("ese buscar ahi no hace nada"). */}
+      <form method="GET" action="/dashboard/gastos" className="mb-3 flex gap-2">
+        {searchParams.cuentas && <input type="hidden" name="cuentas" value={searchParams.cuentas} />}
+        {searchParams.tipo && <input type="hidden" name="tipo" value={searchParams.tipo} />}
+        {searchParams.mes && <input type="hidden" name="mes" value={searchParams.mes} />}
+        <input
+          type="text"
+          name="buscar"
+          defaultValue={buscarTexto}
+          placeholder="Buscar por nombre o monto (ej. Leasing, 245.00)..."
+          className="vc-input flex-1 !py-1.5 !text-xs"
+        />
+        <button type="submit" className="vc-btn-primary !w-auto flex-shrink-0 !py-1.5 px-4 !text-xs">
+          🔍 Buscar
+        </button>
+        {buscarTexto && (
+          <Link
+            href="/dashboard/gastos"
+            className="flex flex-shrink-0 items-center rounded-lg border px-3 text-xs font-medium text-muted hover:opacity-80"
+            style={{ borderColor: "var(--border)" }}
+          >
+            ✕ Limpiar
+          </Link>
+        )}
+      </form>
+
+      {buscarTexto && (
+        <div className="mb-3 flex items-center justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2 text-xs">
+          <span>
+            🔍 Resultados de &quot;{buscarTexto}&quot; en todo el historial (cualquier mes, cualquier categoría) ·{" "}
+            {transaccionesMostradas.length} transacción(es)
+          </span>
+          <Link href="/dashboard/gastos" className="font-medium text-teal hover:opacity-80">
+            ✕ Quitar búsqueda
+          </Link>
+        </div>
       )}
 
       <div className="vc-card">
