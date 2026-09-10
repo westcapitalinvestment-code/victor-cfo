@@ -66,6 +66,17 @@ export async function POST(req: NextRequest) {
   // (ya no es autoservicio).
   const esReferidoConTrial = esReferido && (plan === "core" || plan === "pro");
 
+  // Trial de 7 días para CUALQUIER primera suscripción (10 sept 2026,
+  // pedido de Joel tras comparar con la competencia — Luna Money muestra
+  // "FREE for 7 days" como titular antes de pedir pago; nuestra pantalla no
+  // mencionaba trial en ningún lado). Se calcula por "primera suscripción"
+  // (sin stripe_customer_id todavía), NO por si el usuario ya pagó antes —
+  // así un usuario Core existente que sube a Pro desde el paywall NO recibe
+  // otro trial (ya es cliente, cobrarle de una vez es lo correcto). Un
+  // referido sigue recibiendo el trial más largo (30 días) en vez de este.
+  const esPrimeraSuscripcion = !perfil?.stripe_customer_id;
+  const trialDias = esReferidoConTrial ? 30 : esPrimeraSuscripcion ? 7 : 0;
+
   const origin = req.headers.get("origin") || "https://www.victorcfo.com";
   const separadorReturn = returnTo.includes("?") ? "&" : "?";
   const separadorCancel = cancelTo.includes("?") ? "&" : "?";
@@ -80,7 +91,7 @@ export async function POST(req: NextRequest) {
       metadata: { supabase_user_id: user.id, plan, ciclo },
       subscription_data: {
         metadata: { supabase_user_id: user.id, plan, ciclo },
-        ...(esReferidoConTrial ? { trial_period_days: 30 } : {}),
+        ...(trialDias > 0 ? { trial_period_days: trialDias } : {}),
       },
       success_url: `${origin}${returnTo}${separadorReturn}pago=exitoso`,
       cancel_url: `${origin}${cancelTo}${separadorCancel}plan=${plan}&ciclo=${ciclo}`,
