@@ -29,13 +29,15 @@ export async function POST(req: Request) {
   if (!entidad) return NextResponse.json({ error: "Entidad no encontrada." }, { status: 404 });
 
   const filas = cruces
-    .map((c: any) => ({
-      fecha: String(c?.fecha ?? ""),
-      hora: c?.hora ? String(c.hora) : null,
-      placa: String(c?.placa ?? "").trim().toUpperCase(),
-      plaza: c?.plaza ? String(c.plaza) : null,
-      monto: Number(c?.monto),
-    }))
+    .map(
+      (c: any): { fecha: string; hora: string | null; placa: string; plaza: string | null; monto: number } => ({
+        fecha: String(c?.fecha ?? ""),
+        hora: c?.hora ? String(c.hora) : null,
+        placa: String(c?.placa ?? "").trim().toUpperCase(),
+        plaza: c?.plaza ? String(c.plaza) : null,
+        monto: Number(c?.monto),
+      })
+    )
     .filter((c) => /^\d{4}-\d{2}-\d{2}$/.test(c.fecha) && c.placa && Number.isFinite(c.monto) && c.monto > 0);
 
   if (filas.length === 0) return NextResponse.json({ error: "Ningún cruce tiene datos válidos." }, { status: 400 });
