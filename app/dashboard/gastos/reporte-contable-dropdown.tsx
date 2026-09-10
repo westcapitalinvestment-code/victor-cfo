@@ -36,6 +36,22 @@ export default function ReporteContableDropdown({ rangos, entityId }: { rangos: 
       </button>
       {open && (
         <div className="vc-card absolute left-0 top-9 z-10 flex w-80 flex-col gap-1">
+          {entityId && (
+            <>
+              {/* Estado de Resultados (10 sept 2026) — matriz mes-a-mes,
+                  exclusivo de negocio (por eso solo aparece cuando hay
+                  entityId, nunca en Gastos personal). Pantalla propia en vez
+                  de ir directo a un archivo, para que se pueda ver antes de
+                  descargar. */}
+              <a
+                href="/dashboard/negocio/estado-resultados"
+                className="rounded-lg px-2 py-1.5 text-xs font-medium text-teal hover:bg-teal/[.08]"
+              >
+                📊 Ver Estado de Resultados
+              </a>
+              <div className="my-1 h-px bg-border" />
+            </>
+          )}
           {rangos.map((r) => {
             const params = new URLSearchParams();
             if (r.desde) params.set("desde", r.desde);

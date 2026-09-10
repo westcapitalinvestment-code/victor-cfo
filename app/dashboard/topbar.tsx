@@ -198,16 +198,21 @@ export default function Topbar({
           </div>
         </div>
 
-        {/* Invitar al contable — gratis para cualquier plan. La idea es que
-            los mismos CPAs nos hagan mercadeo: un cliente invita a su
-            contador, y luego ese contador invita a sus otros clientes. */}
-        <Link href="/dashboard/invitar-contable" className="vc-invite-banner">
+        {/* Invitar al contable — DESACTIVADO temporalmente (10 sept 2026,
+            pedido de Joel): el Portal CPA todavía no tiene suficiente que
+            ofrecerle a un contable real (ver Estado de Resultados nuevo en
+            construcción). La idea de fondo sigue siendo buena — cliente
+            invita a su contador, el contador termina invitando a sus otros
+            clientes — pero se reactiva cuando el portal esté sólido. Ruta y
+            backend (/dashboard/invitar-contable, account_members) quedan
+            intactos, solo se esconde la entrada desde el topbar. */}
+        {/* <Link href="/dashboard/invitar-contable" className="vc-invite-banner">
           <i className="ti ti-user-plus" style={{ fontSize: 15 }} />
           <span>
             <span className="vc-invite-title">Invita a tu contable</span>
             <span className="vc-invite-sub">Acceso gratis · sin costo adicional</span>
           </span>
-        </Link>
+        </Link> */}
       </div>
 
       {/* Tabs de contexto — Personal está disponible en Core. Negocio
