@@ -208,5 +208,14 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // console.log a propósito (9 sept 2026) — Vercel no muestra el body de la
+  // respuesta en su panel de Logs, solo metadata (status/duración). Sin
+  // esto, diagnosticar por qué a alguien no le llegó un push significaba
+  // adivinar en vez de ver el detalle real por usuario.
+  console.log(
+    "[notificaciones-push]",
+    JSON.stringify({ usuariosNotificados, suscripcionesExpiradas, totalSuscripciones: subs.length, resultados })
+  );
+
   return NextResponse.json({ ok: true, usuariosNotificados, suscripcionesExpiradas, resultados });
 }
