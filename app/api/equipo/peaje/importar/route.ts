@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   const entityId = body?.entityId as string | undefined;
   const nombreArchivo: string = body?.nombreArchivo || "estado de peaje";
   const r2Key = body?.r2Key as string | undefined;
-  const cruces = Array.isArray(body?.cruces) ? body.cruces : [];
+  const cruces: unknown[] = Array.isArray(body?.cruces) ? body.cruces : [];
 
   if (!entityId) return NextResponse.json({ error: "Falta entityId." }, { status: 400 });
   if (!r2Key) return NextResponse.json({ error: "Falta el archivo subido (r2Key)." }, { status: 400 });
