@@ -137,6 +137,18 @@ export default function CategoriaDropdown({ opciones, basePath = "/dashboard/gas
               + Añadir categoría
             </button>
           )}
+          {/* Gestionar categorías (10 sept 2026, pedido de Joel: "algo para
+          eliminar/editar categoria pq hay una que dice Telefonica y otra
+          Telefonia") — fusionar/renombrar/eliminar vive en su propia
+          pantalla en vez de aquí porque necesita más espacio (conteo de
+          transacciones por categoría, selector de destino al fusionar). */}
+          <Link
+            href="/dashboard/categorias"
+            onClick={() => setOpen(false)}
+            className="rounded-lg px-2 py-1.5 text-left text-xs text-muted hover:opacity-80"
+          >
+            ⚙ Gestionar categorías (fusionar, renombrar, eliminar)
+          </Link>
         </div>
       )}
     </div>

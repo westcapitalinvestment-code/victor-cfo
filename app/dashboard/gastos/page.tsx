@@ -93,7 +93,7 @@ function parsearCategoriaSeleccionada(valor: string | undefined): { tipo: "id"; 
 export default async function GastosPage({
   searchParams,
 }: {
-  searchParams: { cuentas?: string; categoria?: string; tipo?: string; mes?: string };
+  searchParams: { cuentas?: string; categoria?: string; tipo?: string; mes?: string; buscar?: string };
 }) {
   const supabase = createClient();
   const {
@@ -200,6 +200,40 @@ export default async function GastosPage({
     transaccionesQuery,
     supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
+
+  // Búsqueda de transacciones (10 sept 2026, pedido de Joel: "creo que hay
+  // que poner un search a transacciones por si hay alguna mal
+  // categorizada") — a propósito NO respeta mes/categoría/tipo, porque el
+  // punto es encontrar cosas fuera de donde uno esperaría verlas (ej.
+  // buscar "vehiculo" para confirmar que el gasto recurrente del vehículo
+  // corporativo no se coló en otra categoría, o no quedó sin categorizar,
+  // en CUALQUIER mes). Consulta aparte de transaccionesQuery de arriba —
+  // esa sigue alimentando el reporte por categoría y los totales del mes
+  // tal como estaban, sin verse afectada por la búsqueda.
+  const buscarTexto = (searchParams.buscar ?? "").trim();
+  const LIMITE_BUSQUEDA = 500;
+  let resultadosBusqueda: typeof transacciones = [];
+  if (buscarTexto) {
+    let busquedaQuery = supabase
+      .from("transactions")
+      .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo, pending")
+      .eq("owner_id", user.id)
+      .is("entity_id", null)
+      .eq("es_duplicada", false)
+      .ilike("description_raw", `%${buscarTexto}%`)
+      .order("fecha", { ascending: false })
+      .limit(LIMITE_BUSQUEDA);
+    if (cuentasSeleccionadas.length > 0) {
+      const plaidIds = cuentasSeleccionadas.filter((c) => c.origen === "plaid").map((c) => c.id);
+      const manualIds = cuentasSeleccionadas.filter((c) => c.origen === "manual").map((c) => c.id);
+      const condiciones: string[] = [];
+      if (plaidIds.length > 0) condiciones.push(`plaid_account_id.in.(${plaidIds.join(",")})`);
+      if (manualIds.length > 0) condiciones.push(`manual_account_id.in.(${manualIds.join(",")})`);
+      if (condiciones.length > 0) busquedaQuery = busquedaQuery.or(condiciones.join(","));
+    }
+    const { data: datosBusqueda } = await busquedaQuery;
+    resultadosBusqueda = datosBusqueda ?? [];
+  }
 
   // Historial de "esto cambió después de guardarse" (transaction_sync_log,
   // migración 0022) — para las transacciones visibles en esta pantalla,
@@ -344,14 +378,18 @@ export default async function GastosPage({
   // limita al mes seleccionado — un gasto de julio sin categorizar sigue
   // pendiente aunque ya no sea "este mes", y el usuario necesita verlo
   // para resolverlo, no que desaparezca de la vista.
-  const transaccionesMostradas = categoriaSeleccionada
-    ? (transacciones ?? []).filter((t) => {
-        if (t.tipo_flujo !== tipoReporte) return false;
-        if (categoriaSeleccionada.tipo === "sin_categorizar") return !t.hacienda_category_id;
-        if (!dentroDelRango(t.fecha)) return false;
-        return t.hacienda_category_id === categoriaSeleccionada.id;
-      })
-    : (transacciones ?? []).filter((t) => t.tipo_flujo === tipoReporte && dentroDelRango(t.fecha));
+  // La búsqueda manda sobre todos los demás filtros de la lista (categoría,
+  // tipo, mes) — ver comentario junto a resultadosBusqueda arriba.
+  const transaccionesMostradas = buscarTexto
+    ? resultadosBusqueda
+    : categoriaSeleccionada
+      ? (transacciones ?? []).filter((t) => {
+          if (t.tipo_flujo !== tipoReporte) return false;
+          if (categoriaSeleccionada.tipo === "sin_categorizar") return !t.hacienda_category_id;
+          if (!dentroDelRango(t.fecha)) return false;
+          return t.hacienda_category_id === categoriaSeleccionada.id;
+        })
+      : (transacciones ?? []).filter((t) => t.tipo_flujo === tipoReporte && dentroDelRango(t.fecha));
 
   const nombreCategoriaSeleccionada = categoriaSeleccionada
     ? reporteCategoria.find((r) =>
@@ -458,6 +496,47 @@ export default async function GastosPage({
         <CategoriaDropdown opciones={opcionesCategoria} />
       </div>
 
+      {/* Búsqueda de transacciones (10 sept 2026) — ver comentario junto a
+      resultadosBusqueda arriba. Form GET simple, sin JS, para que funcione
+      igual de bien que el resto de los filtros de esta pantalla (todos son
+      navegación por URL). Conserva el filtro de cuenta si había uno. */}
+      <form method="GET" action="/dashboard/gastos" className="mb-4 flex gap-2">
+        {searchParams.cuentas && <input type="hidden" name="cuentas" value={searchParams.cuentas} />}
+        <input
+          type="text"
+          name="buscar"
+          defaultValue={buscarTexto}
+          placeholder="Buscar en la descripción de tus transacciones (ej. vehiculo, telefonia)..."
+          className="vc-input flex-1 !text-sm"
+        />
+        <button type="submit" className="vc-btn-primary flex-shrink-0 px-4 text-sm">
+          🔍 Buscar
+        </button>
+        {buscarTexto && (
+          <Link
+            href="/dashboard/gastos"
+            className="flex flex-shrink-0 items-center rounded-lg border px-3 text-xs font-medium text-muted hover:opacity-80"
+            style={{ borderColor: "var(--border)" }}
+          >
+            ✕ Limpiar
+          </Link>
+        )}
+      </form>
+
+      {buscarTexto && (
+        <div className="mb-3 flex items-center justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2 text-xs">
+          <span>
+            🔍 Resultados de &quot;{buscarTexto}&quot; en todo el historial (cualquier mes, cualquier categoría) ·{" "}
+            {transaccionesMostradas.length} transacción(es)
+          </span>
+          <Link href="/dashboard/gastos" className="font-medium text-teal hover:opacity-80">
+            ✕ Quitar búsqueda
+          </Link>
+        </div>
+      )}
+
+      {!buscarTexto && (
+      <>
       {/* Toggle Gastos/Ingresos — mismo rol que "Debits"/"Credits" en el
       reporte del BPPR. Cambia tipoReporte, que a su vez filtra tanto el
       reporte de categorías como la lista de transacciones de abajo. Antes
@@ -612,6 +691,8 @@ export default async function GastosPage({
           </span>
         </div>
       )}
+      </>
+      )}
 
       <div className="vc-card">
         {error && <p className="text-xs text-amb">No se pudo leer transactions ({error.message}).</p>}
@@ -619,11 +700,13 @@ export default async function GastosPage({
         {!error && transaccionesMostradas.length === 0 && (
           <div className="py-6 text-center">
             <p className="text-sm text-muted">
-              {categoriaSeleccionada
-                ? `No hay transacciones en esta categoría ${esTodo ? "en el historial" : `en ${etiquetaMes(mesSeleccionado)}`}.`
-                : "Todavía no hay transacciones."}
+              {buscarTexto
+                ? `No se encontró ninguna transacción con "${buscarTexto}".`
+                : categoriaSeleccionada
+                  ? `No hay transacciones en esta categoría ${esTodo ? "en el historial" : `en ${etiquetaMes(mesSeleccionado)}`}.`
+                  : "Todavía no hay transacciones."}
             </p>
-            {!categoriaSeleccionada && (
+            {!categoriaSeleccionada && !buscarTexto && (
               <p className="mt-1 text-xs text-muted">Se llenan solas cuando conectes tu banco en la pestaña Cuentas.</p>
             )}
           </div>
@@ -643,14 +726,19 @@ export default async function GastosPage({
             // parámetro que no estaba en el key — ahora el key incluye
             // tipo y mes explícitamente, que son los dos filtros nuevos de
             // esta pantalla, además de cuenta y categoría de siempre.
-            key={`${searchParams.cuentas ?? "todas"}-${searchParams.categoria ?? "todas"}-${tipoReporte}-${mesSeleccionado}`}
+            key={`${searchParams.cuentas ?? "todas"}-${searchParams.categoria ?? "todas"}-${tipoReporte}-${mesSeleccionado}-${buscarTexto}`}
             transaccionesIniciales={transaccionesMostradas}
             categorias={categorias ?? []}
             nombrePorCuenta={Object.fromEntries(nombrePorCuenta)}
             cambioPorTransaccion={cambioPorTransaccion}
           />
         )}
-        {!categoriaSeleccionada && transacciones && transacciones.length === LIMITE_TRANSACCIONES && (
+        {buscarTexto && resultadosBusqueda.length === LIMITE_BUSQUEDA && (
+          <p className="mt-3 text-center text-xs text-muted">
+            Mostrando los {LIMITE_BUSQUEDA} resultados más recientes que coinciden — afina la búsqueda si falta alguno.
+          </p>
+        )}
+        {!buscarTexto && !categoriaSeleccionada && transacciones && transacciones.length === LIMITE_TRANSACCIONES && (
           <p className="mt-3 text-center text-xs text-muted">
             Mostrando las {LIMITE_TRANSACCIONES} más recientes
             {cuentasSeleccionadas.length === 1 ? " de esta cuenta" : cuentasSeleccionadas.length > 1 ? " de estas cuentas" : ""}. Filtra por

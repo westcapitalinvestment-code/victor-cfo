@@ -69,7 +69,7 @@ function parsearCategoriaSeleccionada(valor: string | undefined): { tipo: "id"; 
 export default async function GastosNegocioPage({
   searchParams,
 }: {
-  searchParams: { cuentas?: string; categoria?: string; tipo?: string; mes?: string };
+  searchParams: { cuentas?: string; categoria?: string; tipo?: string; mes?: string; buscar?: string };
 }) {
   const supabase = createClient();
   const {
@@ -166,6 +166,34 @@ export default async function GastosNegocioPage({
     supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
+  // Búsqueda de transacciones (10 sept 2026) — mismo comportamiento que
+  // /dashboard/gastos (Personal): ignora mes/categoría/tipo a propósito,
+  // scoped a esta entidad. Ver comentario extenso en la versión Personal.
+  const buscarTexto = (searchParams.buscar ?? "").trim();
+  const LIMITE_BUSQUEDA = 500;
+  let resultadosBusqueda: typeof transacciones = [];
+  if (buscarTexto) {
+    let busquedaQuery = supabase
+      .from("transactions")
+      .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo, pending")
+      .eq("owner_id", user.id)
+      .eq("entity_id", entidadId)
+      .eq("es_duplicada", false)
+      .ilike("description_raw", `%${buscarTexto}%`)
+      .order("fecha", { ascending: false })
+      .limit(LIMITE_BUSQUEDA);
+    if (cuentasSeleccionadas.length > 0) {
+      const plaidIds = cuentasSeleccionadas.filter((c) => c.origen === "plaid").map((c) => c.id);
+      const manualIds = cuentasSeleccionadas.filter((c) => c.origen === "manual").map((c) => c.id);
+      const condiciones: string[] = [];
+      if (plaidIds.length > 0) condiciones.push(`plaid_account_id.in.(${plaidIds.join(",")})`);
+      if (manualIds.length > 0) condiciones.push(`manual_account_id.in.(${manualIds.join(",")})`);
+      if (condiciones.length > 0) busquedaQuery = busquedaQuery.or(condiciones.join(","));
+    }
+    const { data: datosBusqueda } = await busquedaQuery;
+    resultadosBusqueda = datosBusqueda ?? [];
+  }
+
   const idsTransacciones = (transacciones ?? []).map((t) => t.id);
   const { data: cambiosRecientes } =
     idsTransacciones.length > 0
@@ -236,14 +264,16 @@ export default async function GastosNegocioPage({
     }
   }
 
-  const transaccionesMostradas = categoriaSeleccionada
-    ? (transacciones ?? []).filter((t) => {
-        if (t.tipo_flujo !== tipoReporte) return false;
-        if (categoriaSeleccionada.tipo === "sin_categorizar") return !t.hacienda_category_id;
-        if (!dentroDelRango(t.fecha)) return false;
-        return t.hacienda_category_id === categoriaSeleccionada.id;
-      })
-    : (transacciones ?? []).filter((t) => t.tipo_flujo === tipoReporte && dentroDelRango(t.fecha));
+  const transaccionesMostradas = buscarTexto
+    ? resultadosBusqueda
+    : categoriaSeleccionada
+      ? (transacciones ?? []).filter((t) => {
+          if (t.tipo_flujo !== tipoReporte) return false;
+          if (categoriaSeleccionada.tipo === "sin_categorizar") return !t.hacienda_category_id;
+          if (!dentroDelRango(t.fecha)) return false;
+          return t.hacienda_category_id === categoriaSeleccionada.id;
+        })
+      : (transacciones ?? []).filter((t) => t.tipo_flujo === tipoReporte && dentroDelRango(t.fecha));
 
   const nombreCategoriaSeleccionada = categoriaSeleccionada
     ? reporteCategoria.find((r) =>
@@ -316,6 +346,45 @@ export default async function GastosNegocioPage({
         <CategoriaDropdown opciones={opcionesCategoria} basePath={BASE_PATH} />
       </div>
 
+      {/* Búsqueda de transacciones (10 sept 2026) — ver /dashboard/gastos
+      (Personal) para el comentario extenso. Scoped a esta entidad. */}
+      <form method="GET" action={BASE_PATH} className="mb-4 flex gap-2">
+        {searchParams.cuentas && <input type="hidden" name="cuentas" value={searchParams.cuentas} />}
+        <input
+          type="text"
+          name="buscar"
+          defaultValue={buscarTexto}
+          placeholder="Buscar en la descripción de las transacciones (ej. vehiculo, telefonia)..."
+          className="vc-input flex-1 !text-sm"
+        />
+        <button type="submit" className="vc-btn-primary flex-shrink-0 px-4 text-sm">
+          🔍 Buscar
+        </button>
+        {buscarTexto && (
+          <Link
+            href={BASE_PATH}
+            className="flex flex-shrink-0 items-center rounded-lg border px-3 text-xs font-medium text-muted hover:opacity-80"
+            style={{ borderColor: "var(--border)" }}
+          >
+            ✕ Limpiar
+          </Link>
+        )}
+      </form>
+
+      {buscarTexto && (
+        <div className="mb-3 flex items-center justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2 text-xs">
+          <span>
+            🔍 Resultados de &quot;{buscarTexto}&quot; en todo el historial (cualquier mes, cualquier categoría) ·{" "}
+            {transaccionesMostradas.length} transacción(es)
+          </span>
+          <Link href={BASE_PATH} className="font-medium text-teal hover:opacity-80">
+            ✕ Quitar búsqueda
+          </Link>
+        </div>
+      )}
+
+      {!buscarTexto && (
+      <>
       {/* Mismo segmented control de ancho completo que /dashboard/gastos —
       ver el comentario allá para el porqué del cambio de pills sueltas a
       franja. */}
@@ -440,6 +509,8 @@ export default async function GastosNegocioPage({
           </span>
         </div>
       )}
+      </>
+      )}
 
       <div className="vc-card">
         {error && <p className="text-xs text-amb">No se pudo leer transactions ({error.message}).</p>}
@@ -447,11 +518,13 @@ export default async function GastosNegocioPage({
         {!error && transaccionesMostradas.length === 0 && (
           <div className="py-6 text-center">
             <p className="text-sm text-muted">
-              {categoriaSeleccionada
-                ? `No hay transacciones en esta categoría ${esTodo ? "en el historial" : `en ${etiquetaMes(mesSeleccionado)}`}.`
-                : "Todavía no hay transacciones de esta entidad."}
+              {buscarTexto
+                ? `No se encontró ninguna transacción con "${buscarTexto}".`
+                : categoriaSeleccionada
+                  ? `No hay transacciones en esta categoría ${esTodo ? "en el historial" : `en ${etiquetaMes(mesSeleccionado)}`}.`
+                  : "Todavía no hay transacciones de esta entidad."}
             </p>
-            {!categoriaSeleccionada && totalCuentas === 0 && (
+            {!categoriaSeleccionada && !buscarTexto && totalCuentas === 0 && (
               <p className="mt-1 text-xs text-muted">
                 Asigna una cuenta a {entidadActiva.name} desde{" "}
                 <Link href="/dashboard/cuentas" className="text-teal">
@@ -465,14 +538,19 @@ export default async function GastosNegocioPage({
 
         {transaccionesMostradas.length > 0 && (
           <GastosList
-            key={`${searchParams.cuentas ?? "todas"}-${searchParams.categoria ?? "todas"}-${tipoReporte}-${mesSeleccionado}`}
+            key={`${searchParams.cuentas ?? "todas"}-${searchParams.categoria ?? "todas"}-${tipoReporte}-${mesSeleccionado}-${buscarTexto}`}
             transaccionesIniciales={transaccionesMostradas}
             categorias={categorias ?? []}
             nombrePorCuenta={Object.fromEntries(nombrePorCuenta)}
             cambioPorTransaccion={cambioPorTransaccion}
           />
         )}
-        {!categoriaSeleccionada && transacciones && transacciones.length === LIMITE_TRANSACCIONES && (
+        {buscarTexto && resultadosBusqueda.length === LIMITE_BUSQUEDA && (
+          <p className="mt-3 text-center text-xs text-muted">
+            Mostrando los {LIMITE_BUSQUEDA} resultados más recientes que coinciden — afina la búsqueda si falta alguno.
+          </p>
+        )}
+        {!buscarTexto && !categoriaSeleccionada && transacciones && transacciones.length === LIMITE_TRANSACCIONES && (
           <p className="mt-3 text-center text-xs text-muted">
             Mostrando las {LIMITE_TRANSACCIONES} más recientes
             {cuentasSeleccionadas.length === 1 ? " de esta cuenta" : cuentasSeleccionadas.length > 1 ? " de estas cuentas" : ""}. Filtra por
