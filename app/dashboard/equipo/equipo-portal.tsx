@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
 import GastosEvidenciaTab from "./gastos-evidencia-tab";
+import PeajesTab from "./peajes-tab";
 
 type Tecnico = {
   id: string;
@@ -77,6 +78,7 @@ const TABS = [
   { id: "panel", label: "Panel", icon: "ti-layout-dashboard" },
   { id: "tecnicos", label: "Técnicos", icon: "ti-users" },
   { id: "gastos", label: "Gastos", icon: "ti-receipt-2" },
+  { id: "peajes", label: "Peajes", icon: "ti-road" },
   { id: "reportes", label: "Reportes", icon: "ti-chart-bar" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -188,6 +190,7 @@ export default function EquipoPortal({
         <TecnicosTab tecnicos={tecnicos} vendors={vendors} entidad={entidad} addonTecnicosActivo={addonTecnicosActivo} />
       )}
       {tab === "gastos" && <GastosEvidenciaTab entityId={entidad.id} />}
+      {tab === "peajes" && <PeajesTab entityId={entidad.id} />}
       {tab === "reportes" && <ReportesTab facturas={facturas} items={items} tecnicos={tecnicos} />}
     </div>
   );
