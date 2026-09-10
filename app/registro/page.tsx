@@ -128,6 +128,20 @@ function RegistroForm() {
   const [error, setError] = useState<string | null>(null);
   const [revisaCorreo, setRevisaCorreo] = useState(false);
   const [oauthEnCurso, setOauthEnCurso] = useState<"google" | "apple" | null>(null);
+  // Email/contraseña como tarjeta colapsada (11 sept 2026, pedido de Joel:
+  // "quítale lo de email y contraseña que sea una tarjeta de 'continuar con
+  // email' y luego si la selecciona se abra la oportunidad para crear el
+  // email y psw" — mismo patrón que el botón "Continue with Email" de Luna
+  // Money, que también aparece colapsado junto a Google/Apple).
+  const [mostrarEmailForm, setMostrarEmailForm] = useState(false);
+  // Línea única que aclara trial + precio real (11 sept 2026, pedido de
+  // Joel: "hay que aclarar que son 7 días gratis y luego ($14.99-$49.99) el
+  // plan que escoja mensual" — reemplaza los 2 párrafos sueltos que había
+  // antes por 1 solo, igual que el "Free for 7 days, then $X/month. Cancel
+  // anytime." de Luna Money).
+  const finePrint = esReferido
+    ? `Tu primer mes de ${plan === "pro" ? "Pro" : "Core"} es gratis, luego $${precioMostrar}${precios.sufijo}. Cancela cuando quieras.`
+    : `Gratis por 7 días, luego $${precioMostrar}${precios.sufijo}. Cancela cuando quieras.`;
 
   // Login/registro con Google y Apple (10 sept 2026, pedido de Joel tras
   // comparar con Luna Money: ellos ofrecen un tap con Google/Apple antes de
@@ -309,25 +323,28 @@ function RegistroForm() {
         </ul>
       </div>
 
-      {/* Panel del formulario */}
+      {/* Panel del formulario (11 sept 2026, pedido de Joel: "mas grande
+          todo mas centralizado" comparando con Luna — tarjeta más ancha
+          (max-w-md en vez de max-w-sm) y con más aire por dentro). */}
       <div className="flex flex-1 items-center justify-center px-6 py-10">
-        <div className="w-full max-w-sm">
-          <form onSubmit={handleRegistro} className="vc-card flex flex-col gap-3">
+        <div className="w-full max-w-md">
+          <form onSubmit={handleRegistro} className="vc-card flex flex-col gap-3 p-8">
             <div className="mb-1 text-center">
-              <p className="text-4xl font-bold leading-none text-teal">GRATIS</p>
-              <p className="mt-1 text-xs text-muted">
+              <p className="text-5xl font-bold leading-none text-teal">GRATIS</p>
+              <p className="mt-2 text-sm text-muted">
                 {esReferido ? `tu primer mes de ${plan === "pro" ? "Pro" : "Core"}` : "por 7 días"}
               </p>
             </div>
 
-            {/* Tabs Core/Pro estilo Luna ("PERSONAL / BUSINESS": pill con la
-                opción activa resaltada, no botones con borde). */}
-            <div className="mb-1 flex justify-center gap-1 rounded-full bg-bg p-1 text-xs">
+            {/* Tabs Core/Pro (11 sept 2026, pedido de Joel: "que tengan color
+                al seleccionarlas" — antes la opción activa solo se veía
+                blanca/elevada, ahora lleva teal sólido, bien visible). */}
+            <div className="mb-1 flex justify-center gap-1 rounded-full bg-bg p-1 text-sm">
               <button
                 type="button"
                 onClick={() => setPlan("core")}
-                className={`flex-1 rounded-full px-4 py-1.5 font-medium transition-colors ${
-                  plan === "core" ? "bg-card text-text shadow-sm" : "text-muted"
+                className={`flex-1 rounded-full px-4 py-2 font-medium transition-colors ${
+                  plan === "core" ? "bg-teal text-white shadow-sm" : "text-muted"
                 }`}
               >
                 Core
@@ -335,20 +352,21 @@ function RegistroForm() {
               <button
                 type="button"
                 onClick={() => setPlan("pro")}
-                className={`flex-1 rounded-full px-4 py-1.5 font-medium transition-colors ${
-                  plan === "pro" ? "bg-card text-text shadow-sm" : "text-muted"
+                className={`flex-1 rounded-full px-4 py-2 font-medium transition-colors ${
+                  plan === "pro" ? "bg-teal text-white shadow-sm" : "text-muted"
                 }`}
               >
                 Pro (negocio)
               </button>
             </div>
 
-            {/* Radio cards Mensual/Anual con el ahorro visible (11 sept 2026,
-                pedido de Joel: "el ahorro si lo paga anual" — mismo patrón
-                que el badge "SAVE 31%" de Luna Money, pero calculado). */}
+            {/* Radio cards Mensual/Anual (11 sept 2026, pedido de Joel: "las
+                descripciones más pegadas al precio" — precio en una sola
+                línea con " · ", centrado verticalmente con la etiqueta, en
+                vez de 2 líneas sueltas). */}
             <div className="mb-1 flex flex-col gap-2">
               <label
-                className={`flex cursor-pointer items-start justify-between rounded-lg border p-3 text-sm ${
+                className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm ${
                   ciclo === "anual" ? "border-teal bg-teal/[.06]" : "border-border"
                 }`}
               >
@@ -360,16 +378,13 @@ function RegistroForm() {
                     onChange={() => setCiclo("anual")}
                     className="accent-teal"
                   />
-                  <span className="font-medium text-text">
-                    Anual{" "}
-                    <span className="ml-1 rounded-full bg-teal px-2 py-0.5 text-[0.65rem] font-semibold text-white">
-                      Ahorra {ahorroPct}%
-                    </span>
+                  <span className="font-medium text-text">Anual</span>
+                  <span className="rounded-full bg-teal px-2 py-0.5 text-[0.65rem] font-semibold text-white">
+                    Ahorra {ahorroPct}%
                   </span>
                 </span>
-                <span className="text-right text-xs leading-tight text-muted">
-                  ${anualPorMes}/mes
-                  <br />${preciosPlan.anual.normal}/año
+                <span className="text-xs text-muted">
+                  ${anualPorMes}/mes · ${preciosPlan.anual.normal}/año
                 </span>
               </label>
 
@@ -392,29 +407,10 @@ function RegistroForm() {
               </label>
             </div>
 
-            {esReferido && (
-              <p className="mb-1 text-xs font-medium text-teal">
-                Te invitaron con un link especial — tu primer mes de {plan === "pro" ? "Pro" : "Core"} es gratis.
-              </p>
-            )}
-
-            <input
-              className="vc-input"
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            <input
-              className="vc-input"
-              type="password"
-              placeholder="Contraseña (mínimo 6 caracteres)"
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            {/* Aclaración de trial + precio real, en 1 línea (11 sept 2026,
+                pedido de Joel: "hay que aclarar que son 7 días gratis y
+                luego [precio] el plan que escoja mensual"). */}
+            <p className="text-center text-xs text-muted">{finePrint}</p>
 
             <label className="flex items-start gap-2 text-xs text-muted">
               <input
@@ -439,63 +435,104 @@ function RegistroForm() {
 
             {error && <p className="text-xs text-red">{error}</p>}
 
-            <button type="submit" className="vc-btn-primary mt-2" disabled={loading || !aceptaTerminos}>
-              {loading && accionEnCurso === "pago"
-                ? "Creando cuenta..."
-                : esReferido
-                  ? `Activar — primer mes gratis (luego $${precioMostrar}${precios.sufijo})`
-                  : `Comenzar — luego $${precioMostrar}${precios.sufijo}`}
-            </button>
-            {!esReferido && (
-              <p className="text-center text-[0.7rem] text-muted">
-                Gratis por 7 días. No se te cobra nada hoy. Cancela cuando quieras.
-              </p>
+            {!mostrarEmailForm ? (
+              <>
+                {/* Apple queda oculto por ahora (10 sept 2026, pedido de
+                    Joel: "si comenzamos con Google por ahora") — requiere
+                    Apple Developer Program ($99/año) + Services ID/Key
+                    ID/private key, mucho más setup que Google.
+                    continuarConOAuth("apple") ya funciona y el callback ya
+                    lo soporta — cuando Joel complete el lado de Apple, esto
+                    es re-mostrar el botón, nada más. */}
+                <button
+                  type="button"
+                  className="vc-btn-secondary flex items-center justify-center gap-2"
+                  disabled={loading || !!oauthEnCurso || !aceptaTerminos}
+                  onClick={() => continuarConOAuth("google")}
+                >
+                  <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+                    <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z" />
+                    <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4c-7.6 0-14.1 4.3-17.7 10.7z" />
+                    <path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.5C29.4 34.8 26.8 36 24 36c-5.3 0-9.7-3.1-11.3-7.6l-6.5 5c3.6 6.4 10.1 10.6 17.8 10.6z" />
+                    <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.5l6.5 5.5C40.5 36.6 44 30.9 44 24c0-1.3-.1-2.7-.4-3.5z" />
+                  </svg>
+                  {oauthEnCurso === "google" ? "..." : "Continuar con Google"}
+                </button>
+
+                {/* Tarjeta "Continuar con email" (11 sept 2026, pedido de
+                    Joel: "quítale lo de email y contraseña que sea una
+                    tarjeta de 'continuar con email' y luego si la selecciona
+                    se abra la oportunidad para crear el email y psw" — antes
+                    los campos de email/contraseña estaban siempre visibles;
+                    ahora son un paso aparte, igual que el botón "Continue
+                    with Email" de Luna Money). */}
+                <button
+                  type="button"
+                  className="vc-btn-secondary"
+                  disabled={loading || !aceptaTerminos}
+                  onClick={() => {
+                    setError(null);
+                    setMostrarEmailForm(true);
+                  }}
+                >
+                  Continuar con email
+                </button>
+
+                <div className="my-1 flex items-center gap-2 text-xs text-muted">
+                  <span className="h-px flex-1 bg-border" />
+                  <span>o</span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+
+                <button
+                  type="button"
+                  className="vc-btn-secondary"
+                  disabled={loading || !aceptaTerminos}
+                  onClick={() => crearCuenta(true)}
+                >
+                  {loading && accionEnCurso === "gratis" ? "Creando cuenta..." : "Empezar gratis (limitada)"}
+                </button>
+                <p className="text-center text-[0.7rem] text-muted">
+                  Gratis: Bóveda, Metas, Citas y categorizar por CSV. Sin conectar banco ni chat con VICTOR.
+                </p>
+              </>
+            ) : (
+              <>
+                <input
+                  className="vc-input"
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoFocus
+                  required
+                />
+                <input
+                  className="vc-input"
+                  type="password"
+                  placeholder="Contraseña (mínimo 6 caracteres)"
+                  minLength={6}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+
+                <button type="submit" className="vc-btn-primary mt-1" disabled={loading || !aceptaTerminos}>
+                  {loading && accionEnCurso === "pago" ? "Creando cuenta..." : "Crear cuenta"}
+                </button>
+
+                <button
+                  type="button"
+                  className="text-center text-xs text-muted hover:text-teal"
+                  onClick={() => {
+                    setError(null);
+                    setMostrarEmailForm(false);
+                  }}
+                >
+                  ‹ Volver
+                </button>
+              </>
             )}
-
-            <div className="my-1 flex items-center gap-2 text-xs text-muted">
-              <span className="h-px flex-1 bg-border" />
-              <span>o continúa con</span>
-              <span className="h-px flex-1 bg-border" />
-            </div>
-
-            {/* Apple queda oculto por ahora (10 sept 2026, pedido de Joel:
-                "si comenzamos con Google por ahora") — requiere Apple
-                Developer Program ($99/año) + Services ID/Key ID/private key,
-                mucho más setup que Google. continuarConOAuth("apple") ya
-                funciona y el callback ya lo soporta — cuando Joel complete
-                el lado de Apple, esto es re-mostrar el botón, nada más. */}
-            <button
-              type="button"
-              className="vc-btn-secondary flex items-center justify-center gap-2"
-              disabled={loading || !!oauthEnCurso || !aceptaTerminos}
-              onClick={() => continuarConOAuth("google")}
-            >
-              <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
-                <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z" />
-                <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4c-7.6 0-14.1 4.3-17.7 10.7z" />
-                <path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.5C29.4 34.8 26.8 36 24 36c-5.3 0-9.7-3.1-11.3-7.6l-6.5 5c3.6 6.4 10.1 10.6 17.8 10.6z" />
-                <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.5l6.5 5.5C40.5 36.6 44 30.9 44 24c0-1.3-.1-2.7-.4-3.5z" />
-              </svg>
-              {oauthEnCurso === "google" ? "..." : "Continuar con Google"}
-            </button>
-
-            <div className="my-1 flex items-center gap-2 text-xs text-muted">
-              <span className="h-px flex-1 bg-border" />
-              <span>o</span>
-              <span className="h-px flex-1 bg-border" />
-            </div>
-
-            <button
-              type="button"
-              className="vc-btn-secondary"
-              disabled={loading || !aceptaTerminos}
-              onClick={() => crearCuenta(true)}
-            >
-              {loading && accionEnCurso === "gratis" ? "Creando cuenta..." : "Empezar gratis (limitada)"}
-            </button>
-            <p className="text-center text-[0.7rem] text-muted">
-              Gratis: Bóveda, Metas, Citas y categorizar por CSV. Sin conectar banco ni chat con VICTOR.
-            </p>
 
             <p className="mt-1 text-center text-xs text-muted">
               ¿Ya tienes cuenta?{" "}
