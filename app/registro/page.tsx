@@ -109,6 +109,16 @@ function RegistroForm() {
   // (mes gratis, cualquier plan) se comunica aparte, no como precio
   // tachado. Ver comentario grande arriba de PRECIOS_REGISTRO.
   const precioMostrar = precios.normal;
+  // Precio por mes equivalente y % de ahorro del plan Anual vs. pagar 12
+  // meses al precio Mensual (11 sept 2026, pedido de Joel: mostrar "el
+  // ahorro si lo paga anual" al lado de la opción, como el badge "SAVE 31%"
+  // de Luna Money — calculado, no hardcodeado, para que nunca quede
+  // desactualizado si cambian los precios).
+  const preciosPlan = PRECIOS_REGISTRO[plan];
+  const mensualNum = parseFloat(preciosPlan.mensual.normal);
+  const anualNum = parseFloat(preciosPlan.anual.normal);
+  const anualPorMes = (anualNum / 12).toFixed(2);
+  const ahorroPct = Math.round((1 - anualNum / (mensualNum * 12)) * 100);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -257,194 +267,244 @@ function RegistroForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex items-center justify-center gap-2">
+    <div className="flex min-h-screen flex-col md:flex-row">
+      {/* Panel de explicación (11 sept 2026, layout estilo Luna Money —
+          pedido de Joel: "lo quiero así como este [Luna], que la explicación
+          esté al lado y se vea fino, no esto tan largo". La explicación y el
+          checklist ahora van AL LADO del formulario en desktop en vez de
+          apilados arriba de los campos; en mobile quedan arriba pero mucho
+          más cortos que antes porque el checklist ya no se repite dentro
+          del form. */}
+      <div className="flex flex-col justify-center gap-5 bg-gradient-to-br from-teal/10 via-teal/5 to-transparent px-8 py-10 md:w-[38%] md:px-12">
+        <div className="flex items-center gap-2">
           <img src="/victor-avatar.png" alt="VICTOR" className="h-9 w-9 rounded-full object-cover" style={{ background: "#fff" }} />
           <span className="text-lg font-medium">VICTOR</span>
         </div>
-
-        <form onSubmit={handleRegistro} className="vc-card flex flex-col gap-3">
-          <h1 className="mb-1 text-base font-medium">Comienza ahora</h1>
-
-          {/* Interruptores estilo landing (10 sept 2026, pedido de Joel:
-              "eso no es un toggle, son muchos botones arriba, debe ser un
-              switch que cambie como en la Landing" — antes esto eran 4
-              botones con borde en 2 filas; ahora son 2 switches compactos
-              idénticos al de app/landing-pricing.tsx, mucho más cortos). */}
-          <div className="mb-1 flex items-center justify-center gap-2.5">
-            <span className={`text-xs font-medium ${plan === "core" ? "text-text" : "text-muted"}`}>Core</span>
-            <div
-              role="button"
-              onClick={() => setPlan(plan === "core" ? "pro" : "core")}
-              className="relative h-6 w-11 shrink-0 cursor-pointer rounded-full bg-teal transition-colors"
-            >
-              <div
-                className="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all"
-                style={{ left: plan === "pro" ? 22 : 3 }}
-              />
-            </div>
-            <span className={`text-xs font-medium ${plan === "pro" ? "text-text" : "text-muted"}`}>Pro (negocio)</span>
-          </div>
-
-          <div className="mb-1 flex items-center justify-center gap-2.5">
-            <span className={`text-xs font-medium ${ciclo === "anual" ? "text-muted" : "text-text"}`}>Mensual</span>
-            <div
-              role="button"
-              onClick={() => setCiclo(ciclo === "mensual" ? "anual" : "mensual")}
-              className="relative h-6 w-11 shrink-0 cursor-pointer rounded-full bg-teal transition-colors"
-            >
-              <div
-                className="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all"
-                style={{ left: ciclo === "anual" ? 22 : 3 }}
-              />
-            </div>
-            <span className={`text-xs font-medium ${ciclo === "anual" ? "text-text" : "text-muted"}`}>
-              Anual{" "}
-              <span className="ml-1 rounded-full bg-teal px-2 py-0.5 text-[0.65rem] font-semibold text-white">
-                1 mes gratis
-              </span>
-            </span>
-          </div>
-
-          {esReferido && (
-            <p className="mb-1 text-xs font-medium text-teal">
-              Te invitaron con un link especial — tu primer mes de {plan === "pro" ? "Pro" : "Core"} es gratis.
-            </p>
-          )}
-
-          <div className="mb-1 flex items-baseline gap-1">
-            <span className="text-2xl font-semibold">${precioMostrar}</span>
-            <span className="text-xs text-muted">{precios.sufijo}</span>
-          </div>
-          <p className="mb-1 text-xs text-muted">
+        <div>
+          <h2 className="mb-2 text-2xl font-semibold text-teal">Prueba VICTOR gratis</h2>
+          <p className="text-sm text-muted">
             {plan === "pro"
               ? "Negocio + personal en un solo lugar: facturación, pagos y VICTOR. Cancela cuando quieras."
-              : "Acceso completo: banco conectado + VICTOR. Cancela cuando quieras."}
+              : "Tu asesor financiero con IA: banco conectado y todo lo que necesitas para manejar tus finanzas. Cancela cuando quieras."}
           </p>
+        </div>
+        <ul className="flex flex-col gap-2 text-sm text-text">
+          <li className="flex items-center gap-2">
+            <span className="text-teal">✓</span> Banco conectado (Plaid) — gastos e ingresos automáticos
+          </li>
+          <li className="flex items-center gap-2">
+            <span className="text-teal">✓</span> VICTOR, tu asesor financiero por chat, 24/7
+          </li>
+          <li className="flex items-center gap-2">
+            <span className="text-teal">✓</span> Metas, Bóveda de documentos y Citas
+          </li>
+          {plan === "pro" && (
+            <li className="flex items-center gap-2">
+              <span className="text-teal">✓</span> Facturación, cotizaciones y cobros con tarjeta
+            </li>
+          )}
+          <li className="flex items-center gap-2">
+            <span className="text-teal">✓</span> Reportes listos para Hacienda
+          </li>
+        </ul>
+      </div>
 
-          {/* Qué incluye (10 sept 2026, pedido de Joel: "y lo que obtiene al
-              pagar, un resumen" — reforzar el valor justo antes de pedir el
-              pago, mismo principio que el checklist de Luna Money en su
-              pantalla de pricing). */}
-          <ul className="mb-1 flex flex-col gap-1 text-xs text-muted">
-            <li>✓ Banco conectado (Plaid) — gastos e ingresos automáticos</li>
-            <li>✓ VICTOR, tu asesor financiero por chat, 24/7</li>
-            <li>✓ Metas, Bóveda de documentos y Citas</li>
-            {plan === "pro" ? (
-              <>
-                <li>✓ Facturación, cotizaciones y cobros con tarjeta</li>
-                <li>✓ Reportes listos para Hacienda</li>
-              </>
-            ) : (
-              <li>✓ Reportes listos para Hacienda</li>
+      {/* Panel del formulario */}
+      <div className="flex flex-1 items-center justify-center px-6 py-10">
+        <div className="w-full max-w-sm">
+          <form onSubmit={handleRegistro} className="vc-card flex flex-col gap-3">
+            <div className="mb-1 text-center">
+              <p className="text-4xl font-bold leading-none text-teal">GRATIS</p>
+              <p className="mt-1 text-xs text-muted">
+                {esReferido ? `tu primer mes de ${plan === "pro" ? "Pro" : "Core"}` : "por 7 días"}
+              </p>
+            </div>
+
+            {/* Tabs Core/Pro estilo Luna ("PERSONAL / BUSINESS": pill con la
+                opción activa resaltada, no botones con borde). */}
+            <div className="mb-1 flex justify-center gap-1 rounded-full bg-bg p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setPlan("core")}
+                className={`flex-1 rounded-full px-4 py-1.5 font-medium transition-colors ${
+                  plan === "core" ? "bg-card text-text shadow-sm" : "text-muted"
+                }`}
+              >
+                Core
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlan("pro")}
+                className={`flex-1 rounded-full px-4 py-1.5 font-medium transition-colors ${
+                  plan === "pro" ? "bg-card text-text shadow-sm" : "text-muted"
+                }`}
+              >
+                Pro (negocio)
+              </button>
+            </div>
+
+            {/* Radio cards Mensual/Anual con el ahorro visible (11 sept 2026,
+                pedido de Joel: "el ahorro si lo paga anual" — mismo patrón
+                que el badge "SAVE 31%" de Luna Money, pero calculado). */}
+            <div className="mb-1 flex flex-col gap-2">
+              <label
+                className={`flex cursor-pointer items-start justify-between rounded-lg border p-3 text-sm ${
+                  ciclo === "anual" ? "border-teal bg-teal/[.06]" : "border-border"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="ciclo"
+                    checked={ciclo === "anual"}
+                    onChange={() => setCiclo("anual")}
+                    className="accent-teal"
+                  />
+                  <span className="font-medium text-text">
+                    Anual{" "}
+                    <span className="ml-1 rounded-full bg-teal px-2 py-0.5 text-[0.65rem] font-semibold text-white">
+                      Ahorra {ahorroPct}%
+                    </span>
+                  </span>
+                </span>
+                <span className="text-right text-xs leading-tight text-muted">
+                  ${anualPorMes}/mes
+                  <br />${preciosPlan.anual.normal}/año
+                </span>
+              </label>
+
+              <label
+                className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm ${
+                  ciclo === "mensual" ? "border-teal bg-teal/[.06]" : "border-border"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="ciclo"
+                    checked={ciclo === "mensual"}
+                    onChange={() => setCiclo("mensual")}
+                    className="accent-teal"
+                  />
+                  <span className="font-medium text-text">Mensual</span>
+                </span>
+                <span className="text-xs text-muted">${preciosPlan.mensual.normal}/mes</span>
+              </label>
+            </div>
+
+            {esReferido && (
+              <p className="mb-1 text-xs font-medium text-teal">
+                Te invitaron con un link especial — tu primer mes de {plan === "pro" ? "Pro" : "Core"} es gratis.
+              </p>
             )}
-          </ul>
 
-          <input
-            className="vc-input"
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <input
-            className="vc-input"
-            type="password"
-            placeholder="Contraseña (mínimo 6 caracteres)"
-            minLength={6}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-
-          <label className="flex items-start gap-2 text-xs text-muted">
             <input
-              type="checkbox"
-              checked={aceptaTerminos}
-              onChange={(e) => setAceptaTerminos(e.target.checked)}
-              className="mt-0.5"
+              className="vc-input"
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
             />
-            <span>
-              Acepto la{" "}
-              <Link href="/privacidad" target="_blank" className="font-medium text-teal">
-                Política de Privacidad
-              </Link>{" "}
-              y los{" "}
-              <Link href="/terminos" target="_blank" className="font-medium text-teal">
-                Términos de Servicio
+            <input
+              className="vc-input"
+              type="password"
+              placeholder="Contraseña (mínimo 6 caracteres)"
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+
+            <label className="flex items-start gap-2 text-xs text-muted">
+              <input
+                type="checkbox"
+                checked={aceptaTerminos}
+                onChange={(e) => setAceptaTerminos(e.target.checked)}
+                className="mt-0.5"
+                required
+              />
+              <span>
+                Acepto la{" "}
+                <Link href="/privacidad" target="_blank" className="font-medium text-teal">
+                  Política de Privacidad
+                </Link>{" "}
+                y los{" "}
+                <Link href="/terminos" target="_blank" className="font-medium text-teal">
+                  Términos de Servicio
+                </Link>
+                , incluyendo el uso de Plaid para conectar mi banco.
+              </span>
+            </label>
+
+            {error && <p className="text-xs text-red">{error}</p>}
+
+            <button type="submit" className="vc-btn-primary mt-2" disabled={loading || !aceptaTerminos}>
+              {loading && accionEnCurso === "pago"
+                ? "Creando cuenta..."
+                : esReferido
+                  ? `Activar — primer mes gratis (luego $${precioMostrar}${precios.sufijo})`
+                  : `Comenzar — luego $${precioMostrar}${precios.sufijo}`}
+            </button>
+            {!esReferido && (
+              <p className="text-center text-[0.7rem] text-muted">
+                Gratis por 7 días. No se te cobra nada hoy. Cancela cuando quieras.
+              </p>
+            )}
+
+            <div className="my-1 flex items-center gap-2 text-xs text-muted">
+              <span className="h-px flex-1 bg-border" />
+              <span>o continúa con</span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+
+            {/* Apple queda oculto por ahora (10 sept 2026, pedido de Joel:
+                "si comenzamos con Google por ahora") — requiere Apple
+                Developer Program ($99/año) + Services ID/Key ID/private key,
+                mucho más setup que Google. continuarConOAuth("apple") ya
+                funciona y el callback ya lo soporta — cuando Joel complete
+                el lado de Apple, esto es re-mostrar el botón, nada más. */}
+            <button
+              type="button"
+              className="vc-btn-secondary flex items-center justify-center gap-2"
+              disabled={loading || !!oauthEnCurso || !aceptaTerminos}
+              onClick={() => continuarConOAuth("google")}
+            >
+              <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+                <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z" />
+                <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4c-7.6 0-14.1 4.3-17.7 10.7z" />
+                <path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.5C29.4 34.8 26.8 36 24 36c-5.3 0-9.7-3.1-11.3-7.6l-6.5 5c3.6 6.4 10.1 10.6 17.8 10.6z" />
+                <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.5l6.5 5.5C40.5 36.6 44 30.9 44 24c0-1.3-.1-2.7-.4-3.5z" />
+              </svg>
+              {oauthEnCurso === "google" ? "..." : "Continuar con Google"}
+            </button>
+
+            <div className="my-1 flex items-center gap-2 text-xs text-muted">
+              <span className="h-px flex-1 bg-border" />
+              <span>o</span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+
+            <button
+              type="button"
+              className="vc-btn-secondary"
+              disabled={loading || !aceptaTerminos}
+              onClick={() => crearCuenta(true)}
+            >
+              {loading && accionEnCurso === "gratis" ? "Creando cuenta..." : "Empezar gratis (limitada)"}
+            </button>
+            <p className="text-center text-[0.7rem] text-muted">
+              Gratis: Bóveda, Metas, Citas y categorizar por CSV. Sin conectar banco ni chat con VICTOR.
+            </p>
+
+            <p className="mt-1 text-center text-xs text-muted">
+              ¿Ya tienes cuenta?{" "}
+              <Link href="/login" className="font-medium text-teal">
+                Entra aquí
               </Link>
-              , incluyendo el uso de Plaid para conectar mi banco.
-            </span>
-          </label>
-
-          {error && <p className="text-xs text-red">{error}</p>}
-
-          <button type="submit" className="vc-btn-primary mt-2" disabled={loading || !aceptaTerminos}>
-            {loading && accionEnCurso === "pago"
-              ? "Creando cuenta..."
-              : esReferido
-                ? `Activar — primer mes gratis (luego $${precioMostrar}${precios.sufijo})`
-                : `Empieza gratis 7 días — luego $${precioMostrar}${precios.sufijo}`}
-          </button>
-          {!esReferido && (
-            <p className="text-center text-[0.7rem] text-muted">No se te cobra nada hoy. Cancela cuando quieras.</p>
-          )}
-
-          <div className="my-1 flex items-center gap-2 text-xs text-muted">
-            <span className="h-px flex-1 bg-border" />
-            <span>o continúa con</span>
-            <span className="h-px flex-1 bg-border" />
-          </div>
-
-          {/* Apple queda oculto por ahora (10 sept 2026, pedido de Joel:
-              "si comenzamos con Google por ahora") — requiere Apple
-              Developer Program ($99/año) + Services ID/Key ID/private key,
-              mucho más setup que Google. continuarConOAuth("apple") ya
-              funciona y el callback ya lo soporta — cuando Joel complete el
-              lado de Apple, esto es re-mostrar el botón, nada más. */}
-          <button
-            type="button"
-            className="vc-btn-secondary flex items-center justify-center gap-2"
-            disabled={loading || !!oauthEnCurso || !aceptaTerminos}
-            onClick={() => continuarConOAuth("google")}
-          >
-            <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
-              <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z" />
-              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4c-7.6 0-14.1 4.3-17.7 10.7z" />
-              <path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.5C29.4 34.8 26.8 36 24 36c-5.3 0-9.7-3.1-11.3-7.6l-6.5 5c3.6 6.4 10.1 10.6 17.8 10.6z" />
-              <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.5l6.5 5.5C40.5 36.6 44 30.9 44 24c0-1.3-.1-2.7-.4-3.5z" />
-            </svg>
-            {oauthEnCurso === "google" ? "..." : "Continuar con Google"}
-          </button>
-
-          <div className="my-1 flex items-center gap-2 text-xs text-muted">
-            <span className="h-px flex-1 bg-border" />
-            <span>o</span>
-            <span className="h-px flex-1 bg-border" />
-          </div>
-
-          <button
-            type="button"
-            className="vc-btn-secondary"
-            disabled={loading || !aceptaTerminos}
-            onClick={() => crearCuenta(true)}
-          >
-            {loading && accionEnCurso === "gratis" ? "Creando cuenta..." : "Empezar gratis (limitada)"}
-          </button>
-          <p className="text-center text-[0.7rem] text-muted">
-            Gratis: Bóveda, Metas, Citas y categorizar por CSV. Sin conectar banco ni chat con VICTOR.
-          </p>
-
-          <p className="mt-1 text-center text-xs text-muted">
-            ¿Ya tienes cuenta?{" "}
-            <Link href="/login" className="font-medium text-teal">
-              Entra aquí
-            </Link>
-          </p>
-        </form>
+            </p>
+          </form>
+        </div>
       </div>
     </div>
   );
