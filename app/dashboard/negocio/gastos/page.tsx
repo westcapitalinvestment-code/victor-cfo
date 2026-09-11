@@ -37,7 +37,19 @@ function etiquetaMes(mesYYYYMM: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1).replace(".", "");
 }
 
-const LIMITE_TRANSACCIONES = 300;
+// Antes era 300 — con orden DESC por fecha y SIN filtro de mes a nivel de
+// SQL (el mes se filtra en JS más abajo, dentroDelRango), una cuenta con
+// más de 300 transacciones en su historial total empujaba los meses viejos
+// FUERA del propio fetch: nunca llegaban a la página, así que ni el pill
+// del mes ni la lista los mostraban, aunque sí estuvieran bien guardados en
+// la base de datos (bug real reportado por Joel, 11 sept 2026 — subió un
+// CSV de enero a mayo y no se veía nada de enero a abril, solo mayo en
+// adelante, porque las transacciones de mayo-septiembre de esa cuenta ya
+// sumaban más de 300 y se comían todo el límite). Subido a un número que
+// cubre años de historial normal sin tener que rediseñar la query por
+// mes — ver comentario largo junto a mesesDisponibles más abajo si esto
+// necesita revisarse de raíz en el futuro.
+const LIMITE_TRANSACCIONES = 5000;
 
 function idConPrefijo(origen: "plaid" | "manual", id: string) {
   return `${origen}:${id}`;

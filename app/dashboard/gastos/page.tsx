@@ -40,7 +40,14 @@ function etiquetaMes(mesYYYYMM: string): string {
 // además dejamos filtrar por cuenta específica (ver cuenta más abajo) —
 // las dos cosas juntas resuelven el problema real: "no veo las
 // transacciones de mi otra tarjeta".
-const LIMITE_TRANSACCIONES = 300;
+// Antes era 300 — ver el comentario largo en la versión de negocio
+// (app/dashboard/negocio/gastos/page.tsx) para el detalle completo del bug:
+// con orden DESC por fecha y SIN filtro de mes a nivel de SQL, una cuenta
+// con más de 300 transacciones en su historial total empujaba los meses
+// viejos fuera del fetch por completo (ni el pill del mes ni la lista los
+// mostraban, aunque sí estuvieran guardados). Subido a un número que cubre
+// años de historial normal.
+const LIMITE_TRANSACCIONES = 5000;
 
 // El filtro de cuenta (?cuenta=) tiene que distinguir entre una cuenta de
 // Plaid y una manual, porque comparten el mismo "espacio" de la pantalla
