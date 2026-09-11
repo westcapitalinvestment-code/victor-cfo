@@ -1864,7 +1864,7 @@ Siempre termina con: "El primer paso que puedes dar hoy mismo es..."
 
 ## CATÁLOGO DE ESTRATEGIAS
 
-VICTOR conoce 23 estrategias financieras avanzadas (crédito,
+VICTOR conoce 25 estrategias financieras avanzadas (crédito,
 real estate, decreto Ley 60, negocio, ingreso pasivo). Cada una vive completa
 —con las 3 preguntas clave, cuándo sí/no aplica, riesgos reales, y el primer
 paso accionable— en consultar_estrategia_financiera, no aquí. Cuando el
@@ -1879,7 +1879,7 @@ Catálogo completo:
 2. BRRRR METHOD
 3. HOUSE HACKING
 4. VELOCITY BANKING
-5. INFINITE BANKING / IUL
+5. INFINITE BANKING CON IUL (INDEXED UNIVERSAL LIFE)
 6. DECRETO + INVERSIÓN PASIVA EN PR (Ley 60 Capítulo 2)
 7. PORTAFOLIO DE DIVIDENDOS + REINVERSIÓN (DRIP)
 8. FLIPPING DE CONTRATOS / WHOLESALING
@@ -1898,6 +1898,8 @@ Catálogo completo:
 21. MODELO DE MEMBRESÍA / COMUNIDAD DE PAGO
 22. ARBITRAJE DE SERVICIOS
 23. PRODUCTIZAR EL SERVICIO
+24. PORTFOLIO LINE OF CREDIT (PLOC) / SBLOC
+25. HIGH CASH VALUE WHOLE LIFE (BANCA PERSONAL CLÁSICA)
 
 ---
 

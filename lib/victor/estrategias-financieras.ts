@@ -1,4 +1,4 @@
-// Catálogo completo de las 23 estrategias financieras avanzadas de VICTOR —
+// Catálogo completo de las 25 estrategias financieras avanzadas de VICTOR —
 // vivía dentro del system prompt (Capa 3, ~47,000 caracteres enviados en CADA
 // llamada al API) y se movió aquí para que VICTOR lo consulte bajo demanda con
 // la tool consultar_estrategia_financiera, solo cuando el usuario de verdad
@@ -214,39 +214,67 @@ ese capital.`,
   },
   {
     numero: 5,
-    titulo: `INFINITE BANKING / IUL`,
-    texto: `### ESTRATEGIA 5 — INFINITE BANKING / IUL
-**También conocida como:** Banca personal, Be Your Own Bank, póliza como banco
+    titulo: `INFINITE BANKING CON IUL (INDEXED UNIVERSAL LIFE)`,
+    texto: `### ESTRATEGIA 5 — INFINITE BANKING CON IUL (INDEXED UNIVERSAL LIFE)
+**También conocida como:** IUL, Be Your Own Bank con seguro indexado
 
 **Qué es:**
-Usar una póliza de vida entera o indexada (IUL) de alto componente de ahorro (PUA)
-como vehículo de ahorro que genera valor en efectivo. Ese cash value se puede
-"pedir prestado" a ti mismo a tasas bajas para financiar inversiones, autos,
-propiedades — y te pagas a ti mismo de vuelta. El dinero sigue creciendo en la
-póliza incluso mientras está "prestado."
+Usar una póliza de vida indexada universal (IUL) — donde el valor en efectivo
+crece atado al desempeño de un índice bursátil (típicamente S&P 500) con un
+tope (cap, ej. 9-12%) y un piso (floor, casi siempre 0% — no se pierde valor
+si el índice cae) — como vehículo de ahorro con prima flexible. Ese cash value
+se puede "pedir prestado" a ti mismo a tasas bajas para financiar inversiones,
+autos, propiedades — y te pagas a ti mismo de vuelta. El dinero sigue
+creciendo en la póliza incluso mientras está "prestado."
+
+**Cómo funciona en la práctica:**
+- El seguro cobra el costo de seguro (COI) y cargos administrativos
+directamente del cash value — más altos en los primeros años
+- El crecimiento se calcula con un "interest crediting method" (point-to-point
+anual, mensual, etc.) sobre el índice, limitado por el cap
+- La prima es flexible — se puede pagar de más (para acelerar el cash value) o
+de menos (dentro de ciertos límites), a diferencia de whole life que tiene
+prima fija
 
 **Las 3 preguntas clave:**
 1. ¿Tienes ingreso estable para sostener las primas por 10+ años?
 2. ¿Tienes dependientes que se beneficiarían del seguro de vida?
-3. ¿Cuál es tu horizonte de tiempo — necesitas liquidez en los próximos 3 años?
+3. ¿Cuál es tu horizonte de tiempo — necesitas liquidez en los próximos 3-5
+años?
 
 **Cuándo SÍ aplica:**
 - Horizonte largo (10+ años)
 - Ya maximizó 401K, IRA y otros vehículos de primera prioridad
 - Necesita protección de vida real (dependientes)
-- Quiere diversificación fuera del mercado de valores
+- Quiere participar en el upside del mercado con piso de protección (0%
+floor)
 
 **Cuándo NO aplica:**
 - Horizonte corto
 - No tiene dependientes que necesiten el seguro
 - No ha maximizado vehículos básicos primero (IRA, 401K)
-- Necesita liquidez en corto plazo — los primeros años de una póliza tienen poco
-cash value
+- Necesita liquidez en corto plazo — los primeros años de una póliza tienen
+poco cash value, casi todo se va en costo de seguro y cargos
+- Busca algo simple y predecible — el IUL es de los productos de seguro de
+vida más complejos que existen, con variables (cap, floor, spread,
+participation rate) que cambian por aseguradora
 
 **Riesgo real más importante:**
-La mayoría de las pólizas IUL se venden mal — con componente de comisión alto y
-poca transparencia. Si se considera, ir con un agente de fee-only que no gana
-comisión por venderte la póliza.
+La mayoría de las pólizas IUL se venden mal — con componente de comisión alto
+y poca transparencia sobre cómo el cap/floor/spread realmente afecta el
+retorno a largo plazo. Muchas ilustraciones de venta usan retornos
+proyectados no garantizados que rara vez se cumplen. Si se considera, ir con
+un agente de fee-only que no gana comisión por venderte la póliza, y pedir la
+ilustración con el escenario GARANTIZADO (no el proyectado).
+
+**IUL vs High Cash Value Whole Life (Estrategia 25) — no confundir:**
+Son dos productos distintos que se venden bajo el mismo paraguas de "Infinite
+Banking." El IUL liga el crecimiento a un índice (con cap y piso, no
+garantizado más allá del 0%). La Whole Life de alto valor en efectivo
+(Estrategia 25) da crecimiento GARANTIZADO por contrato más dividendos no
+garantizados de una aseguradora mutual — más predecible pero típicamente con
+techo de retorno más bajo. VICTOR siempre pregunta cuál de los dos productos
+específicos le mencionaron antes de desarrollar el plan.
 
 **En PR:**
 - Los decretos de PR (Ley 22/60) tienen implicaciones en el tratamiento de
@@ -255,7 +283,8 @@ ganancias del cash value — validar con CPA
 de decreto
 **Primer paso accionable:**
 Antes de considerar IUL, verificar si ya se está aprovechando el IRA (límite
-$7K/año 2026) y cualquier match de 401K disponible. Si no — empezar ahí primero.`,
+$7,500/año 2026) y cualquier match de 401K disponible. Si no — empezar ahí
+primero.`,
   },
   {
     numero: 6,
@@ -1138,6 +1167,185 @@ conecta directamente con la Estrategia 19.
 Tomar el servicio que más veces has entregado en el último año. Escribir los 5
 pasos que siempre haces. Definir un precio fijo y un tiempo de entrega. Eso ya es
 un servicio productizado.`,
+  },
+  {
+    numero: 24,
+    titulo: `PORTFOLIO LINE OF CREDIT (PLOC) / SBLOC`,
+    texto: `### ESTRATEGIA 24 — PORTFOLIO LINE OF CREDIT (PLOC) / SBLOC
+**También conocida como:** Securities-Based Line of Credit (SBLOC), non-purpose
+loan, préstamo con garantía de portafolio
+
+**Qué es:**
+Una línea de crédito revolving usando un portafolio de inversiones taxable
+(acciones, bonos, fondos, ETFs — NO cuentas de retiro como IRA/401K) como
+colateral, sin tener que vender ni una sola posición. El broker (Schwab,
+Fidelity, Morgan Stanley, etc.) presta un porcentaje del valor del portafolio
+elegible a una tasa variable. Como el colateral es líquido y ya está en la casa
+de bolsa, la aprobación es casi instantánea — no hay el underwriting típico de
+un préstamo bancario.
+
+**Cómo funciona en la práctica:**
+- Portafolio diversificado de $500K en una cuenta taxable
+- El broker ofrece crédito hasta un % del valor elegible — varía por tipo de
+activo: efectivo/T-bills ~95-100%, acciones/ETFs diversificados ~50-65%,
+posiciones concentradas o muy volátiles, menos (o excluidas)
+- Accedes a $250K-$300K de liquidez sin vender ni una acción — sin disparar
+ganancia de capital
+- Pagas solo interés sobre lo que uses, tasa variable (referencia + margen,
+históricamente referencia + 0.75%-2.5% según el tamaño del balance)
+- Muchos productos no tienen vencimiento fijo — es revolving, pero el broker
+puede exigir el pago si el valor del colateral cae demasiado
+
+**Las 3 preguntas clave:**
+1. ¿Cuál es el valor y la composición de tu portafolio elegible — diversificado
+o concentrado en pocas posiciones?
+2. ¿Para qué necesitas el capital y por cuánto tiempo — un puente corto o
+financiamiento de largo plazo?
+3. ¿Qué tan cómodo estás con el riesgo de que el mercado caiga y el broker te
+pida más colateral o liquide posiciones automáticamente?
+
+**Cuándo SÍ aplica:**
+- Portafolio taxable grande y diversificado (no concentrado en 1-2 posiciones
+volátiles)
+- Necesita liquidez SIN vender — evita disparar el evento tributable o
+interrumpir una posición que quiere mantener a largo plazo
+- Uso de plazo corto-mediano con plan claro de repago (bridge financing, down
+payment, oportunidad puntual, pago de contribuciones)
+- Tolera deuda a tasa variable y puede monitorear el mercado
+
+**Cuándo NO aplica:**
+- Portafolio pequeño o concentrado en pocas acciones/posiciones volátiles — LTV
+elegible bajo o rechazo
+- Necesita el capital para gastos operativos recurrentes — eso es señal de
+problema de flujo, no de oportunidad de inversión
+- No puede tolerar una caída de mercado que dispare una "maintenance call"
+- El portafolio vive en una cuenta de retiro (IRA/401K/Keogh) — esas NO
+califican como colateral de un PLOC/SBLOC, solo cuentas taxable regulares
+
+**Riesgo real más importante:**
+La "maintenance call" (equivalente a un margin call). Si el valor del
+portafolio cae y el LTV sube por encima del límite permitido, el broker puede
+exigir más colateral/efectivo o VENDER automáticamente posiciones del
+portafolio sin autorización adicional para bajar el balance — típicamente justo
+cuando el mercado ya está bajo, lo que puede generar una pérdida realizada y,
+si esas posiciones tenían ganancia acumulada, una obligación tributaria
+inesperada por esa venta forzada. No es deuda "sin riesgo" — combina el riesgo
+de mercado del colateral con el riesgo de tasa variable del préstamo.
+
+**PLOC/SBLOC vs HELOC (Estrategia 12) — no confundir:**
+| | HELOC | PLOC / SBLOC |
+|---|---|---|
+| Colateral | Equity de la casa | Portafolio de inversión (cuenta taxable) |
+| Aprobación | Underwriting, tasación, 30-60 días | Casi instantánea — el colateral ya es líquido |
+| Riesgo si cae el valor | Pierdes la casa si no pagas | Venta forzada automática de tus inversiones (maintenance call), a veces sin aviso previo |
+| Mejor para | Capital estable, plazo largo | Liquidez puente, plazo corto-mediano, evitar vender y disparar ganancia de capital |
+
+**En PR — con o sin decreto:**
+- Con decreto Ley 60 Cap 2 (0% ganancias de capital en activos post-decreto), el
+verdadero valor del PLOC no es solo "no pagar impuesto al vender" (eso ya sería
+0% de todas formas) — es evitar vender posiciones PRE-decreto (que sí generan
+obligación) o simplemente no interrumpir el interés compuesto de una posición
+de largo plazo
+- La mayoría de brokers nacionales (Schwab, Fidelity) ofrecen PLOC/SBLOC sin
+importar si el residente está en PR o estados — validar con el broker actual
+- El interés pagado en un PLOC usado para invertir puede calificar como
+"investment interest expense" deducible — el tratamiento exacto en la planilla
+(PR vs federal) requiere confirmación con CPA, VICTOR no calcula el ahorro
+exacto en impuestos
+
+**Primer paso accionable:**
+Llamar o entrar al portal de tu broker actual (Schwab, Fidelity, etc.) y
+preguntar tres cosas: si ofrecen PLOC/SBLOC, qué porcentaje de tu portafolio
+actual calificaría como colateral, y la tasa vigente. No es una aplicación de
+crédito nueva — es una extensión de la cuenta que ya tienes.`,
+  },
+  {
+    numero: 25,
+    titulo: `HIGH CASH VALUE WHOLE LIFE (BANCA PERSONAL CLÁSICA)`,
+    texto: `### ESTRATEGIA 25 — HIGH CASH VALUE WHOLE LIFE (BANCA PERSONAL CLÁSICA)
+**También conocida como:** Infinite Banking Concept (IBC) original, whole life
+con PUA, participating whole life
+
+**Qué es:**
+La versión ORIGINAL del "Infinite Banking Concept" tal como lo enseñó Nelson
+Nash — una póliza de vida entera (whole life) PARTICIPATING de una
+aseguradora mutual (no de acciones públicas), estructurada con un rider de
+Paid-Up Additions (PUA) que "adelanta" mucho más cash value en los primeros
+años de lo que tendría una whole life tradicional. El valor en efectivo crece
+de forma GARANTIZADA por contrato (una tabla fija que no depende del
+mercado), más dividendos NO garantizados que la aseguradora reparte según sus
+ganancias — que históricamente muchas mutuales llevan décadas pagando sin
+interrupción, aunque no están garantizados por contrato. Se puede pedir
+prestado contra ese cash value a la tasa que fija la póliza, y el dinero
+sigue "trabajando" porque el cash value completo (no el balance menos el
+préstamo) sigue generando dividendos.
+
+**Cómo funciona en la práctica:**
+- Prima FIJA (a diferencia del IUL) — parte va a la póliza base (death
+benefit), parte (vía el rider PUA) se dirige directo a cash value
+- El diseño "alto valor en efectivo" maximiza el % que va a PUA (a veces
+50-70% de la prima total) precisamente para acelerar el cash value disponible
+en los primeros 2-4 años, en vez de los 8-10 años típicos de una whole life
+estándar
+- El préstamo contra la póliza no requiere aprobación de crédito ni reduce el
+death benefit reportado (aunque si no se repaga, sí se descuenta del
+beneficio al fallecer)
+
+**Las 3 preguntas clave:**
+1. ¿Tienes ingreso estable para sostener una prima FIJA por 10+ años (no es
+flexible como el IUL)?
+2. ¿Tienes dependientes que se beneficiarían del seguro de vida?
+3. ¿Prefieres crecimiento predecible y garantizado sobre la posibilidad de
+mayor retorno pero con más variabilidad (IUL)?
+
+**Cuándo SÍ aplica:**
+- Horizonte largo (10+ años) y quiere predictibilidad total, no le interesa
+apostar a un índice
+- Ya maximizó 401K, IRA y otros vehículos de primera prioridad
+- Necesita protección de vida real (dependientes)
+- Quiere usar la póliza activamente como fuente de capital recurrente
+(comprar autos, financiar un negocio, real estate) — el diseño PUA está
+pensado exactamente para eso
+
+**Cuándo NO aplica:**
+- Horizonte corto o no puede comprometerse a una prima fija
+- No tiene dependientes que necesiten el seguro
+- No ha maximizado vehículos básicos primero (IRA, 401K)
+- Busca maximizar retorno — el techo de una whole life bien diseñada es más
+bajo que el de un IUL con buen año de mercado
+
+**Riesgo real más importante:**
+Igual que el IUL, se vende mal con frecuencia — muchos agentes arman la
+póliza para maximizar SU comisión (más death benefit, menos PUA) en vez de
+maximizar el cash value temprano del cliente. Una póliza mal diseñada para
+"banca personal" puede tardar 8-10 años en tener cash value útil, en vez de
+2-4. Ir con un agente que se especialice específicamente en diseño de alto
+valor en efectivo (no un agente de seguros generalista), y pedir ver el %
+exacto de la prima que va a PUA versus base.
+
+**Diferencia clave vs IUL (Estrategia 5):**
+| | High Cash Value Whole Life | IUL |
+|---|---|---|
+| Crecimiento | Garantizado por contrato + dividendos no garantizados | Ligado a índice, con cap y floor 0% |
+| Prima | Fija | Flexible |
+| Predictibilidad | Alta | Media — depende del cap/floor/spread del año |
+| Techo de retorno | Más bajo pero estable | Más alto en años buenos de mercado |
+| Uso como "banco" | Diseño original de Nelson Nash, cash value temprano vía PUA | Adaptación posterior, cash value temprano depende del diseño |
+
+**En PR:**
+- Mismas implicaciones de decreto (Ley 22/60) que el IUL — validar
+tratamiento de dividendos y cash value con CPA
+- Los dividendos de la mutual, aunque no garantizados, generalmente no se
+reportan como ingreso tributable mientras se mantienen dentro de la póliza (a
+diferencia de un dividendo de una acción pública) — confirmar tratamiento
+específico con CPA antes de asumir esto
+
+**Primer paso accionable:**
+Antes de considerar esta estrategia, verificar si ya se está aprovechando el
+IRA (límite $7,500/año 2026) y cualquier match de 401K disponible. Si ya está
+cubierto y quiere avanzar, pedir a 2-3 agentes especializados en "alto valor
+en efectivo" una ilustración mostrando el % exacto que va a PUA — comparar
+antes de decidir.`,
   },
 ];
 

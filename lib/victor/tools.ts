@@ -915,7 +915,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
   {
     name: "consultar_estrategia_financiera",
     description:
-      "Trae el desarrollo COMPLETO de una de las 23 estrategias financieras avanzadas del catálogo de " +
+      "Trae el desarrollo COMPLETO de una de las 25 estrategias financieras avanzadas del catálogo de " +
       "VICTOR (crédito, real estate, decreto Ley 60, negocio, ingreso pasivo) — con las 3 preguntas clave, " +
       "cuándo sí/no aplica, riesgos reales, y el primer paso accionable. El catálogo completo de nombres " +
       "está en tu system prompt (sección CATÁLOGO DE ESTRATEGIAS) — úsala SIEMPRE que el usuario mencione " +
