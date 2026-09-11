@@ -2203,18 +2203,30 @@ export async function executeVictorTool(
         .filter(Boolean)
         .join(",");
 
-      const { data: subida, error: errorSubida } = await supabase
+      // Trae varias subidas recientes, no solo la última — si el usuario
+      // resubió el MISMO rango de fechas por error (ej. re-subir enero-mayo
+      // que ya estaba importado), esa subida más nueva legítimamente no
+      // insertó ninguna fila (todo salió duplicado) y statement_upload_id
+      // no enlaza a NADA. Antes esta tool se quedaba fija en esa subida
+      // vacía y VICTOR concluía "no hay transacciones de ese rango" — una
+      // fabricación real (11 sept 2026, reportado por Joel: subió un CSV a
+      // Flexicuenta Negocios, VICTOR dijo que no había nada antes del 10 de
+      // junio, cuando sí estaba todo, solo que enlazado a una subida
+      // ANTERIOR que sí había insertado las filas de verdad — la más nueva
+      // solo las volvió a traer y encontró que ya existían). Ahora se
+      // recorren las últimas subidas hasta encontrar una con
+      // total_importadas > 0 — esa es la que de verdad tiene datos.
+      const { data: subidasRecientes, error: errorSubida } = await supabase
         .from("statement_uploads")
         .select("id, origen, nombre_archivo, created_at, total_importadas, total_duplicadas")
         .eq("owner_id", ownerId)
         .or(filtroOrCuentas)
         .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(10);
 
       if (errorSubida) return { ok: false, message: `No se pudo consultar el historial de subidas: ${errorSubida.message}` };
 
-      if (!subida) {
+      if (!subidasRecientes || subidasRecientes.length === 0) {
         return {
           ok: true,
           message:
@@ -2222,6 +2234,16 @@ export async function executeVictorTool(
             `o se importaron antes de que este registro existiera. Usa consultar_transacciones_de_cuenta en su lugar para ver su actividad.`,
         };
       }
+
+      const subidaMasReciente = subidasRecientes[0];
+      const subida = subidasRecientes.find((s) => (s.total_importadas ?? 0) > 0) ?? subidaMasReciente;
+      const avisoResubida =
+        subida.id !== subidaMasReciente.id
+          ? `\n\nOJO: la subida MÁS RECIENTE de esta cuenta ("${subidaMasReciente.nombre_archivo ?? "sin nombre"}", ` +
+            `${subidaMasReciente.created_at.slice(0, 10)}) no agregó ninguna fila nueva — todo lo que traía ya estaba en el sistema ` +
+            `(${subidaMasReciente.total_duplicadas} marcadas duplicadas). Eso NO significa que la cuenta esté vacía en ese rango de fechas — ` +
+            `lo de abajo es la subida anterior real que sí insertó esos datos.`
+          : "";
 
       const { count: totalFilasSubida } = await supabase
         .from("transactions")
@@ -2263,7 +2285,8 @@ export async function executeVictorTool(
         ok: true,
         message:
           `Subida: "${subida.nombre_archivo ?? "sin nombre"}" (${subida.origen.toUpperCase()}), del ${subida.created_at.slice(0, 10)} — ` +
-          `${subida.total_importadas} importadas en su momento, ${subida.total_duplicadas} duplicadas. ${totalFilasSubida} fila(s) reales hoy en la base de datos.\n\n` +
+          `${subida.total_importadas} importadas en su momento, ${subida.total_duplicadas} duplicadas. ${totalFilasSubida} fila(s) reales hoy en la base de datos.` +
+          `${avisoResubida}\n\n` +
           `${listaSubida}${avisoSubida}\n\n` +
           `El [id] al inicio de cada línea es para uso interno tuyo (transaction_id en categorizar_transacciones_lote) — nunca lo repitas ` +
           `en el chat. Estas SÍ pueden tener categoría ya puesta por el trigger automático (por patrón de comercio) — si el usuario quiere ` +
