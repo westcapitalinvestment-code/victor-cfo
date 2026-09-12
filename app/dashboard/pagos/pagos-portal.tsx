@@ -32,6 +32,18 @@ type Retencion = {
   created_at: string;
 };
 
+// Evidencia (foto/PDF) de un pago — migración 0085, 12 sept 2026, pedido de
+// Joel: "poner un boton de foto y upload por si se necesitara poner una
+// evidencia de la factura o lo que uno esta pagando en pagos". Mismo shape
+// que Adjunto en factura-detalle.tsx.
+type AdjuntoPago = { id: string; nombre_archivo: string };
+
+const EXTENSIONES_IMAGEN_PAGO = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"];
+function esImagenPago(nombre: string): boolean {
+  const n = nombre.toLowerCase();
+  return EXTENSIONES_IMAGEN_PAGO.some((ext) => n.endsWith(ext));
+}
+
 const TABS = [
   { id: "pagos", label: "Pagos", icon: "ti-cash" },
   { id: "contratistas", label: "Contratistas", icon: "ti-users" },
@@ -95,6 +107,7 @@ export default function PagosPortal({
   volverLabel = "← VICTOR",
   ownerIdEfectivo,
   modoAdmin = false,
+  adjuntosPorRetencion = {},
 }: {
   vendors: Vendor[];
   retenciones: Retencion[];
@@ -118,6 +131,11 @@ export default function PagosPortal({
   volverLabel?: string;
   ownerIdEfectivo?: string;
   modoAdmin?: boolean;
+  // Evidencia por pago, agrupada por vendor_retencion_id — solo trae la de
+  // las filas visibles en "Pagos recientes" (últimas 20). No soportado
+  // todavía en modoAdmin (RLS de vendor_retencion_attachments es solo
+  // owner_id = auth.uid(), igual que invoice_attachments hoy).
+  adjuntosPorRetencion?: Record<string, AdjuntoPago[]>;
 }) {
   const [tab, setTab] = useState<TabId>("pagos");
 
@@ -171,7 +189,15 @@ export default function PagosPortal({
       </div>
 
       {tab === "pagos" && (
-        <PagosTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} entidades={entidades} ownerIdEfectivo={ownerIdEfectivo} />
+        <PagosTab
+          vendors={vendors}
+          retenciones={retenciones}
+          entidadId={entidadId}
+          entidades={entidades}
+          ownerIdEfectivo={ownerIdEfectivo}
+          adjuntosPorRetencionInicial={adjuntosPorRetencion}
+          modoAdmin={modoAdmin}
+        />
       )}
       {tab === "contratistas" && (
         <ContratistasTab vendors={vendors} entidadId={entidadId} retencionDefault={retencionDefault} ownerIdEfectivo={ownerIdEfectivo} />
@@ -233,12 +259,16 @@ function PagosTab({
   entidadId,
   entidades,
   ownerIdEfectivo,
+  adjuntosPorRetencionInicial = {},
+  modoAdmin = false,
 }: {
   vendors: Vendor[];
   retenciones: Retencion[];
   entidadId: string | null;
   entidades: { id: string; name: string }[];
   ownerIdEfectivo?: string;
+  adjuntosPorRetencionInicial?: Record<string, AdjuntoPago[]>;
+  modoAdmin?: boolean;
 }) {
   const supabase = createClient();
   const router = useRouter();
@@ -253,6 +283,74 @@ function PagosTab({
   // sept 2026, pedido de Joel: calcado del mockup — "Registrar corrida" ya
   // no guarda directo, primero muestra bajo qué entidad va a quedar el pago.
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
+
+  // Evidencia por pago (12 sept 2026, pedido de Joel) — un solo panel
+  // expandido a la vez dentro de "Pagos recientes", igual patrón visual que
+  // "Evidencia del trabajo" en factura-detalle.tsx pero compacto porque acá
+  // cada fila ya es una lista densa (no una pantalla propia).
+  const [adjuntosPorRetencion, setAdjuntosPorRetencion] = useState(adjuntosPorRetencionInicial);
+  const [evidenciaAbiertaId, setEvidenciaAbiertaId] = useState<string | null>(null);
+  const [subiendoEvidenciaId, setSubiendoEvidenciaId] = useState<string | null>(null);
+  const [borrandoEvidenciaId, setBorrandoEvidenciaId] = useState<string | null>(null);
+  const inputCamaraEvidenciaRef = useRef<HTMLInputElement>(null);
+  const inputArchivoEvidenciaRef = useRef<HTMLInputElement>(null);
+  const retencionEvidenciaObjetivo = useRef<string | null>(null);
+
+  function abrirCamaraEvidencia(retencionId: string) {
+    retencionEvidenciaObjetivo.current = retencionId;
+    inputCamaraEvidenciaRef.current?.click();
+  }
+
+  function abrirArchivoEvidencia(retencionId: string) {
+    retencionEvidenciaObjetivo.current = retencionId;
+    inputArchivoEvidenciaRef.current?.click();
+  }
+
+  async function subirEvidenciaPago(e: React.ChangeEvent<HTMLInputElement>) {
+    const retencionId = retencionEvidenciaObjetivo.current;
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0 || !retencionId) return;
+
+    setSubiendoEvidenciaId(retencionId);
+    setError(null);
+
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("vendorRetencionId", retencionId);
+
+      const res = await fetch("/api/pagos/adjuntos/upload", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(data.error ?? "No se pudo subir el archivo.");
+        continue;
+      }
+      setAdjuntosPorRetencion((prev) => ({
+        ...prev,
+        [retencionId]: [...(prev[retencionId] ?? []), { id: data.id, nombre_archivo: file.name }],
+      }));
+    }
+
+    setSubiendoEvidenciaId(null);
+  }
+
+  async function borrarEvidenciaPago(retencionId: string, adjuntoId: string) {
+    setBorrandoEvidenciaId(adjuntoId);
+    setError(null);
+    const res = await fetch(`/api/pagos/adjuntos/${adjuntoId}`, { method: "DELETE" });
+    setBorrandoEvidenciaId(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "No se pudo eliminar el archivo.");
+      return;
+    }
+    setAdjuntosPorRetencion((prev) => ({
+      ...prev,
+      [retencionId]: (prev[retencionId] ?? []).filter((a) => a.id !== adjuntoId),
+    }));
+  }
 
   const nombreEntidad = useMemo(() => {
     const mapa = new Map(entidades.map((e) => [e.id, e.name]));
@@ -547,23 +645,114 @@ function PagosTab({
         </div>
       )}
 
+      {!modoAdmin && (
+        <>
+          <input
+            ref={inputCamaraEvidenciaRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={subirEvidenciaPago}
+          />
+          <input
+            ref={inputArchivoEvidenciaRef}
+            type="file"
+            accept="image/*,.pdf"
+            multiple
+            className="hidden"
+            onChange={subirEvidenciaPago}
+          />
+        </>
+      )}
+
       <SeccionColapsable titulo={`Pagos recientes${historialOrdenado.length > 0 ? ` (${historialOrdenado.length})` : ""}`} defaultAbierta={false}>
         {historialOrdenado.length === 0 && <p className="text-xs text-muted">Todavía no has registrado ningún pago.</p>}
         {historialOrdenado.map((r) => {
           const v = vendorPorId.get(r.vendor_id);
+          const adjuntos = adjuntosPorRetencion[r.id] ?? [];
+          const evidenciaAbierta = evidenciaAbiertaId === r.id;
           return (
-            <div key={r.id} className="flex items-center gap-2 border-b border-border py-2 text-sm last:border-0">
-              <div className="min-w-0 flex-1">
-                <p className="truncate">{v?.name ?? "Contratista eliminado"}</p>
-                <p className="text-xs text-muted">
-                  {formatFecha(r.period_start)} · Bruto {formatMoney(Number(r.gross_amount))} · Retenido{" "}
-                  {formatMoney(Number(r.retention_amount))} ({Number(r.retention_pct)}%)
-                </p>
+            <div key={r.id} className="border-b border-border py-2 text-sm last:border-0">
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate">{v?.name ?? "Contratista eliminado"}</p>
+                  <p className="text-xs text-muted">
+                    {formatFecha(r.period_start)} · Bruto {formatMoney(Number(r.gross_amount))} · Retenido{" "}
+                    {formatMoney(Number(r.retention_amount))} ({Number(r.retention_pct)}%)
+                  </p>
+                </div>
+                <span className="flex-shrink-0 text-sm font-medium">{formatMoney(Number(r.net_paid))}</span>
+                {!modoAdmin && (
+                  <button
+                    onClick={() => setEvidenciaAbiertaId(evidenciaAbierta ? null : r.id)}
+                    className={`relative flex-shrink-0 ${adjuntos.length > 0 ? "text-teal" : "text-muted hover:text-teal"}`}
+                    title="Evidencia (factura/recibo del pago)"
+                  >
+                    <i className="ti ti-paperclip" style={{ fontSize: 14 }} />
+                    {adjuntos.length > 0 && (
+                      <span
+                        className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] font-medium text-white"
+                        style={{ background: "#1D9E75" }}
+                      >
+                        {adjuntos.length}
+                      </span>
+                    )}
+                  </button>
+                )}
+                <button onClick={() => eliminarRetencion(r.id)} className="flex-shrink-0 text-muted hover:text-red" title="Eliminar">
+                  <i className="ti ti-trash" style={{ fontSize: 14 }} />
+                </button>
               </div>
-              <span className="flex-shrink-0 text-sm font-medium">{formatMoney(Number(r.net_paid))}</span>
-              <button onClick={() => eliminarRetencion(r.id)} className="flex-shrink-0 text-muted hover:text-red" title="Eliminar">
-                <i className="ti ti-trash" style={{ fontSize: 14 }} />
-              </button>
+
+              {!modoAdmin && evidenciaAbierta && (
+                <div className="mt-2 rounded-lg border border-border bg-bg p-2">
+                  {adjuntos.length > 0 && (
+                    <div className="mb-2 grid grid-cols-4 gap-1.5">
+                      {adjuntos.map((a) => (
+                        <div key={a.id} className="relative overflow-hidden rounded-lg border border-border">
+                          <a href={`/api/pagos/adjuntos/${a.id}/ver`} target="_blank" rel="noopener noreferrer" className="block">
+                            {esImagenPago(a.nombre_archivo) ? (
+                              <img src={`/api/pagos/adjuntos/${a.id}/ver`} alt={a.nombre_archivo} className="h-14 w-full object-cover" />
+                            ) : (
+                              <div className="flex h-14 w-full items-center justify-center bg-card">
+                                <i className="ti ti-file-text text-lg text-muted" />
+                              </div>
+                            )}
+                          </a>
+                          <button
+                            type="button"
+                            className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-white disabled:opacity-50"
+                            disabled={borrandoEvidenciaId === a.id}
+                            onClick={() => borrarEvidenciaPago(r.id, a.id)}
+                            title="Eliminar"
+                          >
+                            <i className="ti ti-x" style={{ fontSize: 10 }} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      disabled={subiendoEvidenciaId === r.id}
+                      className="flex-1 rounded-pill border border-border py-1.5 text-xs font-medium hover:opacity-80 disabled:opacity-50"
+                      onClick={() => abrirCamaraEvidencia(r.id)}
+                    >
+                      📷 Foto
+                    </button>
+                    <button
+                      type="button"
+                      disabled={subiendoEvidenciaId === r.id}
+                      className="flex-1 rounded-pill border border-border py-1.5 text-xs font-medium hover:opacity-80 disabled:opacity-50"
+                      onClick={() => abrirArchivoEvidencia(r.id)}
+                    >
+                      📁 {subiendoEvidenciaId === r.id ? "Subiendo..." : "Añadir"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

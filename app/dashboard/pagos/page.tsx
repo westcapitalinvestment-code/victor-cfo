@@ -65,6 +65,29 @@ export default async function PagosPage() {
   const { data: vendors } = await vendorsQuery;
   const { data: retenciones } = await retencionesQuery;
 
+  // Evidencia (foto/PDF) por pago — migración 0085, 12 sept 2026, pedido de
+  // Joel: "poner un boton de foto y upload por si se necesitara poner una
+  // evidencia de la factura o lo que uno esta pagando en pagos". Se trae de
+  // una vez para las últimas 20 filas visibles en "Pagos recientes" (mismo
+  // límite que ya usa PagosTab), agrupado por vendor_retencion_id.
+  const idsRecientes = (retenciones ?? [])
+    .slice()
+    .sort((a, b) => (b.period_start ?? "").localeCompare(a.period_start ?? "") || b.created_at.localeCompare(a.created_at))
+    .slice(0, 20)
+    .map((r) => r.id);
+
+  const adjuntosPorRetencion: Record<string, { id: string; nombre_archivo: string }[]> = {};
+  if (idsRecientes.length > 0) {
+    const { data: adjuntos } = await supabase
+      .from("vendor_retencion_attachments")
+      .select("id, nombre_archivo, vendor_retencion_id")
+      .in("vendor_retencion_id", idsRecientes)
+      .order("created_at", { ascending: true });
+    for (const a of adjuntos ?? []) {
+      (adjuntosPorRetencion[a.vendor_retencion_id] ??= []).push({ id: a.id, nombre_archivo: a.nombre_archivo });
+    }
+  }
+
   return (
     <PagosPortal
       vendors={vendors ?? []}
@@ -73,6 +96,7 @@ export default async function PagosPage() {
       vistaGlobal={vistaGlobal}
       entidades={entities.map((e) => ({ id: e.id, name: e.name }))}
       retencionDefault={entidadActiva?.default_contractor_retention_pct ?? 10}
+      adjuntosPorRetencion={adjuntosPorRetencion}
     />
   );
 }
