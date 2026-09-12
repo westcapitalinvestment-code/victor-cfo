@@ -49,6 +49,28 @@ export default async function AdminPagosPage({ params }: { params: { entityId: s
       .order("period_start", { ascending: false }),
   ]);
 
+  // Evidencia (foto/PDF) por pago — mismo bloque que dashboard/pagos/page.tsx
+  // (12 sept 2026, fix de raíz junto con la migración 0086 y el ownerId
+  // efectivo en /api/pagos/adjuntos/*): sin esto el Administrador nunca veía
+  // la evidencia ya subida por el dueño, aunque el backend ya la permitiera.
+  const idsRecientes = (retenciones ?? [])
+    .slice()
+    .sort((a, b) => (b.period_start ?? "").localeCompare(a.period_start ?? "") || b.created_at.localeCompare(a.created_at))
+    .slice(0, 20)
+    .map((r) => r.id);
+
+  const adjuntosPorRetencion: Record<string, { id: string; nombre_archivo: string }[]> = {};
+  if (idsRecientes.length > 0) {
+    const { data: adjuntos } = await supabase
+      .from("vendor_retencion_attachments")
+      .select("id, nombre_archivo, vendor_retencion_id")
+      .in("vendor_retencion_id", idsRecientes)
+      .order("created_at", { ascending: true });
+    for (const a of adjuntos ?? []) {
+      (adjuntosPorRetencion[a.vendor_retencion_id] ??= []).push({ id: a.id, nombre_archivo: a.nombre_archivo });
+    }
+  }
+
   return (
     <>
       <AdminNav entityId={entityId} activo="pagos" />
@@ -61,6 +83,7 @@ export default async function AdminPagosPage({ params }: { params: { entityId: s
         volverHref={`/admin/${entityId}`}
         volverLabel="← Facturación"
         ownerIdEfectivo={ownerId}
+        adjuntosPorRetencion={adjuntosPorRetencion}
         modoAdmin
       />
     </>

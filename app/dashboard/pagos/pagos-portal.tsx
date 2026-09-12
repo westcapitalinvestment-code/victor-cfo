@@ -132,9 +132,10 @@ export default function PagosPortal({
   ownerIdEfectivo?: string;
   modoAdmin?: boolean;
   // Evidencia por pago, agrupada por vendor_retencion_id — solo trae la de
-  // las filas visibles en "Pagos recientes" (últimas 20). No soportado
-  // todavía en modoAdmin (RLS de vendor_retencion_attachments es solo
-  // owner_id = auth.uid(), igual que invoice_attachments hoy).
+  // las filas visibles en "Pagos recientes" (últimas 20). Soportado también
+  // en modoAdmin (Administrador) desde la migración 0086 + fix de ownerId
+  // efectivo en /api/pagos/adjuntos/* (12 sept 2026) — /admin/[entityId]/pagos
+  // debe pasar este prop igual que dashboard/pagos/page.tsx para que se vea.
   adjuntosPorRetencion?: Record<string, AdjuntoPago[]>;
 }) {
   const [tab, setTab] = useState<TabId>("pagos");
@@ -283,6 +284,37 @@ function PagosTab({
   // sept 2026, pedido de Joel: calcado del mockup — "Registrar corrida" ya
   // no guarda directo, primero muestra bajo qué entidad va a quedar el pago.
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
+
+  // Adjuntar factura al MOMENTO de registrar el pago (12 sept 2026, pedido
+  // de Joel: "eso debe estar en corrida de pagos tambien... si uno va a
+  // pagar algo es pq tiene una factura") — no hay que esperar a que el pago
+  // ya esté guardado para subir evidencia. Por contratista, antes de
+  // "Registrar corrida"; se sube DESPUÉS del insert, usando el id real de
+  // la vendor_retencion recién creada (no existe todavía mientras se arma
+  // la corrida).
+  const [archivosPendientes, setArchivosPendientes] = useState<Record<string, File[]>>({});
+  const inputArchivoCorridaRef = useRef<HTMLInputElement>(null);
+  const vendorArchivoObjetivo = useRef<string | null>(null);
+
+  function abrirArchivoCorrida(vendorId: string) {
+    vendorArchivoObjetivo.current = vendorId;
+    inputArchivoCorridaRef.current?.click();
+  }
+
+  function agregarArchivosPendientes(e: React.ChangeEvent<HTMLInputElement>) {
+    const vendorId = vendorArchivoObjetivo.current;
+    const nuevos = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (nuevos.length === 0 || !vendorId) return;
+    setArchivosPendientes((prev) => ({ ...prev, [vendorId]: [...(prev[vendorId] ?? []), ...nuevos] }));
+  }
+
+  function quitarArchivoPendiente(vendorId: string, index: number) {
+    setArchivosPendientes((prev) => ({
+      ...prev,
+      [vendorId]: (prev[vendorId] ?? []).filter((_, i) => i !== index),
+    }));
+  }
 
   // Evidencia por pago (12 sept 2026, pedido de Joel) — un solo panel
   // expandido a la vez dentro de "Pagos recientes", igual patrón visual que
@@ -440,7 +472,10 @@ function PagosTab({
       remittance_status: "pendiente",
     }));
 
-    const { error: insertError } = await supabase.from("vendor_retenciones").insert(inserts);
+    const { data: nuevasRetenciones, error: insertError } = await supabase
+      .from("vendor_retenciones")
+      .insert(inserts)
+      .select("id, vendor_id");
     setGuardando(false);
     setMostrarConfirmacion(false);
     if (insertError) {
@@ -448,8 +483,33 @@ function PagosTab({
       return;
     }
 
+    // Sube las facturas que se adjuntaron mientras se armaba la corrida,
+    // ahora que ya existe el id real de cada vendor_retencion. Si una sube
+    // falla no se revierte el pago (ya quedó registrado) — solo se avisa.
+    if (nuevasRetenciones) {
+      for (const r of nuevasRetenciones) {
+        const archivos = archivosPendientes[r.vendor_id] ?? [];
+        for (const file of archivos) {
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("vendorRetencionId", r.id);
+          const res = await fetch("/api/pagos/adjuntos/upload", { method: "POST", body: formData });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) {
+            setAdjuntosPorRetencion((prev) => ({
+              ...prev,
+              [r.id]: [...(prev[r.id] ?? []), { id: data.id, nombre_archivo: file.name }],
+            }));
+          } else {
+            setError(`No se pudo subir "${file.name}": ${data.error ?? "error desconocido"}`);
+          }
+        }
+      }
+    }
+
     setResultado(filas.map((f) => ({ nombre: f.vendor.name, neto: f.neto })));
     setMontos({});
+    setArchivosPendientes({});
     setCopiado(false);
     router.refresh();
   }
@@ -571,6 +631,24 @@ function PagosTab({
                   {iniciales(v.name)}
                 </div>
                 <p className="min-w-0 flex-1 truncate text-sm">{v.name}</p>
+                <button
+                  type="button"
+                  onClick={() => abrirArchivoCorrida(v.id)}
+                  className={`relative flex-shrink-0 ${
+                    (archivosPendientes[v.id]?.length ?? 0) > 0 ? "text-teal" : "text-muted hover:text-teal"
+                  }`}
+                  title="Adjuntar factura de este pago"
+                >
+                  <i className="ti ti-paperclip" style={{ fontSize: 14 }} />
+                  {(archivosPendientes[v.id]?.length ?? 0) > 0 && (
+                    <span
+                      className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] font-medium text-white"
+                      style={{ background: "#1D9E75" }}
+                    >
+                      {archivosPendientes[v.id]!.length}
+                    </span>
+                  )}
+                </button>
                 <div className="relative flex-shrink-0">
                   <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted">$</span>
                   <input
@@ -613,6 +691,38 @@ function PagosTab({
           </div>
         )}
 
+        {Object.values(archivosPendientes).some((files) => files.length > 0) && (
+          <div className="mt-2 rounded-lg border border-border bg-bg p-2">
+            <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">Facturas adjuntas a esta corrida</p>
+            {Object.entries(archivosPendientes).flatMap(([vendorId, files]) =>
+              files.map((file, idx) => (
+                <div key={`${vendorId}-${idx}`} className="flex items-center justify-between gap-2 py-0.5 text-xs">
+                  <span className="min-w-0 flex-1 truncate">
+                    {activos.find((v) => v.id === vendorId)?.name ?? "Contratista"} — {file.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => quitarArchivoPendiente(vendorId, idx)}
+                    className="flex-shrink-0 text-muted hover:text-red"
+                    title="Quitar"
+                  >
+                    <i className="ti ti-x" style={{ fontSize: 12 }} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        <input
+          ref={inputArchivoCorridaRef}
+          type="file"
+          accept="image/*,.pdf"
+          multiple
+          className="hidden"
+          onChange={agregarArchivosPendientes}
+        />
+
         <button className="vc-btn-primary mt-3" disabled={filas.length === 0 || guardando} onClick={() => setMostrarConfirmacion(true)}>
           {guardando ? "Guardando..." : `Registrar corrida${filas.length > 0 ? ` (${filas.length})` : ""}`}
         </button>
@@ -645,26 +755,25 @@ function PagosTab({
         </div>
       )}
 
-      {!modoAdmin && (
-        <>
-          <input
-            ref={inputCamaraEvidenciaRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={subirEvidenciaPago}
-          />
-          <input
-            ref={inputArchivoEvidenciaRef}
-            type="file"
-            accept="image/*,.pdf"
-            multiple
-            className="hidden"
-            onChange={subirEvidenciaPago}
-          />
-        </>
-      )}
+      {/* Evidencia también disponible para Administrador (12 sept 2026 — ya no
+          se oculta con !modoAdmin: RLS 0086 + los 3 API routes de
+          /api/pagos/adjuntos ya resuelven el owner_id efectivo del negocio). */}
+      <input
+        ref={inputCamaraEvidenciaRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={subirEvidenciaPago}
+      />
+      <input
+        ref={inputArchivoEvidenciaRef}
+        type="file"
+        accept="image/*,.pdf"
+        multiple
+        className="hidden"
+        onChange={subirEvidenciaPago}
+      />
 
       <SeccionColapsable titulo={`Pagos recientes${historialOrdenado.length > 0 ? ` (${historialOrdenado.length})` : ""}`} defaultAbierta={false}>
         {historialOrdenado.length === 0 && <p className="text-xs text-muted">Todavía no has registrado ningún pago.</p>}
@@ -683,29 +792,27 @@ function PagosTab({
                   </p>
                 </div>
                 <span className="flex-shrink-0 text-sm font-medium">{formatMoney(Number(r.net_paid))}</span>
-                {!modoAdmin && (
-                  <button
-                    onClick={() => setEvidenciaAbiertaId(evidenciaAbierta ? null : r.id)}
-                    className={`relative flex-shrink-0 ${adjuntos.length > 0 ? "text-teal" : "text-muted hover:text-teal"}`}
-                    title="Evidencia (factura/recibo del pago)"
-                  >
-                    <i className="ti ti-paperclip" style={{ fontSize: 14 }} />
-                    {adjuntos.length > 0 && (
-                      <span
-                        className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] font-medium text-white"
-                        style={{ background: "#1D9E75" }}
-                      >
-                        {adjuntos.length}
-                      </span>
-                    )}
-                  </button>
-                )}
+                <button
+                  onClick={() => setEvidenciaAbiertaId(evidenciaAbierta ? null : r.id)}
+                  className={`relative flex-shrink-0 ${adjuntos.length > 0 ? "text-teal" : "text-muted hover:text-teal"}`}
+                  title="Evidencia (factura/recibo del pago)"
+                >
+                  <i className="ti ti-paperclip" style={{ fontSize: 14 }} />
+                  {adjuntos.length > 0 && (
+                    <span
+                      className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] font-medium text-white"
+                      style={{ background: "#1D9E75" }}
+                    >
+                      {adjuntos.length}
+                    </span>
+                  )}
+                </button>
                 <button onClick={() => eliminarRetencion(r.id)} className="flex-shrink-0 text-muted hover:text-red" title="Eliminar">
                   <i className="ti ti-trash" style={{ fontSize: 14 }} />
                 </button>
               </div>
 
-              {!modoAdmin && evidenciaAbierta && (
+              {evidenciaAbierta && (
                 <div className="mt-2 rounded-lg border border-border bg-bg p-2">
                   {adjuntos.length > 0 && (
                     <div className="mb-2 grid grid-cols-4 gap-1.5">
