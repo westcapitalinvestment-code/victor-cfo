@@ -12,6 +12,7 @@ import SessionTimeoutConfig from "../session-timeout-config";
 import ReferralLink from "../referral-link";
 import EliminarCuenta from "../eliminar-cuenta";
 import EditarCuenta from "../editar-cuenta";
+import ReiniciarDemo from "../reiniciar-demo";
 
 export default async function ConfigPage() {
   const supabase = createClient();
@@ -27,7 +28,7 @@ export default async function ConfigPage() {
   // mostrar el fallback "core"/"trialing" de abajo.
   const { data: profile } = await supabase
     .from("users")
-    .select("full_name, plan, plan_status, deletion_scheduled_for")
+    .select("full_name, plan, plan_status, deletion_scheduled_for, is_demo")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -71,6 +72,8 @@ export default async function ConfigPage() {
   return (
     <div className="vc-shell">
       <h1 className="mb-4 text-lg font-medium">Configuración</h1>
+
+      {profile?.is_demo && <ReiniciarDemo />}
 
       <div className="vc-card mb-4">
         <p className="text-sm font-semibold">Cuenta</p>
