@@ -17,7 +17,11 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const desde = searchParams.get("desde") || "0000-01-01";
+  // "0001-01-01" y no "0000-01-01" (14 sept 2026, fix de raíz): Postgres
+  // rechaza el año 0000 como fecha inválida — la query .gte("period_end",
+  // desde) fallaba en silencio para "Todo" y el PDF salía en $0 sin avisar
+  // (no se revisaba `error`, ver abajo).
+  const desde = searchParams.get("desde") || "0001-01-01";
   const hasta = searchParams.get("hasta") || new Date().toISOString().slice(0, 10);
   const entityId = searchParams.get("entityId");
   const vendorIdsParam = searchParams.get("vendorIds");
@@ -32,7 +36,8 @@ export async function GET(req: NextRequest) {
   if (entityId) query = query.eq("entity_id", entityId);
   if (vendorIds && vendorIds.length > 0) query = query.in("vendor_id", vendorIds);
 
-  const { data } = await query;
+  const { data, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const filas = (data ?? []) as any[];
 
   // 7 sept 2026, pedido de Joel: "que en todos los reportes... aparezca el

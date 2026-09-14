@@ -1235,8 +1235,11 @@ function inicioPeriodo(periodo: string, rangoDesde: string): string {
     return new Date(hoy.getFullYear(), inicioTrimestre, 1).toISOString().slice(0, 10);
   }
   if (periodo === "anio") return new Date(hoy.getFullYear(), 0, 1).toISOString().slice(0, 10);
-  if (periodo === "rango") return rangoDesde || "0000-01-01";
-  return "0000-01-01";
+  // "0001-01-01" y no "0000-01-01" (14 sept 2026, fix de raíz): Postgres
+  // rechaza el año 0000 como fecha inválida — la query .gte("fecha_emision",
+  // desde) fallaba en silencio para "Todo" y el reporte salía en $0.
+  if (periodo === "rango") return rangoDesde || "0001-01-01";
+  return "0001-01-01";
 }
 
 function finPeriodo(periodo: string, rangoHasta: string): string {

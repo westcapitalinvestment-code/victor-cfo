@@ -27,7 +27,11 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const desde = searchParams.get("desde") || "0000-01-01";
+  // "0001-01-01" y no "0000-01-01" (14 sept 2026, fix de raíz): Postgres
+  // rechaza el año 0000 como fecha inválida — la query .gte("fecha_emision",
+  // desde) fallaba en silencio para "Todo" y el PDF salía en $0 sin avisar
+  // (no se revisaba el error de la query, ver abajo).
+  const desde = searchParams.get("desde") || "0001-01-01";
   const hasta = searchParams.get("hasta") || new Date().toISOString().slice(0, 10);
   const clienteId = searchParams.get("clienteId");
   const estadoFiltro = searchParams.get("estado");
@@ -46,7 +50,8 @@ export async function GET(req: NextRequest) {
   if (clienteId) facturasQuery = facturasQuery.eq("client_id", clienteId);
   if (entityId) facturasQuery = facturasQuery.eq("entity_id", entityId);
 
-  const { data: facturasData } = await facturasQuery;
+  const { data: facturasData, error: facturasError } = await facturasQuery;
+  if (facturasError) return NextResponse.json({ error: facturasError.message }, { status: 500 });
   let facturas = (facturasData ?? []) as any[];
   if (estadoFiltro) facturas = facturas.filter((f) => estadoMostrado(f.estado, f.fecha_vencimiento) === estadoFiltro);
   if (email) facturas = facturas.filter((f) => (f.clients?.email ?? "").toLowerCase().includes(email.toLowerCase()));

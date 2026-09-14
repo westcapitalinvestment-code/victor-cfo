@@ -22,7 +22,9 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const desde = searchParams.get("desde") || "0000-01-01";
+  // "0001-01-01" y no "0000-01-01" (14 sept 2026, fix de raíz): Postgres
+  // rechaza el año 0000 como fecha inválida — ver mismo fix en pdf/route.ts.
+  const desde = searchParams.get("desde") || "0001-01-01";
   const hasta = searchParams.get("hasta") || new Date().toISOString().slice(0, 10);
   const entityId = searchParams.get("entityId");
   // vendorIds (2 sept 2026, pedido de Joel: "necesito filtrar... por
