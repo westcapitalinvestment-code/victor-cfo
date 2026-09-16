@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { esCicloValido, type Ciclo } from "@/lib/stripe";
+import { fbqTrack } from "@/lib/fbpixel";
 
 // Registro real — esto es lo que faltaba para que el landing page
 // (victorcfo.com) pueda mandar gente nueva a crear cuenta de verdad.
@@ -217,6 +218,12 @@ function RegistroForm() {
       setError(error.message);
       return;
     }
+
+    // Cuenta creada de verdad en Supabase (con o sin sesión inmediata según
+    // confirmación de email) — este es el momento correcto para "Lead" de
+    // Meta: alguien completó el formulario de registro, sin importar si
+    // termina pagando o se queda en el plan gratis.
+    fbqTrack("Lead", { plan, ciclo, gratis: esGratis });
 
     // Si el proyecto de Supabase tiene confirmación de email activada, no
     // hay sesión todavía — el usuario tiene que confirmar desde su correo

@@ -1,13 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { fbqTrack } from "@/lib/fbpixel";
 
 export default function OnboardingForm({ initialFullName }: { initialFullName: string }) {
   const router = useRouter();
   const supabase = createClient();
   const [fullName, setFullName] = useState(initialFullName);
+
+  // "CompleteRegistration" de Meta (16 sept 2026) — llegar a /onboarding
+  // significa que la cuenta ya quedó creada y activa, sea por el plan
+  // gratis (directo) o por el plan pagado (de vuelta de Stripe Checkout
+  // exitoso vía returnTo=/onboarding). Es el punto correcto para medir
+  // "registro completado" en los dos caminos con un solo evento.
+  useEffect(() => {
+    fbqTrack("CompleteRegistration");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
