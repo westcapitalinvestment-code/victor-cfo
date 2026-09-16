@@ -273,3 +273,16 @@ body {
 .vc-nb i.on { color: #1D9E75; }
 .vc-nl { font-size: 9px; color: var(--muted); white-space: nowrap; }
 .vc-nl.on { color: #1D9E75; font-weight: 500; }
+
+/* Mensajes de VICTOR (16 sept 2026) — react-markdown pinta cada bloque con
+   sus propios <p>/<ul>/<li>, que traen margin por defecto del navegador y
+   dejaban las burbujas del chat con huecos enormes entre líneas. Estos
+   overrides las vuelven a ver compactas, como el texto plano de antes,
+   pero con **negrita** y listas de verdad en vez de asteriscos crudos. */
+.vc-markdown p { margin: 0 0 6px; }
+.vc-markdown p:last-child { margin-bottom: 0; }
+.vc-markdown ul, .vc-markdown ol { margin: 0 0 6px; padding-left: 18px; }
+.vc-markdown ul:last-child, .vc-markdown ol:last-child { margin-bottom: 0; }
+.vc-markdown li { margin-bottom: 2px; }
+.vc-markdown strong { font-weight: 600; }
+.vc-markdown a { color: #1D9E75; text-decoration: underline; }

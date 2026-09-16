@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // "El alma de VICTOR" — botón flotante + panel de chat, disponible en
 // cualquier pantalla del dashboard (se monta una sola vez desde el
@@ -529,9 +531,9 @@ export default function VictorChat({
                   <img src={VICTOR_AVATAR} alt="VICTOR" className="h-7 w-7 flex-shrink-0 rounded-full object-cover" />
                 )}
                 <div
-                  className={`max-w-[80%] whitespace-pre-wrap rounded-[10px] p-2.5 text-sm ${
+                  className={`max-w-[80%] rounded-[10px] p-2.5 text-sm ${
                     m.role === "user"
-                      ? "rounded-br-none text-white"
+                      ? "rounded-br-none whitespace-pre-wrap text-white"
                       : "rounded-bl-none border border-border bg-bg text-text"
                   }`}
                   style={m.role === "user" ? { background: "#1D9E75" } : undefined}
@@ -539,7 +541,18 @@ export default function VictorChat({
                   {m.imageDataUrl && (
                     <img src={m.imageDataUrl} alt="Imagen enviada" className="mb-1.5 max-h-40 w-full rounded-lg object-cover" />
                   )}
-                  {m.content}
+                  {m.role === "assistant" ? (
+                    // VICTOR escribe en markdown (**negrita**, listas con "-", etc.) —
+                    // antes esto se pintaba tal cual, con los asteriscos crudos
+                    // visibles (reportado 16 sept 2026). Los mensajes del usuario
+                    // se quedan en texto plano (whitespace-pre-wrap arriba), nunca
+                    // necesitan markdown.
+                    <div className="vc-markdown">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    m.content
+                  )}
                 </div>
               </div>
             ))}
