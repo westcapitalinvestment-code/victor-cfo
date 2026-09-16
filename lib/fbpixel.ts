@@ -7,7 +7,7 @@
 // seguros para disparar eventos estándar de Meta desde componentes cliente
 // puntuales (registro, onboarding), sin repetir el chequeo de
 // "¿existe window.fbq?" en cada sitio.
-export const META_PIXEL_ID = "41857395";
+export const META_PIXEL_ID = "1107383785154187";
 
 type FbqEventoEstandar =
   | "Lead"
