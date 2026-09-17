@@ -3602,7 +3602,7 @@ export async function executeVictorTool(
 
       let query = supabase
         .from("invoices")
-        .select("id, numero, subtotal, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
+        .select("id, numero, subtotal, total, deposito_monto, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
         .eq("owner_id", ownerId)
         .neq("estado", "borrador")
         .gte("fecha_emision", desde)
@@ -3613,20 +3613,70 @@ export async function executeVictorTool(
       const { data: facturas, error: facturasError } = await query;
       if (facturasError) return { ok: false, message: `No se pudo calcular el reporte: ${facturasError.message}` };
 
-      if (!facturas || facturas.length === 0) {
-        return { ok: true, message: `No hay facturas (enviadas o más) entre ${desde} y ${hasta} en ${alcance.alcanceLabel}.` };
+      // Segunda consulta, SIN restricción de fecha (17 sept 2026, bug real
+      // reportado por Joel): "Pendiente por cobrar" y "Vencidas" son un
+      // estado ACTUAL de la cartera, no algo que deba limitarse a facturas
+      // emitidas dentro del rango pedido — una factura de hace 2 meses que
+      // sigue sin pagarse tiene que aparecer igual aunque el usuario haya
+      // preguntado "cómo van mis ingresos este mes". Antes esta tool solo
+      // miraba `facturas` (ya filtradas por fecha_emision dentro de
+      // desde/hasta), así que facturas más viejas sin pagar desaparecían
+      // por completo del reporte sin ningún aviso — Joel reportó 2 facturas
+      // reales (Preventive Health y Dra. Bennyvette) que nunca salían.
+      let queryTodas = supabase
+        .from("invoices")
+        .select("id, numero, total, deposito_monto, estado, fecha_vencimiento, client_id, clients(name)")
+        .eq("owner_id", ownerId)
+        .neq("estado", "borrador");
+      if (alcance.modo === "entidad") queryTodas = queryTodas.eq("entity_id", alcance.entityId);
+      const { data: facturasTodas, error: facturasTodasError } = await queryTodas;
+      if (facturasTodasError) return { ok: false, message: `No se pudo calcular la cartera pendiente: ${facturasTodasError.message}` };
+
+      if ((!facturas || facturas.length === 0) && (!facturasTodas || facturasTodas.length === 0)) {
+        return { ok: true, message: `No hay facturas (enviadas o más) en ${alcance.alcanceLabel}.` };
       }
 
       function estaVencidaFactura(f: { estado: string; fecha_vencimiento: string | null }): boolean {
         return f.estado !== "pagada" && !!f.fecha_vencimiento && f.fecha_vencimiento < hoyStr;
       }
 
-      const porCliente = new Map<string, { nombre: string; facturado: number; cobrado: number; count: number }>();
-      const vencidas: { cliente: string; numero: string; monto: number; dias: number }[] = [];
-      for (const f of facturas as unknown as {
-        numero: string;
+      // "Pendiente" REAL de una factura: si ya está pagada, $0 (así tenga
+      // retención — la retención NO es dinero que el cliente todavía deba,
+      // es un crédito que su contable ya depositó en Hacienda a nombre del
+      // usuario). Si no está pagada, es el total NETO (ya viene descontada
+      // la retención, ver nota junto a "Facturado" abajo) menos cualquier
+      // depósito ya recibido. Bug real reportado por Joel (17 sept 2026):
+      // antes esto se derivaba como Facturado(bruto)-Cobrado(neto), lo cual
+      // dejaba exactamente el monto de la retención como "pendiente" en
+      // facturas YA pagadas — VICTOR le reportó $291 de "pendiente" a Joel
+      // en 3 facturas que en realidad estaban saldadas al 100%.
+      function pendienteRealDeFactura(f: { estado: string; total: number; deposito_monto: number | null }): number {
+        if (f.estado === "pagada") return 0;
+        return Math.max(0, Number(f.total) - Number(f.deposito_monto ?? 0));
+      }
+
+      const porCliente = new Map<string, { nombre: string; facturado: number; cobrado: number; pendienteReal: number; count: number }>();
+      for (const f of (facturas ?? []) as unknown as {
         subtotal: number;
         total: number;
+        estado: string;
+        client_id: string | null;
+        clients: { name: string } | null;
+      }[]) {
+        const key = f.client_id ?? "sin-cliente";
+        const nombre = f.clients?.name ?? "Sin cliente";
+        const actual = porCliente.get(key) ?? { nombre, facturado: 0, cobrado: 0, pendienteReal: 0, count: 0 };
+        actual.facturado += Number(f.subtotal);
+        if (f.estado === "pagada") actual.cobrado += Number(f.total);
+        actual.count += 1;
+        porCliente.set(key, actual);
+      }
+
+      const vencidas: { cliente: string; numero: string; monto: number; dias: number }[] = [];
+      for (const f of (facturasTodas ?? []) as unknown as {
+        numero: string;
+        total: number;
+        deposito_monto: number | null;
         estado: string;
         fecha_vencimiento: string | null;
         client_id: string | null;
@@ -3634,34 +3684,36 @@ export async function executeVictorTool(
       }[]) {
         const key = f.client_id ?? "sin-cliente";
         const nombre = f.clients?.name ?? "Sin cliente";
-        const actual = porCliente.get(key) ?? { nombre, facturado: 0, cobrado: 0, count: 0 };
-        actual.facturado += Number(f.subtotal);
-        if (f.estado === "pagada") actual.cobrado += Number(f.total);
-        actual.count += 1;
+        // Puede ser un cliente que no tenga ninguna factura DENTRO del
+        // período (por eso no está en porCliente todavía) pero sí tenga
+        // saldo pendiente de fuera del período — se agrega igual para que
+        // no desaparezca de la cartera.
+        const actual = porCliente.get(key) ?? { nombre, facturado: 0, cobrado: 0, pendienteReal: 0, count: 0 };
+        actual.pendienteReal += pendienteRealDeFactura(f);
         porCliente.set(key, actual);
 
         if (estaVencidaFactura(f)) {
           const dias = Math.round(
             (new Date(`${hoyStr}T00:00:00Z`).getTime() - new Date(`${f.fecha_vencimiento}T00:00:00Z`).getTime()) / (24 * 60 * 60 * 1000)
           );
-          vencidas.push({ cliente: nombre, numero: f.numero, monto: Number(f.total), dias });
+          vencidas.push({ cliente: nombre, numero: f.numero, monto: pendienteRealDeFactura(f), dias });
         }
       }
 
-      const ranking = [...porCliente.values()].sort((a, b) => b.facturado - a.facturado);
+      const ranking = [...porCliente.values()].sort((a, b) => b.pendienteReal - a.pendienteReal || b.facturado - a.facturado);
       const top = ranking.slice(0, limite);
       const totalFacturado = ranking.reduce((s, c) => s + c.facturado, 0);
       const totalCobrado = ranking.reduce((s, c) => s + c.cobrado, 0);
-      // 7 sept 2026, pedido de Joel: dejar el "pendiente por cobrar" ya
-      // calculado explícitamente en vez de que VICTOR tenga que restar
-      // facturado-cobrado de memoria cada vez que alguien pregunta "si
-      // cobro eso, dónde queda mi margen" — mismo dato, menos riesgo de que
-      // se equivoque haciendo la resta él mismo.
-      const totalPendiente = Math.max(0, totalFacturado - totalCobrado);
+      // Pendiente REAL = suma directa de pendienteRealDeFactura() sobre
+      // TODAS las facturas sin pagar (cualquier fecha) — nunca una resta de
+      // Facturado-Cobrado, esos dos son conceptos distintos (bruto vs.
+      // neto-solo-si-pagada) y restarlos da un número que parece plausible
+      // pero está mal.
+      const totalPendienteReal = ranking.reduce((s, c) => s + c.pendienteReal, 0);
 
       const lineasClientes = top.map((c, i) => {
         const pct = totalFacturado > 0 ? Math.round((c.facturado / totalFacturado) * 100) : 0;
-        return `${i + 1}. ${c.nombre} — Facturado $${c.facturado.toFixed(2)} (${pct}%), Cobrado $${c.cobrado.toFixed(2)}, ${c.count} factura(s)`;
+        return `${i + 1}. ${c.nombre} — Facturado (periodo) $${c.facturado.toFixed(2)} (${pct}%), Cobrado (periodo) $${c.cobrado.toFixed(2)}, Pendiente real (cartera completa, cualquier fecha) $${c.pendienteReal.toFixed(2)}, ${c.count} factura(s) en el periodo`;
       });
 
       vencidas.sort((a, b) => b.dias - a.dias);
@@ -3672,11 +3724,14 @@ export async function executeVictorTool(
       return {
         ok: true,
         message:
-          `Ingresos por cliente entre ${desde} y ${hasta} (${alcance.alcanceLabel}): Facturado total $${totalFacturado.toFixed(2)}, ` +
-          `Cobrado $${totalCobrado.toFixed(2)}, Pendiente por cobrar $${totalPendiente.toFixed(2)}.\n\nTop clientes:\n${lineasClientes.join("\n")}` +
+          `Ingresos por cliente entre ${desde} y ${hasta} (${alcance.alcanceLabel}): Facturado total del periodo $${totalFacturado.toFixed(2)} (bruto, ANTES de retención), ` +
+          `Cobrado del periodo $${totalCobrado.toFixed(2)}.\n\n` +
+          `Pendiente por cobrar REAL (toda la cartera sin pagar, sin importar cuándo se emitió, YA neto de retención — este es el número que le debes decir al usuario si pregunta "quién me debe" o "cuánto tengo pendiente"): $${totalPendienteReal.toFixed(2)}.\n` +
+          `IMPORTANTE: nunca calcules "pendiente" restando Facturado-Cobrado de esta respuesta — usa siempre el campo "Pendiente real" de cada cliente o el total de arriba, ya vienen correctos (netos de retención, e incluyen facturas de CUALQUIER fecha, no solo del periodo consultado).\n\n` +
+          `Top clientes por pendiente real:\n${lineasClientes.join("\n")}` +
           (vencidas.length > 0
-            ? `\n\nFacturas VENCIDAS (${vencidas.length}):\n${lineasVencidas.join("\n")}${vencidas.length > 10 ? `\n(+ ${vencidas.length - 10} más)` : ""}`
-            : "\n\nNo hay facturas vencidas en este rango."),
+            ? `\n\nFacturas VENCIDAS (${vencidas.length}, de toda la cartera, no solo del periodo):\n${lineasVencidas.join("\n")}${vencidas.length > 10 ? `\n(+ ${vencidas.length - 10} más)` : ""}`
+            : "\n\nNo hay facturas vencidas."),
       };
     }
 
@@ -3849,20 +3904,28 @@ export async function executeVictorTool(
       const margenYTD = ingresoYTD - gastoYTD;
       const margenProyectado = ingresoProyectado - gastoProyectado;
 
-      // Cuentas por cobrar pendientes (Facturación) — facturado - cobrado
-      // de facturas no-borrador, mismo cálculo que reporte_ingresos_por_cliente
-      // pero sin desglose por cliente, solo el total pendiente.
+      // Cuentas por cobrar pendientes (Facturación).
+      // Fix (17 sept 2026, mismo bug que reporte_ingresos_por_cliente reportado
+      // por Joel): NO se deriva como Facturado(bruto)-Cobrado(neto) porque eso
+      // deja exactamente el monto de la retención como "pendiente" en facturas
+      // ya pagadas al 100%. Se calcula el pendiente REAL factura por factura:
+      // $0 si está pagada, si no total NETO (ya sin retención) menos depósito.
+      // Tampoco se restringe por fecha — se incluye CUALQUIER factura no-borrador
+      // pendiente sin importar cuándo se emitió.
       const { data: facturas, error: facturasError } = await supabase
         .from("invoices")
-        .select("subtotal, total, estado, entity_id")
+        .select("subtotal, total, deposito_monto, estado, entity_id")
         .eq("owner_id", ownerId)
         .neq("estado", "borrador")
         .in("entity_id", idsObjetivo);
       if (facturasError) return { ok: false, message: `No se pudo calcular las cuentas por cobrar: ${facturasError.message}` };
 
-      const totalFacturado = (facturas ?? []).reduce((s, f) => s + Number(f.subtotal), 0);
-      const totalCobrado = (facturas ?? []).reduce((s, f) => (f.estado === "pagada" ? s + Number(f.total) : s), 0);
-      const pendienteCobrar = Math.max(0, totalFacturado - totalCobrado);
+      function pendienteRealDeFacturaProyeccion(f: { estado: string; total: number; deposito_monto: number | null }): number {
+        if (f.estado === "pagada") return 0;
+        return Math.max(0, Number(f.total) - Number(f.deposito_monto ?? 0));
+      }
+
+      const pendienteCobrar = (facturas ?? []).reduce((s, f) => s + pendienteRealDeFacturaProyeccion(f), 0);
 
       const margenSiCobraPendiente = margenYTD + pendienteCobrar;
       const margenProyectadoConPendiente = margenProyectado + pendienteCobrar;
@@ -3872,13 +3935,14 @@ export async function executeVictorTool(
         message:
           `Proyección de margen para ${alcanceLabel} (año ${anioActualStrLocal}):\n` +
           `- YTD real: Ingreso $${ingresoYTD.toFixed(2)}, Gasto $${gastoYTD.toFixed(2)}, Margen $${margenYTD.toFixed(2)}.\n` +
-          `- Cuentas por cobrar pendientes (facturado no cobrado): $${pendienteCobrar.toFixed(2)}.\n` +
+          `- Cuentas por cobrar pendientes (cartera completa, netas de retención, cualquier fecha de emisión): $${pendienteCobrar.toFixed(2)}.\n` +
           `- Si cobra TODO lo pendiente hoy, el margen YTD quedaría en $${margenSiCobraPendiente.toFixed(2)}.\n` +
           `- Proyección a fin de año (ritmo real de ingreso/gasto de los últimos ${diasTranscurridosAño} días, sin contar el pendiente): ` +
           `Ingreso $${ingresoProyectado.toFixed(2)}, Gasto $${gastoProyectado.toFixed(2)}, Margen $${margenProyectado.toFixed(2)}.\n` +
           `- Proyección a fin de año SUMANDO el cobro del pendiente: Margen $${margenProyectadoConPendiente.toFixed(2)}.\n\n` +
           `Aclárale al usuario que la proyección de fin de año asume que el ritmo de ingreso/gasto de lo que va del año se mantiene igual — ` +
-          `es un estimado, no una promesa, y que el pendiente por cobrar solo se hace realidad si el cliente efectivamente paga.`,
+          `es un estimado, no una promesa, y que el pendiente por cobrar solo se hace realidad si el cliente efectivamente paga. ` +
+          `IMPORTANTE: el monto de "Cuentas por cobrar pendientes" ya viene correcto (neto de retención, solo facturas no pagadas, de cualquier fecha) — no lo recalcules restando Facturado-Cobrado.`,
       };
     }
 
