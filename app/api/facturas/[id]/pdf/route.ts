@@ -325,11 +325,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     // Joel el 1 sept 2026. Cada renglón crece si tiene descripción.
     if (it.detalle) {
       texto(String(it.detalle).slice(0, 60), colDesc + 5, y - 11, { size: 8, color: gris });
-      y -= 29;
+      y -= 31;
     } else {
-      y -= 18;
+      y -= 20;
     }
-    page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: width - margin, y: y + 6 }, thickness: 0.5, color: lineaGris });
+    // La línea separadora se dibuja relativa a "y" (que ya es la posición de
+    // la SIGUIENTE fila), así que el offset tiene que dejar más aire que el
+    // ascenso del texto (~7.2pt a 10px Helvetica) o si no la línea le queda
+    // pegada/encima al texto del siguiente renglón — bug real reportado por
+    // Joel el 17 sept 2026 (con 2+ líneas de servicio se veían montadas).
+    // Antes esto era "+6", que dejaba un espacio negativo (6 - 7.2 = -1.2pt).
+    page.drawLine({ start: { x: margin, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 0.5, color: lineaGris });
   }
 
   y -= 10;

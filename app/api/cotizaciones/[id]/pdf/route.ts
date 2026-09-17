@@ -250,11 +250,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     // (Invoice 0001540.pdf), pedido de Joel el 1 sept 2026.
     if (it.detalle) {
       texto(String(it.detalle).slice(0, 60), colDesc + 5, y - 11, { size: 8, color: gris });
-      y -= 29;
+      y -= 31;
     } else {
-      y -= 18;
+      y -= 20;
     }
-    page.drawLine({ start: { x: margin, y: y + 6 }, end: { x: width - margin, y: y + 6 }, thickness: 0.5, color: lineaGris });
+    // Mismo fix que en el PDF de facturas (17 sept 2026): el offset de "+6"
+    // dejaba la línea separadora pegada/montada sobre el texto de la
+    // siguiente fila cuando había 2+ líneas de servicio, porque el ascenso
+    // del texto a 10px (~7.2pt) superaba ese margen.
+    page.drawLine({ start: { x: margin, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 0.5, color: lineaGris });
   }
 
   y -= 10;
