@@ -388,7 +388,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     input_schema: {
       type: "object",
       properties: {
-        dias: { type: "number", description: "Ventana de días hacia adelante a revisar. Si no se especifica, usa 30." },
+        dias: { type: "number", description: "Ventana de días hacia adelante a revisar. Si no se especifica, usa 30. Tope real: 400 días (documentos con vencimiento más lejano no se pueden traer)." },
       },
       required: [],
     },
@@ -872,7 +872,11 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "para Hacienda), y neto pagado — para un rango de fechas y una entidad de negocio. Mismo cálculo exacto que " +
       "usa la pantalla Pagos → Reportes y su export CSV/PDF. OBLIGATORIO: úsala SIEMPRE que el usuario pregunte " +
       "cuánto le ha pagado a un contratista, cuánto ha retenido en total para el 480.6A/B, o pida un análisis de " +
-      "gastos de contratistas/nómina externa del negocio — NUNCA inventes esos números. Si el usuario tiene más " +
+      "gastos de contratistas/nómina externa del negocio — NUNCA inventes esos números. También ÚSALA para " +
+      "explicar qué compone un depósito o lote bancario específico (ej. una transacción de Pagos/nómina que " +
+      "salió del banco): pon desde=hasta=esa fecha exacta y usa el detalle individual que trae la respuesta — " +
+      "NUNCA asumas ni extrapoles que un monto bancario pasado se va a repetir, los pagos se ejecutan manualmente " +
+      "y varían cada vez. Si el usuario tiene más " +
       "de una entidad y no especifica cuál, esta herramienta consulta TODAS las entidades juntas por default (no " +
       "existe alcance 'Personal' aquí, Pagos es exclusivamente de negocio). Si no da un período, usa el mes en " +
       "curso; si dice 'este trimestre', 'este año', etc., calcula tú las fechas con la fecha real de hoy.",
@@ -2509,8 +2513,15 @@ export async function executeVictorTool(
     }
 
     case "revisar_documentos_por_vencer": {
+      // Fix (19 sept 2026, bug real reportado por Joel): el tope estaba en
+      // 120 días, así que aunque VICTOR pidiera una ventana más ancha (ej.
+      // 400 días) para buscar un documento con vencimiento a más de un año
+      // (marbete de motora, vence 8/31/2027), el tope lo cortaba en
+      // silencio y el documento JAMÁS podía aparecer sin importar qué
+      // ventana se pasara. Subido a 400 para cubrir documentos con
+      // renovación anual o multianual.
       const diasVentana = Number.isFinite(Number(input.dias)) && Number(input.dias) > 0
-        ? Math.min(Number(input.dias), 120)
+        ? Math.min(Number(input.dias), 400)
         : 30;
       // fechaHoyPR()/diasHastaPR() en vez de new Date() crudo — ver la nota
       // grande junto a diasHastaPR() en lib/hora-pr.ts: comparar un
@@ -3775,7 +3786,7 @@ export async function executeVictorTool(
 
       let query = supabase
         .from("vendor_retenciones")
-        .select("vendor_id, gross_amount, retention_amount, net_paid, period_end, vendors(name, tax_id)")
+        .select("vendor_id, gross_amount, retention_amount, net_paid, period_end, created_at, vendors(name, tax_id)")
         .eq("owner_id", ownerId)
         .gte("period_end", desde)
         .lte("period_end", hasta);
@@ -3815,11 +3826,34 @@ export async function executeVictorTool(
         (c) => `- ${c.nombre} — Bruto $${c.bruto.toFixed(2)}, Retenido $${c.retenido.toFixed(2)}, Neto $${c.neto.toFixed(2)} (${c.count} pago(s))`
       );
 
+      // Fix (19 sept 2026, bug real reportado por Joel): VICTOR vio un lote
+      // ACH de $4,043.86 salir del banco un día y lo trató como si fuera un
+      // monto FIJO de nómina que se repite cada 2 semanas, cuando en
+      // realidad es la suma variable de varios pagos de Pagos ejecutados
+      // ese mismo día (contratistas + el draw del dueño), y el monto cambia
+      // según a quién se le pague ese ciclo. Se añade aquí el desglose
+      // INDIVIDUAL fecha por fecha (no solo agregado por contratista) para
+      // que VICTOR pueda explicar exactamente qué compone un depósito/lote
+      // bancario específico en vez de adivinar un patrón.
+      const detalleIndividual = (retenciones as unknown as {
+        vendor_id: string;
+        net_paid: number;
+        created_at: string;
+        vendors: { name: string; tax_id: string | null } | null;
+      }[])
+        .slice()
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+        .map((r) => `${(r.created_at || "").slice(0, 10)} — ${r.vendors?.name ?? "Contratista eliminado"}: neto $${Number(r.net_paid).toFixed(2)}`)
+        .join("; ");
+
       return {
         ok: true,
         message:
           `Pagos a contratistas entre ${desde} y ${hasta} (${alcance.alcanceLabel}): Bruto $${totalBruto.toFixed(2)}, ` +
-          `Retenido (crédito para remesar) $${totalRetenido.toFixed(2)}, Neto pagado $${totalNeto.toFixed(2)}.\n\n${lineas.join("\n")}`,
+          `Retenido (crédito para remesar) $${totalRetenido.toFixed(2)}, Neto pagado $${totalNeto.toFixed(2)}.\n\n` +
+          `Por contratista:\n${lineas.join("\n")}\n\n` +
+          `Detalle individual por fecha (usa esto para explicar qué compone un depósito/lote bancario de una fecha específica — filtra por la fecha exacta que te interese, no asumas un patrón fijo): ${detalleIndividual}\n\n` +
+          `REGLA DURA: la nómina/los pagos a contratistas y el draw del dueño se ejecutan MANUALMENTE desde Pagos, no siguen un monto fijo automático — el usuario decide cada vez a quién paga y cuánto se asigna a sí mismo. NUNCA extrapoles un "monto de nómina" futuro a partir del patrón de montos bancarios pasados (ej. "la próxima corrida será ~$X"). Si el usuario pregunta cuánto será la próxima corrida de pago, dile que eso lo define él mismo cuando la ejecute, y ofrécete a calcular el impacto en cash una vez él te dé el monto real. Tampoco confundas el TOTAL pagado a todos (contratistas + dueño) con lo que le queda a el dueño — son cosas distintas.`,
       };
     }
 
@@ -3930,19 +3964,48 @@ export async function executeVictorTool(
       const margenSiCobraPendiente = margenYTD + pendienteCobrar;
       const margenProyectadoConPendiente = margenProyectado + pendienteCobrar;
 
+      // Cash real hoy en las cuentas líquidas (depository) de esta entidad.
+      // Fix (19 sept 2026, bug real reportado por Joel): VICTOR le presentó
+      // "$6,696.34 de margen" como si fuera plata disponible en el banco, y
+      // Joel tenía $2,658.90 reales en la cuenta. "Margen" es ganancia
+      // contable acumulada del año (ingreso - gasto), NO el saldo de hoy —
+      // ya se ha ido gastando/transfiriendo durante el año. Se trae el cash
+      // real aquí mismo para que VICTOR nunca tenga que adivinar ni mezclar
+      // los dos conceptos.
+      const [{ data: plaidCash }, { data: manualCash }] = await Promise.all([
+        supabase
+          .from("plaid_accounts")
+          .select("current_balance, type, entity_id")
+          .eq("owner_id", ownerId)
+          .in("entity_id", idsObjetivo)
+          .eq("type", "depository"),
+        supabase
+          .from("manual_accounts")
+          .select("current_balance, type, entity_id")
+          .eq("owner_id", ownerId)
+          .in("entity_id", idsObjetivo)
+          .eq("type", "depository"),
+      ]);
+      const cashReal =
+        (plaidCash ?? []).reduce((s, c) => s + Number(c.current_balance || 0), 0) +
+        (manualCash ?? []).reduce((s, c) => s + Number(c.current_balance || 0), 0);
+
       return {
         ok: true,
         message:
           `Proyección de margen para ${alcanceLabel} (año ${anioActualStrLocal}):\n` +
-          `- YTD real: Ingreso $${ingresoYTD.toFixed(2)}, Gasto $${gastoYTD.toFixed(2)}, Margen $${margenYTD.toFixed(2)}.\n` +
+          `- CASH REAL disponible hoy en cuentas de banco: $${cashReal.toFixed(2)}. Este es el único número que representa dinero que existe hoy en el banco.\n` +
+          `- Margen YTD (ganancia contable acumulada del año = dinero que ENTRÓ menos dinero que SALIÓ del banco, según las transacciones registradas): Ingreso $${ingresoYTD.toFixed(2)}, Gasto $${gastoYTD.toFixed(2)}, Margen $${margenYTD.toFixed(2)}. ESTO NO ES SALDO DISPONIBLE — es cuánto ganó el negocio en lo que va del año, y esa ganancia ya se fue gastando/transfiriendo/pagando cosas durante el año, por eso casi nunca coincide con el cash real de arriba.\n` +
+          `- Nota sobre la fuente del Ingreso YTD: este número sale de transacciones bancarias reales (dinero que efectivamente tocó la cuenta), NO del módulo de Facturación. Puede no coincidir con "Cobrado" de Facturación (que refleja facturas marcadas como pagadas manualmente) — son dos fuentes distintas y es normal que difieran. Si el usuario pregunta específicamente por facturación (cuánto ha facturado o cobrado por cliente), usa reporte_ingresos_por_cliente en vez de este número.\n` +
           `- Cuentas por cobrar pendientes (cartera completa, netas de retención, cualquier fecha de emisión): $${pendienteCobrar.toFixed(2)}.\n` +
-          `- Si cobra TODO lo pendiente hoy, el margen YTD quedaría en $${margenSiCobraPendiente.toFixed(2)}.\n` +
+          `- Si cobra TODO lo pendiente hoy, el margen YTD quedaría en $${margenSiCobraPendiente.toFixed(2)} (de nuevo, esto es margen contable, no cash — el cash real subiría en $${pendienteCobrar.toFixed(2)} desde $${cashReal.toFixed(2)} cuando eso se cobre).\n` +
           `- Proyección a fin de año (ritmo real de ingreso/gasto de los últimos ${diasTranscurridosAño} días, sin contar el pendiente): ` +
           `Ingreso $${ingresoProyectado.toFixed(2)}, Gasto $${gastoProyectado.toFixed(2)}, Margen $${margenProyectado.toFixed(2)}.\n` +
           `- Proyección a fin de año SUMANDO el cobro del pendiente: Margen $${margenProyectadoConPendiente.toFixed(2)}.\n\n` +
           `Aclárale al usuario que la proyección de fin de año asume que el ritmo de ingreso/gasto de lo que va del año se mantiene igual — ` +
           `es un estimado, no una promesa, y que el pendiente por cobrar solo se hace realidad si el cliente efectivamente paga. ` +
-          `IMPORTANTE: el monto de "Cuentas por cobrar pendientes" ya viene correcto (neto de retención, solo facturas no pagadas, de cualquier fecha) — no lo recalcules restando Facturado-Cobrado.`,
+          `IMPORTANTE: el monto de "Cuentas por cobrar pendientes" ya viene correcto (neto de retención, solo facturas no pagadas, de cualquier fecha) — no lo recalcules restando Facturado-Cobrado. ` +
+          `REGLA DURA: si el usuario pregunta cuánto puede gastar, sacar, o asignarse hoy, la respuesta SIEMPRE se basa en CASH REAL ($${cashReal.toFixed(2)}) menos lo que falte por pagar antes de esa fecha — NUNCA en el margen ni en ninguna proyección. El margen sirve para hablar de qué tan rentable es el negocio, no de qué tanto dinero hay disponible ahora mismo.`,
       };
     }
 
