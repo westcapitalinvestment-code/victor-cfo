@@ -311,3 +311,19 @@ body {
 .vc-markdown li { margin-bottom: 2px; }
 .vc-markdown strong { font-weight: 600; }
 .vc-markdown a { color: #1D9E75; text-decoration: underline; }
+
+/* Tablas de VICTOR (20 sept 2026, reportado por Joel: "cuando Victor pone
+   comparaciones se sale de las líneas del chat") — un <table> normal no
+   respeta el ancho de la burbuja (max-w-[80%] del panel de chat, que ya de
+   por sí es angosto — 360px en el panel completo, menos en celular), así
+   que una tabla de varias columnas (ej. comparación de tarjetas con
+   Balance/APR/Pago mínimo/Interés) se salía del borde sin control. display:
+   block + overflow-x:auto en el <table> mismo (no en toda la burbuja)
+   contiene el scroll horizontal SOLO a la tabla — el resto del mensaje
+   queda intacto — y el font-size más chico deja ver más columnas antes de
+   tener que deslizar. */
+.vc-markdown table { display: block; overflow-x: auto; max-width: 100%; border-collapse: collapse; font-size: 11px; white-space: nowrap; margin: 4px 0 8px; -webkit-overflow-scrolling: touch; }
+.vc-markdown table:last-child { margin-bottom: 0; }
+.vc-markdown th, .vc-markdown td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+.vc-markdown th { font-weight: 600; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .2px; }
+.vc-markdown tr:last-child td { border-bottom: none; }
