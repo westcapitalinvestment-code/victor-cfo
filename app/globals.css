@@ -278,7 +278,20 @@ body {
    celular como un swipe de sistema y cambiaba de página/app. "contain"
    detiene el rebote justo en el borde de este elemento en vez de dejarlo
    seguir hacia la página completa. */
-.vc-bnav-scroll { display: flex; overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; scrollbar-width: none; padding: 0 8px; gap: 2px; justify-content: center; }
+/* justify-content: flex-start, no center (19 sept 2026, reportado por Joel:
+   "el nav queda como en el centro... hay que deslizarlo para ver Home").
+   Con justify-content:center en un flex overflow-x:auto, cuando el
+   contenido es más ancho que la pantalla (siempre — son 10-11 íconos), el
+   navegador arranca el scroll YA centrado en vez de en 0, así que Home/
+   Transacciones/Metas (los primeros íconos) quedan fuera de vista desde
+   que abres la app. flex-start arranca el scroll pegado a la izquierda,
+   como cualquier lista horizontal normal. En desktop (media query abajo)
+   sí se centra, porque ahí el nav normalmente cabe completo sin overflow
+   y se ve mejor centrado. */
+.vc-bnav-scroll { display: flex; overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; scrollbar-width: none; padding: 0 8px; gap: 2px; justify-content: flex-start; }
+@media (min-width: 1024px) {
+  .vc-bnav-scroll { justify-content: center; }
+}
 .vc-nb { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; background: none; border: none; padding: 6px 10px; border-radius: 10px; transition: all .15s; flex-shrink: 0; min-width: 60px; text-decoration: none; }
 .vc-nb:hover { background: rgba(29,158,117,.06); }
 .vc-nb i { font-size: 23px; color: var(--muted); transition: color .15s; }
