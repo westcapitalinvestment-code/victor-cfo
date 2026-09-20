@@ -31,9 +31,20 @@ export const metadata: Metadata = {
 // pegado ahí, generando esos saltos/desajustes. Con "cover" la app pinta
 // hasta el borde real de la pantalla y nosotros mismos controlamos el
 // espaciado seguro con env(safe-area-inset-bottom) en el bottom nav.
+// width/initialScale (19 sept 2026, reportado por Joel: la app "se pone
+// grande" al abrirla y hay que encogerla a mano) — faltaban del todo. Sin
+// initialScale explícito, el navegador decide el zoom inicial por su
+// cuenta y no siempre acierta en "cover a la pantalla completa sin
+// zoom" — sobre todo en la PWA instalada. maximumScale se deja en 5 (no en
+// 1) a propósito: bloquear el pinch-zoom del usuario es un problema de
+// accesibilidad, y con el fix de font-size 16px en .vc-input (mismo commit)
+// ya no debería hacer falta forzarlo.
 export const viewport: Viewport = {
   themeColor: "#1D9E75",
   viewportFit: "cover",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 // Script bloqueante y mínimo — aplica la clase "dark" al <html> ANTES de

@@ -141,7 +141,19 @@ body {
   border: .5px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
-  font-size: 13px;
+  /* 16px, no 13px (19 sept 2026, reportado por Joel: "se pone grande y hay
+     que estar encogiendola... cuando abre el chat vuelve otra vez a
+     agrandarse"). Root cause real: iOS hace zoom automático de TODA la
+     página cuando enfocas un input/textarea con font-size menor a 16px —
+     es un comportamiento fijo de Safari/WebKit, no un bug nuestro, pero
+     .vc-input es la clase compartida de TODOS los inputs de la app (chat,
+     Registrar pago, formularios de Facturación, etc.), así que cada vez
+     que Joel tocaba cualquier campo, el teléfono entero se zoomeaba y se
+     quedaba así — de ahí el "hay que estar jugando con ella para
+     mantenerla estable" y el look de "disparate" al registrar un pago.
+     16px elimina el zoom automático de raíz, sin depender de bloquear el
+     pinch-zoom del usuario (eso rompería accesibilidad). */
+  font-size: 16px;
   color: var(--text);
   outline: none;
 }
