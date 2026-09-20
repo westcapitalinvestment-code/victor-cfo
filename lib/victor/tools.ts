@@ -917,6 +917,84 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    // Nace de un caso real (20 sept 2026): Joel le explicó a VICTOR a mano el
+    // ciclo mensual completo de VIP Medical (3 doctores que pagan montos fijos
+    // a principio de mes, nómina el 30 y otra vez el 14) y le dijo directo:
+    // "tu trabajo es mirarla, trackearla y recomendar... tienes que aprender
+    // patrones y ejecutar" — para CUALQUIER usuario, no solo este. Antes,
+    // VICTOR no tenía dónde guardar ese conocimiento entre conversaciones —
+    // cada turno arrancaba de cero. Este trío de herramientas (guardar/listar/
+    // detectar) le da memoria real de patrones recurrentes.
+    name: "guardar_patron_recurrente",
+    description:
+      "Guarda (o actualiza, si ya existe uno muy parecido) un ingreso o gasto RECURRENTE del usuario — un " +
+      "cliente que paga lo mismo cada mes, la nómina que se repite cada 2 semanas, una suscripción fija, etc. " +
+      "Úsala en el momento EXACTO en que el usuario te diga algo así en conversación (ej. 'todos los " +
+      "comienzos de mes me paga el Dr. Serrano $1,410' o 'la nómina la pago el 30 y me vuelve a tocar el 14') " +
+      "— no esperes a que lo repita ni se lo preguntes de vuelta, guárdalo de inmediato con estado 'confirmado' " +
+      "porque el usuario ya te lo afirmó directamente. También la usas tú mismo para guardar un patrón que " +
+      "detectaste con detectar_patrones_recurrentes, con estado 'sugerido' hasta que el usuario lo confirme. " +
+      "Si ya existe un patrón con la misma contraparte y tipo para esta entidad, esta llamada lo ACTUALIZA en " +
+      "vez de duplicarlo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre de la entidad de negocio a la que pertenece este patrón. Omite este campo para un patrón Personal.",
+        },
+        tipo: { type: "string", enum: ["ingreso", "gasto"], description: "Si este patrón es dinero que ENTRA o que SALE." },
+        contraparte: { type: "string", description: "Quién paga o a quién se le paga — ej. 'Dr. Serrano', 'Nómina Gretchen + Derek', 'T-Mobile'." },
+        monto_esperado: { type: "number", description: "Monto típico (o el más reciente, si varía un poco cada vez)." },
+        monto_min: { type: "number", description: "Si el monto varía de un ciclo a otro (ej. nómina), el mínimo típico." },
+        monto_max: { type: "number", description: "Si el monto varía de un ciclo a otro, el máximo típico." },
+        frecuencia: { type: "string", enum: ["mensual", "quincenal", "semanal", "personalizado"], description: "Con qué frecuencia se repite." },
+        dia_mes_esperado: { type: "number", description: "Día del mes (1-31) en que típicamente ocurre. Para 'quincenal', el PRIMERO de los dos días." },
+        dias_mes_adicional: { type: "number", description: "Solo para 'quincenal': el SEGUNDO día del mes en que ocurre (ej. nómina el 30 Y el 14 → dia_mes_esperado=30, dias_mes_adicional=14)." },
+        descripcion: { type: "string", description: "Detalle libre opcional." },
+        notas: { type: "string", description: "Cualquier contexto adicional que el usuario haya dado." },
+        estado: { type: "string", enum: ["confirmado", "sugerido", "descartado"], description: "'confirmado' si el usuario lo afirmó directamente (default). 'sugerido' solo cuando TÚ lo detectas de transacciones y aún no lo ha confirmado. 'descartado' para marcar que un sugerido resultó ser falso positivo." },
+      },
+      required: ["tipo", "contraparte", "frecuencia"],
+    },
+  },
+  {
+    name: "listar_patrones_recurrentes",
+    description:
+      "Trae los patrones recurrentes de ingreso/gasto ya guardados (confirmados y, si se pide, sugeridos " +
+      "pendientes de confirmar) — úsala ANTES de proyectar cash flow, calcular un draw, o responder cualquier " +
+      "pregunta sobre 'cuánto entra/sale normalmente' en vez de recalcular todo desde las transacciones crudas " +
+      "cada vez. También úsala al inicio de una conversación de negocio si nunca has revisado los patrones de " +
+      "esta entidad, para saber qué ya sabes y qué todavía no.",
+    input_schema: {
+      type: "object",
+      properties: {
+        entidad_nombre: { type: "string", description: "Nombre de la entidad de negocio. Omite para Personal, o usa 'todas' para Personal + todas las entidades." },
+        incluir_sugeridos: { type: "boolean", description: "true para incluir también los detectados automáticamente que aún no se han confirmado (default: false, solo confirmados)." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "detectar_patrones_recurrentes",
+    description:
+      "Escanea las transacciones bancarias reales de los últimos meses buscando ingresos o gastos que se " +
+      "repiten (mismo monto aproximado, misma contraparte, mismo día del mes aproximado, en 2 o más meses " +
+      "distintos) y guarda los que encuentra como patrones 'sugeridos' nuevos (no duplica los que ya existen). " +
+      "Úsala cuando el usuario pida algo como 'revisa mis patrones' o '¿qué ingresos recurrentes tengo?', o " +
+      "proactivamente la primera vez que trabajes a fondo con el cash flow de una entidad que todavía no tiene " +
+      "ningún patrón guardado. Después de detectar, cuéntale al usuario lo que encontraste y pídele que " +
+      "confirme cada uno (con guardar_patron_recurrente, estado 'confirmado') antes de usarlos en proyecciones — " +
+      "un patrón 'sugerido' nunca debe tratarse como un hecho confirmado.",
+    input_schema: {
+      type: "object",
+      properties: {
+        entidad_nombre: { type: "string", description: "Nombre de la entidad de negocio. Omite para Personal." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "consultar_estrategia_financiera",
     description:
       "Trae el desarrollo COMPLETO de una de las 25 estrategias financieras avanzadas del catálogo de " +
@@ -4006,6 +4084,280 @@ export async function executeVictorTool(
           `es un estimado, no una promesa, y que el pendiente por cobrar solo se hace realidad si el cliente efectivamente paga. ` +
           `IMPORTANTE: el monto de "Cuentas por cobrar pendientes" ya viene correcto (neto de retención, solo facturas no pagadas, de cualquier fecha) — no lo recalcules restando Facturado-Cobrado. ` +
           `REGLA DURA: si el usuario pregunta cuánto puede gastar, sacar, o asignarse hoy, la respuesta SIEMPRE se basa en CASH REAL ($${cashReal.toFixed(2)}) menos lo que falte por pagar antes de esa fecha — NUNCA en el margen ni en ninguna proyección. El margen sirve para hablar de qué tan rentable es el negocio, no de qué tanto dinero hay disponible ahora mismo.`,
+      };
+    }
+
+    case "guardar_patron_recurrente": {
+      const tipo = input.tipo === "ingreso" || input.tipo === "gasto" ? input.tipo : null;
+      const contraparte = typeof input.contraparte === "string" ? input.contraparte.trim() : "";
+      const frecuenciaInput = String(input.frecuencia ?? "");
+      const frecuencia = ["mensual", "quincenal", "semanal", "personalizado"].includes(frecuenciaInput) ? frecuenciaInput : null;
+      if (!tipo || !contraparte || !frecuencia) {
+        return { ok: false, message: "Faltan datos — necesito tipo ('ingreso'/'gasto'), contraparte, y frecuencia para guardar el patrón." };
+      }
+
+      const alcance = await resolverAlcanceTransacciones(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!alcance.ok) return alcance;
+      if (alcance.modo === "todas") {
+        return {
+          ok: false,
+          message:
+            "Un patrón recurrente pertenece a UNA sola entidad (o a Personal) — pregúntale al usuario a cuál de sus entidades aplica y vuelve a llamar con ese nombre en entidad_nombre.",
+        };
+      }
+      const entityId = alcance.entityId;
+
+      const estadoInput = String(input.estado ?? "");
+      const estado = ["confirmado", "sugerido", "descartado"].includes(estadoInput) ? estadoInput : "confirmado";
+      const fuente = estado === "sugerido" ? "detectado_automatico" : "usuario_dijo";
+
+      const montoEsperado = typeof input.monto_esperado === "number" ? input.monto_esperado : null;
+      const montoMin = typeof input.monto_min === "number" ? input.monto_min : null;
+      const montoMax = typeof input.monto_max === "number" ? input.monto_max : null;
+      const diaMes = typeof input.dia_mes_esperado === "number" ? Math.round(input.dia_mes_esperado) : null;
+      const diaMesAdicional = typeof input.dias_mes_adicional === "number" ? Math.round(input.dias_mes_adicional) : null;
+      const descripcion = typeof input.descripcion === "string" ? input.descripcion.trim() || null : null;
+      const notas = typeof input.notas === "string" ? input.notas.trim() || null : null;
+
+      // Busca un patrón muy parecido ya guardado (misma entidad/Personal, mismo
+      // tipo, contraparte parecida) para actualizarlo en vez de duplicarlo.
+      const { data: existentes, error: buscarError } = entityId
+        ? await supabase.from("patrones_recurrentes").select("id, contraparte").eq("owner_id", ownerId).eq("tipo", tipo).eq("entity_id", entityId)
+        : await supabase.from("patrones_recurrentes").select("id, contraparte").eq("owner_id", ownerId).eq("tipo", tipo).is("entity_id", null);
+      if (buscarError) return { ok: false, message: `No se pudo guardar el patrón: ${buscarError.message}` };
+
+      const contraparteNorm = contraparte.toLowerCase();
+      const parecido = (existentes ?? []).find(
+        (p) =>
+          p.contraparte.toLowerCase() === contraparteNorm ||
+          p.contraparte.toLowerCase().includes(contraparteNorm) ||
+          contraparteNorm.includes(p.contraparte.toLowerCase())
+      );
+
+      const campos = {
+        owner_id: ownerId,
+        entity_id: entityId,
+        tipo,
+        contraparte,
+        descripcion,
+        monto_esperado: montoEsperado,
+        monto_min: montoMin,
+        monto_max: montoMax,
+        frecuencia,
+        dia_mes_esperado: diaMes,
+        dias_mes_adicional: diaMesAdicional,
+        notas,
+        estado,
+        fuente,
+      };
+
+      const montoTxt = montoEsperado != null ? `, ~$${montoEsperado.toFixed(2)}` : "";
+      if (parecido) {
+        const { error: updateError } = await supabase.from("patrones_recurrentes").update(campos).eq("id", parecido.id);
+        if (updateError) return { ok: false, message: `No se pudo actualizar el patrón: ${updateError.message}` };
+        return {
+          ok: true,
+          message: `Patrón actualizado: ${contraparte} (${tipo}, ${frecuencia}${montoTxt}) bajo ${alcance.alcanceLabel}, estado ${estado}.`,
+        };
+      }
+
+      const { error: insertError } = await supabase.from("patrones_recurrentes").insert(campos);
+      if (insertError) return { ok: false, message: `No se pudo guardar el patrón: ${insertError.message}` };
+      return {
+        ok: true,
+        message: `Patrón guardado: ${contraparte} (${tipo}, ${frecuencia}${montoTxt}) bajo ${alcance.alcanceLabel}, estado ${estado}.`,
+      };
+    }
+
+    case "listar_patrones_recurrentes": {
+      const alcance = await resolverAlcanceTransacciones(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!alcance.ok) return alcance;
+      const incluirSugeridos = input.incluir_sugeridos === true;
+      const estados = incluirSugeridos ? ["confirmado", "sugerido"] : ["confirmado"];
+
+      const baseSelect = "tipo, contraparte, monto_esperado, monto_min, monto_max, frecuencia, dia_mes_esperado, dias_mes_adicional, estado, notas";
+      const { data: patrones, error } =
+        alcance.modo === "personal"
+          ? await supabase.from("patrones_recurrentes").select(baseSelect).eq("owner_id", ownerId).in("estado", estados).is("entity_id", null).order("tipo")
+          : alcance.modo === "entidad"
+          ? await supabase.from("patrones_recurrentes").select(baseSelect).eq("owner_id", ownerId).in("estado", estados).eq("entity_id", alcance.entityId).order("tipo")
+          : await supabase.from("patrones_recurrentes").select(baseSelect).eq("owner_id", ownerId).in("estado", estados).order("tipo");
+      if (error) return { ok: false, message: `No se pudieron traer los patrones: ${error.message}` };
+
+      if (!patrones || patrones.length === 0) {
+        return {
+          ok: true,
+          message: `No hay patrones recurrentes guardados todavía para ${alcance.alcanceLabel}. Si el usuario te acaba de contar uno en conversación, guárdalo de inmediato con guardar_patron_recurrente. Si nunca has revisado su historial de transacciones para buscar patrones, puedes usar detectar_patrones_recurrentes.`,
+        };
+      }
+
+      const lineas = patrones.map((p) => {
+        const montoTxt =
+          p.monto_min != null && p.monto_max != null && p.monto_min !== p.monto_max
+            ? `$${Number(p.monto_min).toFixed(2)}-$${Number(p.monto_max).toFixed(2)}`
+            : p.monto_esperado != null
+            ? `$${Number(p.monto_esperado).toFixed(2)}`
+            : "monto no especificado";
+        const diaTxt = p.dia_mes_esperado
+          ? p.dias_mes_adicional
+            ? `días ${p.dia_mes_esperado} y ${p.dias_mes_adicional} de cada mes`
+            : `día ${p.dia_mes_esperado} de cada mes`
+          : "";
+        const etiquetaEstado = p.estado === "sugerido" ? " [SUGERIDO — sin confirmar aún]" : "";
+        return `- ${p.tipo === "ingreso" ? "Ingreso" : "Gasto"}: ${p.contraparte} — ${montoTxt}, ${p.frecuencia}${diaTxt ? `, ${diaTxt}` : ""}${etiquetaEstado}`;
+      });
+
+      return {
+        ok: true,
+        message: `Patrones recurrentes de ${alcance.alcanceLabel}:\n${lineas.join("\n")}\n\nUsa estos patrones para responder preguntas de cash flow/draw/nómina en vez de recalcular todo desde cero cada vez. Los marcados [SUGERIDO] todavía no los ha confirmado el usuario — pregúntale antes de tratarlos como un hecho.`,
+      };
+    }
+
+    case "detectar_patrones_recurrentes": {
+      const alcance = await resolverAlcanceTransacciones(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!alcance.ok) return alcance;
+      if (alcance.modo === "todas") {
+        return {
+          ok: false,
+          message: "Detecta patrones de a una entidad (o Personal) a la vez — no mandes entidad_nombre para Personal, o manda el nombre de UNA entidad específica.",
+        };
+      }
+      const entityId = alcance.entityId;
+
+      const hoyStr = fechaHoyPR();
+      const desdeDate = new Date(`${hoyStr}T00:00:00Z`);
+      desdeDate.setUTCMonth(desdeDate.getUTCMonth() - 4);
+      const desdeStr = desdeDate.toISOString().slice(0, 10);
+
+      const { data: transacciones, error: txError } = entityId
+        ? await supabase
+            .from("transactions")
+            .select("description_raw, amount, fecha, tipo_flujo")
+            .eq("owner_id", ownerId)
+            .eq("entity_id", entityId)
+            .eq("es_duplicada", false)
+            .in("tipo_flujo", ["ingreso", "gasto"])
+            .gte("fecha", desdeStr)
+        : await supabase
+            .from("transactions")
+            .select("description_raw, amount, fecha, tipo_flujo")
+            .eq("owner_id", ownerId)
+            .is("entity_id", null)
+            .eq("es_duplicada", false)
+            .in("tipo_flujo", ["ingreso", "gasto"])
+            .gte("fecha", desdeStr);
+      if (txError) return { ok: false, message: `No se pudo revisar las transacciones: ${txError.message}` };
+      if (!transacciones || transacciones.length === 0) {
+        return { ok: true, message: `No hay transacciones en los últimos 4 meses para ${alcance.alcanceLabel} — no se puede detectar ningún patrón todavía.` };
+      }
+
+      // Normaliza la descripción para agrupar variantes del mismo comercio/
+      // pagador (quita secuencias largas de dígitos — casi siempre números de
+      // referencia/confirmación que cambian cada vez — y espacios de más).
+      function normalizar(desc: string): string {
+        return desc
+          .toUpperCase()
+          .replace(/\d{3,}/g, "")
+          .replace(/[^A-Z0-9 ]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      type Grupo = { claveNorm: string; tipo: string; ejemploDesc: string; montos: number[]; fechas: string[] };
+      const grupos = new Map<string, Grupo>();
+      for (const t of transacciones) {
+        const desc = String(t.description_raw ?? "").trim();
+        if (!desc) continue;
+        const norm = normalizar(desc);
+        if (!norm || norm.length < 3) continue;
+        const clave = `${t.tipo_flujo}::${norm}`;
+        if (!grupos.has(clave)) grupos.set(clave, { claveNorm: norm, tipo: String(t.tipo_flujo), ejemploDesc: desc, montos: [], fechas: [] });
+        const g = grupos.get(clave)!;
+        g.montos.push(Math.abs(Number(t.amount)));
+        g.fechas.push(String(t.fecha));
+      }
+
+      // Candidato real: aparece en 2 o más meses de calendario distintos.
+      const candidatos = Array.from(grupos.values()).filter((g) => new Set(g.fechas.map((f) => f.slice(0, 7))).size >= 2);
+
+      if (candidatos.length === 0) {
+        return {
+          ok: true,
+          message: `Revisé las transacciones de los últimos 4 meses de ${alcance.alcanceLabel} y no encontré ningún patrón claro (algo que se repita en 2 o más meses distintos con un monto/comercio parecido).`,
+        };
+      }
+
+      // No duplicar lo que ya está guardado (mismo tipo + contraparte normalizada).
+      const { data: yaGuardados } = entityId
+        ? await supabase.from("patrones_recurrentes").select("contraparte, tipo").eq("owner_id", ownerId).eq("entity_id", entityId)
+        : await supabase.from("patrones_recurrentes").select("contraparte, tipo").eq("owner_id", ownerId).is("entity_id", null);
+      const existentesNorm = new Set((yaGuardados ?? []).map((p) => `${p.tipo}::${normalizar(p.contraparte)}`));
+
+      const nuevos = candidatos
+        .filter((g) => !existentesNorm.has(`${g.tipo}::${g.claveNorm}`))
+        .map((g) => {
+          const montoMin = Math.min(...g.montos);
+          const montoMax = Math.max(...g.montos);
+          const montoEsperado = g.montos.reduce((s, m) => s + m, 0) / g.montos.length;
+          const dias = g.fechas.map((f) => Number(f.slice(8, 10)));
+          const diaMes = Math.round(dias.reduce((s, d) => s + d, 0) / dias.length);
+          return {
+            tipo: g.tipo,
+            contraparte: g.ejemploDesc,
+            montoEsperado: Math.round(montoEsperado * 100) / 100,
+            montoMin: Math.round(montoMin * 100) / 100,
+            montoMax: Math.round(montoMax * 100) / 100,
+            diaMes,
+            vecesVisto: g.montos.length,
+          };
+        });
+
+      if (nuevos.length === 0) {
+        return { ok: true, message: `Revisé de nuevo y todos los patrones que se repiten en ${alcance.alcanceLabel} ya estaban guardados — no hay candidatos nuevos.` };
+      }
+
+      const filas = nuevos.map((n) => ({
+        owner_id: ownerId,
+        entity_id: entityId,
+        tipo: n.tipo,
+        contraparte: n.contraparte,
+        monto_esperado: n.montoEsperado,
+        monto_min: n.montoMin,
+        monto_max: n.montoMax,
+        frecuencia: "mensual",
+        dia_mes_esperado: n.diaMes,
+        estado: "sugerido",
+        fuente: "detectado_automatico",
+        notas: `Detectado automáticamente — visto ${n.vecesVisto} veces en los últimos meses.`,
+      }));
+
+      const { error: insertError } = await supabase.from("patrones_recurrentes").insert(filas);
+      if (insertError) return { ok: false, message: `Encontré patrones pero no los pude guardar: ${insertError.message}` };
+
+      const lista = nuevos
+        .map(
+          (n) =>
+            `- ${n.tipo === "ingreso" ? "Ingreso" : "Gasto"}: ${n.contraparte} — ~$${n.montoEsperado.toFixed(2)} (rango $${n.montoMin.toFixed(2)}-$${n.montoMax.toFixed(2)}), alrededor del día ${n.diaMes} de cada mes`
+        )
+        .join("\n");
+
+      return {
+        ok: true,
+        message:
+          `Encontré ${nuevos.length} patrón(es) nuevo(s) en ${alcance.alcanceLabel} y los guardé como SUGERIDOS (sin confirmar todavía):\n${lista}\n\n` +
+          `REGLA DURA: cuéntaselos al usuario y pídele que confirme cada uno antes de tratarlos como un hecho en cualquier proyección — usa guardar_patron_recurrente con estado 'confirmado' una vez el usuario lo valide. Nunca presentes un patrón 'sugerido' como si ya fuera un hecho conocido.`,
       };
     }
 

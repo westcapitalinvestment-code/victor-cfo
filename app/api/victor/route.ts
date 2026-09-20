@@ -821,10 +821,25 @@ export async function POST(req: NextRequest) {
         // VICTOR contestaba con texto vacío. Con más margen, el pensamiento
         // tiene espacio de sobra y siempre queda algo para la respuesta.
         max_tokens: 8192,
-        // output_config/effort era solo para Sonnet 5 (pensamiento
-        // adaptativo) — Haiku no tiene ese parámetro, así que no se manda
-        // nada aquí mientras el experimento de "todo en Haiku" siga activo
-        // (ver nota grande junto a modeloTurno, arriba).
+        // FIX DE RAÍZ (20 sept 2026 — Joel reportó que las respuestas
+        // largas de VICTOR se cortan a mitad "para variar", justo en un
+        // turno donde le pidió trackear varios ingresos recurrentes y
+        // calcular un rango). El comentario de arriba (max_tokens 4096→8192)
+        // ya explicaba la causa: Sonnet 5 corre pensamiento adaptativo a
+        // effort "high" por default, y ese pensamiento interno se come el
+        // mismo presupuesto de max_tokens que la respuesta visible — con
+        // varios números que sumar/comparar, el pensamiento puede crecer
+        // tanto que no deja espacio ni con 8192. La nota vieja decía
+        // "output_config/effort era solo para Sonnet 5... no se manda nada
+        // aquí mientras el experimento de todo en Haiku siga activo" — pero
+        // modeloTurno es "claude-sonnet-5" fijo desde la tarea #482 (dejó de
+        // ser un experimento), y ese ajuste de effort nunca se volvió a
+        // añadir cuando se hizo el cambio permanente. "low" es lo que
+        // Anthropic recomienda para chat conversacional (no código/agentes)
+        // — reduce el pensamiento interno sin quitarle a VICTOR la
+        // capacidad de usar herramientas o razonar sobre los resultados,
+        // solo evita que gaste de más "pensando" en silencio.
+        output_config: { effort: "low" },
         system: systemBlocks,
         tools: VICTOR_TOOLS,
         // FIX (3 sept 2026 — bug real reportado por Joel: el saludo dijo
@@ -959,6 +974,9 @@ export async function POST(req: NextRequest) {
       const retryResponse = await anthropic.messages.create({
         model: modeloTurno,
         max_tokens: 8192,
+        // Mismo fix de raíz que la llamada principal del loop, arriba
+        // (20 sept 2026) — este retry también corre en Sonnet 5.
+        output_config: { effort: "low" },
         system: systemBlocks,
         tools: VICTOR_TOOLS,
         messages: apiMessages,
