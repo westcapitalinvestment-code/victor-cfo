@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { VALOR_VISTA_GLOBAL } from "@/lib/entidad-activa-constantes";
-
 // Barra superior compartida de todo el dashboard — calcada de la
 // .topbar de VICTOR — Dashboard Core.html: logo + nombre + badge de plan,
 // banner central para invitar al contable (gratis, para cualquier plan —
@@ -97,6 +95,16 @@ export default function Topbar({
   const [openNegocio, setOpenNegocio] = useState(false);
   const [cambiando, setCambiando] = useState(false);
   const negocioRef = useRef<HTMLDivElement>(null);
+  // Confirmación ANTES de crear una entidad adicional (19 sept 2026, pedido
+  // de Joel: "preferiria que primero el usuario configurara lo del pago y
+  // luego ir a crear la empresa" — antes "+ Añadir entidad" llevaba directo
+  // al formulario de crear, y el cargo de $24.99/mes se sincronizaba con
+  // Stripe DESPUÉS de guardar, sin que el usuario viera ningún aviso del
+  // cobro (ver entidad-form.tsx guardar() → /api/stripe/addon-entidades/
+  // sincronizar). No hace falta pedir tarjeta nueva — ya está en el archivo
+  // por la suscripción Pro — pero sí debe quedar claro el cobro ANTES de
+  // entrar al formulario, no después de ya haber llenado todo.
+  const [confirmarAddEntidad, setConfirmarAddEntidad] = useState(false);
 
   useEffect(() => {
     function onClickFuera(e: MouseEvent) {
@@ -283,22 +291,52 @@ export default function Topbar({
                   ))}
                   <button
                     type="button"
-                    disabled={cambiando}
-                    className={`vc-negocio-item ${vistaGlobalNegocio ? "activo" : ""}`}
-                    onClick={() => seleccionarEntidad(VALOR_VISTA_GLOBAL)}
+                    className="vc-negocio-item vc-negocio-add"
+                    onClick={() => {
+                      setOpenNegocio(false);
+                      setConfirmarAddEntidad(true);
+                    }}
                   >
-                    <span className="vc-negocio-dot" style={{ background: "var(--muted)" }} />
-                    Vista global — todas las entidades
-                  </button>
-                  <Link href="/dashboard/entidades/nueva" className="vc-negocio-item vc-negocio-add" onClick={() => setOpenNegocio(false)}>
                     + Añadir entidad — $24.99/mes
-                  </Link>
+                  </button>
                 </div>
               )}
             </div>
           )}
         </div>
       </div>
+
+      {confirmarAddEntidad && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
+          onClick={() => setConfirmarAddEntidad(false)}
+        >
+          <div
+            className="vc-card w-full max-w-sm rounded-b-none text-center sm:rounded-b-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <i className="ti ti-building-store mb-2 text-2xl" style={{ color: "#1D9E75" }} />
+            <p className="mb-1 text-sm font-semibold">¿Añadir otra entidad de negocio?</p>
+            <p className="mb-3 text-sm text-muted">
+              Tu primera entidad va incluida en tu plan Pro. Esta sería una entidad adicional — se añade un cargo de{" "}
+              <span className="font-medium text-text">$24.99/mes</span> a tu suscripción actual, usando la misma
+              tarjeta con la que ya pagas Pro (no hace falta que la vuelvas a poner).
+            </p>
+            <button
+              className="vc-btn-primary mb-2"
+              onClick={() => {
+                setConfirmarAddEntidad(false);
+                router.push("/dashboard/entidades/nueva");
+              }}
+            >
+              Sí, continuar y crear la entidad
+            </button>
+            <button className="w-full text-xs text-muted hover:opacity-80" onClick={() => setConfirmarAddEntidad(false)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
