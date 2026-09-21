@@ -446,25 +446,39 @@ export async function sendWelcomeEmail(params: {
   const esPro = plan === "pro" || plan === "proplus";
   const dashboardUrl = `${SITE_URL}/dashboard`;
 
+  // Copy personalizada (21 sept 2026, pedido de Joel: "quiero que sea una
+  // experiencia personalizada y que el usuario se sienta comprometido") —
+  // siempre con el nombre en el saludo, y explicando que la categorización
+  // es escalonada (VICTOR necesita ayuda al principio, aprende con el uso)
+  // en vez de prometer automatización total desde el día uno.
   const pasosCore: [string, string][] = [
-    ["Conecta tu banco", "Desde Cuentas, conecta tu banco o tarjeta — VICTOR empieza a ver tus gastos e ingresos automáticamente, sin que tengas que anotar nada a mano."],
-    ["Habla con VICTOR", "Pregúntale lo que sea de tus finanzas, pídele que te categorice un gasto, o que te diga cuánto llevas gastado este mes. Está siempre disponible, abajo a la derecha."],
-    ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en la Bóveda guardar pólizas, contratos o cualquier documento importante."],
+    ["Conecta tus bancos y tarjetas", "Así VICTOR empieza a ver tus gastos e ingresos automáticamente, sin que tengas que anotar nada a mano."],
+    ["VICTOR aprende de ti", "Al principio te va a preguntar para categorizar bien tus gastos — mientras más lo uses, más te va a conocer, y más lo va a hacer solo."],
+    ["Usa Citas como tu asistente diario", "Agenda tus compromisos ahí y VICTOR te los recuerda, para que no se te olvide nada importante."],
   ];
 
   const pasosPro: [string, string][] = [
     ["Conecta tus cuentas", "Personal y de negocio — desde Cuentas puedes conectar bancos o tarjetas de ambos lados, cada uno en su espacio."],
-    ["Activa tu entidad de negocio", "Desde Configuración, crea tu entidad — eso habilita Facturación, Cobros, Pagos a contratistas y tus Reportes de Hacienda."],
+    [
+      "Activa tu entidad de negocio",
+      "Desde Configuración, eso habilita Facturación — puedes cobrar por ATH Móvil Business o con tarjeta vía Stripe activándolo ahí mismo — y registrar Pagos a contratistas o servicios profesionales para organizar tus cuentas (VICTOR no paga por ti, solo lo deja anotado), además de tus Reportes listos para tu contable.",
+    ],
     ["Habla con VICTOR", "Te ayuda a categorizar transacciones, crear facturas, y entender tus números — de negocio y personales, siempre disponible abajo a la derecha."],
-    ["Suma tu equipo si lo necesitas", "Puedes invitar a tu contable (solo lectura), a una secretaria/admin para facturación, o a técnicos si haces trabajo de campo — todo desde Configuración."],
+    // Sin mencionar "invita a tu contable" todavía (21 sept 2026, pedido de
+    // Joel: aún no está listo para promoverlo — falta reunirse con su
+    // contable para definir cómo quiere que funcione ese flujo antes de
+    // ofrecérselo a usuarios nuevos). Cuando esté listo, se añade de vuelta.
+    ["Suma tu equipo si lo necesitas", "Invita a una secretaria/admin para que maneje facturación y cobros, o a técnicos si haces trabajo de campo — todo desde Configuración."],
   ];
 
   const pasos = esPro ? pasosPro : pasosCore;
   const nombrePlan = esPro ? "Pro" : "Core";
 
   const textoPlano =
-    `Hola${saludoNombre ? ` ${saludoNombre}` : ""},\n\n` +
-    `¡Bienvenido a VICTOR CFO${esPro ? " Pro" : ""}! Aquí tienes un repaso rápido de cómo sacarle jugo desde ya:\n\n` +
+    (saludoNombre
+      ? `¡Bienvenido, ${saludoNombre}, a VICTOR CFO${esPro ? " Pro" : ""}!\n\n`
+      : `¡Bienvenido a VICTOR CFO${esPro ? " Pro" : ""}!\n\n`) +
+    `Esto es lo que puedes hacer en tu plan ${nombrePlan}:\n\n` +
     pasos.map(([titulo, texto], i) => `${i + 1}. ${titulo} — ${texto}`).join("\n\n") +
     `\n\nEntra a tu cuenta aquí:\n${dashboardUrl}\n\n` +
     `Cualquier duda, responde este correo — te leemos.\n\n` +
@@ -492,8 +506,12 @@ export async function sendWelcomeEmail(params: {
     <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; background: #1D9E75; color: #fff; font-weight: 600; font-size: 14px; vertical-align: middle;">V</span>
     <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
   </div>
-  <p>Hola${htmlSeguro.saludo ? ` ${htmlSeguro.saludo}` : ""},</p>
-  <p>¡Bienvenido a <strong>VICTOR CFO${esPro ? " Pro" : ""}</strong>! Aquí tienes un repaso rápido de cómo sacarle jugo desde ya:</p>
+  <p>${
+    htmlSeguro.saludo
+      ? `¡Bienvenido, <strong>${htmlSeguro.saludo}</strong>, a VICTOR CFO${esPro ? " Pro" : ""}!`
+      : `¡Bienvenido a VICTOR CFO${esPro ? " Pro" : ""}!`
+  }</p>
+  <p>Esto es lo que puedes hacer en tu plan <strong>${nombrePlan}</strong>:</p>
   <div style="margin: 24px 0;">${pasosHtml}</div>
   <div style="text-align: center; margin: 28px 0;">
     <a href="${dashboardUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Entrar a mi cuenta</a>
