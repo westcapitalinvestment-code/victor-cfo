@@ -154,6 +154,7 @@ export default function FacturaDetalle({
   const [cobrando, setCobrando] = useState(false);
   const [linkCobro, setLinkCobro] = useState<string | null>(null);
 
+  const [enviandoEmail, setEnviandoEmail] = useState(false);
   const [adjuntos, setAdjuntos] = useState(adjuntosIniciales);
   const [subiendo, setSubiendo] = useState(false);
   const [borrandoId, setBorrandoId] = useState<string | null>(null);
@@ -279,6 +280,23 @@ export default function FacturaDetalle({
     } con tarjeta: ${linkCobro}`;
     const destino = factura.clients?.telefono ? telefonoWhatsapp(factura.clients.telefono) : "";
     window.open(`https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`, "_blank");
+  }
+
+  // Envío manual por correo (21 sept 2026, pedido de Joel: "obvio ese boton
+  // debe existir") — hasta ahora solo las facturas recurrentes generadas por
+  // el cron mandaban email real; esta pantalla solo tenía WhatsApp. Reusa el
+  // mismo endpoint/función que el cron (ver app/api/facturas/[id]/enviar-email).
+  async function enviarPorEmail() {
+    setEnviandoEmail(true);
+    setError(null);
+    const res = await fetch(`/api/facturas/${factura.id}/enviar-email`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setEnviandoEmail(false);
+    if (!res.ok) {
+      setError(data.error ?? "No se pudo enviar el correo.");
+      return;
+    }
+    router.refresh();
   }
 
   // PDF real generado en el servidor (app/api/facturas/[id]/pdf) — no es
@@ -609,7 +627,7 @@ export default function FacturaDetalle({
           </div>
         </div>
 
-        <div className={`no-imprimir grid gap-2 border-t border-border pt-3 ${modoAdmin ? "grid-cols-2" : "grid-cols-4"}`}>
+        <div className={`no-imprimir grid gap-2 border-t border-border pt-3 ${modoAdmin ? "grid-cols-3" : "grid-cols-5"}`}>
           <a
             href={`/api/facturas/${factura.id}/pdf`}
             target="_blank"
@@ -623,6 +641,15 @@ export default function FacturaDetalle({
             className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
           >
             <i className="ti ti-brand-whatsapp text-base" /> Reenviar
+          </button>
+          <button
+            type="button"
+            onClick={enviarPorEmail}
+            disabled={enviandoEmail || !factura.clients?.email}
+            title={!factura.clients?.email ? "Este cliente no tiene correo guardado" : undefined}
+            className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80 disabled:opacity-50"
+          >
+            <i className="ti ti-mail text-base" /> {enviandoEmail ? "..." : "Email"}
           </button>
           {!modoAdmin && factura.estado !== "pagada" && (
             <Link
