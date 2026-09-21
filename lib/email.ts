@@ -724,6 +724,7 @@ export async function sendRespuestaSoporteEmail(params: {
     <span style="font-size: 16px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR</span>
   </div>
   <p style="font-size: 14px;">${htmlRespuesta}</p>
+  <p style="font-size: 14px; margin-top: 20px;">— VICTOR</p>
   <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
   <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
 </div>`.trim();
