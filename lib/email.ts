@@ -455,6 +455,7 @@ export async function sendWelcomeEmail(params: {
     ["Conecta tus bancos y tarjetas", "Así VICTOR empieza a ver tus gastos e ingresos automáticamente, sin que tengas que anotar nada a mano."],
     ["VICTOR aprende de ti", "Al principio te va a preguntar para categorizar bien tus gastos — mientras más lo uses, más te va a conocer, y más lo va a hacer solo."],
     ["Usa Citas como tu asistente diario", "Agenda tus compromisos ahí y VICTOR te los recuerda, para que no se te olvide nada importante."],
+    ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en la Bóveda guardar pólizas, contratos o cualquier documento importante."],
   ];
 
   const pasosPro: [string, string][] = [
@@ -468,7 +469,7 @@ export async function sendWelcomeEmail(params: {
     // Joel: aún no está listo para promoverlo — falta reunirse con su
     // contable para definir cómo quiere que funcione ese flujo antes de
     // ofrecérselo a usuarios nuevos). Cuando esté listo, se añade de vuelta.
-    ["Suma tu equipo si lo necesitas", "Invita a una secretaria/admin para que maneje facturación y cobros, o a técnicos si haces trabajo de campo — todo desde Configuración."],
+    ["Suma tu equipo si lo necesitas", "Invita a una secretaria/admin para que maneje facturación y cobros, o a tus técnicos si tienes personal que hace instalaciones o visitas a clientes — todo desde Configuración."],
   ];
 
   const pasos = esPro ? pasosPro : pasosCore;
