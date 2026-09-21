@@ -203,6 +203,10 @@ export default function VictorChat({
   // Tope de seguridad del dictado por voz — ver el bug real reportado por
   // Joel más abajo, junto a la config de SpeechRecognition.
   const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Reintento automático de "audio-capture" — ver comentario en
+  // toggleVoice/iniciarReconocimiento más abajo. Evita reintentar en bucle
+  // si el micrófono de verdad no está disponible.
+  const audioCaptureRetryRef = useRef(false);
   // send() se redefine en cada render (lee input/pendingImage/conversationId
   // por closure) — el listener de reconocimiento de voz se arma UNA sola vez
   // (useEffect con deps []), así que sin este ref quedaría pegado para
@@ -413,6 +417,21 @@ export default function VictorChat({
         setError("El dictado por voz necesita conexión a internet — revisa tu señal e inténtalo de nuevo.");
       } else if (event.error === "language-not-supported") {
         setError("Este celular no tiene instalado el paquete de voz en español. Prueba escribiendo el mensaje.");
+      } else if (event.error === "audio-capture") {
+        // Fix (21 sept 2026, reportado por Joel: ya no tumba la app, pero
+        // sale este error justo al hablar). Causa probable: toggleVoice
+        // suelta el stream de getUserMedia y arranca SpeechRecognition casi
+        // en el mismo instante — en algunos Android el hardware de audio
+        // tarda un pelín en liberarse, y esa carrera hace que
+        // SpeechRecognition no consiga el micrófono la primera vez. Se
+        // reintenta una sola vez, solo — si vuelve a fallar, ahí sí es un
+        // problema real (otra app usando el mic, o hardware no disponible).
+        if (!audioCaptureRetryRef.current) {
+          audioCaptureRetryRef.current = true;
+          setTimeout(() => iniciarReconocimiento(), 400);
+        } else {
+          setError("No se pudo acceder al micrófono — puede que otra app lo esté usando ahora mismo. Ciérrala e inténtalo de nuevo.");
+        }
       } else if (event.error !== "aborted") {
         // Incluye el código real (event.error) en el mensaje — mientras no
         // sepamos cuál de los errores restantes del spec (audio-capture,
@@ -460,44 +479,13 @@ export default function VictorChat({
     reader.readAsDataURL(file);
   }
 
-  async function toggleVoice() {
-    if (!recognitionRef.current) return;
-    if (listening) {
-      recognitionRef.current.stop();
-      setListening(false);
-      return;
-    }
-
-    setOpen(true);
-    setError(null);
-
-    // Pide el permiso de micrófono nosotros mismos con getUserMedia ANTES
-    // de arrancar el reconocimiento — bug real reportado por Joel (28
-    // agosto 2026, PWA instalada): dejar que SpeechRecognition pida el
-    // permiso por su cuenta terminaba en "audio-capture" sin que el
-    // sistema operativo mostrara nunca el diálogo real de "Permitir
-    // micrófono". Pidiéndolo explícito con getUserMedia, el sistema SÍ lo
-    // muestra la primera vez; después queda recordado igual que cualquier
-    // otro permiso. No necesitamos el audio en sí (SpeechRecognition abre
-    // su propio canal), así que el stream se cierra de inmediato.
-    if (navigator.mediaDevices?.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((t) => t.stop());
-      } catch (err) {
-        if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
-          setError("VICTOR no tiene permiso para usar el micrófono. Revisa los permisos de la app en Ajustes del celular y vuelve a intentar.");
-        } else if (err instanceof DOMException && err.name === "NotFoundError") {
-          setError("No se encontró un micrófono disponible en este dispositivo.");
-        } else {
-          setError("No se pudo activar el micrófono. Inténtalo de nuevo.");
-        }
-        return;
-      }
-    }
-
+  // Arranca (o reintenta arrancar) el reconocimiento — separado de
+  // toggleVoice para que el reintento automático de "audio-capture" (ver
+  // onerror más arriba) pueda llamarlo directo, sin repetir el
+  // getUserMedia de permiso cada vez.
+  function iniciarReconocimiento() {
     try {
-      recognitionRef.current.start();
+      recognitionRef.current?.start();
       setListening(true);
       // Tope de seguridad inicial — si nunca llega ni un solo resultado
       // interino (el caso más raro y más frustrante: "se queda grabando y
@@ -513,6 +501,54 @@ export default function VictorChat({
       setListening(false);
       setError("No se pudo activar el micrófono. Inténtalo de nuevo.");
     }
+  }
+
+  async function toggleVoice() {
+    if (!recognitionRef.current) return;
+    if (listening) {
+      recognitionRef.current.stop();
+      setListening(false);
+      return;
+    }
+
+    setOpen(true);
+    setError(null);
+    audioCaptureRetryRef.current = false;
+
+    // Pide el permiso de micrófono nosotros mismos con getUserMedia ANTES
+    // de arrancar el reconocimiento — bug real reportado por Joel (28
+    // agosto 2026, PWA instalada): dejar que SpeechRecognition pida el
+    // permiso por su cuenta terminaba en "audio-capture" sin que el
+    // sistema operativo mostrara nunca el diálogo real de "Permitir
+    // micrófono". Pidiéndolo explícito con getUserMedia, el sistema SÍ lo
+    // muestra la primera vez; después queda recordado igual que cualquier
+    // otro permiso. No necesitamos el audio en sí (SpeechRecognition abre
+    // su propio canal), así que el stream se cierra de inmediato.
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+        // Fix (21 sept 2026, reportado por Joel: ya no se cae la app, pero
+        // sale "audio-capture" justo al hablar). Soltar el micrófono aquí
+        // (stream.getTracks().forEach(t => t.stop())) y arrancar
+        // SpeechRecognition casi en el mismo instante compite por el mismo
+        // recurso de audio — en algunos Android el hardware tarda un
+        // instante en liberarse de verdad. Esta pausa corta le da ese
+        // respiro antes de pedirlo de nuevo.
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      } catch (err) {
+        if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
+          setError("VICTOR no tiene permiso para usar el micrófono. Revisa los permisos de la app en Ajustes del celular y vuelve a intentar.");
+        } else if (err instanceof DOMException && err.name === "NotFoundError") {
+          setError("No se encontró un micrófono disponible en este dispositivo.");
+        } else {
+          setError("No se pudo activar el micrófono. Inténtalo de nuevo.");
+        }
+        return;
+      }
+    }
+
+    iniciarReconocimiento();
   }
 
   async function send(text?: string, opts?: { hidden?: boolean }) {
