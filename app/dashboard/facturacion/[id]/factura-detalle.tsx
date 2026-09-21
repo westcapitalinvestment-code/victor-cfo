@@ -155,6 +155,13 @@ export default function FacturaDetalle({
   const [linkCobro, setLinkCobro] = useState<string | null>(null);
 
   const [enviandoEmail, setEnviandoEmail] = useState(false);
+  // Confirmación visible de envío (21 sept 2026, pedido de Joel: le dio
+  // click, no vio ningún cambio — la factura ya estaba "enviada" así que
+  // router.refresh() no mueve nada en pantalla — y le volvió a dar,
+  // mandando el correo 2 veces). El botón solo mostraba "..." un instante;
+  // ahora se queda en "✓ Enviado" unos segundos y deshabilitado, para que
+  // sea imposible mandarlo doble por impaciencia.
+  const [emailEnviado, setEmailEnviado] = useState(false);
   const [adjuntos, setAdjuntos] = useState(adjuntosIniciales);
   const [subiendo, setSubiendo] = useState(false);
   const [borrandoId, setBorrandoId] = useState<string | null>(null);
@@ -287,6 +294,7 @@ export default function FacturaDetalle({
   // el cron mandaban email real; esta pantalla solo tenía WhatsApp. Reusa el
   // mismo endpoint/función que el cron (ver app/api/facturas/[id]/enviar-email).
   async function enviarPorEmail() {
+    if (enviandoEmail || emailEnviado) return; // guarda extra contra doble-click
     setEnviandoEmail(true);
     setError(null);
     const res = await fetch(`/api/facturas/${factura.id}/enviar-email`, { method: "POST" });
@@ -296,6 +304,8 @@ export default function FacturaDetalle({
       setError(data.error ?? "No se pudo enviar el correo.");
       return;
     }
+    setEmailEnviado(true);
+    setTimeout(() => setEmailEnviado(false), 5000);
     router.refresh();
   }
 
@@ -351,6 +361,7 @@ export default function FacturaDetalle({
 
       <div className="vc-card factura-imprimible flex flex-col gap-3">
         {error && <p className="no-imprimir text-xs text-red">{error}</p>}
+        {emailEnviado && <p className="no-imprimir text-xs text-teal">✓ Correo enviado.</p>}
 
         {/* Ni el nombre personal del dueño ni el RUC/EIN van en la factura
             (pedido de Joel, 1 sept 2026) — solo la identidad del negocio. */}
@@ -645,11 +656,14 @@ export default function FacturaDetalle({
           <button
             type="button"
             onClick={enviarPorEmail}
-            disabled={enviandoEmail || !factura.clients?.email}
+            disabled={enviandoEmail || emailEnviado || !factura.clients?.email}
             title={!factura.clients?.email ? "Este cliente no tiene correo guardado" : undefined}
-            className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80 disabled:opacity-50"
+            className={`flex flex-col items-center gap-1 rounded-lg border py-2 text-xs font-medium hover:opacity-80 disabled:opacity-50 ${
+              emailEnviado ? "border-teal text-teal" : "border-border"
+            }`}
           >
-            <i className="ti ti-mail text-base" /> {enviandoEmail ? "..." : "Email"}
+            <i className={`ti ${emailEnviado ? "ti-check" : "ti-mail"} text-base`} />{" "}
+            {enviandoEmail ? "Enviando..." : emailEnviado ? "✓ Enviado" : "Email"}
           </button>
           {!modoAdmin && factura.estado !== "pagada" && (
             <Link

@@ -14,6 +14,18 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 // este fallback solo aplica si por lo que sea esa variable no está.
 const FROM = process.env.RESEND_FROM_EMAIL || "VICTOR CFO <onboarding@resend.dev>";
 
+// Solo la dirección (sin el nombre para mostrar) sacada de FROM — Resend
+// exige que el dominio del remitente esté verificado, así que no podemos
+// mandar desde el dominio propio de cada negocio (ej. vipmdpr.com); lo que
+// SÍ podemos personalizar es el nombre para mostrar. sendInvoiceEmail la usa
+// para que el remitente diga "Nombre del Negocio vía VICTOR CFO" en vez de
+// solo "VICTOR CFO" — así el cliente reconoce quién le factura de verdad,
+// aunque la dirección técnica siga siendo la compartida de la plataforma.
+const FROM_ADDRESS = (() => {
+  const match = FROM.match(/<(.+)>/);
+  return match ? match[1] : FROM;
+})();
+
 // victorcfo.com está hardcodeado (no hay variable de entorno para el
 // dominio base) — coincide con el resto del código (landing, términos,
 // privacidad) que también lo escriben literal.
@@ -338,14 +350,25 @@ export async function sendInvoiceEmail(params: {
   // directa, porque esas expiran a las 24h y este correo puede abrirse
   // semanas después (3 sept 2026, pedido de Joel).
   cobroTarjetaDisponible?: boolean;
+  // Correo de contacto de la entidad (business_entities.email, migración
+  // 0039) — 21 sept 2026, pregunta de Joel: "no se supone que la factura
+  // llegue a mis clientes de info@vipmdpr.com?". La respuesta corta es que
+  // no podemos mandar desde su dominio (Resend solo tiene victorcfo.com
+  // verificado), pero si la entidad tiene un correo de contacto guardado, lo
+  // ponemos como Reply-To — así cuando el cliente le dé "Responder", le
+  // llega a Joel directo a su correo de negocio, no a VICTOR CFO.
+  replyToEmail?: string | null;
 }): Promise<{ sent: boolean; reason?: string }> {
   if (!resend) {
     return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
   }
 
-  const { clientEmail, clientName, entityName, invoiceId, invoiceNumber, dueDate, cobroTarjetaDisponible } = params;
+  const { clientEmail, clientName, entityName, invoiceId, invoiceNumber, dueDate, cobroTarjetaDisponible, replyToEmail } = params;
   const saludoNombre = clientName || "";
   const negocio = entityName || "";
+  // Nombre para mostrar personalizado por negocio — la dirección real sigue
+  // siendo la de VICTOR CFO (ver FROM_ADDRESS arriba).
+  const fromFactura = negocio ? `${negocio} vía VICTOR CFO <${FROM_ADDRESS}>` : FROM;
   const pdfUrl = `${SITE_URL}/api/facturas/${invoiceId}/pdf`;
   const pagarUrl = `${SITE_URL}/api/facturas/${invoiceId}/pagar`;
   const vencePart = dueDate ? ` Vence el ${new Date(`${dueDate}T00:00:00Z`).toLocaleDateString("es-PR", { timeZone: "UTC" })}.` : "";
@@ -385,8 +408,9 @@ export async function sendInvoiceEmail(params: {
 
   try {
     const { error } = await resend.emails.send({
-      from: FROM,
+      from: fromFactura,
       to: clientEmail,
+      ...(replyToEmail ? { replyTo: replyToEmail } : {}),
       subject: `Factura ${invoiceNumber}${negocio ? ` de ${negocio}` : ""}`,
       text: textoPlano,
       html: htmlCorreo,

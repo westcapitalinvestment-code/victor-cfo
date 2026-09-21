@@ -28,7 +28,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const { data: factura, error: fetchError } = await supabase
     .from("invoices")
     .select(
-      "id, numero, estado, fecha_vencimiento, clients(name, email), business_entities(name, stripe_connect_charges_enabled)"
+      "id, numero, estado, fecha_vencimiento, clients(name, email), business_entities(name, email, stripe_connect_charges_enabled)"
     )
     .eq("id", params.id)
     .single();
@@ -52,6 +52,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     invoiceNumber: factura.numero as string,
     dueDate: (factura.fecha_vencimiento as string | null) ?? null,
     cobroTarjetaDisponible: !!entidad?.stripe_connect_charges_enabled,
+    replyToEmail: entidad?.email ?? null,
   });
 
   if (!resultado.sent) {
