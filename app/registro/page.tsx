@@ -225,6 +225,20 @@ function RegistroForm() {
     // termina pagando o se queda en el plan gratis.
     fbqTrack("Lead", { plan, ciclo, gratis: esGratis });
 
+    // Bienvenida al registro, pague o no (21 sept 2026, pedido de Joel: "que
+    // se envien cuando se registre el cliente pague o no") — dispara aquí
+    // mismo, sin esperar a Stripe. data.user existe aunque data.session sea
+    // null (proyecto con confirmación de email obligatoria), así que esto
+    // corre en los 3 caminos: gratis, pago-con-sesión y pago-sin-confirmar.
+    // Fire-and-forget: si falla, no debe frenar el registro de nadie.
+    if (data.user?.id) {
+      fetch("/api/registro/bienvenida-inicial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: data.user.id }),
+      }).catch(() => {});
+    }
+
     // Si el proyecto de Supabase tiene confirmación de email activada, no
     // hay sesión todavía — el usuario tiene que confirmar desde su correo
     // antes de poder entrar. Si está desactivada, ya queda logueado.

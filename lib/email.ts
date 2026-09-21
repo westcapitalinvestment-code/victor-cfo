@@ -542,3 +542,154 @@ export async function sendWelcomeEmail(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+// Bienvenida al REGISTRO, no al pago (21 sept 2026, pedido de Joel: "que se
+// envien cuando se registre el cliente pague o no — si ya pagó se lo merece
+// y si no pagó lo motiva a pagar"). sendWelcomeEmail (arriba) sigue
+// disparando solo cuando Stripe confirma el pago — estas dos funciones
+// cubren el hueco de todo el que se registra y todavía no llegó ahí: el
+// plan gratis (que nunca pasa por Stripe) y el que eligió pagar pero no
+// completó el checkout. Llamadas desde lib/bienvenida-inicial.ts.
+export async function sendWelcomeGratisEmail(params: {
+  toEmail: string;
+  toName: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName } = params;
+  const saludoNombre = toName || "";
+  const dashboardUrl = `${SITE_URL}/dashboard`;
+
+  // El plan gratis NO tiene chat con VICTOR ni conexión de banco (ver
+  // app/dashboard/victor-chat.tsx, bloqueado = plan==='gratis') — esta copy
+  // solo promete lo que de verdad tiene: cuentas manuales, Citas, Metas y
+  // Bóveda. El upsell a Core es honesto sobre qué desbloquea, no un genérico
+  // "actualiza ya".
+  const pasos: [string, string][] = [
+    ["Añade tus cuentas a mano", "En Cuentas puedes agregar tus bancos o tarjetas manualmente y llevar tus gastos e ingresos organizados, sin conectar nada."],
+    ["Usa Citas como tu asistente diario", "Agenda tus compromisos ahí y VICTOR te los recuerda, para que no se te olvide nada importante."],
+    ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en la Bóveda guardar pólizas, contratos o cualquier documento importante."],
+  ];
+
+  const textoPlano =
+    (saludoNombre ? `¡Bienvenido, ${saludoNombre}, a VICTOR CFO!\n\n` : `¡Bienvenido a VICTOR CFO!\n\n`) +
+    `Esto es lo que puedes hacer con tu cuenta gratis ahora mismo:\n\n` +
+    pasos.map(([titulo, texto], i) => `${i + 1}. ${titulo} — ${texto}`).join("\n\n") +
+    `\n\nCon Core ($14.99/mes) desbloqueas lo que más te va a ahorrar tiempo: conectar tu banco de verdad (sin escribir nada a mano) y hablar con VICTOR, que categoriza tus gastos solo y contesta cualquier duda de tus finanzas al momento.\n\n` +
+    `Entra a tu cuenta aquí:\n${dashboardUrl}\n\n` +
+    `Cualquier duda o pregunta, escríbenos a soporte@victorcfo.com y te responderemos en la brevedad posible.\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = saludoNombre ? escapeHtml(saludoNombre) : "";
+
+  const pasosHtml = pasos
+    .map(
+      ([titulo, texto], i) => `
+  <div style="display: flex; gap: 14px; margin-bottom: 20px;">
+    <div style="flex-shrink: 0; width: 28px; height: 28px; border-radius: 9999px; background: #eefaf4; color: #14543d; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center;">${i + 1}</div>
+    <div>
+      <p style="margin: 0 0 4px 0; font-weight: 600;">${escapeHtml(titulo)}</p>
+      <p style="margin: 0; color: #555; font-size: 14px;">${escapeHtml(texto)}</p>
+    </div>
+  </div>`
+    )
+    .join("");
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; background: #1D9E75; color: #fff; font-weight: 600; font-size: 14px; vertical-align: middle;">V</span>
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${htmlSeguro ? `¡Bienvenido, <strong>${htmlSeguro}</strong>, a VICTOR CFO!` : `¡Bienvenido a VICTOR CFO!`}</p>
+  <p>Esto es lo que puedes hacer con tu cuenta <strong>gratis</strong> ahora mismo:</p>
+  <div style="margin: 24px 0;">${pasosHtml}</div>
+  <div style="background: #f6faf8; border: 1px solid #d8ece4; border-radius: 10px; padding: 16px; margin: 24px 0;">
+    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px;">Con Core ($14.99/mes) desbloqueas:</p>
+    <p style="margin: 0; font-size: 14px; color: #333;">Conectar tu banco de verdad (sin escribir nada a mano) y hablar con VICTOR — categoriza tus gastos solo y contesta cualquier duda de tus finanzas al momento.</p>
+  </div>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${dashboardUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Entrar a mi cuenta</a>
+  </div>
+  <p style="font-size: 14px;">Cualquier duda o pregunta, escríbenos a <a href="mailto:soporte@victorcfo.com" style="color: #1D9E75;">soporte@victorcfo.com</a> y te responderemos en la brevedad posible.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: "Bienvenido a VICTOR CFO — así empiezas gratis",
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
+// Se registró eligiendo pagar (Core/Pro), pero el checkout de Stripe no se
+// completó todavía (cerró la pestaña, se le fue la conexión, etc.) — sin
+// esto, esa persona no recibía NADA nunca (ver comentario arriba). El link
+// manda de vuelta a completar-pago, mismo destino que usa la propia app
+// cuando el checkout falla (ver app/registro/page.tsx).
+export async function sendCasiTerminasEmail(params: {
+  toEmail: string;
+  toName: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName } = params;
+  const saludoNombre = toName || "";
+  const completarPagoUrl = `${SITE_URL}/registro/completar-pago`;
+
+  const textoPlano =
+    (saludoNombre ? `Hola ${saludoNombre},\n\n` : `Hola,\n\n`) +
+    `Creaste tu cuenta en VICTOR CFO, pero tu plan todavía no está activo porque falta completar el pago. Te toma un minuto:\n\n` +
+    `${completarPagoUrl}\n\n` +
+    `En cuanto lo completes tienes acceso a todo: conectar tu banco automático, hablar con VICTOR para categorizar tus gastos y resolver dudas al momento, Facturación si tienes negocio, y más.\n\n` +
+    `Cualquier duda o pregunta, escríbenos a soporte@victorcfo.com y te responderemos en la brevedad posible.\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = saludoNombre ? escapeHtml(saludoNombre) : "";
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; background: #1D9E75; color: #fff; font-weight: 600; font-size: 14px; vertical-align: middle;">V</span>
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${htmlSeguro ? `Hola, <strong>${htmlSeguro}</strong>,` : `Hola,`}</p>
+  <p>Creaste tu cuenta en VICTOR CFO, pero tu plan todavía no está activo porque falta completar el pago. Te toma un minuto.</p>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${completarPagoUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Completar mi pago</a>
+  </div>
+  <p style="font-size: 14px;">En cuanto lo completes tienes acceso a todo: conectar tu banco automático, hablar con VICTOR para categorizar tus gastos y resolver dudas al momento, Facturación si tienes negocio, y más.</p>
+  <p style="font-size: 14px;">Cualquier duda o pregunta, escríbenos a <a href="mailto:soporte@victorcfo.com" style="color: #1D9E75;">soporte@victorcfo.com</a> y te responderemos en la brevedad posible.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: "Ya casi terminas — activa tu plan en VICTOR CFO",
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}

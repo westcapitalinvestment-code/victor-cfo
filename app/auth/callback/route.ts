@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { enviarBienvenidaInicial } from "@/lib/bienvenida-inicial";
 
 // Callback de OAuth (Google/Apple) — Supabase redirige aquí con ?code=...
 // después de que el usuario autoriza en el proveedor (10 sept 2026, pedido
@@ -30,10 +31,18 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data: sesionData, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     return NextResponse.redirect(`${origin}/login?error=oauth`);
+  }
+
+  // Bienvenida al registro, pague o no (21 sept 2026) — mismo mecanismo que
+  // app/registro/page.tsx, pero aquí ya hay sesión así que se llama directo
+  // (sin pasar por la ruta pública). Idempotente: en un login normal de un
+  // usuario que ya la recibió, esto no hace nada. Fire-and-forget.
+  if (sesionData.user?.id) {
+    enviarBienvenidaInicial(sesionData.user.id).catch(() => {});
   }
 
   // Aplica referido/socio/plan-gratis si venían en la URL — no-op si no hay
