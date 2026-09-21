@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { getStripe, esPlanValido, priceIdAddonTecnicos, todosLosPriceIdsDePlanes } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
-import { sendReferralCreditEmail } from "@/lib/email";
+import { sendReferralCreditEmail, sendWelcomeEmail } from "@/lib/email";
 
 // Rollover de créditos de IA (migración 0064, 3 sept 2026, pedido de Joel:
 // "me gustaria que se renueve que no lo pierda pq asi no se siente
@@ -214,6 +214,30 @@ export async function POST(req: NextRequest) {
         }
 
         await supabase.from("users").update(datosActualizar).eq("id", userId);
+
+        // Correo de bienvenida (21 sept 2026, pedido de Joel) — el plan que
+        // se guardó puede venir de esta misma sesión (metadata.plan) o, si
+        // el checkout no lo trajo por lo que sea, del valor que ya tenía el
+        // usuario en la tabla. Si el envío falla (ej. RESEND_API_KEY no
+        // configurada, o dominio del remitente sin verificar todavía), no
+        // tumbamos el webhook — la cuenta ya quedó activa, que es lo que
+        // de verdad importa; el correo es un extra, no la fuente de verdad.
+        try {
+          const { data: nuevoUsuario } = await supabase
+            .from("users")
+            .select("email, full_name, plan")
+            .eq("id", userId)
+            .maybeSingle();
+          if (nuevoUsuario?.email) {
+            await sendWelcomeEmail({
+              toEmail: nuevoUsuario.email,
+              toName: nuevoUsuario.full_name,
+              plan: (nuevoUsuario.plan as "core" | "pro" | "proplus") ?? "core",
+            });
+          }
+        } catch (err) {
+          console.error("No se pudo enviar el correo de bienvenida:", err);
+        }
         break;
       }
 

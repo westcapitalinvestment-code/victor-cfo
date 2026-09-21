@@ -397,3 +397,99 @@ export async function sendInvoiceEmail(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+// Bienvenida al activar el plan (21 sept 2026, pedido de Joel) — lo llama
+// checkout.session.completed en app/api/stripe/webhook/route.ts, justo
+// después de marcar plan_status="active", así que llega apenas la persona
+// termina de pagar (o empieza su trial de 7 días, ver trialDias en
+// app/api/stripe/checkout/route.ts). Contenido diferenciado por plan: Core es
+// finanzas personales, Pro suma el lado de negocio (Facturación, Pagos,
+// Reportes). Si alguien cancela y vuelve a suscribirse pasa por aquí de
+// nuevo — no hay guardrail de "ya se le mandó antes" porque un segundo
+// correo de bienvenida no hace daño (a diferencia del crédito de
+// referidos, que si se duplicara sería dinero real).
+export async function sendWelcomeEmail(params: {
+  toEmail: string;
+  toName: string | null;
+  plan: "core" | "pro" | "proplus";
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName, plan } = params;
+  const saludoNombre = toName || "";
+  const esPro = plan === "pro" || plan === "proplus";
+  const dashboardUrl = `${SITE_URL}/dashboard`;
+
+  const pasosCore: [string, string][] = [
+    ["Conecta tu banco", "Desde Cuentas, conecta tu banco o tarjeta — VICTOR empieza a ver tus gastos e ingresos automáticamente, sin que tengas que anotar nada a mano."],
+    ["Habla con VICTOR", "Pregúntale lo que sea de tus finanzas, pídele que te categorice un gasto, o que te diga cuánto llevas gastado este mes. Está siempre disponible, abajo a la derecha."],
+    ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en la Bóveda guardar pólizas, contratos o cualquier documento importante."],
+  ];
+
+  const pasosPro: [string, string][] = [
+    ["Conecta tus cuentas", "Personal y de negocio — desde Cuentas puedes conectar bancos o tarjetas de ambos lados, cada uno en su espacio."],
+    ["Activa tu entidad de negocio", "Desde Configuración, crea tu entidad — eso habilita Facturación, Cobros, Pagos a contratistas y tus Reportes de Hacienda."],
+    ["Habla con VICTOR", "Te ayuda a categorizar transacciones, crear facturas, y entender tus números — de negocio y personales, siempre disponible abajo a la derecha."],
+    ["Suma tu equipo si lo necesitas", "Puedes invitar a tu contable (solo lectura), a una secretaria/admin para facturación, o a técnicos si haces trabajo de campo — todo desde Configuración."],
+  ];
+
+  const pasos = esPro ? pasosPro : pasosCore;
+  const nombrePlan = esPro ? "Pro" : "Core";
+
+  const textoPlano =
+    `Hola${saludoNombre ? ` ${saludoNombre}` : ""},\n\n` +
+    `¡Bienvenido a VICTOR CFO${esPro ? " Pro" : ""}! Aquí tienes un repaso rápido de cómo sacarle jugo desde ya:\n\n` +
+    pasos.map(([titulo, texto], i) => `${i + 1}. ${titulo} — ${texto}`).join("\n\n") +
+    `\n\nEntra a tu cuenta aquí:\n${dashboardUrl}\n\n` +
+    `Cualquier duda, responde este correo — te leemos.\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = { saludo: saludoNombre ? escapeHtml(saludoNombre) : "" };
+
+  const pasosHtml = pasos
+    .map(
+      ([titulo, texto], i) => `
+  <div style="display: flex; gap: 14px; margin-bottom: 20px;">
+    <div style="flex-shrink: 0; width: 28px; height: 28px; border-radius: 9999px; background: #eefaf4; color: #14543d; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center;">${i + 1}</div>
+    <div>
+      <p style="margin: 0 0 4px 0; font-weight: 600;">${escapeHtml(titulo)}</p>
+      <p style="margin: 0; color: #555; font-size: 14px;">${escapeHtml(texto)}</p>
+    </div>
+  </div>`
+    )
+    .join("");
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; background: #1D9E75; color: #fff; font-weight: 600; font-size: 14px; vertical-align: middle;">V</span>
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>Hola${htmlSeguro.saludo ? ` ${htmlSeguro.saludo}` : ""},</p>
+  <p>¡Bienvenido a <strong>VICTOR CFO${esPro ? " Pro" : ""}</strong>! Aquí tienes un repaso rápido de cómo sacarle jugo desde ya:</p>
+  <div style="margin: 24px 0;">${pasosHtml}</div>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${dashboardUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Entrar a mi cuenta</a>
+  </div>
+  <p style="font-size: 14px;">Cualquier duda, <strong>responde este correo</strong> — te leemos.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: `Bienvenido a VICTOR CFO ${nombrePlan} — así empiezas`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
