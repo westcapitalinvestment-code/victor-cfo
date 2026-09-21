@@ -207,6 +207,19 @@ export default function VictorChat({
   // toggleVoice/iniciarReconocimiento más abajo. Evita reintentar en bucle
   // si el micrófono de verdad no está disponible.
   const audioCaptureRetryRef = useRef(false);
+  // Fix (21 sept 2026, confirmado por Joel en Safari/iPhone: el mensaje se
+  // transcribía y mandaba bien, pero la caja de texto se quedaba con el
+  // mismo texto "atascado" como si hubiera que reenviarlo). Safari a veces
+  // dispara onresult UNA VEZ MÁS después de haber marcado el resultado
+  // como final y de llamar recognitionRef.current?.stop() — esa segunda
+  // vuelta repetía setInput(transcript) (repoblando la caja) y volvía a
+  // llamar a send(), que esta vez salía temprano por el guard `loading`
+  // (la primera llamada a send() ya lo había puesto en true) SIN llegar a
+  // limpiar el input. Esta bandera se pone en true en cuanto se procesa el
+  // primer resultado final de la sesión, y onresult la revisa de primero
+  // para ignorar cualquier evento tardío/duplicado — se resetea a false
+  // cada vez que arranca una sesión nueva de reconocimiento.
+  const resultadoFinalProcesadoRef = useRef(false);
   // send() se redefine en cada render (lee input/pendingImage/conversationId
   // por closure) — el listener de reconocimiento de voz se arma UNA sola vez
   // (useEffect con deps []), así que sin este ref quedaría pegado para
@@ -378,6 +391,10 @@ export default function VictorChat({
       // en vez de solo fallar en pantalla. Con el try/catch, en el peor
       // caso se apaga el micrófono con un mensaje — nunca se cae la app.
       try {
+        // Un evento tardío/duplicado después del resultado final (ver
+        // comentario en resultadoFinalProcesadoRef más arriba) se ignora
+        // por completo — ni repuebla el input ni vuelve a intentar enviar.
+        if (resultadoFinalProcesadoRef.current) return;
         // Reinicia el tope de seguridad cada vez que llega algo nuevo —
         // solo se apaga solo si de verdad se quedó en silencio total.
         limpiarTimeoutVoz();
@@ -386,6 +403,7 @@ export default function VictorChat({
         setInput(transcript);
         if (resultado.isFinal) {
           if (transcript.trim()) {
+            resultadoFinalProcesadoRef.current = true;
             recognitionRef.current?.stop();
             sendRef.current(transcript.trim());
           }
@@ -485,6 +503,7 @@ export default function VictorChat({
   // getUserMedia de permiso cada vez.
   function iniciarReconocimiento() {
     try {
+      resultadoFinalProcesadoRef.current = false;
       recognitionRef.current?.start();
       setListening(true);
       // Tope de seguridad inicial — si nunca llega ni un solo resultado
