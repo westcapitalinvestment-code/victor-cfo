@@ -515,26 +515,41 @@ export default function VictorChat({
     setError(null);
     audioCaptureRetryRef.current = false;
 
-    // Pide el permiso de micrófono nosotros mismos con getUserMedia ANTES
-    // de arrancar el reconocimiento — bug real reportado por Joel (28
-    // agosto 2026, PWA instalada): dejar que SpeechRecognition pida el
-    // permiso por su cuenta terminaba en "audio-capture" sin que el
-    // sistema operativo mostrara nunca el diálogo real de "Permitir
-    // micrófono". Pidiéndolo explícito con getUserMedia, el sistema SÍ lo
-    // muestra la primera vez; después queda recordado igual que cualquier
-    // otro permiso. No necesitamos el audio en sí (SpeechRecognition abre
-    // su propio canal), así que el stream se cierra de inmediato.
-    if (navigator.mediaDevices?.getUserMedia) {
+    // Fix (21 sept 2026, reportado por Joel DOS veces seguidas: incluso con
+    // una pausa de 300ms y un reintento automático, seguía saliendo
+    // "audio-capture" — no era una carrera de milisegundos, era un
+    // problema de fondo). Causa raíz real: este código pedía el micrófono
+    // con getUserMedia() y lo soltaba EN CADA toque del botón, así ya
+    // estuviera el permiso concedido desde hacía rato — ese vaivén de
+    // abrir/cerrar el canal de audio, en algunos Android, deja el
+    // subsistema de audio en un estado donde SpeechRecognition ya no puede
+    // tomar el micrófono después, sin importar cuánto se espere. El
+    // getUserMedia solo hacía falta la PRIMERA vez (bug original del 28
+    // agosto 2026: sin él, el sistema nunca mostraba el diálogo de
+    // "Permitir micrófono"). Ahora se consulta el permiso real primero
+    // (Permissions API) y el getUserMedia de priming solo corre cuando
+    // todavía no está concedido — en el uso normal (permiso ya dado en
+    // algún momento anterior) se salta por completo y se va directo a
+    // iniciarReconocimiento(), sin tocar el micrófono dos veces.
+    let permisoYaConcedido = false;
+    if (navigator.permissions?.query) {
+      try {
+        const estado = await navigator.permissions.query({ name: "microphone" as PermissionName });
+        permisoYaConcedido = estado.state === "granted";
+      } catch {
+        // Algún navegador no soporta consultar "microphone" en particular
+        // — se sigue con el flujo de respaldo (getUserMedia) más abajo.
+      }
+    }
+
+    if (!permisoYaConcedido && navigator.mediaDevices?.getUserMedia) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach((t) => t.stop());
-        // Fix (21 sept 2026, reportado por Joel: ya no se cae la app, pero
-        // sale "audio-capture" justo al hablar). Soltar el micrófono aquí
-        // (stream.getTracks().forEach(t => t.stop())) y arrancar
-        // SpeechRecognition casi en el mismo instante compite por el mismo
-        // recurso de audio — en algunos Android el hardware tarda un
-        // instante en liberarse de verdad. Esta pausa corta le da ese
-        // respiro antes de pedirlo de nuevo.
+        // Pausa corta antes de arrancar SpeechRecognition — solo se llega
+        // aquí quando de verdad se acaba de pedir el permiso por primera
+        // vez, así que este pequeño respiro (y no un vaivén constante) es
+        // seguro y no afecta el uso normal del día a día.
         await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (err) {
         if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
