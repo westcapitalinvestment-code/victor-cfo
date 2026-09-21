@@ -40,6 +40,28 @@ function fmtFecha(iso: string | null) {
 export default function UsuariosPanel({ usuarios, defaultAbierto = false }: { usuarios: UsuarioFila[]; defaultAbierto?: boolean }) {
   const [abierto, setAbierto] = useState(defaultAbierto);
   const [busqueda, setBusqueda] = useState("");
+  // Reenviar bienvenida (21 sept 2026) — estado por usuario (id -> "enviando"
+  // | "enviado" | mensaje de error) para que el botón dé feedback claro y no
+  // se pueda disparar doble sin querer (misma lección del botón de email de
+  // facturas: sin esto, Joel no sabía si ya había salido y lo mandaba 2 veces).
+  const [estadoEnvio, setEstadoEnvio] = useState<Record<string, "enviando" | "enviado" | string>>({});
+
+  async function reenviarBienvenida(id: string) {
+    if (estadoEnvio[id] === "enviando" || estadoEnvio[id] === "enviado") return;
+    setEstadoEnvio((prev) => ({ ...prev, [id]: "enviando" }));
+    const res = await fetch("/api/cfo/reenviar-bienvenida", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setEstadoEnvio((prev) => ({ ...prev, [id]: data.error ?? "Error" }));
+      return;
+    }
+    setEstadoEnvio((prev) => ({ ...prev, [id]: "enviado" }));
+    setTimeout(() => setEstadoEnvio((prev) => ({ ...prev, [id]: "" })), 5000);
+  }
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -77,12 +99,15 @@ export default function UsuariosPanel({ usuarios, defaultAbierto = false }: { us
                     <th className="pb-2 pr-2">Plan</th>
                     <th className="pb-2 pr-2">Estado</th>
                     <th className="pb-2 pr-2">Desde</th>
-                    <th className="pb-2 text-right">Gasto IA</th>
+                    <th className="pb-2 pr-2 text-right">Gasto IA</th>
+                    <th className="pb-2"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtrados.map((u) => {
                     const estado = ESTADO_LABEL[u.planStatus ?? ""] ?? { texto: u.planStatus ?? "—", clase: "text-muted" };
+                    const envio = estadoEnvio[u.id];
+                    const esGratis = u.plan === "gratis";
                     return (
                       <tr key={u.id} className="border-b border-border last:border-0">
                         <td className="py-2 pr-2">
@@ -92,7 +117,28 @@ export default function UsuariosPanel({ usuarios, defaultAbierto = false }: { us
                         <td className="py-2 pr-2">{PLAN_LABEL[u.plan] ?? u.plan}</td>
                         <td className={`py-2 pr-2 ${estado.clase}`}>{estado.texto}</td>
                         <td className="py-2 pr-2 text-muted">{fmtFecha(u.creadoEn)}</td>
-                        <td className="py-2 text-right">{fmt(u.gastoIaCentavos / 100)}</td>
+                        <td className="py-2 pr-2 text-right">{fmt(u.gastoIaCentavos / 100)}</td>
+                        <td className="py-2 text-right">
+                          {!esGratis && (
+                            <button
+                              type="button"
+                              onClick={() => reenviarBienvenida(u.id)}
+                              disabled={envio === "enviando" || envio === "enviado"}
+                              title="Reenviar el correo de bienvenida (copia más reciente) a este usuario"
+                              className={`whitespace-nowrap rounded border px-2 py-1 text-[11px] font-medium hover:opacity-80 disabled:opacity-50 ${
+                                envio === "enviado" ? "border-grn text-grn" : envio && envio !== "enviando" ? "border-red text-red" : "border-border"
+                              }`}
+                            >
+                              {envio === "enviando"
+                                ? "Enviando..."
+                                : envio === "enviado"
+                                ? "✓ Enviado"
+                                : envio
+                                ? "Error"
+                                : "Reenviar bienvenida"}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
