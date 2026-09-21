@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -47,6 +47,101 @@ const EMOJIS = [
 // /public se sube directo (drag & drop, sin copiar texto), así que nunca
 // más puede corromperse en el paste.
 const VICTOR_AVATAR = "/victor-avatar.png";
+
+// Lista de mensajes, memoizada aparte del resto del chat (21 sept 2026,
+// reportado por Joel: "la PWA esta lenta cuando uno escribe"). Causa real,
+// no era la señal — cada mensaje de VICTOR pasa por <ReactMarkdown>, que
+// vuelve a parsear TODO el markdown de TODA la conversación en cada
+// render. Como el input vive en el mismo componente que la lista de
+// mensajes, cada letra que el usuario tecleaba (setInput) volvía a
+// renderizar — y por lo tanto volvía a parsear — la conversación entera.
+// Con una conversación larga eso se siente cada vez más lento a medida
+// que pasan los mensajes, exactamente lo que Joel describió. Sacando la
+// lista a su propio componente con memo(), React solo la vuelve a pintar
+// cuando `messages`, `loading` o `error` de verdad cambian — no en cada
+// tecla.
+const PanelMensajes = memo(function PanelMensajes({
+  scrollRef,
+  messages,
+  loading,
+  error,
+  avatar,
+  onSugerencia,
+}: {
+  scrollRef: React.RefObject<HTMLDivElement>;
+  messages: ChatMessage[];
+  loading: boolean;
+  error: string | null;
+  avatar: string;
+  onSugerencia: (texto: string) => void;
+}) {
+  return (
+    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4" style={{ minHeight: 240 }}>
+      {messages.length === 0 && !loading && (
+        <div className="mb-3 flex items-start gap-2">
+          <img src={avatar} alt="VICTOR" className="h-7 w-7 flex-shrink-0 rounded-full object-cover" />
+          <div className="rounded-r-[10px] rounded-bl-[10px] border border-border bg-bg p-2.5 text-sm text-text">
+            ¡Hola! Soy VICTOR. Cuéntame qué necesitas — tus gastos, tus metas, o si tienes una
+            idea que quieres evaluar juntos.
+          </div>
+        </div>
+      )}
+
+      {messages.map((m, i) => (
+        <div key={i} className={`mb-3 flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+          {m.role === "assistant" && (
+            <img src={avatar} alt="VICTOR" className="h-7 w-7 flex-shrink-0 rounded-full object-cover" />
+          )}
+          <div
+            className={`max-w-[80%] rounded-[10px] p-2.5 text-sm ${
+              m.role === "user"
+                ? "rounded-br-none whitespace-pre-wrap text-white"
+                : "rounded-bl-none border border-border bg-bg text-text"
+            }`}
+            style={m.role === "user" ? { background: "#1D9E75" } : undefined}
+          >
+            {m.imageDataUrl && (
+              <img src={m.imageDataUrl} alt="Imagen enviada" className="mb-1.5 max-h-40 w-full rounded-lg object-cover" />
+            )}
+            {m.role === "assistant" ? (
+              <div className="vc-markdown">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+              </div>
+            ) : (
+              m.content
+            )}
+          </div>
+        </div>
+      ))}
+
+      {loading && (
+        <div className="mb-3 flex justify-start gap-2">
+          <img src={avatar} alt="VICTOR" className="h-7 w-7 flex-shrink-0 rounded-full object-cover" />
+          <div className="rounded-[10px] rounded-bl-none border border-border bg-bg p-2.5 text-sm text-muted">
+            VICTOR está analizando y escribiendo…
+          </div>
+        </div>
+      )}
+
+      {error && <p className="text-xs text-red">{error}</p>}
+
+      {messages.length === 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {SUGERENCIAS.map((s) => (
+            <button
+              key={s}
+              onClick={() => onSugerencia(s)}
+              className="rounded-pill border border-teal px-3 py-1.5 text-xs text-teal"
+              style={{ background: "rgba(29,158,117,.1)" }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
 
 export default function VictorChat({
   autoOpenOnboarding = false,
@@ -114,6 +209,21 @@ export default function VictorChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Tope de seguridad del dictado por voz — ver el bug real reportado por
+  // Joel más abajo, junto a la config de SpeechRecognition.
+  const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // send() se redefine en cada render (lee input/pendingImage/conversationId
+  // por closure) — el listener de reconocimiento de voz se arma UNA sola vez
+  // (useEffect con deps []), así que sin este ref quedaría pegado para
+  // siempre a la versión de send() del primer render (conversationId
+  // siempre null, loading siempre false). sendRef siempre apunta a la
+  // versión más reciente; sendStable es una identidad fija para pasar como
+  // prop a componentes memoizados sin romper el memo().
+  const sendRef = useRef<(text?: string, opts?: { hidden?: boolean }) => Promise<void>>(async () => {});
+  const sendStable = useCallback((text?: string, opts?: { hidden?: boolean }) => {
+    sendRef.current(text, opts);
+  }, []);
 
   // Continuidad real entre dispositivos: al montar, trae la conversación
   // más reciente del usuario desde el servidor (no solo lo que haya en
@@ -223,6 +333,21 @@ export default function VictorChat({
   // Dictado por voz — Web Speech API, nativo del navegador (Chrome/Edge).
   // Pensado para cuando el usuario está manejando o simplemente no quiere
   // escribir: toca el micrófono, habla, y en cuanto termina se manda solo.
+  //
+  // Fix (21 sept 2026, reportado por Joel: "se activa pero una vez digo lo
+  // que quiero no puedo enviarlo, se queda grabando y no lo envía"). Con
+  // interimResults=false, el usuario no veía NADA en pantalla hasta que el
+  // navegador confirmara un resultado final — en un PWA instalado en
+  // Android, ese evento final (onresult/onend) a veces nunca llega aunque
+  // el micrófono sí captó el audio, dejando "listening" pegado en true para
+  // siempre sin ningún error. Dos cambios:
+  //   1. interimResults=true — el texto va apareciendo en la caja MIENTRAS
+  //      habla (como en cualquier dictado real), así que aunque el evento
+  //      final nunca llegue, el usuario YA tiene su texto en el input y
+  //      puede tocar Enviar él mismo en vez de quedar atascado.
+  //   2. Un timeout de seguridad (voiceTimeoutRef) que apaga el micrófono
+  //      solo a los 12s si no ha pasado nada — antes esto podía quedarse
+  //      "grabando" indefinidamente sin ninguna salida.
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
@@ -230,12 +355,32 @@ export default function VictorChat({
 
     const recognition = new SpeechRecognition();
     recognition.lang = "es-PR";
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
+    function limpiarTimeoutVoz() {
+      if (voiceTimeoutRef.current) {
+        clearTimeout(voiceTimeoutRef.current);
+        voiceTimeoutRef.current = null;
+      }
+    }
+
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = event.results[event.results.length - 1][0].transcript;
-      if (transcript.trim()) send(transcript.trim());
+      // Reinicia el tope de seguridad cada vez que llega algo nuevo — solo
+      // se apaga solo si de verdad se quedó en silencio total.
+      limpiarTimeoutVoz();
+      const resultado = event.results[event.results.length - 1];
+      const transcript = resultado[0].transcript;
+      setInput(transcript);
+      if (resultado.isFinal) {
+        if (transcript.trim()) {
+          recognitionRef.current?.stop();
+          sendRef.current(transcript.trim());
+        }
+      } else {
+        // Todavía hablando — vuelve a armar el tope de seguridad.
+        voiceTimeoutRef.current = setTimeout(() => recognitionRef.current?.stop(), 12000);
+      }
     };
     // Antes esto solo apagaba "listening" sin decir nada — para el usuario
     // se sentía como "el micrófono no sirve" sin ninguna pista de por qué
@@ -244,6 +389,7 @@ export default function VictorChat({
     // instalación específica (es un permiso aparte del navegador normal) —
     // ahora se lo decimos explícitamente en vez de fallar en silencio.
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      limpiarTimeoutVoz();
       setListening(false);
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         setError("VICTOR no tiene permiso para usar el micrófono. Revisa los permisos de la app en Ajustes del celular y vuelve a intentar.");
@@ -260,9 +406,13 @@ export default function VictorChat({
         setError(`No se pudo usar el micrófono ahora mismo (error: ${event.error}). Inténtalo de nuevo.`);
       }
     };
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      limpiarTimeoutVoz();
+      setListening(false);
+    };
 
     recognitionRef.current = recognition;
+    return () => limpiarTimeoutVoz();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -281,6 +431,33 @@ export default function VictorChat({
       const pos = start + emoji.length;
       el?.setSelectionRange(pos, pos);
     });
+  }
+
+  // Cámara / adjuntar archivo del teléfono (21 sept 2026, pedido de Joel:
+  // "si se le puede agregar una camara y para descargar archivos del
+  // telefono por si le tengo que enviar una foto de un recibo o algo que
+  // el usuario no entienda y le preg a victor"). Mismo mecanismo que ya
+  // usa el paste de Ctrl+V más abajo (dataUrl para la vista previa, base64
+  // puro para mandarle a Claude) — reusa el mismo estado pendingImage, así
+  // que no hace falta tocar send() para nada. El <input type="file"> en sí
+  // no tiene el atributo `capture`, así que en el celular el propio picker
+  // del sistema ya ofrece "Cámara" o "Elegir foto existente" en un solo
+  // control — no hace falta un botón separado para cada uno.
+  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite elegir el mismo archivo dos veces seguidas
+    if (!file) return;
+    if (!IMAGE_MEDIA_TYPES_ACEPTADOS.includes(file.type)) {
+      setError("Ese tipo de imagen no es compatible — prueba con un PNG, JPG, WEBP o GIF.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const resultado = reader.result as string;
+      const base64 = resultado.split(",")[1] || "";
+      setPendingImage({ dataUrl: resultado, base64, mediaType: file.type });
+    };
+    reader.readAsDataURL(file);
   }
 
   async function toggleVoice() {
@@ -322,6 +499,12 @@ export default function VictorChat({
     try {
       recognitionRef.current.start();
       setListening(true);
+      // Tope de seguridad inicial — si nunca llega ni un solo resultado
+      // interino (el caso más raro y más frustrante: "se queda grabando y
+      // no pasa nada"), esto lo apaga solo a los 12s en vez de dejarlo
+      // pegado para siempre.
+      if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
+      voiceTimeoutRef.current = setTimeout(() => recognitionRef.current?.stop(), 12000);
     } catch {
       // .start() puede lanzar de una vez (no async) si ya había una
       // sesión de reconocimiento activa (ej. doble toque rápido) — el
@@ -402,6 +585,14 @@ export default function VictorChat({
       setLoading(false);
     }
   }
+
+  // Mantiene sendRef apuntando siempre a la versión más reciente de send()
+  // (ver el comentario junto a la declaración de sendRef más arriba) — sin
+  // este efecto, sendRef.current se quedaba en el no-op inicial y el
+  // dictado por voz nunca mandaba nada de verdad.
+  useEffect(() => {
+    sendRef.current = send;
+  });
 
   return (
     <>
@@ -513,76 +704,15 @@ export default function VictorChat({
             </div>
           ) : (
             <>
-          {/* Mensajes */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4" style={{ minHeight: 240 }}>
-            {messages.length === 0 && !loading && (
-              <div className="mb-3 flex items-start gap-2">
-                <img src={VICTOR_AVATAR} alt="VICTOR" className="h-7 w-7 flex-shrink-0 rounded-full object-cover" />
-                <div className="rounded-r-[10px] rounded-bl-[10px] border border-border bg-bg p-2.5 text-sm text-text">
-                  ¡Hola! Soy VICTOR. Cuéntame qué necesitas — tus gastos, tus metas, o si tienes una
-                  idea que quieres evaluar juntos.
-                </div>
-              </div>
-            )}
-
-            {messages.map((m, i) => (
-              <div key={i} className={`mb-3 flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                {m.role === "assistant" && (
-                  <img src={VICTOR_AVATAR} alt="VICTOR" className="h-7 w-7 flex-shrink-0 rounded-full object-cover" />
-                )}
-                <div
-                  className={`max-w-[80%] rounded-[10px] p-2.5 text-sm ${
-                    m.role === "user"
-                      ? "rounded-br-none whitespace-pre-wrap text-white"
-                      : "rounded-bl-none border border-border bg-bg text-text"
-                  }`}
-                  style={m.role === "user" ? { background: "#1D9E75" } : undefined}
-                >
-                  {m.imageDataUrl && (
-                    <img src={m.imageDataUrl} alt="Imagen enviada" className="mb-1.5 max-h-40 w-full rounded-lg object-cover" />
-                  )}
-                  {m.role === "assistant" ? (
-                    // VICTOR escribe en markdown (**negrita**, listas con "-", etc.) —
-                    // antes esto se pintaba tal cual, con los asteriscos crudos
-                    // visibles (reportado 16 sept 2026). Los mensajes del usuario
-                    // se quedan en texto plano (whitespace-pre-wrap arriba), nunca
-                    // necesitan markdown.
-                    <div className="vc-markdown">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
-                    </div>
-                  ) : (
-                    m.content
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {loading && (
-              <div className="mb-3 flex justify-start gap-2">
-                <img src={VICTOR_AVATAR} alt="VICTOR" className="h-7 w-7 flex-shrink-0 rounded-full object-cover" />
-                <div className="rounded-[10px] rounded-bl-none border border-border bg-bg p-2.5 text-sm text-muted">
-                  VICTOR está analizando y escribiendo…
-                </div>
-              </div>
-            )}
-
-            {error && <p className="text-xs text-red">{error}</p>}
-
-            {messages.length === 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {SUGERENCIAS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => send(s)}
-                    className="rounded-pill border border-teal px-3 py-1.5 text-xs text-teal"
-                    style={{ background: "rgba(29,158,117,.1)" }}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Mensajes — componente aparte y memoizado, ver PanelMensajes arriba */}
+          <PanelMensajes
+            scrollRef={scrollRef}
+            messages={messages}
+            loading={loading}
+            error={error}
+            avatar={VICTOR_AVATAR}
+            onSugerencia={sendStable}
+          />
 
           {/* Input */}
           <div className="relative flex flex-col gap-2 border-t border-border bg-card p-3">
@@ -631,6 +761,24 @@ export default function VictorChat({
               }
             >
               <i className="ti ti-mood-smile" style={{ fontSize: 16 }} />
+            </button>
+            {/* Input de archivo oculto — el picker nativo del celular ya
+                ofrece "Cámara" o "Elegir foto" sin necesitar dos botones
+                separados (ver comentario en handleFileSelected). */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={handleFileSelected}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              title="Adjuntar foto"
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border"
+              style={{ background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }}
+            >
+              <i className="ti ti-camera" style={{ fontSize: 16 }} />
             </button>
             {voiceSupported && (
               <button
