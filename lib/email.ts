@@ -765,7 +765,10 @@ export async function sendEscalacionSoporteEmail(params: {
   }
 
   const { deEmail, deNombre, asunto, cuerpo, motivo } = params;
-  const joelEmail = "dr.jvalentin@gmail.com";
+  // info@victorcfo.com (21 sept 2026, pedido de Joel: las escalaciones no
+  // deben mezclarse con su Gmail personal) — bandeja real de Workspace,
+  // separada de dr.jvalentin@gmail.com, que Joel revisa aparte.
+  const joelEmail = "info@victorcfo.com";
   const remitente = deNombre ? `${deNombre} <${deEmail}>` : deEmail;
 
   const textoPlano =
