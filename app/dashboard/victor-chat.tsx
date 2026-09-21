@@ -25,18 +25,6 @@ const SALUDO_DIARIO_TRIGGER = "[SALUDO_DIARIO]";
 
 const SUGERENCIAS = ["Analizar mis gastos", "Ver mis metas", "Ayúdame con una estrategia"];
 
-// Selector de emojis simple para el input — igual que en WhatsApp, un
-// botón de carita abre una cuadrícula chiquita y cada toque inserta el
-// emoji donde esté el cursor. No usamos ninguna librería nueva (el
-// usuario pega los archivos a mano en GitHub, sin npm install), así que
-// es solo una lista fija de los más comunes en conversaciones de plata.
-const EMOJIS = [
-  "😀", "😂", "😊", "😍", "🤔", "😅", "😢", "😭",
-  "😮", "🙏", "👍", "👎", "💪", "🙌", "👏", "🤝",
-  "❤️", "🔥", "🎉", "✅", "❌", "⚠️", "💰", "💵",
-  "💳", "📈", "📉", "🏦", "🏠", "🚗", "😴", "🤷",
-];
-
 // Logo/cara de VICTOR — antes era un PNG en base64 metido directo en el
 // código (~4KB en una sola línea gigante). Se movió a un archivo real en
 // /public (28 agosto 2026) porque ese base64 gigante se corrompía cada vez
@@ -200,7 +188,8 @@ export default function VictorChat({
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
-  const [showEmojis, setShowEmojis] = useState(false);
+  // Menú del botón "+" (Tomar foto / Elegir foto) — ver JSX del input.
+  const [showAdjuntar, setShowAdjuntar] = useState(false);
   // Imagen pegada (Ctrl+V) o adjuntada, lista para mandar en el próximo
   // mensaje — se limpia sola después de enviar. dataUrl es para la vista
   // previa y la burbuja del chat; base64/mediaType es lo que de verdad se
@@ -210,6 +199,7 @@ export default function VictorChat({
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   // Tope de seguridad del dictado por voz — ver el bug real reportado por
   // Joel más abajo, junto a la config de SpeechRecognition.
   const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -354,7 +344,18 @@ export default function VictorChat({
     setVoiceSupported(true);
 
     const recognition = new SpeechRecognition();
-    recognition.lang = "es-PR";
+    // Fix (21 sept 2026, reportado por Joel: "cuando le comienzo a hablar
+    // se cae y se tumba" — la app se cierra justo al empezar a hablar, no
+    // al activar el micrófono). "es-PR" no es un locale que el motor de
+    // voz de Android traiga instalado en la mayoría de los celulares (a
+    // diferencia de es-ES o es-US, que sí vienen de fábrica) — el fallo no
+    // pasa al arrancar el reconocimiento (eso ya funcionaba, "listening"
+    // se ponía en true), sino en el momento exacto en que el audio real
+    // empieza a procesarse contra un idioma que el motor no tiene
+    // descargado, lo cual en algunos Android/WebView tumba el proceso en
+    // vez de mandar un error limpio. "es-US" es el locale de español con
+    // mejor soporte real en Android y sigue sonando natural para PR.
+    recognition.lang = "es-US";
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
@@ -366,20 +367,33 @@ export default function VictorChat({
     }
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Reinicia el tope de seguridad cada vez que llega algo nuevo — solo
-      // se apaga solo si de verdad se quedó en silencio total.
-      limpiarTimeoutVoz();
-      const resultado = event.results[event.results.length - 1];
-      const transcript = resultado[0].transcript;
-      setInput(transcript);
-      if (resultado.isFinal) {
-        if (transcript.trim()) {
-          recognitionRef.current?.stop();
-          sendRef.current(transcript.trim());
+      // Todo el cuerpo envuelto en try/catch — si algo de esto llegara a
+      // lanzar (ej. un evento con forma inesperada en algún Android raro),
+      // antes se perdía como excepción sin atrapar dentro de un callback
+      // del navegador, lo cual en un PWA instalado puede tumbar la sesión
+      // en vez de solo fallar en pantalla. Con el try/catch, en el peor
+      // caso se apaga el micrófono con un mensaje — nunca se cae la app.
+      try {
+        // Reinicia el tope de seguridad cada vez que llega algo nuevo —
+        // solo se apaga solo si de verdad se quedó en silencio total.
+        limpiarTimeoutVoz();
+        const resultado = event.results[event.results.length - 1];
+        const transcript = resultado[0].transcript;
+        setInput(transcript);
+        if (resultado.isFinal) {
+          if (transcript.trim()) {
+            recognitionRef.current?.stop();
+            sendRef.current(transcript.trim());
+          }
+        } else {
+          // Todavía hablando — vuelve a armar el tope de seguridad.
+          voiceTimeoutRef.current = setTimeout(() => recognitionRef.current?.stop(), 12000);
         }
-      } else {
-        // Todavía hablando — vuelve a armar el tope de seguridad.
-        voiceTimeoutRef.current = setTimeout(() => recognitionRef.current?.stop(), 12000);
+      } catch {
+        limpiarTimeoutVoz();
+        recognitionRef.current?.stop();
+        setListening(false);
+        setError("Hubo un problema procesando el dictado. Inténtalo de nuevo.");
       }
     };
     // Antes esto solo apagaba "listening" sin decir nada — para el usuario
@@ -397,6 +411,8 @@ export default function VictorChat({
         setError("No se escuchó nada — inténtalo de nuevo, más cerca del micrófono.");
       } else if (event.error === "network") {
         setError("El dictado por voz necesita conexión a internet — revisa tu señal e inténtalo de nuevo.");
+      } else if (event.error === "language-not-supported") {
+        setError("Este celular no tiene instalado el paquete de voz en español. Prueba escribiendo el mensaje.");
       } else if (event.error !== "aborted") {
         // Incluye el código real (event.error) en el mensaje — mientras no
         // sepamos cuál de los errores restantes del spec (audio-capture,
@@ -416,33 +432,17 @@ export default function VictorChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Inserta el emoji justo donde esté el cursor (no solo al final) — así
-  // se puede escribir "gracias 🙏 por la ayuda" sin tener que mover el
-  // texto a mano. El picker se queda abierto después de escoger uno,
-  // igual que en WhatsApp, para poder poner varios seguidos.
-  function insertarEmoji(emoji: string) {
-    const el = inputRef.current;
-    const start = el?.selectionStart ?? input.length;
-    const end = el?.selectionEnd ?? input.length;
-    const nuevo = input.slice(0, start) + emoji + input.slice(end);
-    setInput(nuevo);
-    requestAnimationFrame(() => {
-      el?.focus();
-      const pos = start + emoji.length;
-      el?.setSelectionRange(pos, pos);
-    });
-  }
-
   // Cámara / adjuntar archivo del teléfono (21 sept 2026, pedido de Joel:
   // "si se le puede agregar una camara y para descargar archivos del
   // telefono por si le tengo que enviar una foto de un recibo o algo que
-  // el usuario no entienda y le preg a victor"). Mismo mecanismo que ya
+  // el usuario no entienda y le preg a victor"; menú "+" rediseñado el
+  // mismo día a pedido de Joel para que tomar foto y elegir de galería
+  // sean dos opciones explícitas, como en Gemini). Mismo mecanismo que ya
   // usa el paste de Ctrl+V más abajo (dataUrl para la vista previa, base64
   // puro para mandarle a Claude) — reusa el mismo estado pendingImage, así
-  // que no hace falta tocar send() para nada. El <input type="file"> en sí
-  // no tiene el atributo `capture`, así que en el celular el propio picker
-  // del sistema ya ofrece "Cámara" o "Elegir foto existente" en un solo
-  // control — no hace falta un botón separado para cada uno.
+  // que no hace falta tocar send() para nada. Un solo handler sirve para
+  // los dos <input type="file"> del menú (fileInputRef y cameraInputRef,
+  // ver JSX) — lo único que cambia entre ellos es el atributo `capture`.
   function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // permite elegir el mismo archivo dos veces seguidas
@@ -730,41 +730,20 @@ export default function VictorChat({
               </div>
             )}
             <div className="relative flex gap-2">
-            {showEmojis && (
-              <>
-                {/* Capa invisible para cerrar el panel al tocar afuera,
-                    igual que el resto de los menús de la app. */}
-                <div className="fixed inset-0 z-[55]" onClick={() => setShowEmojis(false)} />
-                <div
-                  className="absolute bottom-[52px] left-3 z-[60] grid w-[248px] grid-cols-8 gap-1 rounded-xl border border-border bg-card p-2 shadow-2xl"
-                >
-                  {EMOJIS.map((e) => (
-                    <button
-                      key={e}
-                      onClick={() => insertarEmoji(e)}
-                      className="flex h-7 w-7 items-center justify-center rounded-md text-base hover:bg-bg"
-                    >
-                      {e}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-            <button
-              onClick={() => setShowEmojis((v) => !v)}
-              title="Insertar emoji"
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border"
-              style={
-                showEmojis
-                  ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
-                  : { background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }
-              }
-            >
-              <i className="ti ti-mood-smile" style={{ fontSize: 16 }} />
-            </button>
-            {/* Input de archivo oculto — el picker nativo del celular ya
-                ofrece "Cámara" o "Elegir foto" sin necesitar dos botones
-                separados (ver comentario en handleFileSelected). */}
+            {/* Selector de emojis quitado (21 sept 2026, pedido de Joel: "el
+                teclado ya los tiene y queda muy poco espacio para
+                escribir") — el teclado nativo del celular ya trae su
+                propio selector de emojis, así que este era redundante y le
+                comía ancho a la caja de texto en una pantalla chiquita. */}
+            {/* Botón "+" con menú desplegable (21 sept 2026, pedido de Joel:
+                "queria un boton asi como el de gemini una + y se desplegara
+                lo que uno queria"). Dos inputs ocultos en vez de uno: antes
+                un solo <input type="file"> sin `capture` dejaba que el
+                picker nativo del celular decidiera si ofrecía cámara o
+                galería (no siempre las dos) — ahora cada opción del menú
+                apunta a su propio input, así "Tomar foto" SIEMPRE abre la
+                cámara (capture="environment") y "Elegir foto" SIEMPRE abre
+                la galería, sin depender de lo que el navegador decida. */}
             <input
               ref={fileInputRef}
               type="file"
@@ -772,13 +751,54 @@ export default function VictorChat({
               className="hidden"
               onChange={handleFileSelected}
             />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              capture="environment"
+              className="hidden"
+              onChange={handleFileSelected}
+            />
+            {showAdjuntar && (
+              <>
+                {/* Capa invisible para cerrar el menú al tocar afuera,
+                    igual que el resto de los menús de la app. */}
+                <div className="fixed inset-0 z-[55]" onClick={() => setShowAdjuntar(false)} />
+                <div className="absolute bottom-[52px] left-3 z-[60] w-[190px] overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+                  <button
+                    onClick={() => {
+                      setShowAdjuntar(false);
+                      cameraInputRef.current?.click();
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-text hover:bg-bg"
+                  >
+                    <i className="ti ti-camera" style={{ fontSize: 16, color: "#1D9E75" }} />
+                    Tomar foto
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAdjuntar(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2.5 text-left text-sm text-text hover:bg-bg"
+                  >
+                    <i className="ti ti-photo" style={{ fontSize: 16, color: "#1D9E75" }} />
+                    Elegir foto
+                  </button>
+                </div>
+              </>
+            )}
             <button
-              onClick={() => fileInputRef.current?.click()}
-              title="Adjuntar foto"
+              onClick={() => setShowAdjuntar((v) => !v)}
+              title="Adjuntar"
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border"
-              style={{ background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }}
+              style={
+                showAdjuntar
+                  ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
+                  : { background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }
+              }
             >
-              <i className="ti ti-camera" style={{ fontSize: 16 }} />
+              <i className="ti ti-plus" style={{ fontSize: 16 }} />
             </button>
             {voiceSupported && (
               <button
