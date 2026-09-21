@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarFirmaSvix } from "@/lib/webhook-svix";
 import { procesarCorreoSoporte } from "@/lib/soporte-agente";
+import { notificarFounder } from "@/lib/push";
 
 // Webhook de Resend Inbound (21 sept 2026, pedido de Joel: "crear un
 // agente que conteste lo que sea que esté en nuestro manual, ya si es algo
@@ -160,6 +161,11 @@ export async function POST(req: NextRequest) {
         .update({ escalado: true, error: "No se pudo obtener el cuerpo del correo." })
         .eq("id", fila.id);
     }
+    notificarFounder({
+      title: "VICTOR CFO — Soporte",
+      body: `Correo de ${deNombre || deEmail} sin poder procesarse — revísalo en info@victorcfo.com.`,
+      url: "/dashboard/cfo",
+    });
     return NextResponse.json({ ok: true, escalado: true, avisoAJoel: envio.sent });
   }
 
@@ -186,6 +192,11 @@ export async function POST(req: NextRequest) {
         .from("soporte_conversaciones")
         .update({ escalado: true, respuesta: resultado.motivo })
         .eq("id", fila.id);
+      notificarFounder({
+        title: "VICTOR CFO — Soporte",
+        body: `${deNombre || deEmail} escribió algo que VICTOR no pudo contestar: "${subjectRaw}".`,
+        url: "/dashboard/cfo",
+      });
     } else {
       await admin.from("soporte_conversaciones").update({ error: resultado.error }).eq("id", fila.id);
     }
