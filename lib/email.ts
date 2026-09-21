@@ -458,13 +458,19 @@ export async function sendWelcomeEmail(params: {
     ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en la Bóveda guardar pólizas, contratos o cualquier documento importante."],
   ];
 
+  // Pro lleva TODO lo de Core (aprende de ti, Citas, Metas/Bóveda) más lo
+  // propio de negocio (21 sept 2026, pedido de Joel: "añádele a Pro lo que
+  // le falta de Core más lo de Pro") — un usuario Pro también tiene lado
+  // personal, así que no pierde esos pasos por pagar el plan más caro.
   const pasosPro: [string, string][] = [
     ["Conecta tus cuentas", "Personal y de negocio — desde Cuentas puedes conectar bancos o tarjetas de ambos lados, cada uno en su espacio."],
     [
       "Activa tu entidad de negocio",
       "Desde Configuración, eso habilita Facturación — puedes cobrar por ATH Móvil Business o con tarjeta vía Stripe activándolo ahí mismo — y registrar Pagos a contratistas o servicios profesionales para organizar tus cuentas (VICTOR no paga por ti, solo lo deja anotado), además de tus Reportes listos para tu contable.",
     ],
-    ["Habla con VICTOR", "Te ayuda a categorizar transacciones, crear facturas, y entender tus números — de negocio y personales, siempre disponible abajo a la derecha."],
+    ["VICTOR aprende de ti", "Al principio te va a preguntar para categorizar bien tus gastos — mientras más lo uses, más te va a conocer, y más lo va a hacer solo. También le puedes pedir que te cree una factura o te explique tus números, de negocio o personales, siempre disponible abajo a la derecha."],
+    ["Usa Citas como tu asistente diario", "Agenda tus compromisos ahí y VICTOR te los recuerda, para que no se te olvide nada importante."],
+    ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en la Bóveda guardar pólizas, contratos o cualquier documento importante."],
     // Sin mencionar "invita a tu contable" todavía (21 sept 2026, pedido de
     // Joel: aún no está listo para promoverlo — falta reunirse con su
     // contable para definir cómo quiere que funcione ese flujo antes de
@@ -482,7 +488,7 @@ export async function sendWelcomeEmail(params: {
     `Esto es lo que puedes hacer en tu plan ${nombrePlan}:\n\n` +
     pasos.map(([titulo, texto], i) => `${i + 1}. ${titulo} — ${texto}`).join("\n\n") +
     `\n\nEntra a tu cuenta aquí:\n${dashboardUrl}\n\n` +
-    `Cualquier duda, responde este correo — te leemos.\n\n` +
+    `Cualquier duda o pregunta, escríbenos a soporte@victorcfo.com y te responderemos en la brevedad posible.\n\n` +
     `— VICTOR CFO\n` +
     `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
 
@@ -517,7 +523,7 @@ export async function sendWelcomeEmail(params: {
   <div style="text-align: center; margin: 28px 0;">
     <a href="${dashboardUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Entrar a mi cuenta</a>
   </div>
-  <p style="font-size: 14px;">Cualquier duda, <strong>responde este correo</strong> — te leemos.</p>
+  <p style="font-size: 14px;">Cualquier duda o pregunta, escríbenos a <a href="mailto:soporte@victorcfo.com" style="color: #1D9E75;">soporte@victorcfo.com</a> y te responderemos en la brevedad posible.</p>
   <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
   <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
 </div>`.trim();
