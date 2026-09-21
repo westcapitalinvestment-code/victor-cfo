@@ -693,3 +693,112 @@ export async function sendCasiTerminasEmail(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+// Agente de soporte por email (21 sept 2026, pedido de Joel: "crear un
+// agente que conteste lo que sea que esté en nuestro manual... btw el
+// agente es Victor CFO"). Responde EN EL MISMO HILO del correo que llegó a
+// soporte@victorcfo.com — de ahí el header In-Reply-To con el message_id
+// que Resend Inbound entrega en el webhook (ver app/api/soporte/inbound).
+// Firma como VICTOR (no como "el equipo de soporte") porque así lo pidió
+// Joel — es el mismo asistente que ya conoce el usuario en la app.
+export async function sendRespuestaSoporteEmail(params: {
+  toEmail: string;
+  asuntoOriginal: string;
+  messageIdOriginal: string;
+  respuesta: string;
+}): Promise<{ sent: boolean; reason?: string; emailId?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, asuntoOriginal, messageIdOriginal, respuesta } = params;
+  const asuntoRespuesta = asuntoOriginal.toLowerCase().startsWith("re:") ? asuntoOriginal : `Re: ${asuntoOriginal}`;
+
+  const textoPlano = `${respuesta}\n\n— VICTOR\nVICTOR CFO · ${SITE_URL}`;
+
+  const htmlRespuesta = escapeHtml(respuesta).replace(/\n/g, "<br/>");
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.6;">
+  <div style="margin-bottom: 20px;">
+    <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 9999px; background: #1D9E75; color: #fff; font-weight: 600; font-size: 13px; vertical-align: middle;">V</span>
+    <span style="font-size: 16px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR</span>
+  </div>
+  <p style="font-size: 14px;">${htmlRespuesta}</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: asuntoRespuesta,
+      text: textoPlano,
+      html: htmlCorreo,
+      headers: {
+        "In-Reply-To": messageIdOriginal,
+        References: messageIdOriginal,
+      },
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true, emailId: data?.id };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
+// Escalación a Joel cuando VICTOR no encuentra la respuesta en el manual —
+// "ya si es algo que no tenemos que lo derive a mi". Va a la bandeja
+// personal de Joel (no a soporte@, para que no se procese como otro
+// correo entrante) con todo el contexto para que él conteste directo,
+// respondiendo a esta notificación con "Cc" o reenviando al cliente.
+export async function sendEscalacionSoporteEmail(params: {
+  deEmail: string;
+  deNombre: string | null;
+  asunto: string;
+  cuerpo: string;
+  motivo: string;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { deEmail, deNombre, asunto, cuerpo, motivo } = params;
+  const joelEmail = "dr.jvalentin@gmail.com";
+  const remitente = deNombre ? `${deNombre} <${deEmail}>` : deEmail;
+
+  const textoPlano =
+    `VICTOR no pudo contestar este correo de soporte con lo que hay en el manual — hace falta que lo veas tú.\n\n` +
+    `De: ${remitente}\n` +
+    `Asunto: ${asunto}\n` +
+    `Por qué se escaló: ${motivo}\n\n` +
+    `--- Correo original ---\n${cuerpo}\n\n` +
+    `Puedes responderle directo a ${deEmail}.`;
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <p style="font-size: 14px;">VICTOR no pudo contestar este correo de soporte con lo que hay en el manual — hace falta que lo veas tú.</p>
+  <table style="width: 100%; font-size: 13px; margin: 16px 0; border-collapse: collapse;">
+    <tr><td style="padding: 4px 0; color: #999; width: 90px;">De</td><td>${escapeHtml(remitente)}</td></tr>
+    <tr><td style="padding: 4px 0; color: #999;">Asunto</td><td>${escapeHtml(asunto)}</td></tr>
+    <tr><td style="padding: 4px 0; color: #999;">Motivo</td><td>${escapeHtml(motivo)}</td></tr>
+  </table>
+  <div style="background: #f7f7f7; border-radius: 8px; padding: 16px; font-size: 13px; white-space: pre-wrap;">${escapeHtml(cuerpo)}</div>
+  <p style="font-size: 13px; margin-top: 16px;">Puedes responderle directo a <a href="mailto:${deEmail}" style="color: #1D9E75;">${deEmail}</a>.</p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: joelEmail,
+      replyTo: deEmail,
+      subject: `[Soporte VICTOR — revisar] ${asunto}`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
