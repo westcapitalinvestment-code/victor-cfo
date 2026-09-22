@@ -405,6 +405,16 @@ export default function VictorChat({
             resultadoFinalProcesadoRef.current = true;
             recognitionRef.current?.stop();
             sendRef.current(transcript.trim());
+            // Red de seguridad extra (21 sept 2026, reportado por Joel
+            // TAMBIÉN en la app instalada de iPhone, no solo en Safari — el
+            // guard de resultadoFinalProcesadoRef de arriba debería bastar,
+            // pero el síntoma persiste ahí, así que además de esa bandera
+            // se limpia el input a la fuerza medio segundo después de
+            // enviar. send() ya lo limpia de inmediato — este golpe extra
+            // solo entra en acción si algo (que sea lo que sea, en esa
+            // plataforma) lo repuebla después. No hace daño si no hay nada
+            // que limpiar.
+            setTimeout(() => setInput(""), 500);
           }
         } else {
           // Todavía hablando — vuelve a armar el tope de seguridad.
@@ -781,7 +791,18 @@ export default function VictorChat({
                 </button>
               </div>
             )}
-            <div className="relative flex gap-2">
+            <div className="relative flex items-end gap-2">
+            {/* Fix (21 sept 2026, pedido de Joel comparando con el screenshot
+                de Gemini: ahí los botones +/mic/enviar se quedan pegados
+                ABAJO mientras el texto crece hacia arriba por encima de
+                ellos — nunca se tapan). Sin items-end, el flex por defecto
+                (align-items: stretch) deja los botones pegados ARRIBA de la
+                fila apenas el <textarea> crece a dos o más líneas, mientras
+                la caja de texto sigue estirándose hacia abajo por debajo de
+                ellos — se veía roto. items-end alinea todos los hijos de
+                esta fila (los botones Y el textarea) contra el borde
+                inferior, así que crezca lo que crezca el texto, los botones
+                siempre quedan a la misma altura abajo. */}
             {/* Selector de emojis quitado (21 sept 2026, pedido de Joel: "el
                 teclado ya los tiene y queda muy poco espacio para
                 escribir") — el teclado nativo del celular ya trae su
