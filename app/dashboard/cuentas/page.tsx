@@ -572,19 +572,42 @@ export default function CuentasPage() {
               ))}
             </div>
           )}
-          <CuentasManuales />
-          <div className="flex gap-2">
-            <button className="vc-btn-primary" disabled={sincronizando} onClick={sincronizar}>
-              {sincronizando ? "Sincronizando..." : "Sincronizar transacciones"}
-            </button>
-            <button
-              className="rounded-lg border border-border px-4 py-3 text-sm text-muted"
-              disabled={conectando}
-              onClick={() => iniciarConexion()}
-            >
-              + Otro banco
+          <button
+            className="mb-3 w-full rounded-lg border border-border px-4 py-2 text-xs text-muted"
+            disabled={sincronizando}
+            onClick={sincronizar}
+          >
+            {sincronizando ? "Sincronizando..." : "Sincronizar transacciones"}
+          </button>
+
+          {/* Conectar banco (Plaid) promovido aquí, justo debajo de las
+              cuentas ya conectadas (22 sept 2026, pedido de Joel) — antes
+              era un botón chiquito "+ Otro banco" al fondo de la pantalla,
+              casi invisible. Ahora es la acción principal (verde) con la
+              misma nota de confianza que ya existe en el estado vacío, para
+              reforzar por qué usamos Plaid justo donde más se necesita:
+              cuando la persona ya está viendo sus cuentas y podría querer
+              añadir otra. Debajo de esta tarjeta solo va Cuentas manuales. */}
+          <div className="vc-card mb-3 text-center">
+            <p className="mb-2 text-sm font-medium">Conectar otro banco</p>
+            <p className="mb-3 text-xs text-muted">
+              Conecta BPPR, FirstBank, Oriental, Mercury u otro banco para ver el balance real y
+              traer tus transacciones automáticamente.
+            </p>
+            <div className="mb-4 rounded-lg border border-border bg-bg2 p-3 text-left text-[11px] leading-relaxed text-muted">
+              <p className="mb-1 font-medium text-text">VICTOR nunca ve ni guarda tu contraseña del banco.</p>
+              <p>
+                La conexión la maneja Plaid directo con tu banco — el mismo sistema que usan Venmo,
+                Chime, American Express y Robinhood. VICTOR solo recibe tus transacciones, nunca tus
+                credenciales.
+              </p>
+            </div>
+            <button className="vc-btn-primary" disabled={conectando} onClick={() => iniciarConexion()}>
+              {conectando ? "Conectando..." : "Conectar banco"}
             </button>
           </div>
+
+          <CuentasManuales />
         </>
       )}
     </div>
