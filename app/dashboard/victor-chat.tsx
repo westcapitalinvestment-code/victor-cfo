@@ -534,34 +534,17 @@ export default function VictorChat({
     setError(null);
     audioCaptureRetryRef.current = false;
 
-    // Fix (21 sept 2026, reportado por Joel DOS veces seguidas: incluso con
-    // una pausa de 300ms y un reintento automático, seguía saliendo
-    // "audio-capture" — no era una carrera de milisegundos, era un
-    // problema de fondo). Causa raíz real: este código pedía el micrófono
-    // con getUserMedia() y lo soltaba EN CADA toque del botón, así ya
-    // estuviera el permiso concedido desde hacía rato — ese vaivén de
-    // abrir/cerrar el canal de audio, en algunos Android, deja el
-    // subsistema de audio en un estado donde SpeechRecognition ya no puede
-    // tomar el micrófono después, sin importar cuánto se espere. El
-    // getUserMedia solo hacía falta la PRIMERA vez (bug original del 28
-    // agosto 2026: sin él, el sistema nunca mostraba el diálogo de
-    // "Permitir micrófono"). Ahora se consulta el permiso real primero
-    // (Permissions API) y el getUserMedia de priming solo corre cuando
-    // todavía no está concedido — en el uso normal (permiso ya dado en
-    // algún momento anterior) se salta por completo y se va directo a
-    // iniciarReconocimiento(), sin tocar el micrófono dos veces.
-    let permisoYaConcedido = false;
-    if (navigator.permissions?.query) {
-      try {
-        const estado = await navigator.permissions.query({ name: "microphone" as PermissionName });
-        permisoYaConcedido = estado.state === "granted";
-      } catch {
-        // Algún navegador no soporta consultar "microphone" en particular
-        // — se sigue con el flujo de respaldo (getUserMedia) más abajo.
-      }
-    }
-
-    if (!permisoYaConcedido && navigator.mediaDevices?.getUserMedia) {
+    // Reversión (21 sept 2026, confirmado por Joel en iPhone/Safari instalado
+    // como app: con el atajo de "saltar getUserMedia si el permiso ya está
+    // concedido" que se probó hoy, el micrófono dejó de funcionar del todo
+    // en la app instalada — "audio-capture" en cada intento. En iOS,
+    // getUserMedia no es solo para pedir permiso: también abre el canal de
+    // audio que SpeechRecognition necesita para poder grabar, así que
+    // saltárselo rompe el reconocimiento aunque el permiso ya esté dado.
+    // De vuelta al comportamiento previo (confirmado por Joel: sí grababa y
+    // transcribía bien, solo hacía falta el fix de sendRef para que
+    // enviara) — se pide el micrófono en cada toque del botón, sin atajos.
+    if (navigator.mediaDevices?.getUserMedia) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach((t) => t.stop());
