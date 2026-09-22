@@ -452,7 +452,7 @@ export async function sendWelcomeEmail(params: {
   // es escalonada (VICTOR necesita ayuda al principio, aprende con el uso)
   // en vez de prometer automatización total desde el día uno.
   const pasosCore: [string, string][] = [
-    ["Conecta tus bancos y tarjetas", "Así VICTOR empieza a ver tus gastos e ingresos automáticamente, sin que tengas que anotar nada a mano. La conexión la maneja Plaid directo con tu banco — el mismo sistema que usan Venmo, Chime, American Express y Robinhood — así que VICTOR nunca ve ni guarda tu contraseña. Si prefieres no conectar el banco todavía, también puedes subir tus estados de cuenta (CSV o PDF) y categorizamos igual."],
+    ["Conecta tus bancos y tarjetas", "Así VICTOR empieza a ver tus gastos e ingresos automáticamente, sin que tengas que anotar nada a mano. La conexión la maneja Plaid directo con tu banco — el mismo sistema que usan Venmo, Chime, American Express y Robinhood — así que VICTOR nunca ve ni guarda tu contraseña, solo recibe tus transacciones. Aquí en Puerto Rico, Plaid conecta bien bancos locales como BPPR, FirstBank, Oriental y Mercury, algo que QuickBooks Online no siempre logra. Si prefieres no conectar el banco todavía, también puedes subir tus estados de cuenta (CSV o PDF) y categorizamos igual."],
     ["VICTOR aprende de ti", "Al principio te va a preguntar para categorizar bien tus gastos — mientras más lo uses, más te va a conocer, y más lo va a hacer solo."],
     ["Usa Citas como tu asistente diario", "Agenda tus compromisos ahí y VICTOR te los recuerda, para que no se te olvide nada importante."],
     ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en la Bóveda guardar pólizas, contratos o cualquier documento importante."],
@@ -463,7 +463,7 @@ export async function sendWelcomeEmail(params: {
   // le falta de Core más lo de Pro") — un usuario Pro también tiene lado
   // personal, así que no pierde esos pasos por pagar el plan más caro.
   const pasosPro: [string, string][] = [
-    ["Conecta tus cuentas", "Personal y de negocio — desde Cuentas puedes conectar bancos o tarjetas de ambos lados, cada uno en su espacio. La conexión la maneja Plaid directo con tu banco — el mismo sistema que usan Venmo, Chime, American Express y Robinhood — así que VICTOR nunca ve ni guarda tu contraseña. Si prefieres no conectar el banco todavía, también puedes subir tus estados de cuenta (CSV o PDF) y categorizamos igual."],
+    ["Conecta tus cuentas", "Personal y de negocio — desde Cuentas puedes conectar bancos o tarjetas de ambos lados, cada uno en su espacio. La conexión la maneja Plaid directo con tu banco — el mismo sistema que usan Venmo, Chime, American Express y Robinhood — así que VICTOR nunca ve ni guarda tu contraseña, solo recibe tus transacciones. Aquí en Puerto Rico, Plaid conecta bien bancos locales como BPPR, FirstBank, Oriental y Mercury, algo que QuickBooks Online no siempre logra. Si prefieres no conectar el banco todavía, también puedes subir tus estados de cuenta (CSV o PDF) y categorizamos igual."],
     [
       "Activa tu entidad de negocio",
       "Desde Configuración, eso habilita Facturación — puedes cobrar por ATH Móvil Business o con tarjeta vía Stripe activándolo ahí mismo — y registrar Pagos a contratistas o servicios profesionales para organizar tus cuentas (VICTOR no paga por ti, solo lo deja anotado), además de tus Reportes listos para tu contable.",

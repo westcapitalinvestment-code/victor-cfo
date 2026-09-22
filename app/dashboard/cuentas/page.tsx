@@ -401,10 +401,18 @@ export default function CuentasPage() {
                 pequeño y nuevo. Va aquí, en la pantalla de conectar, para
                 TODOS por igual — nunca en un correo dirigido a alguien
                 específico que no conectó, porque eso sí se sentiría como
-                vigilancia ("nos dimos cuenta que tú no conectaste"). */}
-            <div className="mb-4 rounded-lg border border-border bg-bg2 p-3 text-left text-[11px] leading-relaxed text-muted">
-              <p className="mb-1 font-medium text-text">VICTOR nunca ve ni guarda tu contraseña del banco.</p>
-              <p>
+                vigilancia ("nos dimos cuenta que tú no conectaste"). Color
+                ámbar (mismo que la tarjeta de referidos en Inicio, pedido de
+                Joel el mismo día) para que resalte en vez de perderse como
+                texto gris más. */}
+            <div
+              className="mb-4 rounded-lg border p-3 text-left text-[11px] leading-relaxed"
+              style={{ borderColor: "#D97706", background: "rgba(217,119,6,.08)" }}
+            >
+              <p className="mb-1 font-medium" style={{ color: "#B45309" }}>
+                VICTOR nunca ve ni guarda tu contraseña del banco.
+              </p>
+              <p style={{ color: "#92400E" }}>
                 La conexión la maneja Plaid directo con tu banco — el mismo sistema que usan Venmo,
                 Chime, American Express y Robinhood. VICTOR solo recibe tus transacciones, nunca tus
                 credenciales.
@@ -572,8 +580,12 @@ export default function CuentasPage() {
               ))}
             </div>
           )}
+          {/* Verde (borde+texto teal, sin relleno) — antes era gris y se
+              perdía (22 sept 2026, pedido de Joel). Se queda arriba del
+              Conectar banco: Joel confirmó que esa posición está bien, ya
+              que actúa sobre las cuentas que se ven justo encima. */}
           <button
-            className="mb-3 w-full rounded-lg border border-border px-4 py-2 text-xs text-muted"
+            className="mb-3 w-full rounded-lg border border-teal px-4 py-2.5 text-sm font-medium text-teal disabled:opacity-50"
             disabled={sincronizando}
             onClick={sincronizar}
           >
@@ -594,9 +606,17 @@ export default function CuentasPage() {
               Conecta BPPR, FirstBank, Oriental, Mercury u otro banco para ver el balance real y
               traer tus transacciones automáticamente.
             </p>
-            <div className="mb-4 rounded-lg border border-border bg-bg2 p-3 text-left text-[11px] leading-relaxed text-muted">
-              <p className="mb-1 font-medium text-text">VICTOR nunca ve ni guarda tu contraseña del banco.</p>
-              <p>
+            {/* Ámbar a propósito — mismo color que la tarjeta de referidos en
+                Inicio (pedido de Joel, 22 sept 2026) para que resalte en vez
+                de perderse como texto gris más. */}
+            <div
+              className="mb-4 rounded-lg border p-3 text-left text-[11px] leading-relaxed"
+              style={{ borderColor: "#D97706", background: "rgba(217,119,6,.08)" }}
+            >
+              <p className="mb-1 font-medium" style={{ color: "#B45309" }}>
+                VICTOR nunca ve ni guarda tu contraseña del banco.
+              </p>
+              <p style={{ color: "#92400E" }}>
                 La conexión la maneja Plaid directo con tu banco — el mismo sistema que usan Venmo,
                 Chime, American Express y Robinhood. VICTOR solo recibe tus transacciones, nunca tus
                 credenciales.

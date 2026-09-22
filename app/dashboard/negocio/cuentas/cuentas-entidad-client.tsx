@@ -166,29 +166,53 @@ export default function CuentasEntidadClient({
         </>
       )}
 
-      <CuentasManuales entityId={entidadId} />
+      {/* Mismo reorden que /dashboard/cuentas (22 sept 2026, pedido de
+          Joel): Sincronizar (verde outline) justo debajo de las cuentas ya
+          conectadas — actúa sobre ellas — y la tarjeta de Conectar banco
+          (con la nota de confianza ámbar) promovida ahí mismo, en vez del
+          botón chiquito "+ Conectar banco" que tenía antes. Debajo de esa
+          tarjeta solo va Cuentas manuales. */}
+      <button
+        className="mb-3 w-full rounded-lg border border-teal px-4 py-2.5 text-sm font-medium text-teal disabled:opacity-50"
+        disabled={sincronizando}
+        onClick={sincronizar}
+      >
+        {sincronizando ? "Sincronizando..." : "Sincronizar transacciones"}
+      </button>
 
-      <div className="flex gap-2">
-        <button className="vc-btn-primary" disabled={sincronizando} onClick={sincronizar}>
-          {sincronizando ? "Sincronizando..." : "Sincronizar transacciones"}
-        </button>
-        <button className="rounded-lg border border-border px-4 py-3 text-sm text-muted" disabled={conectando} onClick={iniciarConexion}>
-          {conectando ? "Conectando..." : "+ Conectar banco"}
+      <div className="vc-card mb-3 text-center">
+        <p className="mb-2 text-sm font-medium">Conectar otro banco</p>
+        <p className="mb-3 text-xs text-muted">
+          Conecta BPPR, FirstBank, Oriental, Mercury u otro banco de esta entidad para ver el balance
+          real y traer sus transacciones automáticamente.
+        </p>
+        <div
+          className="mb-4 rounded-lg border p-3 text-left text-[11px] leading-relaxed"
+          style={{ borderColor: "#D97706", background: "rgba(217,119,6,.08)" }}
+        >
+          <p className="mb-1 font-medium" style={{ color: "#B45309" }}>
+            VICTOR nunca ve ni guarda tu contraseña del banco.
+          </p>
+          <p style={{ color: "#92400E" }}>
+            La conexión la maneja Plaid directo con tu banco — el mismo sistema que usan Venmo,
+            Chime, American Express y Robinhood. VICTOR solo recibe tus transacciones, nunca tus
+            credenciales.
+          </p>
+        </div>
+        <button className="vc-btn-primary" disabled={conectando} onClick={iniciarConexion}>
+          {conectando ? "Conectando..." : "Conectar banco"}
         </button>
       </div>
-      <p className="mt-2 text-[11px] text-muted">
+
+      <p className="mb-3 text-[11px] text-muted">
         Si el banco que conectes aquí trae también cuentas personales mezcladas, puedes reasignarlas desde{" "}
         <a href="/dashboard/cuentas" className="text-teal underline">
           Cuentas (Personal)
         </a>
         , con &quot;Pertenece a&quot;.
       </p>
-      {/* Nota de confianza (22 sept 2026) — mismo texto que /dashboard/cuentas,
-          para todos por igual. */}
-      <p className="mt-2 text-[11px] text-muted">
-        VICTOR nunca ve ni guarda la contraseña del banco — la conexión la maneja Plaid directo con tu
-        banco, el mismo sistema que usan Venmo, Chime, American Express y Robinhood.
-      </p>
+
+      <CuentasManuales entityId={entidadId} />
     </div>
   );
 }
