@@ -361,18 +361,17 @@ export default function VictorChat({
     setVoiceSupported(true);
 
     const recognition = new SpeechRecognition();
-    // Fix (21 sept 2026, reportado por Joel: "cuando le comienzo a hablar
-    // se cae y se tumba" — la app se cierra justo al empezar a hablar, no
-    // al activar el micrófono). "es-PR" no es un locale que el motor de
-    // voz de Android traiga instalado en la mayoría de los celulares (a
-    // diferencia de es-ES o es-US, que sí vienen de fábrica) — el fallo no
-    // pasa al arrancar el reconocimiento (eso ya funcionaba, "listening"
-    // se ponía en true), sino en el momento exacto en que el audio real
-    // empieza a procesarse contra un idioma que el motor no tiene
-    // descargado, lo cual en algunos Android/WebView tumba el proceso en
-    // vez de mandar un error limpio. "es-US" es el locale de español con
-    // mejor soporte real en Android y sigue sonando natural para PR.
-    recognition.lang = "es-US";
+    // Reversión (21 sept 2026, confirmado por Joel en iPhone: llevaba MESES
+    // funcionando bien con "es-PR" en la app instalada — dejó de enviar el
+    // mensaje hace ~3 días (root cause real: el bug de sendRef, ya
+    // arreglado), no por el idioma. El cambio a "es-US" se hizo el mismo
+    // día basado en una hipótesis de Android que no aplicaba a su teléfono
+    // (es iPhone) y coincide justo con la aparición del error
+    // "audio-capture" que no existía antes. Se revierte a "es-PR", el
+    // valor que sí estaba confirmado funcionando en su celular por meses.
+    // Si en el futuro se confirma un problema real de idioma en Android,
+    // hay que resolverlo sin tocar el valor que funciona en iOS.
+    recognition.lang = "es-PR";
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
