@@ -81,6 +81,24 @@ export async function POST(req: NextRequest) {
   const separadorReturn = returnTo.includes("?") ? "&" : "?";
   const separadorCancel = cancelTo.includes("?") ? "&" : "?";
 
+  // Meta Conversions API (22 sept 2026) — se capturan aquí porque este es el
+  // único momento en que hay una request real del navegador del usuario de
+  // la que leer las cookies _fbp/_fbc y la IP/user-agent reales. Para
+  // cuando Stripe llama al webhook de checkout.session.completed, ya no hay
+  // navegador — solo el servidor de Stripe — así que sin guardar esto ahora
+  // en metadata, el evento de Purchase llegaría a Meta sin poder
+  // emparejarse bien con la sesión de anuncio que originó el clic.
+  const fbp = req.cookies.get("_fbp")?.value;
+  const fbc = req.cookies.get("_fbc")?.value;
+  const metaIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || undefined;
+  const metaUa = req.headers.get("user-agent")?.slice(0, 490) || undefined;
+  const metaMetadata = {
+    ...(fbp ? { fbp } : {}),
+    ...(fbc ? { fbc } : {}),
+    ...(metaIp ? { meta_ip: metaIp } : {}),
+    ...(metaUa ? { meta_ua: metaUa } : {}),
+  };
+
   try {
     const session = await getStripe().checkout.sessions.create({
       mode: "subscription",
@@ -88,7 +106,7 @@ export async function POST(req: NextRequest) {
       client_reference_id: user.id,
       customer: perfil?.stripe_customer_id || undefined,
       customer_email: perfil?.stripe_customer_id ? undefined : user.email,
-      metadata: { supabase_user_id: user.id, plan, ciclo },
+      metadata: { supabase_user_id: user.id, plan, ciclo, ...metaMetadata },
       subscription_data: {
         metadata: { supabase_user_id: user.id, plan, ciclo },
         ...(trialDias > 0 ? { trial_period_days: trialDias } : {}),

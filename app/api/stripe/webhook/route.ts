@@ -4,6 +4,7 @@ import { getStripe, esPlanValido, priceIdAddonTecnicos, todosLosPriceIdsDePlanes
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
 import { sendReferralCreditEmail, sendWelcomeEmail } from "@/lib/email";
+import { enviarEventoCAPI } from "@/lib/meta-capi";
 
 // Rollover de créditos de IA (migración 0064, 3 sept 2026, pedido de Joel:
 // "me gustaria que se renueve que no lo pierda pq asi no se siente
@@ -215,6 +216,12 @@ export async function POST(req: NextRequest) {
 
         await supabase.from("users").update(datosActualizar).eq("id", userId);
 
+        const { data: nuevoUsuario } = await supabase
+          .from("users")
+          .select("email, full_name, plan")
+          .eq("id", userId)
+          .maybeSingle();
+
         // Correo de bienvenida (21 sept 2026, pedido de Joel) — el plan que
         // se guardó puede venir de esta misma sesión (metadata.plan) o, si
         // el checkout no lo trajo por lo que sea, del valor que ya tenía el
@@ -223,11 +230,6 @@ export async function POST(req: NextRequest) {
         // tumbamos el webhook — la cuenta ya quedó activa, que es lo que
         // de verdad importa; el correo es un extra, no la fuente de verdad.
         try {
-          const { data: nuevoUsuario } = await supabase
-            .from("users")
-            .select("email, full_name, plan")
-            .eq("id", userId)
-            .maybeSingle();
           if (nuevoUsuario?.email) {
             await sendWelcomeEmail({
               toEmail: nuevoUsuario.email,
@@ -237,6 +239,37 @@ export async function POST(req: NextRequest) {
           }
         } catch (err) {
           console.error("No se pudo enviar el correo de bienvenida:", err);
+        }
+
+        // Meta Conversions API — evento Purchase (22 sept 2026, pedido de
+        // Joel: "lo que haga falta para optimizar y coger más clientes").
+        // Este es el momento real de "alguien pagó de verdad" — el pixel del
+        // navegador (lib/fbpixel.ts) nunca mandaba esta señal, así que Meta
+        // optimizaba la campaña solo por Lead/CompleteRegistration (formulario
+        // lleno), no por quién de verdad se convierte en cliente pagando.
+        // fbp/fbc/meta_ip/meta_ua vienen de session.metadata, capturados en
+        // /api/stripe/checkout justo cuando el usuario hizo clic para pagar
+        // (ver ese archivo) — para cuando Stripe llama aquí ya no hay
+        // request del navegador de la que leerlos.
+        try {
+          await enviarEventoCAPI({
+            eventName: "Purchase",
+            eventId: `purchase_${session.id}`,
+            // OJO: este request lo manda Stripe server-a-server, no el
+            // navegador — no hay header "origin" real que leer aquí, así
+            // que se usa el dominio fijo de producción.
+            eventSourceUrl: "https://www.victorcfo.com/onboarding",
+            email: nuevoUsuario?.email,
+            fbp: session.metadata?.fbp,
+            fbc: session.metadata?.fbc,
+            clientIp: session.metadata?.meta_ip,
+            userAgent: session.metadata?.meta_ua,
+            value: (session.amount_total ?? 0) / 100,
+            currency: session.currency ?? "usd",
+            customData: { plan: nuevoUsuario?.plan ?? plan },
+          });
+        } catch (err) {
+          console.error("No se pudo enviar el evento Purchase a Meta CAPI:", err);
         }
         break;
       }
