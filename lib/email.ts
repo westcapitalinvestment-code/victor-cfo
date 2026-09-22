@@ -694,6 +694,69 @@ export async function sendCasiTerminasEmail(params: {
   }
 }
 
+// Recordatorio de onboarding incompleto (22 sept 2026) — a diferencia de
+// sendCasiTerminasEmail (que persigue el PAGO), este persigue la
+// conversación con VICTOR: el usuario ya pagó/activó su plan, pero cerró
+// el chat antes de que VICTOR terminara de conocerlo (apodo, situación,
+// etc. — ver migración 0008), así que perfil_completo sigue en false y el
+// saludo proactivo diario nunca lo vuelve a buscar (ver migración 0014).
+// Se manda UNA sola vez por usuario (recordatorio_onboarding_enviado,
+// migración 0093), no en cadena.
+export async function sendRecordatorioOnboardingEmail(params: {
+  toEmail: string;
+  toName: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName } = params;
+  const saludoNombre = toName || "";
+  const dashboardUrl = `${SITE_URL}/dashboard`;
+
+  const textoPlano =
+    (saludoNombre ? `Hola ${saludoNombre},\n\n` : `Hola,\n\n`) +
+    `Notamos que empezaste a configurar tu cuenta en VICTOR CFO, pero la conversación con VICTOR se quedó a medias — todavía no terminamos de conocerte.\n\n` +
+    `Es rápido, un par de preguntas nada más, y con eso VICTOR puede empezar a trabajar de verdad por ti: avisarte de gastos sin categorizar, documentos por vencer, y resumirte tus finanzas cada mañana sin que tengas que preguntarle.\n\n` +
+    `${dashboardUrl}\n\n` +
+    `Cualquier duda o pregunta, escríbenos a soporte@victorcfo.com y te respondemos en la brevedad posible.\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = saludoNombre ? escapeHtml(saludoNombre) : "";
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; background: #1D9E75; color: #fff; font-weight: 600; font-size: 14px; vertical-align: middle;">V</span>
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${htmlSeguro ? `Hola, <strong>${htmlSeguro}</strong>,` : `Hola,`}</p>
+  <p>Notamos que empezaste a configurar tu cuenta, pero la conversación con VICTOR se quedó a medias — todavía no terminamos de conocerte.</p>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${dashboardUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Terminar de conocer a VICTOR</a>
+  </div>
+  <p style="font-size: 14px;">Es rápido, un par de preguntas nada más, y con eso VICTOR puede empezar a trabajar de verdad por ti: avisarte de gastos sin categorizar, documentos por vencer, y resumirte tus finanzas cada mañana sin que tengas que preguntarle.</p>
+  <p style="font-size: 14px;">Cualquier duda o pregunta, escríbenos a <a href="mailto:soporte@victorcfo.com" style="color: #1D9E75;">soporte@victorcfo.com</a> y te respondemos en la brevedad posible.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: "Nos quedamos a medias conociéndote — termina tu perfil con VICTOR",
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
 // Agente de soporte por email (21 sept 2026, pedido de Joel: "crear un
 // agente que conteste lo que sea que esté en nuestro manual... btw el
 // agente es Victor CFO"). Responde EN EL MISMO HILO del correo que llegó a
