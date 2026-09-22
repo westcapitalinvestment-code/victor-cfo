@@ -183,6 +183,12 @@ export default function CuentasEntidadClient({
         </a>
         , con &quot;Pertenece a&quot;.
       </p>
+      {/* Nota de confianza (22 sept 2026) — mismo texto que /dashboard/cuentas,
+          para todos por igual. */}
+      <p className="mt-2 text-[11px] text-muted">
+        VICTOR nunca ve ni guarda la contraseña del banco — la conexión la maneja Plaid directo con tu
+        banco, el mismo sistema que usan Venmo, Chime, American Express y Robinhood.
+      </p>
     </div>
   );
 }

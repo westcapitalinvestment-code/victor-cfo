@@ -390,27 +390,42 @@ export default function CuentasPage() {
         <>
           <div className="vc-card mb-3 text-center">
             <p className="mb-2 text-sm font-medium">Conectar banco (Plaid)</p>
-            <p className="mb-4 text-xs text-muted">
+            <p className="mb-3 text-xs text-muted">
               Conecta BPPR, FirstBank, Oriental o Mercury para ver tu balance real y traer tus
               transacciones automáticamente.
             </p>
+            {/* Nota de confianza (22 sept 2026, pedido de Joel tras ver que solo
+                su propia cuenta estaba conectada) — la barrera real no es
+                técnica, es el miedo genuino (con historial real de fraude en
+                PR) a dar la contraseña del banco a una app de un negocio
+                pequeño y nuevo. Va aquí, en la pantalla de conectar, para
+                TODOS por igual — nunca en un correo dirigido a alguien
+                específico que no conectó, porque eso sí se sentiría como
+                vigilancia ("nos dimos cuenta que tú no conectaste"). */}
+            <div className="mb-4 rounded-lg border border-border bg-bg2 p-3 text-left text-[11px] leading-relaxed text-muted">
+              <p className="mb-1 font-medium text-text">VICTOR nunca ve ni guarda tu contraseña del banco.</p>
+              <p>
+                La conexión la maneja Plaid directo con tu banco — el mismo sistema que usan Venmo,
+                Chime, American Express y Robinhood. VICTOR solo recibe tus transacciones, nunca tus
+                credenciales.
+              </p>
+            </div>
             <button className="vc-btn-primary" disabled={conectando} onClick={() => iniciarConexion()}>
               {conectando ? "Conectando..." : "Conectar banco"}
             </button>
           </div>
-          {plan === "gratis" && (
-            // Pista explícita para plan gratis (30 agosto 2026, reportado por
-            // Joel: "no vi dónde el usuario sube el CSV" al probar el flujo
-            // gratis) — sin Plaid, la única forma de traer transacciones es
-            // crear una cuenta manual abajo y subir el CSV desde ahí. Antes
-            // no había ningún texto que conectara "categorizar por CSV" (lo
-            // que promete /registro) con la sección de Cuentas manuales.
+          {
+            // Pista explícita de la alternativa manual (30 agosto 2026,
+            // reportado por Joel para el plan gratis; ampliada 22 sept 2026 a
+            // Core/Pro también — mismo caso real: alguien que ya paga pero no
+            // se siente listo para conectar su banco directo tampoco debería
+            // quedarse sin saber que existe esta opción).
             <div className="mb-3 rounded-lg border border-teal bg-teal/[.06] p-3 text-center text-xs text-text">
               ¿Prefieres no conectar el banco todavía? Crea tus cuentas manual abajo (ej. "BPPR
-              Checking, Oriental, Firstbank, etc") y sube tus CSV para categorizar tus gastos —
-              es gratis.
+              Checking, Oriental, Firstbank, etc") y sube tus estados de cuenta (CSV o PDF) para
+              categorizar tus gastos igual.
             </div>
-          )}
+          }
           <CuentasManuales />
         </>
       ) : (
