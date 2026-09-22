@@ -813,16 +813,16 @@ export async function sendRespuestaSoporteEmail(params: {
 
 // Escalación a Joel cuando VICTOR no encuentra la respuesta en el manual —
 // "ya si es algo que no tenemos que lo derive a mi". Va a info@victorcfo.com
-// con todo el contexto para que él conteste directo, respondiendo a esta
+// (bandeja aparte de soporte@, que es donde llegan las preguntas de
+// clientes — ver comentario en app/api/soporte/inbound/route.ts) con todo
+// el contexto para que él conteste directo, respondiendo a esta
 // notificación con "Cc" o reenviando al cliente.
 //
-// 22 sept 2026 — Joel aclaró que info@victorcfo.com es precisamente el
-// buzón que SÍ está conectado a Resend Inbound (no soporte@, como asumía
-// el comentario original de esta función). Eso significa que esta misma
-// escalación, al llegar a info@, vuelve a disparar el webhook de
-// app/api/soporte/inbound — direccionesPropias() ahí incluye la dirección
-// real de RESEND_FROM_EMAIL (la que se usa como `from` más abajo) para que
-// esa vuelta se descarte sola en vez de reprocesarse como un correo nuevo.
+// 22 sept 2026 — un correo de prueba a soporte@victorcfo.com nunca disparó
+// el webhook (ni respuesta ni escalación); todo apunta a que el DNS de
+// recepción de Resend para ese buzón no quedó completo. direccionesPropias()
+// en el webhook ya incluye info@ de forma defensiva por si en algún momento
+// ese buzón también queda conectado a Resend Inbound.
 export async function sendEscalacionSoporteEmail(params: {
   deEmail: string;
   deNombre: string | null;

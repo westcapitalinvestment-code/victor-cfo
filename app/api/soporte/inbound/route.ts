@@ -9,11 +9,18 @@ import { notificarFounder } from "@/lib/push";
 // que no tenemos que lo derive a mi" — el agente es VICTOR, ver
 // lib/soporte-agente.ts). Resend manda un evento `email.received` cada vez
 // que llega un correo a cualquier dirección de un dominio configurado para
-// recibir — en producción es info@victorcfo.com (22 sept 2026, Joel aclaró
-// que así quedó configurado el DNS; soporte@victorcfo.com es un buzón
-// normal de Google Workspace, SIN automatización — un correo enviado ahí
-// nunca dispara este webhook). Ver direccionesPropias() más abajo para el
-// porqué esto importa para evitar loops con las escalaciones.
+// recibir — el flujo pensado es soporte@victorcfo.com (la dirección que ya
+// se le da al cliente en el email de bienvenida y en la landing) recibe la
+// pregunta; si VICTOR no la puede contestar con el manual, escala a
+// info@victorcfo.com (bandeja aparte de Joel, ver sendEscalacionSoporteEmail
+// en lib/email.ts).
+//
+// 22 sept 2026 — un correo de prueba a soporte@victorcfo.com se quedó sin
+// contestar ni escalar: quedó sentado en la bandeja sin que este webhook se
+// disparara. Eso apunta a que el DNS de recepción de Resend para
+// soporte@victorcfo.com nunca terminó de completarse (o choca con el MX de
+// Google Workspace que ya usa ese buzón para correo normal) — pendiente de
+// verificar/objetar con Joel, es un tema de DNS, no de este código.
 //
 // El payload del webhook es SOLO metadata (email_id, from, subject,
 // message_id) — el cuerpo real hay que pedirlo aparte a la API de Resend
@@ -31,16 +38,13 @@ const RESEND_API_BASE = "https://api.resend.com";
 // reenvía por error la propia respuesta de VICTOR a soporte@), nunca un
 // cliente real. Se descarta sin gastar una llamada a Claude.
 //
-// 22 sept 2026 — Joel aclaró que el buzón que SÍ está conectado a Resend
-// Inbound es info@victorcfo.com, no soporte@ (soporte@ es un buzón normal
-// de Google Workspace sin automatización). sendEscalacionSoporteEmail
-// (lib/email.ts) manda cada escalación precisamente a info@victorcfo.com
-// — si ese buzón es el que dispara este webhook, la propia escalación de
-// VICTOR volvería a entrar aquí como si fuera un correo nuevo de cliente.
-// Por eso esta lista ya no es solo un puñado de direcciones fijas: se le
-// suma en tiempo de ejecución la dirección real que usamos para enviar
-// (RESEND_FROM_EMAIL), sea cual sea, para que ese loop quede cerrado sin
-// depender de que alguien recuerde mantener las dos listas sincronizadas.
+// 22 sept 2026 — el flujo real es soporte@ recibe, escala a info@ (ver
+// comentario de arriba). info@victorcfo.com se incluye aquí igual, de
+// forma defensiva: si algún día ese buzón también queda conectado a
+// Resend Inbound (por ejemplo para que Joel pueda responder tickets desde
+// ahí), la propia escalación de VICTOR no se reprocesaría como un correo
+// nuevo. La dirección real de envío (RESEND_FROM_EMAIL) se suma también en
+// tiempo de ejecución por la misma razón, sea cual sea su valor.
 function direccionesPropias(): Set<string> {
   const propias = new Set([
     "soporte@victorcfo.com",
