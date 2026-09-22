@@ -9,8 +9,11 @@ import { notificarFounder } from "@/lib/push";
 // que no tenemos que lo derive a mi" — el agente es VICTOR, ver
 // lib/soporte-agente.ts). Resend manda un evento `email.received` cada vez
 // que llega un correo a cualquier dirección de un dominio configurado para
-// recibir (soporte@victorcfo.com) — ver guía de DNS/Dashboard que se le da
-// a Joel por separado.
+// recibir — en producción es info@victorcfo.com (22 sept 2026, Joel aclaró
+// que así quedó configurado el DNS; soporte@victorcfo.com es un buzón
+// normal de Google Workspace, SIN automatización — un correo enviado ahí
+// nunca dispara este webhook). Ver direccionesPropias() más abajo para el
+// porqué esto importa para evitar loops con las escalaciones.
 //
 // El payload del webhook es SOLO metadata (email_id, from, subject,
 // message_id) — el cuerpo real hay que pedirlo aparte a la API de Resend
@@ -27,11 +30,31 @@ const RESEND_API_BASE = "https://api.resend.com";
 // estas normalmente sería un rebote o un loop (ej. si algún día se
 // reenvía por error la propia respuesta de VICTOR a soporte@), nunca un
 // cliente real. Se descarta sin gastar una llamada a Claude.
-const DIRECCIONES_PROPIAS = new Set([
-  "soporte@victorcfo.com",
-  "noreply@victorcfo.com",
-  "notificaciones@victorcfo.com",
-]);
+//
+// 22 sept 2026 — Joel aclaró que el buzón que SÍ está conectado a Resend
+// Inbound es info@victorcfo.com, no soporte@ (soporte@ es un buzón normal
+// de Google Workspace sin automatización). sendEscalacionSoporteEmail
+// (lib/email.ts) manda cada escalación precisamente a info@victorcfo.com
+// — si ese buzón es el que dispara este webhook, la propia escalación de
+// VICTOR volvería a entrar aquí como si fuera un correo nuevo de cliente.
+// Por eso esta lista ya no es solo un puñado de direcciones fijas: se le
+// suma en tiempo de ejecución la dirección real que usamos para enviar
+// (RESEND_FROM_EMAIL), sea cual sea, para que ese loop quede cerrado sin
+// depender de que alguien recuerde mantener las dos listas sincronizadas.
+function direccionesPropias(): Set<string> {
+  const propias = new Set([
+    "soporte@victorcfo.com",
+    "noreply@victorcfo.com",
+    "notificaciones@victorcfo.com",
+    "info@victorcfo.com",
+  ]);
+  const fromEnv = process.env.RESEND_FROM_EMAIL;
+  if (fromEnv) {
+    const { email } = parsearRemitente(fromEnv);
+    if (email) propias.add(email);
+  }
+  return propias;
+}
 
 function parsearRemitente(from: string): { email: string; nombre: string | null } {
   const match = from.match(/^(.*)<(.+)>$/);
@@ -97,7 +120,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, dedup: true });
   }
 
-  if (DIRECCIONES_PROPIAS.has(deEmail)) {
+  if (direccionesPropias().has(deEmail)) {
     await admin.from("soporte_conversaciones").insert({
       de_email: deEmail,
       de_nombre: deNombre,
