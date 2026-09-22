@@ -791,174 +791,179 @@ export default function VictorChat({
                 </button>
               </div>
             )}
-            <div className="relative flex items-end gap-2">
-            {/* Fix (21 sept 2026, pedido de Joel comparando con el screenshot
-                de Gemini: ahí los botones +/mic/enviar se quedan pegados
-                ABAJO mientras el texto crece hacia arriba por encima de
-                ellos — nunca se tapan). Sin items-end, el flex por defecto
-                (align-items: stretch) deja los botones pegados ARRIBA de la
-                fila apenas el <textarea> crece a dos o más líneas, mientras
-                la caja de texto sigue estirándose hacia abajo por debajo de
-                ellos — se veía roto. items-end alinea todos los hijos de
-                esta fila (los botones Y el textarea) contra el borde
-                inferior, así que crezca lo que crezca el texto, los botones
-                siempre quedan a la misma altura abajo. */}
-            {/* Selector de emojis quitado (21 sept 2026, pedido de Joel: "el
-                teclado ya los tiene y queda muy poco espacio para
-                escribir") — el teclado nativo del celular ya trae su
-                propio selector de emojis, así que este era redundante y le
-                comía ancho a la caja de texto en una pantalla chiquita. */}
-            {/* Botón "+" con menú desplegable (21 sept 2026, pedido de Joel:
-                "queria un boton asi como el de gemini una + y se desplegara
-                lo que uno queria"). Dos inputs ocultos en vez de uno: antes
-                un solo <input type="file"> sin `capture` dejaba que el
-                picker nativo del celular decidiera si ofrecía cámara o
-                galería (no siempre las dos) — ahora cada opción del menú
-                apunta a su propio input, así "Tomar foto" SIEMPRE abre la
-                cámara (capture="environment") y "Elegir foto" SIEMPRE abre
-                la galería, sin depender de lo que el navegador decida. */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              className="hidden"
-              onChange={handleFileSelected}
-            />
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              capture="environment"
-              className="hidden"
-              onChange={handleFileSelected}
-            />
-            {showAdjuntar && (
-              <>
-                {/* Capa invisible para cerrar el menú al tocar afuera,
-                    igual que el resto de los menús de la app. */}
-                <div className="fixed inset-0 z-[55]" onClick={() => setShowAdjuntar(false)} />
-                <div className="absolute bottom-[52px] left-3 z-[60] w-[190px] overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-                  <button
-                    onClick={() => {
-                      setShowAdjuntar(false);
-                      cameraInputRef.current?.click();
-                    }}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-text hover:bg-bg"
-                  >
-                    <i className="ti ti-camera" style={{ fontSize: 16, color: "#1D9E75" }} />
-                    Tomar foto
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowAdjuntar(false);
-                      fileInputRef.current?.click();
-                    }}
-                    className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2.5 text-left text-sm text-text hover:bg-bg"
-                  >
-                    <i className="ti ti-photo" style={{ fontSize: 16, color: "#1D9E75" }} />
-                    Elegir foto
-                  </button>
-                </div>
-              </>
-            )}
-            <button
-              onClick={() => setShowAdjuntar((v) => !v)}
-              title="Adjuntar"
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border"
-              style={
-                showAdjuntar
-                  ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
-                  : { background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }
-              }
-            >
-              <i className="ti ti-plus" style={{ fontSize: 16 }} />
-            </button>
-            {voiceSupported && (
-              <button
-                onClick={toggleVoice}
-                title="Hablarle a VICTOR"
-                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border"
-                style={
-                  listening
-                    ? { background: "#cf222e", borderColor: "#cf222e", color: "#fff" }
-                    : { background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }
-                }
-              >
-                <i className={`ti ${listening ? "ti-player-stop-filled" : "ti-microphone"}`} style={{ fontSize: 16 }} />
-              </button>
-            )}
-            <div className="relative flex-1">
-              <textarea
-                ref={inputRef}
-                rows={1}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+            {/* Rediseño (21 sept 2026, pedido de Joel comparando con el
+                screenshot de Gemini: ahí el texto va en su propia línea
+                arriba, y los botones +/mic/enviar van en una fila aparte
+                abajo — dos líneas separadas, nunca compiten por el mismo
+                espacio horizontal). Antes todo iba en una sola fila
+                (+/mic/texto/enviar lado a lado), así que entre más crecía
+                la caja de texto a varias líneas, menos ancho quedaba
+                disponible para escribir. Ahora es flex-col: primero el
+                <textarea> a todo el ancho, después una fila aparte con el
+                "+" a la izquierda y mic+enviar a la derecha. */}
+            <div className="flex flex-col gap-2">
+              <div className="relative">
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      send();
+                    }
+                  }}
+                  onPaste={(e) => {
+                    // Un screenshot pegado (Ctrl+V) nunca llega como texto —
+                    // un <textarea> normal no acepta imágenes, así que sin
+                    // esto no pasaba NADA (bug real reportado por Joel, 5
+                    // sept 2026: "el chat no deja pegar", que resultó ser
+                    // justo esto). Si el portapapeles trae una imagen, la
+                    // interceptamos y la mandamos como adjunto en vez de
+                    // dejar que el navegador intente (y falle en silencio)
+                    // pegarla como texto. Si es texto normal, no se hace
+                    // nada aquí y el pegado sigue su curso normal.
+                    const item = Array.from(e.clipboardData.items).find((it) => it.type.startsWith("image/"));
+                    if (!item) return;
+                    if (!IMAGE_MEDIA_TYPES_ACEPTADOS.includes(item.type)) {
+                      e.preventDefault();
+                      setError("Ese tipo de imagen no es compatible — prueba con un PNG, JPG, WEBP o GIF.");
+                      return;
+                    }
                     e.preventDefault();
-                    send();
-                  }
-                }}
-                onPaste={(e) => {
-                  // Un screenshot pegado (Ctrl+V) nunca llega como texto —
-                  // un <textarea> normal no acepta imágenes, así que sin
-                  // esto no pasaba NADA (bug real reportado por Joel, 5
-                  // sept 2026: "el chat no deja pegar", que resultó ser
-                  // justo esto). Si el portapapeles trae una imagen, la
-                  // interceptamos y la mandamos como adjunto en vez de
-                  // dejar que el navegador intente (y falle en silencio)
-                  // pegarla como texto. Si es texto normal, no se hace
-                  // nada aquí y el pegado sigue su curso normal.
-                  const item = Array.from(e.clipboardData.items).find((it) => it.type.startsWith("image/"));
-                  if (!item) return;
-                  if (!IMAGE_MEDIA_TYPES_ACEPTADOS.includes(item.type)) {
-                    e.preventDefault();
-                    setError("Ese tipo de imagen no es compatible — prueba con un PNG, JPG, WEBP o GIF.");
-                    return;
-                  }
-                  e.preventDefault();
-                  const file = item.getAsFile();
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    const resultado = reader.result as string;
-                    const base64 = resultado.split(",")[1] || "";
-                    setPendingImage({ dataUrl: resultado, base64, mediaType: file.type });
-                  };
-                  reader.readAsDataURL(file);
-                }}
-                placeholder={listening ? "Escuchando…" : "Pregúntale a VICTOR..."}
-                className="vc-input w-full resize-none rounded-2xl leading-snug"
-                style={{ maxHeight: 120, overflowY: "auto" }}
-                disabled={loading}
-              />
-              {listening && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-bg">
-                  <div className="vc-wave">
-                    <span className="vc-wave-bar" />
-                    <span className="vc-wave-bar" />
-                    <span className="vc-wave-bar" />
-                    <span className="vc-wave-bar" />
-                    <span className="vc-wave-bar" />
+                    const file = item.getAsFile();
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const resultado = reader.result as string;
+                      const base64 = resultado.split(",")[1] || "";
+                      setPendingImage({ dataUrl: resultado, base64, mediaType: file.type });
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                  placeholder={listening ? "Escuchando…" : "Pregúntale a VICTOR..."}
+                  className="vc-input w-full resize-none rounded-2xl leading-snug"
+                  style={{ maxHeight: 120, overflowY: "auto" }}
+                  disabled={loading}
+                />
+                {listening && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-bg">
+                    <div className="vc-wave">
+                      <span className="vc-wave-bar" />
+                      <span className="vc-wave-bar" />
+                      <span className="vc-wave-bar" />
+                      <span className="vc-wave-bar" />
+                      <span className="vc-wave-bar" />
+                    </div>
                   </div>
+                )}
+              </div>
+              <div className="relative flex items-center justify-between">
+                {/* Selector de emojis quitado (21 sept 2026, pedido de Joel:
+                    "el teclado ya los tiene y queda muy poco espacio para
+                    escribir") — el teclado nativo del celular ya trae su
+                    propio selector de emojis, así que este era redundante y
+                    le comía ancho a la caja de texto en una pantalla
+                    chiquita. */}
+                {/* Botón "+" con menú desplegable (21 sept 2026, pedido de
+                    Joel: "queria un boton asi como el de gemini una + y se
+                    desplegara lo que uno queria"). Dos inputs ocultos en
+                    vez de uno: antes un solo <input type="file"> sin
+                    `capture` dejaba que el picker nativo del celular
+                    decidiera si ofrecía cámara o galería (no siempre las
+                    dos) — ahora cada opción del menú apunta a su propio
+                    input, así "Tomar foto" SIEMPRE abre la cámara
+                    (capture="environment") y "Elegir foto" SIEMPRE abre la
+                    galería, sin depender de lo que el navegador decida. */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleFileSelected}
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleFileSelected}
+                />
+                {showAdjuntar && (
+                  <>
+                    {/* Capa invisible para cerrar el menú al tocar afuera,
+                        igual que el resto de los menús de la app. */}
+                    <div className="fixed inset-0 z-[55]" onClick={() => setShowAdjuntar(false)} />
+                    <div className="absolute bottom-[44px] left-0 z-[60] w-[190px] overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+                      <button
+                        onClick={() => {
+                          setShowAdjuntar(false);
+                          cameraInputRef.current?.click();
+                        }}
+                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-text hover:bg-bg"
+                      >
+                        <i className="ti ti-camera" style={{ fontSize: 16, color: "#1D9E75" }} />
+                        Tomar foto
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowAdjuntar(false);
+                          fileInputRef.current?.click();
+                        }}
+                        className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2.5 text-left text-sm text-text hover:bg-bg"
+                      >
+                        <i className="ti ti-photo" style={{ fontSize: 16, color: "#1D9E75" }} />
+                        Elegir foto
+                      </button>
+                    </div>
+                  </>
+                )}
+                <button
+                  onClick={() => setShowAdjuntar((v) => !v)}
+                  title="Adjuntar"
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border"
+                  style={
+                    showAdjuntar
+                      ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
+                      : { background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }
+                  }
+                >
+                  <i className="ti ti-plus" style={{ fontSize: 16 }} />
+                </button>
+                <div className="flex items-center gap-2">
+                  {voiceSupported && (
+                    <button
+                      onClick={toggleVoice}
+                      title="Hablarle a VICTOR"
+                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border"
+                      style={
+                        listening
+                          ? { background: "#cf222e", borderColor: "#cf222e", color: "#fff" }
+                          : { background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }
+                      }
+                    >
+                      <i className={`ti ${listening ? "ti-player-stop-filled" : "ti-microphone"}`} style={{ fontSize: 16 }} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => send()}
+                    disabled={loading || (!input.trim() && !pendingImage)}
+                    title="Enviar mensaje"
+                    className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border ${
+                      listening ? "vc-send-listening" : ""
+                    }`}
+                    style={
+                      input.trim() || pendingImage
+                        ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
+                        : { background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }
+                    }
+                  >
+                    <i className="ti ti-send" style={{ fontSize: 16 }} />
+                  </button>
                 </div>
-              )}
-            </div>
-            <button
-              onClick={() => send()}
-              disabled={loading || (!input.trim() && !pendingImage)}
-              title="Enviar mensaje"
-              className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border ${
-                listening ? "vc-send-listening" : ""
-              }`}
-              style={
-                input.trim() || pendingImage
-                  ? { background: "#1D9E75", borderColor: "#1D9E75", color: "#fff" }
-                  : { background: "rgba(29,158,117,.1)", borderColor: "#1D9E75", color: "#1D9E75" }
-              }
-            >
-              <i className="ti ti-send" style={{ fontSize: 16 }} />
-            </button>
+              </div>
             </div>
           </div>
             </>
