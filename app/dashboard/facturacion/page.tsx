@@ -22,9 +22,12 @@ export default async function FacturacionPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase.from("users").select("plan").eq("id", user.id).maybeSingle();
+  const { data: profile } = await supabase.from("users").select("plan, addon_tecnicos_status").eq("id", user.id).maybeSingle();
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   if (!esPro) return <ProPaywall />;
+  // Para "Asignar a técnico" en Seguimientos (24 sept 2026) — mismo gate que
+  // ya usan Nueva Factura/Cotización.
+  const addonTecnicosActivo = profile?.addon_tecnicos_status === "activo";
 
   const { data: entities } = await supabase
     .from("business_entities")
@@ -97,6 +100,15 @@ export default async function FacturacionPage({
   // sept 2026: "ninguna cobro fees, no se de dnd saca esos fees").
   const entidadesConAth = (entities ?? []).filter((e) => e.ath_movil_business_path).map((e) => e.id);
 
+  let tecnicosQuery = supabase
+    .from("technicians")
+    .select("id, name, entity_id")
+    .eq("owner_id", user.id)
+    .eq("active", true)
+    .order("name", { ascending: true });
+  if (!vistaGlobal && entidadActivaId) tecnicosQuery = tecnicosQuery.eq("entity_id", entidadActivaId);
+  const { data: tecnicos } = await tecnicosQuery;
+
   return (
     <FacturacionPortal
       clients={clients ?? []}
@@ -107,6 +119,8 @@ export default async function FacturacionPage({
       entidadesConAth={entidadesConAth}
       entidades={entities.map((e) => ({ id: e.id, name: e.name }))}
       tabInicial={searchParams?.tab}
+      tecnicos={tecnicos ?? []}
+      addonTecnicosActivo={addonTecnicosActivo}
     />
   );
 }

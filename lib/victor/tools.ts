@@ -904,8 +904,9 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "pregunte 'a quién le toca darle seguimiento', 'qué clientes se me están yendo', o algo parecido — este es " +
       "justamente el problema real que Joel describió: 'negocio que no crece es por falta de organización... si " +
       "ellos me hubieran llamado cada 6 meses estarían facturando más'. Devuelve cliente, servicio, fecha en que " +
-      "le toca, teléfono y dirección (para coordinar rutas) de cada uno. NUNCA inventes seguimientos que no estén " +
-      "en la base de datos.",
+      "le toca, teléfono, dirección (para coordinar rutas), técnico asignado (si el dueño le asignó uno — 24 sept " +
+      "2026) y la nota más reciente (si el dueño o el técnico dejaron una, ej. 'de viaje, llamar la próxima " +
+      "semana') de cada uno. NUNCA inventes seguimientos que no estén en la base de datos.",
     input_schema: {
       type: "object",
       properties: {
@@ -920,13 +921,18 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
   {
     name: "actualizar_seguimiento_estado",
     description:
-      "Actualiza el estado de un seguimiento de cliente pendiente — úsala cuando el usuario diga que ya llamó o " +
-      "escribió al cliente (nuevo_estado: 'contactado'), que ya coordinaron cita (nuevo_estado: 'agendado'), que " +
-      "ya le volvió a hacer el servicio y quiere cerrar el ciclo (nuevo_estado: 'completado' — OJO: esto no " +
-      "genera el próximo seguimiento automáticamente, eso solo pasa al marcar pagada una factura nueva de ese " +
-      "servicio), o que decidió no darle más seguimiento por ahora (nuevo_estado: 'descartado'). Busca el " +
-      "seguimiento por nombre del cliente (y opcionalmente servicio) — si hay más de una coincidencia entre los " +
-      "pendientes, pregúntale al usuario cuál antes de actualizar.",
+      "Actualiza el estado y/o la nota de un seguimiento de cliente pendiente — úsala cuando el usuario diga que " +
+      "ya llamó o escribió al cliente (nuevo_estado: 'contactado'), que ya coordinaron cita (nuevo_estado: " +
+      "'agendado'), que ya le volvió a hacer el servicio y quiere cerrar el ciclo (nuevo_estado: 'completado' — " +
+      "OJO: esto no genera el próximo seguimiento automáticamente, eso solo pasa al marcar pagada una factura " +
+      "nueva de ese servicio), o que decidió no darle más seguimiento por ahora (nuevo_estado: 'descartado'). " +
+      "IMPORTANTE (24 sept 2026, mismo botón 'Pendiente (nota)' que existe en el portal): si el usuario contactó " +
+      "al cliente pero NO se resolvió nada (ej. 'lo llamé pero está de viaje, hay que llamarlo la próxima " +
+      "semana'), NO uses 'contactado' — omite nuevo_estado por completo y solo pasa `nota`; el seguimiento se " +
+      "queda tal cual estaba (activo, visible) con la nota anotada, listo para reintentar. La nota SIEMPRE " +
+      "reemplaza la anterior (no se acumula) — si hace falta conservar algo de la nota vieja, inclúyelo en el " +
+      "texto nuevo. Busca el seguimiento por nombre del cliente (y opcionalmente servicio) — si hay más de una " +
+      "coincidencia entre los pendientes, pregúntale al usuario cuál antes de actualizar.",
     input_schema: {
       type: "object",
       properties: {
@@ -935,11 +941,18 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
         nuevo_estado: {
           type: "string",
           enum: ["contactado", "agendado", "completado", "descartado"],
-          description: "Nuevo estado del seguimiento.",
+          description:
+            "Nuevo estado del seguimiento. OMÍTELO si el usuario solo quiere dejar una nota sin resolver nada " +
+            "(ej. 'está de viaje, llamar después') — el seguimiento se queda activo tal como estaba.",
         },
-        nota: { type: "string", description: "Nota opcional sobre el contacto (ej. qué dijo el cliente, cuándo quedaron)." },
+        nota: {
+          type: "string",
+          description:
+            "Nota sobre el contacto (ej. qué dijo el cliente, cuándo quedaron). Reemplaza cualquier nota anterior " +
+            "de ese seguimiento — no se acumula.",
+        },
       },
-      required: ["cliente_nombre", "nuevo_estado"],
+      required: ["cliente_nombre"],
     },
   },
   {
@@ -3889,7 +3902,7 @@ export async function executeVictorTool(
 
       let querySeg = supabase
         .from("seguimientos_clientes")
-        .select("id, fecha_proximo, estado, clients(name, telefono, address), services(nombre)")
+        .select("id, fecha_proximo, estado, notas, clients(name, telefono, address), services(nombre), technicians(name)")
         .eq("owner_id", ownerId)
         .in("estado", ["pendiente", "contactado", "agendado"])
         .order("fecha_proximo", { ascending: true });
@@ -3905,13 +3918,16 @@ export async function executeVictorTool(
       const lineasSeg = seguimientosData.map((s) => {
         const clienteJoin = Array.isArray(s.clients) ? s.clients[0] : s.clients;
         const servicioJoin = Array.isArray(s.services) ? s.services[0] : s.services;
+        const tecnicoJoin = Array.isArray((s as any).technicians) ? (s as any).technicians[0] : (s as any).technicians;
         const vencidoSeg = (s.fecha_proximo as string) < hoySeg;
         const cuando = vencidoSeg ? `VENCIDO desde ${s.fecha_proximo}` : `le toca el ${s.fecha_proximo}`;
         return (
           `- ${clienteJoin?.name ?? "Cliente"} — ${servicioJoin?.nombre ?? "servicio"}, ${cuando}` +
           `${clienteJoin?.telefono ? `, tel. ${clienteJoin.telefono}` : ""}` +
           `${clienteJoin?.address ? `, dirección: ${clienteJoin.address}` : ""}` +
-          `${s.estado !== "pendiente" ? ` [${s.estado}]` : ""}`
+          `${s.estado !== "pendiente" ? ` [${s.estado}]` : ""}` +
+          `${tecnicoJoin?.name ? `, asignado a ${tecnicoJoin.name}` : ""}` +
+          `${s.notas ? `, nota: "${s.notas}"` : ""}`
         );
       });
 
@@ -3920,12 +3936,19 @@ export async function executeVictorTool(
 
     case "actualizar_seguimiento_estado": {
       const clienteBuscado = String(input.cliente_nombre ?? "").trim();
-      const nuevoEstadoSeg = String(input.nuevo_estado ?? "").trim();
-      if (!clienteBuscado || !["contactado", "agendado", "completado", "descartado"].includes(nuevoEstadoSeg)) {
-        return { ok: false, message: "Faltan datos válidos (cliente y nuevo estado) para actualizar el seguimiento." };
+      const nuevoEstadoSegCrudo = typeof input.nuevo_estado === "string" ? input.nuevo_estado.trim() : "";
+      const notaSeg = typeof input.nota === "string" && input.nota.trim() ? input.nota.trim() : null;
+      // "Pendiente (nota)" desde el chat (24 sept 2026) — nuevo_estado es
+      // opcional: si el usuario solo dejó una nota sin resolver nada (ej.
+      // "está de viaje, llamar la próxima semana"), se omite y el
+      // seguimiento se queda en el estado que ya tenía.
+      if (nuevoEstadoSegCrudo && !["contactado", "agendado", "completado", "descartado"].includes(nuevoEstadoSegCrudo)) {
+        return { ok: false, message: `Estado inválido: "${nuevoEstadoSegCrudo}".` };
+      }
+      if (!clienteBuscado || (!nuevoEstadoSegCrudo && !notaSeg)) {
+        return { ok: false, message: "Falta el cliente y al menos un nuevo estado o una nota para actualizar el seguimiento." };
       }
       const servicioBuscado = typeof input.servicio_nombre === "string" ? input.servicio_nombre.trim() : "";
-      const notaSeg = typeof input.nota === "string" && input.nota.trim() ? input.nota.trim() : null;
 
       const { data: candidatosSeg, error: buscarSegError } = await supabase
         .from("seguimientos_clientes")
@@ -3966,15 +3989,22 @@ export async function executeVictorTool(
       const { error: updateSegError } = await supabase
         .from("seguimientos_clientes")
         .update({
-          estado: nuevoEstadoSeg,
-          ...(notaSeg ? { notas: seguimientoObjetivo.notas ? `${seguimientoObjetivo.notas}\n${notaSeg}` : notaSeg } : {}),
+          ...(nuevoEstadoSegCrudo ? { estado: nuevoEstadoSegCrudo } : {}),
+          // La nota reemplaza a la anterior (mismo comportamiento que el
+          // botón "Pendiente (nota)"/"Editar nota" del portal) — no se
+          // acumula histórico.
+          ...(notaSeg ? { notas: notaSeg } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq("id", seguimientoObjetivo.id);
       if (updateSegError) return { ok: false, message: `No se pudo actualizar el seguimiento: ${updateSegError.message}` };
 
       const clienteJoinObjetivo = Array.isArray(seguimientoObjetivo.clients) ? seguimientoObjetivo.clients[0] : seguimientoObjetivo.clients;
-      return { ok: true, message: `Seguimiento de "${clienteJoinObjetivo?.name ?? clienteBuscado}" actualizado a "${nuevoEstadoSeg}".` };
+      const nombreClienteObjetivo = clienteJoinObjetivo?.name ?? clienteBuscado;
+      if (nuevoEstadoSegCrudo) {
+        return { ok: true, message: `Seguimiento de "${nombreClienteObjetivo}" actualizado a "${nuevoEstadoSegCrudo}"${notaSeg ? ", con nota guardada" : ""}.` };
+      }
+      return { ok: true, message: `Nota guardada en el seguimiento de "${nombreClienteObjetivo}" — se queda activo, listo para reintentar.` };
     }
 
     case "reporte_pagos_contratistas": {

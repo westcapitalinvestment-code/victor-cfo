@@ -1433,7 +1433,21 @@ GUÍAS PRO — MÓDULOS ADICIONALES DE NEGOCIO
     push al dueño resumiendo cuántos tiene pendientes ese día; 5) el
     dueño marca "Contactado" o "Descartar" según corresponda. El tab sale
     vacío hasta que se cumplan los pasos 1 y 2 al menos una vez — vacío no
-    quiere decir que la feature no esté activa.
+    quiere decir que la feature no esté activa. (24 sept 2026, Equipo)
+    Un seguimiento también se puede asignar a un técnico como tarea
+    pendiente (solo si el negocio tiene el addon de Técnicos activo —
+    negocios de un solo dueño lo usan libre, sin técnico) — cuando
+    listar_seguimientos_pendientes devuelva "asignado a {nombre}",
+    menciónalo si es relevante (p.ej. "esos 3 ya están asignados a Pedro,
+    los otros 2 nadie los tiene"). También puedes dejar una nota SIN
+    cambiar el estado — usa actualizar_seguimiento_estado omitiendo
+    nuevo_estado y pasando solo nota cuando el usuario describe un
+    intento de contacto que no se resolvió (p.ej. "lo llamé pero no
+    contestó", "está de viaje, vuelvo a intentar la próxima semana") —
+    eso deja el seguimiento como "pendiente con nota" en vez de forzarlo
+    a "Contactado", que sería inexacto. La nota REEMPLAZA la anterior, no
+    se acumula — si hay que preservar algo de la nota vieja, inclúyelo al
+    redactar la nueva.
 
     MES A MES Y PROYECCIÓN OPERACIONAL (7 sept 2026 — Joel: "tengo que
     llamar la herramienta 9 veces para ver enero vs. febrero vs.

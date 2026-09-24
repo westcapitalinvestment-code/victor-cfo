@@ -207,6 +207,8 @@ export default function FacturacionPortal({
   volverLabel = "← VICTOR",
   ownerIdEfectivo,
   modoAdmin = false,
+  tecnicos = [],
+  addonTecnicosActivo = false,
 }: {
   clients: Cliente[];
   facturas: Factura[];
@@ -242,6 +244,10 @@ export default function FacturacionPortal({
   // la próxima ronda), así que en vez de dejar links rotos, esas pestañas
   // ni aparecen en modo admin.
   modoAdmin?: boolean;
+  // "Asignar a técnico" en Seguimientos (24 sept 2026) — mismo patrón y
+  // mismo gate de addon que ya usan Nueva Factura/Cotización.
+  tecnicos?: { id: string; name: string; entity_id: string | null }[];
+  addonTecnicosActivo?: boolean;
 }) {
   const tabsVisibles = modoAdmin ? TABS.filter((t) => t.id === "facturas" || t.id === "clientes") : TABS;
   const tabValido = tabsVisibles.some((t) => t.id === tabInicial);
@@ -320,7 +326,13 @@ export default function FacturacionPortal({
       {!modoAdmin && tab === "servicios" && (
         <ServiciosTab servicios={servicios} entidadId={entidadId} ownerIdEfectivo={ownerIdEfectivo} />
       )}
-      {!modoAdmin && tab === "seguimientos" && <SeguimientosTab entidadId={entidadId} />}
+      {!modoAdmin && tab === "seguimientos" && (
+        <SeguimientosTab
+          entidadId={entidadId}
+          tecnicos={tecnicos}
+          addonTecnicosActivo={addonTecnicosActivo}
+        />
+      )}
       {!modoAdmin && tab === "reportes" && (
         <ReportesTab
           facturas={facturas}
@@ -1610,6 +1622,7 @@ type Seguimiento = {
   client_id: string;
   service_id: string | null;
   entity_id: string | null;
+  technician_id: string | null;
   fecha_servicio: string;
   fecha_proximo: string;
   estado: string;
@@ -1632,17 +1645,35 @@ function telefonoWhatsappSeguimiento(telefono: string): string {
 // patrón de ReportesTab, para no tener que hilar seguimientos_clientes por
 // los ~11 archivos que arman basePath/ownerIdEfectivo. Solo se muestra al
 // dueño (no en modoAdmin) — mismo criterio que Cotizaciones/Servicios/Reportes.
-function SeguimientosTab({ entidadId }: { entidadId: string | null }) {
+function SeguimientosTab({
+  entidadId,
+  tecnicos,
+  addonTecnicosActivo,
+}: {
+  entidadId: string | null;
+  tecnicos: { id: string; name: string; entity_id: string | null }[];
+  addonTecnicosActivo: boolean;
+}) {
   const supabase = createClient();
   const [lista, setLista] = useState<Seguimiento[] | null>(null);
   const [actualizandoId, setActualizandoId] = useState<string | null>(null);
+
+  // Filtros (24 sept 2026, pedido de Joel: "a medida que se van acumulando
+  // como se guardan o habra alguna manera de filtrarlos por fechas,
+  // servicios, pueblos") — client-side sobre lo ya cargado, no hace falta
+  // re-pegarle a Supabase por cada cambio de filtro con este volumen.
+  const [filtroServicio, setFiltroServicio] = useState("");
+  const [filtroPueblo, setFiltroPueblo] = useState("");
+  const [filtroDesde, setFiltroDesde] = useState("");
+  const [filtroHasta, setFiltroHasta] = useState("");
+  const [filtroAsignado, setFiltroAsignado] = useState(""); // "" = todos, "sin" = sin asignar, o el id del técnico
 
   useEffect(() => {
     let activo = true;
     supabase
       .from("seguimientos_clientes")
       .select(
-        "id, client_id, service_id, entity_id, fecha_servicio, fecha_proximo, estado, notas, clients(name, telefono, address, email), services(nombre)"
+        "id, client_id, service_id, entity_id, technician_id, fecha_servicio, fecha_proximo, estado, notas, clients(name, telefono, address, email), services(nombre)"
       )
       .in("estado", ["pendiente", "contactado", "agendado"])
       .order("fecha_proximo", { ascending: true })
@@ -1662,9 +1693,40 @@ function SeguimientosTab({ entidadId }: { entidadId: string | null }) {
     return lista.filter((s) => s.entity_id === entidadId);
   }, [lista, entidadId]);
 
+  // Servicios únicos presentes en la lista actual — no hace falta traer el
+  // catálogo completo, solo los que de verdad tienen algún seguimiento.
+  const serviciosEnLista = useMemo(() => {
+    const mapa = new Map<string, string>();
+    filtrados.forEach((s) => {
+      if (s.service_id && s.services?.nombre) mapa.set(s.service_id, s.services.nombre);
+    });
+    return Array.from(mapa.entries());
+  }, [filtrados]);
+
+  const visibles = useMemo(() => {
+    return filtrados.filter((s) => {
+      if (filtroServicio && s.service_id !== filtroServicio) return false;
+      if (filtroPueblo.trim()) {
+        const q = filtroPueblo.trim().toLowerCase();
+        if (!s.clients?.address || !s.clients.address.toLowerCase().includes(q)) return false;
+      }
+      if (filtroDesde && s.fecha_proximo < filtroDesde) return false;
+      if (filtroHasta && s.fecha_proximo > filtroHasta) return false;
+      if (filtroAsignado === "sin" && s.technician_id) return false;
+      if (filtroAsignado && filtroAsignado !== "sin" && s.technician_id !== filtroAsignado) return false;
+      return true;
+    });
+  }, [filtrados, filtroServicio, filtroPueblo, filtroDesde, filtroHasta, filtroAsignado]);
+
   const hoy = hoyISO();
-  const vencidos = filtrados.filter((s) => s.fecha_proximo < hoy);
-  const proximos = filtrados.filter((s) => s.fecha_proximo >= hoy);
+  const vencidos = visibles.filter((s) => s.fecha_proximo < hoy);
+  const proximos = visibles.filter((s) => s.fecha_proximo >= hoy);
+  const hayFiltrosActivos = !!(filtroServicio || filtroPueblo.trim() || filtroDesde || filtroHasta || filtroAsignado);
+
+  const tecnicosDeEntidad = useMemo(
+    () => tecnicos.filter((t) => !t.entity_id || t.entity_id === entidadId),
+    [tecnicos, entidadId]
+  );
 
   async function marcarContactado(id: string) {
     setActualizandoId(id);
@@ -1683,6 +1745,32 @@ function SeguimientosTab({ entidadId }: { entidadId: string | null }) {
       .update({ estado: "descartado", updated_at: new Date().toISOString() })
       .eq("id", id);
     setLista((prev) => (prev ? prev.filter((s) => s.id !== id) : prev));
+    setActualizandoId(null);
+  }
+
+  // "Pendiente (nota)" (24 sept 2026, pedido de Joel: "quizas lo contactaron
+  // y a lo mejor le dijeron que estan de viaje que lo llamen la proxima
+  // semana... que se pueda editar") — guarda/edita la nota SIN tocar el
+  // estado, para que el seguimiento se quede activo en la lista tal como
+  // esté (pendiente o contactado), listo para reintentar.
+  async function guardarNota(id: string, notas: string) {
+    setActualizandoId(id);
+    const notasFinal = notas.trim() || null;
+    await supabase
+      .from("seguimientos_clientes")
+      .update({ notas: notasFinal, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    setLista((prev) => (prev ? prev.map((s) => (s.id === id ? { ...s, notas: notasFinal } : s)) : prev));
+    setActualizandoId(null);
+  }
+
+  async function asignarTecnico(id: string, technicianId: string) {
+    setActualizandoId(id);
+    await supabase
+      .from("seguimientos_clientes")
+      .update({ technician_id: technicianId || null, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    setLista((prev) => (prev ? prev.map((s) => (s.id === id ? { ...s, technician_id: technicianId || null } : s)) : prev));
     setActualizandoId(null);
   }
 
@@ -1709,40 +1797,120 @@ function SeguimientosTab({ entidadId }: { entidadId: string | null }) {
 
   return (
     <div className="space-y-4">
-      {vencidos.length > 0 && (
-        <div>
-          <p className="mb-2 text-xs font-medium text-red">Vencidos ({vencidos.length})</p>
-          <div className="space-y-2">
-            {vencidos.map((s) => (
-              <FilaSeguimiento
-                key={s.id}
-                s={s}
-                vencido
-                onContactado={marcarContactado}
-                onDescartar={descartar}
-                cargando={actualizandoId === s.id}
-                linkWhatsapp={linkWhatsapp(s)}
-              />
+      <div className="vc-card !p-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <select
+            className="vc-input !py-2 text-xs"
+            value={filtroServicio}
+            onChange={(e) => setFiltroServicio(e.target.value)}
+          >
+            <option value="">Todos los servicios</option>
+            {serviciosEnLista.map(([id, nombre]) => (
+              <option key={id} value={id}>
+                {nombre}
+              </option>
             ))}
-          </div>
+          </select>
+          <input
+            className="vc-input !py-2 text-xs"
+            placeholder="Buscar pueblo/dirección..."
+            value={filtroPueblo}
+            onChange={(e) => setFiltroPueblo(e.target.value)}
+          />
+          <input
+            type="date"
+            className="vc-input !py-2 text-xs"
+            value={filtroDesde}
+            onChange={(e) => setFiltroDesde(e.target.value)}
+            title="Desde"
+          />
+          <input
+            type="date"
+            className="vc-input !py-2 text-xs"
+            value={filtroHasta}
+            onChange={(e) => setFiltroHasta(e.target.value)}
+            title="Hasta"
+          />
         </div>
-      )}
-      {proximos.length > 0 && (
-        <div>
-          <p className="mb-2 text-xs font-medium text-muted">Próximos ({proximos.length})</p>
-          <div className="space-y-2">
-            {proximos.map((s) => (
-              <FilaSeguimiento
-                key={s.id}
-                s={s}
-                onContactado={marcarContactado}
-                onDescartar={descartar}
-                cargando={actualizandoId === s.id}
-                linkWhatsapp={linkWhatsapp(s)}
-              />
+        {tecnicosDeEntidad.length > 0 && addonTecnicosActivo && (
+          <select
+            className="vc-input mt-2 !py-2 text-xs"
+            value={filtroAsignado}
+            onChange={(e) => setFiltroAsignado(e.target.value)}
+          >
+            <option value="">Asignado a: todos</option>
+            <option value="sin">Sin asignar</option>
+            {tecnicosDeEntidad.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
             ))}
-          </div>
-        </div>
+          </select>
+        )}
+        {hayFiltrosActivos && (
+          <button
+            onClick={() => {
+              setFiltroServicio("");
+              setFiltroPueblo("");
+              setFiltroDesde("");
+              setFiltroHasta("");
+              setFiltroAsignado("");
+            }}
+            className="mt-2 text-xs font-medium text-teal hover:opacity-80"
+          >
+            Quitar filtros
+          </button>
+        )}
+      </div>
+
+      {visibles.length === 0 ? (
+        <div className="vc-card text-center text-sm text-muted">Ningún seguimiento coincide con estos filtros.</div>
+      ) : (
+        <>
+          {vencidos.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-medium text-red">Vencidos ({vencidos.length})</p>
+              <div className="space-y-2">
+                {vencidos.map((s) => (
+                  <FilaSeguimiento
+                    key={s.id}
+                    s={s}
+                    vencido
+                    onContactado={marcarContactado}
+                    onDescartar={descartar}
+                    onGuardarNota={guardarNota}
+                    onAsignarTecnico={asignarTecnico}
+                    cargando={actualizandoId === s.id}
+                    linkWhatsapp={linkWhatsapp(s)}
+                    tecnicosDeEntidad={tecnicosDeEntidad}
+                    addonTecnicosActivo={addonTecnicosActivo}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {proximos.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-medium text-muted">Próximos ({proximos.length})</p>
+              <div className="space-y-2">
+                {proximos.map((s) => (
+                  <FilaSeguimiento
+                    key={s.id}
+                    s={s}
+                    onContactado={marcarContactado}
+                    onDescartar={descartar}
+                    onGuardarNota={guardarNota}
+                    onAsignarTecnico={asignarTecnico}
+                    cargando={actualizandoId === s.id}
+                    linkWhatsapp={linkWhatsapp(s)}
+                    tecnicosDeEntidad={tecnicosDeEntidad}
+                    addonTecnicosActivo={addonTecnicosActivo}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -1753,16 +1921,33 @@ function FilaSeguimiento({
   vencido = false,
   onContactado,
   onDescartar,
+  onGuardarNota,
+  onAsignarTecnico,
   cargando,
   linkWhatsapp,
+  tecnicosDeEntidad,
+  addonTecnicosActivo,
 }: {
   s: Seguimiento;
   vencido?: boolean;
   onContactado: (id: string) => void;
   onDescartar: (id: string) => void;
+  onGuardarNota: (id: string, notas: string) => void;
+  onAsignarTecnico: (id: string, technicianId: string) => void;
   cargando: boolean;
   linkWhatsapp: string | null;
+  tecnicosDeEntidad: { id: string; name: string; entity_id: string | null }[];
+  addonTecnicosActivo: boolean;
 }) {
+  const [editandoNota, setEditandoNota] = useState(false);
+  const [notaTexto, setNotaTexto] = useState(s.notas ?? "");
+  const tecnicoAsignado = tecnicosDeEntidad.find((t) => t.id === s.technician_id);
+
+  function guardarNota() {
+    onGuardarNota(s.id, notaTexto);
+    setEditandoNota(false);
+  }
+
   return (
     <div className="vc-card">
       <div className="flex items-start justify-between gap-2">
@@ -1776,23 +1961,121 @@ function FilaSeguimiento({
               las rutas") — solo se muestra, no arma rutas automáticas. */}
           {s.clients?.address && <p className="mt-0.5 text-xs text-muted">📍 {s.clients.address}</p>}
           {s.estado === "contactado" && <p className="mt-0.5 text-xs text-teal">Ya contactado</p>}
+          {tecnicoAsignado && (
+            <p className="mt-0.5 text-xs text-muted">
+              <i className="ti ti-tool mr-1" />
+              Asignado a {tecnicoAsignado.name}
+            </p>
+          )}
         </div>
       </div>
-      <div className="mt-2 flex gap-2">
+
+      {/* Nota editable (24 sept 2026, pedido de Joel: "quizas lo contactaron
+          y a lo mejor le dijeron que estan de viaje que lo llamen la proxima
+          semana... que se pueda editar") — no cambia el estado, solo deja
+          constancia de por qué sigue pendiente. */}
+      {s.notas && !editandoNota && (
+        <button
+          onClick={() => {
+            setNotaTexto(s.notas ?? "");
+            setEditandoNota(true);
+          }}
+          className="mt-2 w-full rounded-lg border border-yellow-500/40 bg-yellow-500/[.06] p-2 text-left text-xs text-yellow-700 dark:text-yellow-400"
+        >
+          <i className="ti ti-note mr-1" />
+          {s.notas} <span className="opacity-70">(editar)</span>
+        </button>
+      )}
+      {editandoNota && (
+        <div className="mt-2 space-y-1.5">
+          <textarea
+            className="vc-input text-xs"
+            rows={2}
+            placeholder="Ej. De viaje, llamar la próxima semana..."
+            value={notaTexto}
+            onChange={(e) => setNotaTexto(e.target.value)}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button onClick={guardarNota} disabled={cargando} className="vc-btn-secondary flex-1 border-teal text-xs text-teal">
+              Guardar nota
+            </button>
+            <button
+              onClick={() => {
+                setNotaTexto(s.notas ?? "");
+                setEditandoNota(false);
+              }}
+              className="vc-btn-secondary flex-1 text-xs"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Botones de acción con borde/color propios (24 sept 2026, pedido de
+          Joel: "los botones deben tener algun borde o algo que los
+          resalte") — antes los 4 se veían idénticos (vc-btn-secondary
+          plano). Ahora cada uno tiene su color: WhatsApp verde, Contactado
+          teal sólido, Nota ámbar, Descartar rojo. */}
+      <div className="mt-2 flex flex-wrap gap-2">
         {linkWhatsapp && (
-          <a href={linkWhatsapp} target="_blank" rel="noreferrer" className="vc-btn-secondary flex-1 text-center text-xs">
+          <a
+            href={linkWhatsapp}
+            target="_blank"
+            rel="noreferrer"
+            className="vc-btn-secondary flex-1 border-[#25D366] text-center text-xs text-[#128C7E] dark:text-[#25D366]"
+          >
+            <i className="ti ti-brand-whatsapp mr-1" />
             WhatsApp
           </a>
         )}
         {s.estado !== "contactado" && (
-          <button onClick={() => onContactado(s.id)} disabled={cargando} className="vc-btn-secondary flex-1 text-xs">
+          <button
+            onClick={() => onContactado(s.id)}
+            disabled={cargando}
+            className="vc-btn-secondary flex-1 border-teal text-xs text-teal"
+          >
             Marcar contactado
           </button>
         )}
-        <button onClick={() => onDescartar(s.id)} disabled={cargando} className="vc-btn-secondary flex-1 text-xs">
+        {!editandoNota && (
+          <button
+            onClick={() => setEditandoNota(true)}
+            disabled={cargando}
+            className="vc-btn-secondary flex-1 border-yellow-500 text-xs text-yellow-700 dark:text-yellow-400"
+          >
+            {s.notas ? "Editar nota" : "Pendiente (nota)"}
+          </button>
+        )}
+        <button
+          onClick={() => onDescartar(s.id)}
+          disabled={cargando}
+          className="vc-btn-secondary flex-1 border-red text-xs text-red"
+        >
           Descartar
         </button>
       </div>
+
+      {/* Asignar a técnico (24 sept 2026, pedido de Joel: "asignarlo a
+          tecnico como tarea pendiente") — mismo patrón y gate de addon que
+          Nueva Factura/Cotización. El técnico lo ve en su app y puede
+          marcarlo contactado o dejar nota él mismo. */}
+      {tecnicosDeEntidad.length > 0 && addonTecnicosActivo && (
+        <select
+          className="vc-input mt-2 !py-1.5 text-xs"
+          value={s.technician_id ?? ""}
+          onChange={(e) => onAsignarTecnico(s.id, e.target.value)}
+          disabled={cargando}
+        >
+          <option value="">Sin asignar a técnico — lo manejas tú</option>
+          {tecnicosDeEntidad.map((t) => (
+            <option key={t.id} value={t.id}>
+              Asignar a {t.name}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }

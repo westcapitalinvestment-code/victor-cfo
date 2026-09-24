@@ -82,6 +82,19 @@ export async function construirRespuestaSesion(ctx: ContextoTecnico) {
     .eq("activo", true)
     .order("nombre", { ascending: true });
 
+  // Seguimientos de clientes que el dueño le asignó (24 sept 2026, pedido de
+  // Joel: "asignarlo a tecnico como tarea pendiente") — mismo patrón que
+  // cotizaciones asignadas. El técnico ve a quién tiene que llamar/visitar y
+  // puede marcarlo contactado o dejar nota él mismo (ver PATCH
+  // /api/tecnico/seguimientos/[id]).
+  const { data: seguimientos } = await ctx.admin
+    .from("seguimientos_clientes")
+    .select("id, fecha_proximo, estado, notas, clients(name, telefono, address), services(nombre)")
+    .eq("entity_id", ctx.tecnico.entity_id)
+    .eq("technician_id", ctx.tecnico.id)
+    .in("estado", ["pendiente", "contactado", "agendado"])
+    .order("fecha_proximo", { ascending: true });
+
   return {
     ok: true,
     tecnico: { id: ctx.tecnico.id, name: ctx.tecnico.name },
@@ -103,6 +116,16 @@ export async function construirRespuestaSesion(ctx: ContextoTecnico) {
       total: c.total,
       fechaEmision: c.fecha_emision,
       clienteNombre: c.clients?.name ?? null,
+    })),
+    seguimientos: (seguimientos ?? []).map((s: any) => ({
+      id: s.id,
+      fechaProximo: s.fecha_proximo,
+      estado: s.estado,
+      notas: s.notas,
+      clienteNombre: s.clients?.name ?? null,
+      clienteTelefono: s.clients?.telefono ?? null,
+      clienteDireccion: s.clients?.address ?? null,
+      servicioNombre: s.services?.nombre ?? null,
     })),
   };
 }

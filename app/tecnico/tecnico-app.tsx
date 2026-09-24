@@ -19,6 +19,20 @@ type CotizacionAsignada = { id: string; numero: string; total: number; fechaEmis
 // Tipo de gasto con evidencia requerida (10 sept 2026, migración 0081) —
 // configurado por el dueño en Equipo. Ej. "Gasolina", "Peajes".
 type TipoGasto = { id: string; nombre: string };
+// Seguimiento de cliente asignado por el dueño (24 sept 2026, pedido de
+// Joel: "asignarlo a tecnico como tarea pendiente") — a diferencia de
+// Tarea/CotizaciónAsignada, esto no es dinero por cobrar: es "llama o
+// visita a este cliente porque le toca su servicio otra vez".
+type SeguimientoAsignado = {
+  id: string;
+  fechaProximo: string;
+  estado: string;
+  notas: string | null;
+  clienteNombre: string | null;
+  clienteTelefono: string | null;
+  clienteDireccion: string | null;
+  servicioNombre: string | null;
+};
 type Sesion = {
   tecnico: { id: string; name: string };
   entidad: { name: string };
@@ -28,6 +42,7 @@ type Sesion = {
   tareas: Tarea[];
   cotizaciones: CotizacionAsignada[];
   tiposGasto: TipoGasto[];
+  seguimientos: SeguimientoAsignado[];
 };
 type ClienteLite = { id: string; name: string; phone: string | null };
 type ItemFactura = { id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal_linea: number };
@@ -239,6 +254,26 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
     abrirFactura(data.invoiceId);
   }
 
+  // Acciones sobre un seguimiento asignado (24 sept 2026) — mismo patrón de
+  // botones que el dueño tiene en el portal de Facturación, pero pegándole
+  // a /api/tecnico/seguimientos/[id] (verifica que el seguimiento sea
+  // realmente de ESTE técnico antes de tocarlo).
+  const [actualizandoSegId, setActualizandoSegId] = useState<string | null>(null);
+  const [notaAbiertaId, setNotaAbiertaId] = useState<string | null>(null);
+  const [notaTexto, setNotaTexto] = useState("");
+
+  async function accionSeguimiento(id: string, accion: "contactado" | "descartar" | "nota", notas?: string) {
+    setActualizandoSegId(id);
+    await fetch(`/api/tecnico/seguimientos/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accion, notas }),
+    });
+    setActualizandoSegId(null);
+    setNotaAbiertaId(null);
+    onRecargar();
+  }
+
   if (vista === "cliente_nueva") {
     return (
       <SelectorCliente
@@ -410,6 +445,113 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
           </button>
         ))}
       </div>
+
+      {/* Seguimientos asignados (24 sept 2026, pedido de Joel: "asignarlo a
+          tecnico como tarea pendiente") — no es dinero por cobrar, es
+          "llama o visita a este cliente porque le toca su servicio otra
+          vez". El técnico puede marcarlo contactado, dejar nota (ej. "de
+          viaje, llamar la próxima semana") o descartarlo, sin pasar por
+          el dueño. */}
+      {sesion.seguimientos.length > 0 && (
+        <div className="vc-card mt-3">
+          <p className="mb-2 text-xs uppercase tracking-wide text-muted">
+            Seguimientos asignados <span className="normal-case text-muted">· {sesion.seguimientos.length}</span>
+          </p>
+          <div className="space-y-2">
+            {sesion.seguimientos.map((s) => {
+              const cargando = actualizandoSegId === s.id;
+              const editandoNota = notaAbiertaId === s.id;
+              return (
+                <div key={s.id} className="rounded-lg border border-border p-2.5">
+                  <p className="text-sm">{s.clienteNombre || "Cliente"}</p>
+                  <p className="text-xs text-muted">
+                    {s.servicioNombre ?? "Servicio"} · le toca el {new Date(s.fechaProximo + "T00:00:00").toLocaleDateString("es-PR")}
+                  </p>
+                  {s.clienteDireccion && <p className="mt-0.5 text-xs text-muted">📍 {s.clienteDireccion}</p>}
+                  {s.notas && !editandoNota && (
+                    <button
+                      onClick={() => {
+                        setNotaTexto(s.notas ?? "");
+                        setNotaAbiertaId(s.id);
+                      }}
+                      className="mt-1.5 w-full rounded-lg border border-yellow-500/40 bg-yellow-500/[.06] p-1.5 text-left text-xs text-yellow-700 dark:text-yellow-400"
+                    >
+                      {s.notas} <span className="opacity-70">(editar)</span>
+                    </button>
+                  )}
+                  {editandoNota && (
+                    <div className="mt-1.5 space-y-1.5">
+                      <textarea
+                        className="vc-input text-xs"
+                        rows={2}
+                        placeholder="Ej. De viaje, llamar la próxima semana..."
+                        value={notaTexto}
+                        onChange={(e) => setNotaTexto(e.target.value)}
+                        autoFocus
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => accionSeguimiento(s.id, "nota", notaTexto)}
+                          disabled={cargando}
+                          className="flex-1 rounded-lg border border-teal py-1.5 text-xs font-medium text-teal"
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          onClick={() => setNotaAbiertaId(null)}
+                          className="flex-1 rounded-lg border border-border py-1.5 text-xs font-medium text-muted"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {s.clienteTelefono && (
+                      <a
+                        href={`https://wa.me/${s.clienteTelefono.replace(/\D/g, "").length === 10 ? "1" : ""}${s.clienteTelefono.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex-1 rounded-lg border border-[#25D366] py-1.5 text-center text-xs font-medium text-[#128C7E] dark:text-[#25D366]"
+                      >
+                        WhatsApp
+                      </a>
+                    )}
+                    {s.estado !== "contactado" && (
+                      <button
+                        onClick={() => accionSeguimiento(s.id, "contactado")}
+                        disabled={cargando}
+                        className="flex-1 rounded-lg border border-teal py-1.5 text-xs font-medium text-teal"
+                      >
+                        Contactado
+                      </button>
+                    )}
+                    {!editandoNota && (
+                      <button
+                        onClick={() => {
+                          setNotaTexto(s.notas ?? "");
+                          setNotaAbiertaId(s.id);
+                        }}
+                        disabled={cargando}
+                        className="flex-1 rounded-lg border border-yellow-500 py-1.5 text-xs font-medium text-yellow-700 dark:text-yellow-400"
+                      >
+                        {s.notas ? "Editar nota" : "Nota"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => accionSeguimiento(s.id, "descartar")}
+                      disabled={cargando}
+                      className="flex-1 rounded-lg border border-red py-1.5 text-xs font-medium text-red"
+                    >
+                      Descartar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
