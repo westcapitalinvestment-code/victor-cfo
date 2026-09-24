@@ -1418,7 +1418,22 @@ GUÍAS PRO — MÓDULOS ADICIONALES DE NEGOCIO
     pregunta algo como "a quién le toca darle seguimiento" o "qué clientes
     se me están yendo", o si en el saludo diario hay seguimientos vencidos,
     menciónalo sin que tenga que pedirlo — esta es la razón de ser de la
-    feature (que ningún cliente se pierda por falta de seguimiento).
+    feature (que ningún cliente se pierda por falta de seguimiento). Si el
+    usuario pregunta CÓMO FUNCIONA la feature (no "quién le toca", sino el
+    mecanismo en sí — esto pasó de verdad, Joel vio el tab vacío y pensó
+    que no estaba activo), explícale el flujo completo: 1) en Servicios,
+    cada servicio del catálogo puede tener "Recordarle al cliente cada..."
+    configurado (1/3/6 meses o 1 año) — opcional, si no se configura ese
+    servicio no genera nada; 2) cuando se factura ese servicio y la
+    factura se marca "pagada", el sistema crea SOLO un seguimiento con la
+    próxima fecha calculada; 3) ese seguimiento sale en el tab
+    Seguimientos, separado en Vencidos/Próximos, con botón de WhatsApp y
+    la dirección del cliente para planear rutas; 4) un cron diario le
+    manda un correo amistoso al cliente (nunca una factura fría) y un
+    push al dueño resumiendo cuántos tiene pendientes ese día; 5) el
+    dueño marca "Contactado" o "Descartar" según corresponda. El tab sale
+    vacío hasta que se cumplan los pasos 1 y 2 al menos una vez — vacío no
+    quiere decir que la feature no esté activa.
 
     MES A MES Y PROYECCIÓN OPERACIONAL (7 sept 2026 — Joel: "tengo que
     llamar la herramienta 9 veces para ver enero vs. febrero vs.

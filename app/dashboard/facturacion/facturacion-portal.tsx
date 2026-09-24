@@ -335,13 +335,28 @@ export default function FacturacionPortal({
   );
 }
 
-function Proximamente({ icono, titulo, texto }: { icono: string; titulo: string; texto: string }) {
+// "Próximamente" solo se muestra si se pasa esa prop explícitamente — este
+// componente también se reusa como estado vacío de features que YA están
+// activas (ej. Seguimientos), y ahí decía "Próximamente" aunque el feature
+// llevaba funcionando desde que se lanzó (24 sept 2026, confusión real de
+// Joel: "pense que no estaba activo").
+function Proximamente({
+  icono,
+  titulo,
+  texto,
+  proximamente = false,
+}: {
+  icono: string;
+  titulo: string;
+  texto: string;
+  proximamente?: boolean;
+}) {
   return (
     <div className="vc-card text-center">
       <i className={`ti ${icono} mb-2 text-2xl text-teal`} />
       <p className="mb-1 text-sm font-medium">{titulo}</p>
       <p className="text-xs text-muted">{texto}</p>
-      <p className="mt-3 text-xs font-medium text-teal">Próximamente</p>
+      {proximamente && <p className="mt-3 text-xs font-medium text-teal">Próximamente</p>}
     </div>
   );
 }
