@@ -102,6 +102,16 @@ export interface OpcionesReporteExcel {
   filas: Record<string, string | number | null | undefined>[];
   /** Fila de totales al final de la tabla, resaltada. */
   totales?: FilaTotal[];
+  /**
+   * Tablas separadas por grupo, estilo "Item Sales" de FreshBooks (24 sept
+   * 2026, pedido de Joel: "puedes hacerlo asi como freshbook con sus
+   * titulos lineas y todo separadito bonito?" — mandó el PDF de referencia).
+   * Cuando viene presente, IGNORA `filas`/`totales` de arriba: en su lugar
+   * dibuja un título de grupo (ej. el nombre del servicio) + su propio
+   * encabezado de columnas + sus filas + su fila Total, repetido por cada
+   * grupo — en vez de una sola tabla plana con todo mezclado.
+   */
+  grupos?: { titulo: string; filas: Record<string, string | number | null | undefined>[]; totales?: FilaTotal[] }[];
   nombreHoja?: string;
 }
 
@@ -195,41 +205,43 @@ export async function generarReporteExcel(opts: OpcionesReporteExcel): Promise<B
   sheet.getRow(filaActual).getCell(1).border = { bottom: { style: "medium", color: { argb: TEAL } } };
   filaActual += 1;
 
-  // --- Encabezado de tabla ---
-  const filaHeaderIdx = filaActual;
-  const filaHeader = sheet.getRow(filaHeaderIdx);
-  opts.columnas.forEach((c, i) => {
-    const cell = filaHeader.getCell(i + 1);
-    cell.value = c.header;
-    cell.font = { bold: true, color: { argb: BLANCO }, size: 10 };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TEAL_OSCURO } };
-    cell.alignment = { vertical: "middle", horizontal: c.alinearDerecha ? "right" : "left" };
-  });
-  filaHeader.height = 20;
-  sheet.views = [{ state: "frozen", ySplit: filaHeaderIdx, showGridLines: false }];
-
-  // --- Filas de datos ---
-  opts.filas.forEach((fila, idx) => {
-    const r = sheet.getRow(filaHeaderIdx + 1 + idx);
+  // Helper: dibuja un encabezado de columnas en la fila dada.
+  function dibujarEncabezadoTabla(filaIdx: number) {
+    const fila = sheet.getRow(filaIdx);
     opts.columnas.forEach((c, i) => {
-      const cell = r.getCell(i + 1);
-      const valor = fila[c.key];
-      cell.value = c.moneda ? Number(valor ?? 0) : c.numero ? Number(valor ?? 0) : (valor ?? "");
-      if (c.moneda) cell.numFmt = '"$"#,##0.00';
-      cell.alignment = { horizontal: c.alinearDerecha || c.moneda || c.numero ? "right" : "left", vertical: "middle" };
-      cell.font = { size: 10, color: { argb: "FF16181D" } };
-      if (idx % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GRIS_CLARO } };
-      cell.border = { bottom: { style: "hair", color: { argb: "FFE5E7EB" } } };
+      const cell = fila.getCell(i + 1);
+      cell.value = c.header;
+      cell.font = { bold: true, color: { argb: BLANCO }, size: 10 };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TEAL_OSCURO } };
+      cell.alignment = { vertical: "middle", horizontal: c.alinearDerecha ? "right" : "left" };
     });
-  });
+    fila.height = 20;
+  }
 
-  let filaSiguiente = filaHeaderIdx + 1 + opts.filas.length;
+  // Helper: dibuja las filas de datos a partir de filaIdx, devuelve la
+  // siguiente fila libre.
+  function dibujarFilas(filaIdx: number, filas: Record<string, string | number | null | undefined>[]): number {
+    filas.forEach((fila, idx) => {
+      const r = sheet.getRow(filaIdx + idx);
+      opts.columnas.forEach((c, i) => {
+        const cell = r.getCell(i + 1);
+        const valor = fila[c.key];
+        cell.value = c.moneda ? Number(valor ?? 0) : c.numero ? Number(valor ?? 0) : (valor ?? "");
+        if (c.moneda) cell.numFmt = '"$"#,##0.00';
+        cell.alignment = { horizontal: c.alinearDerecha || c.moneda || c.numero ? "right" : "left", vertical: "middle" };
+        cell.font = { size: 10, color: { argb: "FF16181D" } };
+        if (idx % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GRIS_CLARO } };
+        cell.border = { bottom: { style: "hair", color: { argb: "FFE5E7EB" } } };
+      });
+    });
+    return filaIdx + filas.length;
+  }
 
-  // --- Totales ---
-  if (opts.totales && opts.totales.length > 0) {
-    const r = sheet.getRow(filaSiguiente);
+  // Helper: dibuja una fila de totales en negrita con línea teal encima.
+  function dibujarTotales(filaIdx: number, totales: FilaTotal[]): number {
+    const r = sheet.getRow(filaIdx);
     opts.columnas.forEach((c, i) => {
-      const total = opts.totales!.find((t) => t.key === c.key);
+      const total = totales.find((t) => t.key === c.key);
       const cell = r.getCell(i + 1);
       if (total) {
         cell.value = c.moneda ? Number(total.valor) : total.valor;
@@ -239,7 +251,47 @@ export async function generarReporteExcel(opts: OpcionesReporteExcel): Promise<B
       cell.alignment = { horizontal: c.alinearDerecha || c.moneda ? "right" : "left" };
       cell.border = { top: { style: "medium", color: { argb: TEAL } } };
     });
-    filaSiguiente += 1;
+    return filaIdx + 1;
+  }
+
+  let filaSiguiente: number;
+
+  if (opts.grupos && opts.grupos.length > 0) {
+    // Tablas separadas por grupo (estilo FreshBooks "Item Sales") — un
+    // título + su propio encabezado + sus filas + su Total, por cada grupo.
+    let filaIdx = filaActual;
+    sheet.views = [{ showGridLines: false }];
+    for (const grupo of opts.grupos) {
+      if (numCols > 1) sheet.mergeCells(filaIdx, 1, filaIdx, numCols);
+      const filaTituloGrupo = sheet.getRow(filaIdx);
+      filaTituloGrupo.getCell(1).value = grupo.titulo;
+      filaTituloGrupo.getCell(1).font = { bold: true, size: 12, color: { argb: TEAL_OSCURO } };
+      filaTituloGrupo.getCell(1).border = { bottom: { style: "medium", color: { argb: TEAL } } };
+      filaTituloGrupo.height = 20;
+      filaIdx += 1;
+
+      dibujarEncabezadoTabla(filaIdx);
+      filaIdx += 1;
+
+      filaIdx = dibujarFilas(filaIdx, grupo.filas);
+
+      if (grupo.totales && grupo.totales.length > 0) {
+        filaIdx = dibujarTotales(filaIdx, grupo.totales);
+      }
+      filaIdx += 1; // línea en blanco entre grupos
+    }
+    filaSiguiente = filaIdx;
+  } else {
+    // --- Encabezado de tabla (una sola tabla plana) ---
+    const filaHeaderIdx = filaActual;
+    dibujarEncabezadoTabla(filaHeaderIdx);
+    sheet.views = [{ state: "frozen", ySplit: filaHeaderIdx, showGridLines: false }];
+
+    filaSiguiente = dibujarFilas(filaHeaderIdx + 1, opts.filas);
+
+    if (opts.totales && opts.totales.length > 0) {
+      filaSiguiente = dibujarTotales(filaSiguiente, opts.totales);
+    }
   }
 
   // --- Pie de marca (pedido de Joel: que cualquiera que vea el reporte

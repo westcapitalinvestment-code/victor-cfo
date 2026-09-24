@@ -291,23 +291,72 @@ export async function GET(req: NextRequest) {
     filaTabla(`${c.nombre} (${c.count})`, formatMoney(c.facturado));
   }
 
+  // "Ventas por ítem" con formato de tabla real (24 sept 2026, pedido de
+  // Joel: "puedes hacerlo asi como freshbook con sus titulos lineas y todo
+  // separadito bonito?" — mandó el PDF "Item Sales" de FreshBooks como
+  // referencia). Calca esa estructura: resumen arriba (Total unidades /
+  // Total ventas), luego una tabla por servicio con encabezado de columnas
+  // (Cliente, Factura #, Fecha, Precio unit., Cant., Total), líneas con
+  // separador fino, y fila "Total" en negrita al cierre de cada tabla.
+  const xCliente = margin;
+  const xFactura = margin + 145;
+  const xFecha = margin + 200;
+  const xCostoDer = margin + 320;
+  const xCantDer = margin + 375;
+  const xTotalDer = width - margin;
+
+  function encabezadoTablaItems() {
+    espacio(60);
+    texto("Cliente", xCliente, y, { f: bold, size: 8, color: gris });
+    texto("Factura #", xFactura, y, { f: bold, size: 8, color: gris });
+    texto("Fecha", xFecha, y, { f: bold, size: 8, color: gris });
+    textoDerecha("Precio unit.", xCostoDer, y, { f: bold, size: 8, color: gris });
+    textoDerecha("Cant.", xCantDer, y, { f: bold, size: 8, color: gris });
+    textoDerecha("Total", xTotalDer, y, { f: bold, size: 8, color: gris });
+    y -= 4;
+    page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 0.75, color: lineaGris });
+    y -= 12;
+  }
+
   encabezadoSeccion("Ventas por ítem");
-  if (ventasPorItem.length === 0) filaTabla("No hay líneas de factura en este período.", "");
-  for (const g of ventasPorItem) {
-    espacio(55);
-    y -= 2;
-    texto(g.nombre, margin, y, { f: bold, size: 10, color: teal });
-    textoDerecha(`${g.unidades} unid.  ·  ${formatMoney(g.total)}`, width - margin, y, { size: 9, f: bold, color: teal });
-    y -= 14;
-    for (const fila of g.filas) {
-      espacio(38);
-      texto(fila.cliente, margin, y, { size: 8.5, color: negro });
-      texto(fila.numero ? `#${fila.numero}` : "Sin #", margin + 190, y, { size: 8.5, color: gris });
-      texto(fila.fecha ? formatFecha(fila.fecha) : "", margin + 250, y, { size: 8.5, color: gris });
-      textoDerecha(`${fila.cantidad} × ${formatMoney(fila.precioUnitario)} = ${formatMoney(fila.total)}`, width - margin, y, { size: 8.5 });
-      y -= 12;
+  if (ventasPorItem.length === 0) {
+    filaTabla("No hay líneas de factura en este período.", "");
+  } else {
+    const totalUnidadesItem = ventasPorItem.reduce((s, g) => s + g.unidades, 0);
+    const totalVentasItem = ventasPorItem.reduce((s, g) => s + g.total, 0);
+    filaTabla("Total unidades", String(totalUnidadesItem), { bold: true });
+    filaTabla("Total ventas por ítem", formatMoney(totalVentasItem), { bold: true, color: teal });
+    y -= 8;
+
+    for (const g of ventasPorItem) {
+      espacio(90);
+      y -= 6;
+      texto(g.nombre, margin, y, { f: bold, size: 12, color: teal });
+      y -= 5;
+      page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1.25, color: teal });
+      y -= 14;
+
+      encabezadoTablaItems();
+      for (const fila of g.filas) {
+        espacio(34);
+        texto(fila.cliente.length > 34 ? fila.cliente.slice(0, 33) + "…" : fila.cliente, xCliente, y, { size: 8.5 });
+        texto(fila.numero ? `#${fila.numero}` : "—", xFactura, y, { size: 8.5, color: teal });
+        texto(fila.fecha ? formatFecha(fila.fecha) : "", xFecha, y, { size: 8.5, color: gris });
+        textoDerecha(formatMoney(fila.precioUnitario), xCostoDer, y, { size: 8.5 });
+        textoDerecha(String(fila.cantidad), xCantDer, y, { size: 8.5 });
+        textoDerecha(formatMoney(fila.total), xTotalDer, y, { size: 8.5 });
+        y -= 11.5;
+      }
+
+      espacio(35);
+      y -= 2;
+      page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 0.75, color: lineaGris });
+      y -= 13;
+      texto("Total", xCliente, y, { f: bold, size: 9 });
+      textoDerecha(String(g.unidades), xCantDer, y, { f: bold, size: 9 });
+      textoDerecha(formatMoney(g.total), xTotalDer, y, { f: bold, size: 9, color: teal });
+      y -= 22;
     }
-    y -= 6;
   }
 
   encabezadoSeccion("Retenciones SURI");

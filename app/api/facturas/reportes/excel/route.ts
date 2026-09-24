@@ -97,6 +97,11 @@ export async function GET(req: NextRequest) {
   let columnas: ColumnaReporte[] = [];
   let filas: Record<string, string | number>[] = [];
   let totales: FilaTotal[] = [];
+  // grupos (24 sept 2026, pedido de Joel: "puedes hacerlo asi como
+  // freshbook con sus titulos lineas y todo separadito bonito?") — solo lo
+  // usa la vista itemSales: una tabla separada por servicio, en vez de una
+  // sola tabla plana. Ver lib/reporte-excel.ts.
+  let grupos: { titulo: string; filas: Record<string, string | number>[]; totales?: FilaTotal[] }[] | undefined;
 
   if (vista === "servicio") {
     columnas = [
@@ -124,13 +129,14 @@ export async function GET(req: NextRequest) {
       { key: "total", valor: lista.reduce((s, x) => s + x.total, 0) },
     ];
   } else if (vista === "itemSales") {
-    // Ventas por ítem (24 sept 2026) — espejo exacto de la vista "Ventas
-    // por ítem" en pantalla (facturacion-portal.tsx): una fila por línea
-    // real de factura, no agregada, para que Joel pueda exportar y llevar
-    // la cuenta de cuántos CHRA/EPASS/etc. le ha facturado a cada cliente.
+    // Ventas por ítem (24 sept 2026) — una tabla SEPARADA por servicio,
+    // estilo "Item Sales" de FreshBooks (Joel mandó ese PDF de referencia y
+    // pidió "separadito bonito" como allá), en vez de una sola tabla plana
+    // con el servicio repetido en cada fila. Mismo desglose que la vista en
+    // pantalla y el PDF: Cliente, Factura #, Fecha, Precio unit., Cantidad,
+    // Total, con su propia fila Total por servicio.
     columnas = [
-      { header: "Servicio", key: "servicio", width: 28 },
-      { header: "Cliente", key: "cliente", width: 28 },
+      { header: "Cliente", key: "cliente", width: 32 },
       { header: "Factura #", key: "numero", width: 14 },
       { header: "Fecha", key: "fecha", width: 14 },
       { header: "Precio unit.", key: "precioUnitario", width: 14, moneda: true },
@@ -138,27 +144,39 @@ export async function GET(req: NextRequest) {
       { header: "Total", key: "total", width: 16, moneda: true },
     ];
     const facturaPorId = new Map(facturas.map((f) => [f.id, f]));
-    const filasDetalle = items
-      .map((it: any) => {
-        const f = facturaPorId.get(it.invoice_id);
-        const fechaIso = f?.fecha_emision ?? "";
-        return {
-          servicio: it.services?.nombre ?? it.descripcion,
-          cliente: f?.clients?.name ?? "Sin cliente",
-          numero: f?.numero ?? "",
-          fechaIso,
-          fecha: fechaIso ? formatFecha(fechaIso) : "",
-          precioUnitario: Number(it.precio_unitario ?? 0),
-          cantidad: Number(it.cantidad ?? 1),
-          total: Number(it.subtotal_linea ?? it.cantidad * it.precio_unitario),
-        };
-      })
-      .sort((a, b) => (a.servicio === b.servicio ? a.fechaIso.localeCompare(b.fechaIso) : a.servicio.localeCompare(b.servicio)));
-    filas = filasDetalle.map(({ fechaIso, ...resto }) => resto);
-    totales = [
-      { key: "cantidad", valor: filasDetalle.reduce((s, x) => s + x.cantidad, 0) },
-      { key: "total", valor: filasDetalle.reduce((s, x) => s + x.total, 0) },
-    ];
+    type FilaItemGrupo = { cliente: string; numero: string; fechaIso: string; fecha: string; precioUnitario: number; cantidad: number; total: number };
+    const mapaGrupos = new Map<string, { titulo: string; total: number; filas: FilaItemGrupo[] }>();
+    for (const it of items as any[]) {
+      const key = it.service_id ?? `desc:${it.descripcion}`;
+      const titulo = it.services?.nombre ?? it.descripcion;
+      const f = facturaPorId.get(it.invoice_id);
+      const fechaIso = f?.fecha_emision ?? "";
+      const total = Number(it.subtotal_linea ?? it.cantidad * it.precio_unitario);
+      const actual = mapaGrupos.get(key) ?? { titulo, total: 0, filas: [] as FilaItemGrupo[] };
+      actual.total += total;
+      actual.filas.push({
+        cliente: f?.clients?.name ?? "Sin cliente",
+        numero: f?.numero ?? "",
+        fechaIso,
+        fecha: fechaIso ? formatFecha(fechaIso) : "",
+        precioUnitario: Number(it.precio_unitario ?? 0),
+        cantidad: Number(it.cantidad ?? 1),
+        total,
+      });
+      mapaGrupos.set(key, actual);
+    }
+    const listaGrupos = [...mapaGrupos.values()].sort((a, b) => b.total - a.total);
+    for (const g of listaGrupos) g.filas.sort((a, b) => a.fechaIso.localeCompare(b.fechaIso));
+    grupos = listaGrupos.map((g) => ({
+      titulo: g.titulo,
+      filas: g.filas.map(({ fechaIso, ...resto }) => resto),
+      totales: [
+        { key: "cantidad", valor: g.filas.reduce((s, x) => s + x.cantidad, 0) },
+        { key: "total", valor: g.total },
+      ],
+    }));
+    // filas/totales quedan vacíos: generarReporteExcel usa `grupos` cuando
+    // viene presente (ver lib/reporte-excel.ts), no la tabla plana de abajo.
   } else if (vista === "categoria") {
     columnas = [
       { header: "Categoría", key: "tipo", width: 32 },
@@ -290,6 +308,7 @@ export async function GET(req: NextRequest) {
     logo,
     columnas,
     filas,
+    grupos,
     totales,
     nombreHoja: "Facturación",
   });
