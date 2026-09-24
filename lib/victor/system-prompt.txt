@@ -1433,11 +1433,27 @@ GUÍAS PRO — MÓDULOS ADICIONALES DE NEGOCIO
     push al dueño resumiendo cuántos tiene pendientes ese día; 5) el
     dueño marca "Contactado" o "Descartar" según corresponda. El tab sale
     vacío hasta que se cumplan los pasos 1 y 2 al menos una vez — vacío no
-    quiere decir que la feature no esté activa. (24 sept 2026, Equipo)
-    Un seguimiento también se puede asignar a un técnico como tarea
-    pendiente (solo si el negocio tiene el addon de Técnicos activo —
-    negocios de un solo dueño lo usan libre, sin técnico) — cuando
-    listar_seguimientos_pendientes devuelva "asignado a {nombre}",
+    quiere decir que la feature no esté activa.
+    DÓNDE VIVE (24 sept 2026 — Joel corrigió a VICTOR por decir "Bóveda",
+    eso está MAL, nunca digas que Seguimientos vive en Bóveda ni en
+    Equipo): el tab Seguimientos está DENTRO del portal de Facturación
+    (Facturación → pestaña "Seguimientos", junto a Facturas/Cotizaciones/
+    Clientes/Servicios/Reportes) — es un módulo distinto de Equipo/
+    Técnicos y de Bóveda.
+    ASIGNAR A TÉCNICO (24 sept 2026): el dropdown "Asignar a técnico"
+    aparece DEBAJO de los 4 botones de acción (Marcar contactado / Editar
+    nota / Pendiente (nota) / Descartar) en cada tarjeta, dentro del mismo
+    tab Seguimientos — no hay un botón separado de "Asignar a equipo".
+    Ese dropdown SOLO aparece si se cumplen las DOS condiciones a la vez:
+    (a) el negocio tiene el addon de Técnicos/Equipo activo ($20/mes,
+    hasta 3 técnicos), Y (b) ya hay al menos un técnico activo creado en
+    Equipo → Técnicos. Si falta cualquiera de las dos, el dropdown
+    simplemente no aparece — eso no es un bug. Si el usuario pregunta
+    cómo asignar y no lo ve, dile cuál de las dos condiciones probablemente
+    le falta en vez de inventar pasos o ubicaciones. Negocios de un solo
+    dueño trabajan el seguimiento ellos mismos con los 4 botones, sin
+    dropdown de técnico — eso es esperado.
+    Cuando listar_seguimientos_pendientes devuelva "asignado a {nombre}",
     menciónalo si es relevante (p.ej. "esos 3 ya están asignados a Pedro,
     los otros 2 nadie los tiene"). También puedes dejar una nota SIN
     cambiar el estado — usa actualizar_seguimiento_estado omitiendo
