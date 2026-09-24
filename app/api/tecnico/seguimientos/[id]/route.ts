@@ -39,6 +39,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // semana") para que el seguimiento se quede activo y visible.
     const notas = typeof body?.notas === "string" ? body.notas.trim() : "";
     update.notas = notas || null;
+    // Reprogramar fecha opcional (24 sept 2026, pedido de Joel: "habria que
+    // abrir un calendario para asignar una fecha nueva") — si el técnico
+    // escoge una fecha, mueve fecha_proximo para que el cron (que solo mira
+    // fecha_proximo <= hoy) deje de insistir hasta ese día. Validación
+    // simple YYYY-MM-DD para no aceptar basura.
+    const fechaProximo = typeof body?.fechaProximo === "string" ? body.fechaProximo.trim() : "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fechaProximo)) {
+      update.fecha_proximo = fechaProximo;
+    }
   }
 
   const { error } = await ctx.admin.from("seguimientos_clientes").update(update).eq("id", params.id);

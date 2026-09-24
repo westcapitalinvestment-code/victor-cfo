@@ -261,16 +261,18 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
   const [actualizandoSegId, setActualizandoSegId] = useState<string | null>(null);
   const [notaAbiertaId, setNotaAbiertaId] = useState<string | null>(null);
   const [notaTexto, setNotaTexto] = useState("");
+  const [notaFecha, setNotaFecha] = useState("");
 
-  async function accionSeguimiento(id: string, accion: "contactado" | "descartar" | "nota", notas?: string) {
+  async function accionSeguimiento(id: string, accion: "contactado" | "descartar" | "nota", notas?: string, fechaProximo?: string) {
     setActualizandoSegId(id);
     await fetch(`/api/tecnico/seguimientos/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accion, notas }),
+      body: JSON.stringify({ accion, notas, fechaProximo }),
     });
     setActualizandoSegId(null);
     setNotaAbiertaId(null);
+    setNotaFecha("");
     onRecargar();
   }
 
@@ -494,9 +496,17 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
                         onChange={(e) => setNotaTexto(e.target.value)}
                         autoFocus
                       />
+                      {/* Reprogramar fecha (opcional, 24 sept 2026) — si el
+                          cliente dijo "llámame la semana que viene", aquí se
+                          escoge esa fecha para que deje de salir como
+                          vencido y el sistema no siga insistiendo. */}
+                      <div>
+                        <label className="text-[11px] text-muted">Reprogramar para (opcional)</label>
+                        <input type="date" className="vc-input text-xs" value={notaFecha} onChange={(e) => setNotaFecha(e.target.value)} />
+                      </div>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => accionSeguimiento(s.id, "nota", notaTexto)}
+                          onClick={() => accionSeguimiento(s.id, "nota", notaTexto, notaFecha || undefined)}
                           disabled={cargando}
                           className="flex-1 rounded-lg border border-teal py-1.5 text-xs font-medium text-teal"
                         >

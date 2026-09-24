@@ -931,8 +931,16 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "semana'), NO uses 'contactado' — omite nuevo_estado por completo y solo pasa `nota`; el seguimiento se " +
       "queda tal cual estaba (activo, visible) con la nota anotada, listo para reintentar. La nota SIEMPRE " +
       "reemplaza la anterior (no se acumula) — si hace falta conservar algo de la nota vieja, inclúyelo en el " +
-      "texto nuevo. Busca el seguimiento por nombre del cliente (y opcionalmente servicio) — si hay más de una " +
-      "coincidencia entre los pendientes, pregúntale al usuario cuál antes de actualizar.",
+      "texto nuevo. IMPORTANTE (24 sept 2026, pedido de Joel: 'si la fecha se cambia... habria que abrir un " +
+      "calendario para asignar una fecha nueva'): cuando el usuario menciona una fecha o plazo concreto para " +
+      "reintentar (ej. 'llamar el 10 de octubre', 'la semana que viene', 'en 3 días'), calcula la fecha real " +
+      "(usa tu noción de la fecha de hoy) y pásala en `nueva_fecha` (YYYY-MM-DD) junto con la nota — esto mueve " +
+      "el seguimiento a esa fecha, lo saca de Vencidos, y el cron/push dejan de insistir hasta ese día. Si el " +
+      "usuario NO da una fecha concreta ('lo llamé pero no contestó', sin decir cuándo reintentar), omite " +
+      "nueva_fecha — el seguimiento se queda con la fecha vieja y le sigue apareciendo vencido (correcto: no " +
+      "inventes una fecha que el usuario no dio). Busca el seguimiento por nombre del cliente (y opcionalmente " +
+      "servicio) — si hay más de una coincidencia entre los pendientes, pregúntale al usuario cuál antes de " +
+      "actualizar.",
     input_schema: {
       type: "object",
       properties: {
@@ -950,6 +958,13 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
           description:
             "Nota sobre el contacto (ej. qué dijo el cliente, cuándo quedaron). Reemplaza cualquier nota anterior " +
             "de ese seguimiento — no se acumula.",
+        },
+        nueva_fecha: {
+          type: "string",
+          description:
+            "Fecha (YYYY-MM-DD) para reprogramar el seguimiento, SOLO si el usuario dio una fecha o plazo " +
+            "concreto para reintentar (calcula la fecha real a partir de la de hoy). Mueve fecha_proximo — el " +
+            "seguimiento deja de salir como vencido hasta esa fecha. Omite si el usuario no dio fecha/plazo.",
         },
       },
       required: ["cliente_nombre"],
@@ -3985,6 +4000,12 @@ export async function executeVictorTool(
         };
       }
 
+      // Reprogramar fecha opcional (24 sept 2026, pedido de Joel) — VICTOR ya
+      // calculó la fecha real a partir de "la semana que viene"/etc. en el
+      // texto libre; aquí solo se valida el formato YYYY-MM-DD.
+      const nuevaFechaSegCrudo = typeof input.nueva_fecha === "string" ? input.nueva_fecha.trim() : "";
+      const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(nuevaFechaSegCrudo) ? nuevaFechaSegCrudo : null;
+
       const seguimientoObjetivo = matches[0];
       const { error: updateSegError } = await supabase
         .from("seguimientos_clientes")
@@ -3994,6 +4015,7 @@ export async function executeVictorTool(
           // botón "Pendiente (nota)"/"Editar nota" del portal) — no se
           // acumula histórico.
           ...(notaSeg ? { notas: notaSeg } : {}),
+          ...(fechaValida ? { fecha_proximo: fechaValida } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq("id", seguimientoObjetivo.id);
@@ -4001,10 +4023,11 @@ export async function executeVictorTool(
 
       const clienteJoinObjetivo = Array.isArray(seguimientoObjetivo.clients) ? seguimientoObjetivo.clients[0] : seguimientoObjetivo.clients;
       const nombreClienteObjetivo = clienteJoinObjetivo?.name ?? clienteBuscado;
+      const sufijoFecha = fechaValida ? `, reprogramado para ${fechaValida}` : "";
       if (nuevoEstadoSegCrudo) {
-        return { ok: true, message: `Seguimiento de "${nombreClienteObjetivo}" actualizado a "${nuevoEstadoSegCrudo}"${notaSeg ? ", con nota guardada" : ""}.` };
+        return { ok: true, message: `Seguimiento de "${nombreClienteObjetivo}" actualizado a "${nuevoEstadoSegCrudo}"${notaSeg ? ", con nota guardada" : ""}${sufijoFecha}.` };
       }
-      return { ok: true, message: `Nota guardada en el seguimiento de "${nombreClienteObjetivo}" — se queda activo, listo para reintentar.` };
+      return { ok: true, message: `Nota guardada en el seguimiento de "${nombreClienteObjetivo}"${sufijoFecha} — se queda activo, listo para reintentar.` };
     }
 
     case "reporte_pagos_contratistas": {

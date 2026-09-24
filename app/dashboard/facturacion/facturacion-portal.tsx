@@ -1753,14 +1753,27 @@ function SeguimientosTab({
   // semana... que se pueda editar") — guarda/edita la nota SIN tocar el
   // estado, para que el seguimiento se quede activo en la lista tal como
   // esté (pendiente o contactado), listo para reintentar.
-  async function guardarNota(id: string, notas: string) {
+  // nuevaFecha opcional (24 sept 2026, pedido de Joel: "si la fecha se
+  // cambia como el ejemplo de que estaba de vacaciones... habria que abrir
+  // un calendario para asignar una fecha nueva") — si se escoge, mueve
+  // fecha_proximo a esa fecha, así el cron (que solo mira fecha_proximo <=
+  // hoy) deja de insistirle al cliente/dueño hasta ese día, y el
+  // seguimiento pasa de Vencido a Próximo automáticamente. Si se deja en
+  // blanco, se comporta igual que antes (solo nota, fecha intacta).
+  async function guardarNota(id: string, notas: string, nuevaFecha?: string) {
     setActualizandoId(id);
     const notasFinal = notas.trim() || null;
     await supabase
       .from("seguimientos_clientes")
-      .update({ notas: notasFinal, updated_at: new Date().toISOString() })
+      .update({
+        notas: notasFinal,
+        ...(nuevaFecha ? { fecha_proximo: nuevaFecha } : {}),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id);
-    setLista((prev) => (prev ? prev.map((s) => (s.id === id ? { ...s, notas: notasFinal } : s)) : prev));
+    setLista((prev) =>
+      prev ? prev.map((s) => (s.id === id ? { ...s, notas: notasFinal, ...(nuevaFecha ? { fecha_proximo: nuevaFecha } : {}) } : s)) : prev
+    );
     setActualizandoId(null);
   }
 
@@ -1932,7 +1945,7 @@ function FilaSeguimiento({
   vencido?: boolean;
   onContactado: (id: string) => void;
   onDescartar: (id: string) => void;
-  onGuardarNota: (id: string, notas: string) => void;
+  onGuardarNota: (id: string, notas: string, nuevaFecha?: string) => void;
   onAsignarTecnico: (id: string, technicianId: string) => void;
   cargando: boolean;
   linkWhatsapp: string | null;
@@ -1941,11 +1954,15 @@ function FilaSeguimiento({
 }) {
   const [editandoNota, setEditandoNota] = useState(false);
   const [notaTexto, setNotaTexto] = useState(s.notas ?? "");
+  // Fecha nueva opcional junto a la nota (24 sept 2026, pedido de Joel) —
+  // arranca vacía; si el usuario la llena, guardarNota mueve fecha_proximo.
+  const [notaFecha, setNotaFecha] = useState("");
   const tecnicoAsignado = tecnicosDeEntidad.find((t) => t.id === s.technician_id);
 
   function guardarNota() {
-    onGuardarNota(s.id, notaTexto);
+    onGuardarNota(s.id, notaTexto, notaFecha || undefined);
     setEditandoNota(false);
+    setNotaFecha("");
   }
 
   return (
@@ -2005,6 +2022,14 @@ function FilaSeguimiento({
             onChange={(e) => setNotaTexto(e.target.value)}
             autoFocus
           />
+          {/* Reprogramar fecha (opcional) — si el cliente dijo "llámame la
+              semana que viene", aquí se escoge esa fecha para que el
+              seguimiento se mueva a Próximos y el cron deje de insistir
+              hasta entonces. Sin fecha, se comporta como antes. */}
+          <div>
+            <label className="text-[11px] text-muted">Reprogramar para (opcional)</label>
+            <input type="date" className="vc-input text-xs" value={notaFecha} onChange={(e) => setNotaFecha(e.target.value)} />
+          </div>
           <div className="flex gap-2">
             <button onClick={guardarNota} disabled={cargando} className="vc-btn-secondary flex-1 border-teal text-xs text-teal">
               Guardar nota

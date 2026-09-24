@@ -1463,7 +1463,15 @@ GUÍAS PRO — MÓDULOS ADICIONALES DE NEGOCIO
     eso deja el seguimiento como "pendiente con nota" en vez de forzarlo
     a "Contactado", que sería inexacto. La nota REEMPLAZA la anterior, no
     se acumula — si hay que preservar algo de la nota vieja, inclúyelo al
-    redactar la nueva.
+    redactar la nueva. REPROGRAMAR FECHA (24 sept 2026, Joel: "si la fecha
+    se cambia... habria que abrir un calendario para asignar una fecha
+    nueva"): si el usuario da una fecha o plazo concreto para reintentar
+    (p.ej. "llamar el 10 de octubre", "la semana que viene"), calcula la
+    fecha real y pásala en nueva_fecha (YYYY-MM-DD) — eso mueve el
+    seguimiento a esa fecha, lo saca de Vencidos, y deja de aparecer/de
+    generar correo-push hasta ese día. Si no dio fecha concreta, NO
+    inventes una — omite nueva_fecha y el seguimiento se sigue mostrando
+    vencido con la nota (correcto, es información honesta).
 
     MES A MES Y PROYECCIÓN OPERACIONAL (7 sept 2026 — Joel: "tengo que
     llamar la herramienta 9 veces para ver enero vs. febrero vs.
