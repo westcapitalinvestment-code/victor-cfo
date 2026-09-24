@@ -1960,6 +1960,15 @@ function FilaSeguimiento({
               "tambien seria importante tener la direccion para coordinar
               las rutas") — solo se muestra, no arma rutas automáticas. */}
           {s.clients?.address && <p className="mt-0.5 text-xs text-muted">📍 {s.clients.address}</p>}
+          {/* Teléfono clickeable (24 sept 2026, pedido de Joel: "debe
+              aparecer el telefono en algun lugar para que al click pueda
+              contactar la persona ademas del WA") — tel: abre el marcador,
+              no reemplaza el botón de WhatsApp de abajo. */}
+          {s.clients?.telefono && (
+            <a href={`tel:${s.clients.telefono.replace(/\D/g, "")}`} className="mt-0.5 block text-xs text-teal">
+              📞 {s.clients.telefono}
+            </a>
+          )}
           {s.estado === "contactado" && <p className="mt-0.5 text-xs text-teal">Ya contactado</p>}
           {tecnicoAsignado && (
             <p className="mt-0.5 text-xs text-muted">

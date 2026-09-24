@@ -468,6 +468,11 @@ function AppTecnico({ sesion, onSalir, onRecargar }: { sesion: Sesion; onSalir: 
                     {s.servicioNombre ?? "Servicio"} · le toca el {new Date(s.fechaProximo + "T00:00:00").toLocaleDateString("es-PR")}
                   </p>
                   {s.clienteDireccion && <p className="mt-0.5 text-xs text-muted">📍 {s.clienteDireccion}</p>}
+                  {s.clienteTelefono && (
+                    <a href={`tel:${s.clienteTelefono.replace(/\D/g, "")}`} className="mt-0.5 block text-xs text-teal">
+                      📞 {s.clienteTelefono}
+                    </a>
+                  )}
                   {s.notas && !editandoNota && (
                     <button
                       onClick={() => {
