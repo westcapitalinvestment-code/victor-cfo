@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
   const idsFacturas = facturas.map((f) => f.id);
 
   let items: any[] = [];
-  if (vista === "servicio" || vista === "categoria" || vista === "clienteServicio" || servicioId || categoria) {
+  if (vista === "servicio" || vista === "categoria" || vista === "clienteServicio" || vista === "itemSales" || servicioId || categoria) {
     const { data: itemsData } = await supabase
       .from("invoice_items")
       .select("invoice_id, descripcion, service_id, subtotal_linea, cantidad, precio_unitario, services(nombre, tipo)")
@@ -86,6 +86,7 @@ export async function GET(req: NextRequest) {
     servicio: "Reporte de Facturación — Por servicio",
     categoria: "Reporte de Facturación — Por categoría",
     clienteServicio: "Reporte de Facturación — Cliente + servicio",
+    itemSales: "Reporte de Facturación — Ventas por ítem",
     retenciones: "Reporte de Facturación — Retenciones SURI",
     flujo: "Reporte de Facturación — Flujo de cobro",
   };
@@ -97,24 +98,63 @@ export async function GET(req: NextRequest) {
   if (vista === "servicio") {
     columnas = [
       { header: "Servicio", key: "nombre", width: 40 },
-      { header: "Líneas", key: "count", width: 12, numero: true },
+      // Unidades reales (columna cantidad), no líneas de factura — 24 sept
+      // 2026, pedido de Joel: "(1)" antes salía cuando esa 1 línea en
+      // realidad representaba 22 CHRA. Ver mismo fix en pdf/route.ts.
+      { header: "Unidades", key: "unidades", width: 12, numero: true },
       { header: "Total", key: "total", width: 16, moneda: true },
     ];
-    const mapa = new Map<string, { nombre: string; total: number; count: number }>();
+    const mapa = new Map<string, { nombre: string; total: number; unidades: number }>();
     for (const it of items) {
       const key = it.service_id ?? `desc:${it.descripcion}`;
       const nombre = it.services?.nombre ?? it.descripcion;
       const total = Number(it.subtotal_linea ?? it.cantidad * it.precio_unitario);
-      const actual = mapa.get(key) ?? { nombre, total: 0, count: 0 };
+      const actual = mapa.get(key) ?? { nombre, total: 0, unidades: 0 };
       actual.total += total;
-      actual.count += 1;
+      actual.unidades += Number(it.cantidad ?? 1);
       mapa.set(key, actual);
     }
     const lista = [...mapa.values()].sort((a, b) => b.total - a.total);
-    filas = lista.map((s) => ({ nombre: s.nombre, count: s.count, total: s.total }));
+    filas = lista.map((s) => ({ nombre: s.nombre, unidades: s.unidades, total: s.total }));
     totales = [
-      { key: "count", valor: lista.reduce((s, x) => s + x.count, 0) },
+      { key: "unidades", valor: lista.reduce((s, x) => s + x.unidades, 0) },
       { key: "total", valor: lista.reduce((s, x) => s + x.total, 0) },
+    ];
+  } else if (vista === "itemSales") {
+    // Ventas por ítem (24 sept 2026) — espejo exacto de la vista "Ventas
+    // por ítem" en pantalla (facturacion-portal.tsx): una fila por línea
+    // real de factura, no agregada, para que Joel pueda exportar y llevar
+    // la cuenta de cuántos CHRA/EPASS/etc. le ha facturado a cada cliente.
+    columnas = [
+      { header: "Servicio", key: "servicio", width: 28 },
+      { header: "Cliente", key: "cliente", width: 28 },
+      { header: "Factura #", key: "numero", width: 14 },
+      { header: "Fecha", key: "fecha", width: 14 },
+      { header: "Precio unit.", key: "precioUnitario", width: 14, moneda: true },
+      { header: "Cantidad", key: "cantidad", width: 12, numero: true },
+      { header: "Total", key: "total", width: 16, moneda: true },
+    ];
+    const facturaPorId = new Map(facturas.map((f) => [f.id, f]));
+    const filasDetalle = items
+      .map((it: any) => {
+        const f = facturaPorId.get(it.invoice_id);
+        const fechaIso = f?.fecha_emision ?? "";
+        return {
+          servicio: it.services?.nombre ?? it.descripcion,
+          cliente: f?.clients?.name ?? "Sin cliente",
+          numero: f?.numero ?? "",
+          fechaIso,
+          fecha: fechaIso ? formatFecha(fechaIso) : "",
+          precioUnitario: Number(it.precio_unitario ?? 0),
+          cantidad: Number(it.cantidad ?? 1),
+          total: Number(it.subtotal_linea ?? it.cantidad * it.precio_unitario),
+        };
+      })
+      .sort((a, b) => (a.servicio === b.servicio ? a.fechaIso.localeCompare(b.fechaIso) : a.servicio.localeCompare(b.servicio)));
+    filas = filasDetalle.map(({ fechaIso, ...resto }) => resto);
+    totales = [
+      { key: "cantidad", valor: filasDetalle.reduce((s, x) => s + x.cantidad, 0) },
+      { key: "total", valor: filasDetalle.reduce((s, x) => s + x.total, 0) },
     ];
   } else if (vista === "categoria") {
     columnas = [
@@ -140,22 +180,27 @@ export async function GET(req: NextRequest) {
     columnas = [
       { header: "Cliente", key: "cliente", width: 32 },
       { header: "Servicio", key: "servicio", width: 32 },
+      { header: "Unidades", key: "unidades", width: 12, numero: true },
       { header: "Total", key: "total", width: 16, moneda: true },
     ];
     const facturaPorId = new Map(facturas.map((f) => [f.id, f]));
-    const mapa = new Map<string, { cliente: string; servicio: string; total: number }>();
+    const mapa = new Map<string, { cliente: string; servicio: string; total: number; unidades: number }>();
     for (const it of items) {
       const f = facturaPorId.get(it.invoice_id);
       const cliente = f?.clients?.name ?? "Sin cliente";
       const servicio = it.services?.nombre ?? it.descripcion;
       const key = `${cliente}::${servicio}`;
-      const actual = mapa.get(key) ?? { cliente, servicio, total: 0 };
+      const actual = mapa.get(key) ?? { cliente, servicio, total: 0, unidades: 0 };
       actual.total += Number(it.subtotal_linea ?? it.cantidad * it.precio_unitario);
+      actual.unidades += Number(it.cantidad ?? 1);
       mapa.set(key, actual);
     }
     const lista = [...mapa.values()].sort((a, b) => b.total - a.total);
-    filas = lista.map((r) => ({ cliente: r.cliente, servicio: r.servicio, total: r.total }));
-    totales = [{ key: "total", valor: lista.reduce((s, x) => s + x.total, 0) }];
+    filas = lista.map((r) => ({ cliente: r.cliente, servicio: r.servicio, unidades: r.unidades, total: r.total }));
+    totales = [
+      { key: "unidades", valor: lista.reduce((s, x) => s + x.unidades, 0) },
+      { key: "total", valor: lista.reduce((s, x) => s + x.total, 0) },
+    ];
   } else if (vista === "retenciones") {
     columnas = [
       { header: "Cliente", key: "nombre", width: 32 },

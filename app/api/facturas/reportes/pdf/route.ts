@@ -135,14 +135,17 @@ export async function GET(req: NextRequest) {
     : { data: [] };
 
   const porServicio = (() => {
-    const mapa = new Map<string, { nombre: string; total: number; count: number }>();
+    const mapa = new Map<string, { nombre: string; total: number; unidades: number }>();
     for (const it of itemsData ?? []) {
       const key = (it as any).service_id ?? `desc:${(it as any).descripcion}`;
       const nombre = (it as any).services?.nombre ?? (it as any).descripcion;
       const total = Number((it as any).subtotal_linea ?? (it as any).cantidad * (it as any).precio_unitario);
-      const actual = mapa.get(key) ?? { nombre, total: 0, count: 0 };
+      const actual = mapa.get(key) ?? { nombre, total: 0, unidades: 0 };
       actual.total += total;
-      actual.count += 1;
+      // unidades (24 sept 2026, pedido de Joel) — suma la columna cantidad
+      // real de invoice_items, no el número de líneas: "(1)" antes era 1
+      // LÍNEA, no las 22 unidades de CHRA que esa línea representaba.
+      actual.unidades += Number((it as any).cantidad ?? 1);
       mapa.set(key, actual);
     }
     return [...mapa.values()].sort((a, b) => b.total - a.total).slice(0, 15);
@@ -252,7 +255,7 @@ export async function GET(req: NextRequest) {
   encabezadoSeccion("Por servicio (top 15)");
   if (porServicio.length === 0) filaTabla("No hay líneas de factura en este período.", "");
   for (const s of porServicio) {
-    filaTabla(`${s.nombre} (${s.count})`, formatMoney(s.total));
+    filaTabla(`${s.nombre} (${s.unidades} unid.)`, formatMoney(s.total));
   }
 
   encabezadoSeccion("Retenciones SURI");
