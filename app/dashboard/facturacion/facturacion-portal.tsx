@@ -1411,6 +1411,12 @@ type ItemFacturado = {
   servicioNombre: string | null;
   servicioTipo: string | null;
   subtotal_linea: number;
+  // Unidades reales de la línea (columna cantidad de invoice_items) — 24
+  // sept 2026, pedido de Joel: necesita saber CUÁNTOS items ha facturado
+  // de un servicio (ej. "53 CHRA, 25 AHA" a un mismo Dr.), no solo cuántas
+  // LÍNEAS de factura tiene. Una línea puede tener cantidad > 1 (ej. "10
+  // evaluaciones" en una sola línea), así que sumar líneas subestimaría.
+  cantidad: number;
   estado: string;
   fecha_emision: string;
   clientId: string | null;
@@ -1490,6 +1496,7 @@ function ReportesTab({
           serviceId: it.service_id ?? null,
           servicioNombre: it.services?.nombre ?? null,
           servicioTipo: it.services?.tipo ?? null,
+          cantidad: Number(it.cantidad ?? 1),
           subtotal_linea: Number(it.subtotal_linea ?? it.cantidad * it.precio_unitario),
           estado: it.invoices?.estado ?? "borrador",
           fecha_emision: it.invoices?.fecha_emision ?? "",
@@ -1629,7 +1636,7 @@ function ReportesTab({
   const depositoNetoBanco = totalCobrado - gastoProcesamientoPeriodo;
 
   const porServicio = useMemo(() => {
-    const mapa = new Map<string, { descripcion: string; total: number; count: number }>();
+    const mapa = new Map<string, { descripcion: string; total: number; count: number; unidades: number }>();
     for (const it of itemsEnRango) {
       // Agrupa por service_id cuando existe (línea real del catálogo) —
       // así "Consulta inicial" y "consulta Inicial" cuentan como el mismo
@@ -1637,9 +1644,13 @@ function ReportesTab({
       // su texto exacto, que es lo único que tienen.
       const key = it.serviceId ?? `desc:${it.descripcion}`;
       const nombre = it.servicioNombre ?? it.descripcion;
-      const actual = mapa.get(key) ?? { descripcion: nombre, total: 0, count: 0 };
+      const actual = mapa.get(key) ?? { descripcion: nombre, total: 0, count: 0, unidades: 0 };
       actual.total += it.subtotal_linea;
       actual.count += 1;
+      // unidades (24 sept 2026) — suma la columna cantidad real, no el
+      // número de líneas: si Joel factura "10 CHRA" en una sola línea,
+      // esa línea cuenta como 1 línea pero 10 unidades.
+      actual.unidades += it.cantidad;
       mapa.set(key, actual);
     }
     return [...mapa.values()].sort((a, b) => b.total - a.total);
@@ -1660,12 +1671,16 @@ function ReportesTab({
   const maxPorCategoria = Math.max(1, ...porCategoria.map((c) => c.total));
 
   const porClienteServicio = useMemo(() => {
-    const mapa = new Map<string, { cliente: string; servicio: string; total: number; count: number }>();
+    const mapa = new Map<string, { cliente: string; servicio: string; total: number; count: number; unidades: number }>();
     for (const it of itemsEnRango) {
       const key = `${it.clientId ?? "sin-cliente"}::${it.serviceId ?? it.descripcion}`;
-      const actual = mapa.get(key) ?? { cliente: it.clientNombre, servicio: it.servicioNombre ?? it.descripcion, total: 0, count: 0 };
+      const actual = mapa.get(key) ?? { cliente: it.clientNombre, servicio: it.servicioNombre ?? it.descripcion, total: 0, count: 0, unidades: 0 };
       actual.total += it.subtotal_linea;
       actual.count += 1;
+      // unidades (24 sept 2026, pedido de Joel) — cuántos ítems de este
+      // servicio le ha facturado a este cliente en total (ej. "53 CHRA" a
+      // un Dr.), para saber cuántos van y restar contra lo nuevo que haga.
+      actual.unidades += it.cantidad;
       mapa.set(key, actual);
     }
     return [...mapa.values()].sort((a, b) => b.total - a.total);
@@ -1888,7 +1903,7 @@ function ReportesTab({
                 <span className="flex-shrink-0 font-medium">{formatMoney(s.total)}</span>
               </div>
               <p className="text-xs text-muted">
-                {s.count} línea{s.count === 1 ? "" : "s"}
+                {s.unidades} unidad{s.unidades === 1 ? "" : "es"} · {s.count} línea{s.count === 1 ? "" : "s"}
               </p>
               <BarraProgreso pct={(s.total / maxPorServicio) * 100} color="#1D9E75" />
             </div>
@@ -1925,7 +1940,9 @@ function ReportesTab({
             <div key={i} className="flex items-center justify-between border-b border-border py-2.5 text-sm last:border-0">
               <div className="min-w-0 flex-1">
                 <p className="truncate">{r.cliente}</p>
-                <p className="truncate text-xs text-muted">{r.servicio}</p>
+                <p className="truncate text-xs text-muted">
+                  {r.servicio} · {r.unidades} unidad{r.unidades === 1 ? "" : "es"}
+                </p>
               </div>
               <span className="flex-shrink-0 font-medium">{formatMoney(r.total)}</span>
             </div>

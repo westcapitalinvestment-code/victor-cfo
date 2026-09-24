@@ -1,11 +1,74 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/format";
 
 type Categoria = { id: number; nombre: string };
+
+// Combobox con búsqueda (24 sept 2026, pedido de Joel: con muchas
+// categorías el <select> nativo obliga a hacer scroll — escribir "vida" y
+// que filtre a "Seguros de vida" es mucho más rápido). Mismo patrón que
+// CategoriaComboBox en app/dashboard/gastos/gastos-list.tsx — vive a nivel
+// de módulo (no adentro de GastosPendientesCard) por la misma razón: que
+// React no lo desmonte/remonte en cada render del padre y se pierda lo que
+// el usuario ya escribió.
+function CategoriaComboBox({
+  categorias,
+  disabled,
+  onSeleccionar,
+  onCerrar,
+}: {
+  categorias: Categoria[];
+  disabled?: boolean;
+  onSeleccionar: (id: number) => void;
+  onCerrar: () => void;
+}) {
+  const [busqueda, setBusqueda] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function alHacerClicFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onCerrar();
+      }
+    }
+    document.addEventListener("mousedown", alHacerClicFuera);
+    return () => document.removeEventListener("mousedown", alHacerClicFuera);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filtradas = busqueda.trim()
+    ? categorias.filter((c) => c.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()))
+    : categorias;
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        autoFocus
+        className="vc-input !w-36 !py-1.5 !text-xs"
+        placeholder="Buscar categoría..."
+        disabled={disabled}
+        value={busqueda}
+        onChange={(e) => setBusqueda(e.target.value)}
+      />
+      <div className="absolute right-0 z-20 mt-1 max-h-48 w-48 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+        {filtradas.length === 0 && <p className="p-2 text-xs text-muted">Sin resultados.</p>}
+        {filtradas.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className="block w-full px-2.5 py-1.5 text-left text-xs hover:bg-bg"
+            onClick={() => onSeleccionar(c.id)}
+          >
+            {c.nombre}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 type Pendiente = {
   id: string;
@@ -46,6 +109,10 @@ export default function GastosPendientesCard({
   const [pendientes, setPendientes] = useState(pendientesIniciales);
   const [guardando, setGuardando] = useState<string | null>(null);
   const [abierto, setAbierto] = useState(true);
+  // Cuál fila tiene el combobox de categoría abierto (24 sept 2026) —
+  // reemplaza el <select> nativo que obligaba a hacer scroll por todas las
+  // categorías; null = ninguna fila en modo edición.
+  const [editando, setEditando] = useState<string | null>(null);
 
   // useState(pendientesIniciales) solo usa ese valor en el PRIMER render —
   // si el Server Component padre (page.tsx) vuelve a correr con datos
@@ -135,21 +202,26 @@ export default function GastosPendientesCard({
                   </span>
                 </p>
               </div>
-              <select
-                className="vc-input !w-auto !py-1.5 !text-xs"
-                defaultValue={p.sugeridaId ?? ""}
-                disabled={guardando === p.id}
-                onChange={(e) => categorizar(p.id, Number(e.target.value))}
-              >
-                <option value="" disabled>
-                  {p.sugeridaId ? `¿${nombreCategoria(p.sugeridaId)}?` : "Categoría..."}
-                </option>
-                {categorias.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
-              </select>
+              {editando === p.id ? (
+                <CategoriaComboBox
+                  categorias={categorias}
+                  disabled={guardando === p.id}
+                  onSeleccionar={(id) => {
+                    setEditando(null);
+                    categorizar(p.id, id);
+                  }}
+                  onCerrar={() => setEditando(null)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="vc-input !w-auto flex-shrink-0 !py-1.5 !text-xs"
+                  disabled={guardando === p.id}
+                  onClick={() => setEditando(p.id)}
+                >
+                  {guardando === p.id ? "Guardando..." : p.sugeridaId ? `¿${nombreCategoria(p.sugeridaId)}?` : "Categoría..."}
+                </button>
+              )}
             </div>
           ))}
 
