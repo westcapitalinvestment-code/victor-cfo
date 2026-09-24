@@ -298,12 +298,49 @@ export async function GET(req: NextRequest) {
   // Total ventas), luego una tabla por servicio con encabezado de columnas
   // (Cliente, Factura #, Fecha, Precio unit., Cant., Total), líneas con
   // separador fino, y fila "Total" en negrita al cierre de cada tabla.
+  // Columnas (24 sept 2026, ajuste pedido por Joel: "en nombres largos
+  // freshbook lo pone en 2 lineas... tiene bastante espacio entre Cant y
+  // total" — con un nombre largo como "Oficina Médica Dr. Emmanuel Serrano"
+  // el nombre se cortaba con "…" y a la derecha sobraba espacio en blanco
+  // entre Cant. y Total). Cliente ahora tiene casi el doble de ancho
+  // (145pt → 200pt) y el resto de columnas se recorrieron hacia la
+  // izquierda para llenar ese espacio sobrante; además, si el nombre igual
+  // no cabe en una línea, se parte en 2 (como FreshBooks) en vez de
+  // truncarse con "…".
   const xCliente = margin;
-  const xFactura = margin + 145;
-  const xFecha = margin + 200;
-  const xCostoDer = margin + 320;
-  const xCantDer = margin + 375;
+  const xFactura = margin + 200;
+  const xFecha = margin + 255;
+  const xCostoDer = margin + 365;
+  const xCantDer = margin + 410;
   const xTotalDer = width - margin;
+  const anchoCliente = xFactura - xCliente - 10;
+
+  // Envuelve un texto en hasta 2 líneas que quepan en `anchoMax` — si aun
+  // así no cabe, trunca la 2da línea con "…" (nunca más de 2 líneas, para
+  // no descuadrar la altura de la fila con casos extremos).
+  function envolverTexto(contenido: string, anchoMax: number, f: typeof font, size: number): string[] {
+    const palabras = contenido.split(" ");
+    const lineas: string[] = [];
+    let actual = "";
+    for (const palabra of palabras) {
+      const prueba = actual ? `${actual} ${palabra}` : palabra;
+      if (f.widthOfTextAtSize(prueba, size) <= anchoMax || !actual) {
+        actual = prueba;
+      } else {
+        lineas.push(actual);
+        actual = palabra;
+      }
+    }
+    if (actual) lineas.push(actual);
+    if (lineas.length > 2) {
+      let segunda = lineas[1];
+      while (f.widthOfTextAtSize(segunda + "…", size) > anchoMax && segunda.length > 1) {
+        segunda = segunda.slice(0, -1);
+      }
+      return [lineas[0], segunda + "…"];
+    }
+    return lineas;
+  }
 
   function encabezadoTablaItems() {
     espacio(60);
@@ -338,14 +375,16 @@ export async function GET(req: NextRequest) {
 
       encabezadoTablaItems();
       for (const fila of g.filas) {
-        espacio(34);
-        texto(fila.cliente.length > 34 ? fila.cliente.slice(0, 33) + "…" : fila.cliente, xCliente, y, { size: 8.5 });
+        const lineasCliente = envolverTexto(fila.cliente, anchoCliente, font, 8.5);
+        const altoFila = lineasCliente.length > 1 ? 21 : 11.5;
+        espacio(34 + (altoFila - 11.5));
+        lineasCliente.forEach((linea, i) => texto(linea, xCliente, y - i * 9.5, { size: 8.5 }));
         texto(fila.numero ? `#${fila.numero}` : "—", xFactura, y, { size: 8.5, color: teal });
         texto(fila.fecha ? formatFecha(fila.fecha) : "", xFecha, y, { size: 8.5, color: gris });
         textoDerecha(formatMoney(fila.precioUnitario), xCostoDer, y, { size: 8.5 });
         textoDerecha(String(fila.cantidad), xCantDer, y, { size: 8.5 });
         textoDerecha(formatMoney(fila.total), xTotalDer, y, { size: 8.5 });
-        y -= 11.5;
+        y -= altoFila;
       }
 
       espacio(35);
