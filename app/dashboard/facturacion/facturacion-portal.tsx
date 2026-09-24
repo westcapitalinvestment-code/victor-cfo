@@ -311,7 +311,14 @@ export default function FacturacionPortal({
         <ServiciosTab servicios={servicios} entidadId={entidadId} ownerIdEfectivo={ownerIdEfectivo} />
       )}
       {!modoAdmin && tab === "reportes" && (
-        <ReportesTab facturas={facturas} clients={clients} servicios={servicios} entidadId={entidadId} entidadesConAth={entidadesConAthSet} />
+        <ReportesTab
+          facturas={facturas}
+          clients={clients}
+          servicios={servicios}
+          entidadId={entidadId}
+          entidadesConAth={entidadesConAthSet}
+          basePath={basePath}
+        />
       )}
     </div>
   );
@@ -1252,6 +1259,13 @@ const VISTAS = [
   { value: "servicio", label: "Por servicio" },
   { value: "categoria", label: "Por categoría" },
   { value: "clienteServicio", label: "Cliente + servicio" },
+  // Ventas por ítem (24 sept 2026, pedido de Joel — mostró el reporte "Item
+  // Sales" de FreshBooks como referencia): a diferencia de "Por servicio"
+  // (que solo da el total agregado), esta vista desglosa cada línea real —
+  // cliente, # de factura, fecha, precio unitario, cantidad — para poder
+  // ver cuántos CHRA/AHA/etc. le ha facturado a un Dr. específico y de
+  // dónde sale cada uno, no solo el conteo final.
+  { value: "itemSales", label: "Ventas por ítem" },
   { value: "retenciones", label: "Retenciones SURI" },
   { value: "flujo", label: "Flujo de cobro" },
 ] as const;
@@ -1417,6 +1431,11 @@ type ItemFacturado = {
   // LÍNEAS de factura tiene. Una línea puede tener cantidad > 1 (ej. "10
   // evaluaciones" en una sola línea), así que sumar líneas subestimaría.
   cantidad: number;
+  // precio_unitario y numero de factura (24 sept 2026) — para el reporte
+  // "Ventas por ítem" estilo FreshBooks (Item Sales): lista cada línea con
+  // su precio unitario y el # de factura, no solo el total agregado.
+  precioUnitario: number;
+  facturaNumero: string;
   estado: string;
   fecha_emision: string;
   clientId: string | null;
@@ -1430,12 +1449,14 @@ function ReportesTab({
   servicios,
   entidadId,
   entidadesConAth,
+  basePath = "/dashboard/facturacion",
 }: {
   facturas: Factura[];
   clients: Cliente[];
   servicios: Servicio[];
   entidadId: string | null;
   entidadesConAth: Set<string>;
+  basePath?: string;
 }) {
   const supabase = createClient();
   const [periodo, setPeriodo] = useState<(typeof PERIODOS)[number]["value"]>("mes");
@@ -1486,7 +1507,7 @@ function ReportesTab({
       // incluyendo "vencida") puedan cruzar cada línea con su factura.
       .from("invoice_items")
       .select(
-        "invoice_id, descripcion, service_id, subtotal_linea, cantidad, precio_unitario, services(nombre, tipo), invoices(estado, fecha_emision, client_id, clients(name, email))"
+        "invoice_id, descripcion, service_id, subtotal_linea, cantidad, precio_unitario, services(nombre, tipo), invoices(numero, estado, fecha_emision, client_id, clients(name, email))"
       )
       .then(({ data }) => {
         if (!activo) return;
@@ -1497,6 +1518,8 @@ function ReportesTab({
           servicioNombre: it.services?.nombre ?? null,
           servicioTipo: it.services?.tipo ?? null,
           cantidad: Number(it.cantidad ?? 1),
+          precioUnitario: Number(it.precio_unitario ?? 0),
+          facturaNumero: it.invoices?.numero ?? "",
           subtotal_linea: Number(it.subtotal_linea ?? it.cantidad * it.precio_unitario),
           estado: it.invoices?.estado ?? "borrador",
           fecha_emision: it.invoices?.fecha_emision ?? "",
@@ -1656,6 +1679,58 @@ function ReportesTab({
     return [...mapa.values()].sort((a, b) => b.total - a.total);
   }, [itemsEnRango]);
   const maxPorServicio = Math.max(1, ...porServicio.map((s) => s.total));
+
+  // Ventas por ítem (24 sept 2026) — igual que porServicio pero sin
+  // colapsar: cada línea real de factura queda visible dentro de su grupo
+  // de servicio, ordenada por fecha, para que Joel pueda ver de dónde
+  // sale cada unidad (ej. "53 CHRA" desglosado factura por factura) en vez
+  // de solo el total agregado.
+  const ventasPorItem = useMemo(() => {
+    const mapa = new Map<
+      string,
+      {
+        nombre: string;
+        unidades: number;
+        total: number;
+        filas: {
+          facturaId: string;
+          facturaNumero: string;
+          cliente: string;
+          fecha: string;
+          precioUnitario: number;
+          cantidad: number;
+          total: number;
+        }[];
+      }
+    >();
+    for (const it of itemsEnRango) {
+      const key = it.serviceId ?? `desc:${it.descripcion}`;
+      const nombre = it.servicioNombre ?? it.descripcion;
+      const actual = mapa.get(key) ?? { nombre, unidades: 0, total: 0, filas: [] };
+      actual.unidades += it.cantidad;
+      actual.total += it.subtotal_linea;
+      actual.filas.push({
+        facturaId: it.facturaId,
+        facturaNumero: it.facturaNumero,
+        cliente: it.clientNombre,
+        fecha: it.fecha_emision,
+        precioUnitario: it.precioUnitario,
+        cantidad: it.cantidad,
+        total: it.subtotal_linea,
+      });
+      mapa.set(key, actual);
+    }
+    const grupos = [...mapa.values()].sort((a, b) => b.total - a.total);
+    for (const g of grupos) g.filas.sort((a, b) => a.fecha.localeCompare(b.fecha));
+    return grupos;
+  }, [itemsEnRango]);
+  const totalesVentasPorItem = useMemo(
+    () => ({
+      unidades: ventasPorItem.reduce((s, g) => s + g.unidades, 0),
+      total: ventasPorItem.reduce((s, g) => s + g.total, 0),
+    }),
+    [ventasPorItem]
+  );
 
   const porCategoria = useMemo(() => {
     const mapa = new Map<string, { tipo: string; total: number; count: number }>();
@@ -1906,6 +1981,53 @@ function ReportesTab({
                 {s.unidades} unidad{s.unidades === 1 ? "" : "es"} · {s.count} línea{s.count === 1 ? "" : "s"}
               </p>
               <BarraProgreso pct={(s.total / maxPorServicio) * 100} color="#1D9E75" />
+            </div>
+          ))}
+        </SeccionColapsable>
+      )}
+
+      {vista === "itemSales" && (
+        <SeccionColapsable titulo="Ventas por ítem">
+          {itemsFacturados === null && <p className="text-xs text-muted">Cargando...</p>}
+          {itemsFacturados !== null && ventasPorItem.length === 0 && (
+            <p className="text-xs text-muted">No hay datos para estos filtros.</p>
+          )}
+          {ventasPorItem.length > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-lg bg-teal/[.06] px-3 py-2.5 text-sm">
+              <span className="text-muted">
+                Total unidades: <span className="font-medium text-text">{totalesVentasPorItem.unidades}</span>
+              </span>
+              <span className="font-medium text-teal">{formatMoney(totalesVentasPorItem.total)}</span>
+            </div>
+          )}
+          {ventasPorItem.map((g, gi) => (
+            <div key={gi} className="mb-3 last:mb-0">
+              <div className="flex items-center justify-between border-b border-border pb-1.5">
+                <span className="text-sm font-medium">{g.nombre}</span>
+                <span className="text-xs text-muted">
+                  {g.unidades} unidad{g.unidades === 1 ? "" : "es"} · {formatMoney(g.total)}
+                </span>
+              </div>
+              {g.filas.map((f, fi) => (
+                <Link
+                  key={fi}
+                  href={`${basePath}/${f.facturaId}`}
+                  className="flex items-center justify-between gap-2 border-b border-border py-1.5 text-xs last:border-b-0 hover:bg-bg"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-text">{f.cliente}</p>
+                    <p className="text-[11px] text-muted">
+                      {f.facturaNumero ? `#${f.facturaNumero}` : "Sin #"} · {f.fecha}
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0 text-right text-muted">
+                    <p>
+                      {f.cantidad} × {formatMoney(f.precioUnitario)}
+                    </p>
+                    <p className="font-medium text-text">{formatMoney(f.total)}</p>
+                  </div>
+                </Link>
+              ))}
             </div>
           ))}
         </SeccionColapsable>
