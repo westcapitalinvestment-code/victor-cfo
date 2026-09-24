@@ -34,7 +34,10 @@ export async function GET(req: NextRequest) {
   // rechaza el año 0000 como fecha inválida — ver mismo fix en pdf/route.ts.
   const desde = searchParams.get("desde") || "0001-01-01";
   const hasta = searchParams.get("hasta") || new Date().toISOString().slice(0, 10);
-  const clienteId = searchParams.get("clienteId");
+  // getAll, no get (24 sept 2026) — mismo fix que pdf/route.ts: la pantalla
+  // ahora deja marcar varios clientes a la vez (estilo FreshBooks), así que
+  // clienteId puede venir repetido en el query string.
+  const clienteIds = searchParams.getAll("clienteId");
   const servicioId = searchParams.get("servicioId");
   const categoria = searchParams.get("categoria");
   const estadoFiltro = searchParams.get("estado");
@@ -49,7 +52,7 @@ export async function GET(req: NextRequest) {
     .neq("estado", "borrador")
     .gte("fecha_emision", desde)
     .lte("fecha_emision", hasta);
-  if (clienteId) facturasQuery = facturasQuery.eq("client_id", clienteId);
+  if (clienteIds.length > 0) facturasQuery = facturasQuery.in("client_id", clienteIds);
   if (entityId) facturasQuery = facturasQuery.eq("entity_id", entityId);
 
   const { data: facturasData, error } = await facturasQuery;

@@ -1418,6 +1418,102 @@ function ComboBuscable<T extends { id: string }>({
   );
 }
 
+// Combobox de selección MÚLTIPLE (24 sept 2026, pedido de Joel: "si quiero
+// agrupar más clientes me deja también" — comparaba con FreshBooks, que
+// permite elegir varios clientes a la vez con chips, en vez de uno solo
+// como tenía nuestro filtro de "Cliente"). Igual que ComboBuscable pero
+// onSeleccionar hace toggle sobre un array de ids, y muestra un chip por
+// cada seleccionado (con su × para quitarlo) arriba del input.
+function ComboMultiple<T extends { id: string }>({
+  items,
+  valoresId,
+  onCambiar,
+  etiqueta,
+  placeholder,
+}: {
+  items: T[];
+  valoresId: string[];
+  onCambiar: (ids: string[]) => void;
+  etiqueta: (item: T) => string;
+  placeholder: string;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function alHacerClicFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setAbierto(false);
+        setBusqueda("");
+      }
+    }
+    document.addEventListener("mousedown", alHacerClicFuera);
+    return () => document.removeEventListener("mousedown", alHacerClicFuera);
+  }, []);
+
+  const seleccionados = items.filter((i) => valoresId.includes(i.id));
+  const filtrados = busqueda.trim()
+    ? items.filter((i) => etiqueta(i).toLowerCase().includes(busqueda.trim().toLowerCase()))
+    : items;
+
+  function alternar(id: string) {
+    onCambiar(valoresId.includes(id) ? valoresId.filter((v) => v !== id) : [...valoresId, id]);
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      {seleccionados.length > 0 && (
+        <div className="mb-1 flex flex-wrap gap-1">
+          {seleccionados.map((s) => (
+            <span key={s.id} className="flex items-center gap-1 rounded-full bg-teal/10 px-2 py-0.5 text-[11px] text-teal">
+              {etiqueta(s)}
+              <button type="button" onClick={() => alternar(s.id)} className="hover:opacity-70">
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <input
+        className="vc-input"
+        style={{ fontSize: 12 }}
+        placeholder={seleccionados.length === 0 ? placeholder : "Agregar más..."}
+        value={busqueda}
+        onFocus={() => setAbierto(true)}
+        onChange={(e) => {
+          setBusqueda(e.target.value);
+          setAbierto(true);
+        }}
+      />
+      {abierto && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+          {filtrados.length === 0 && <p className="p-3 text-xs text-muted">Sin resultados.</p>}
+          {filtrados.map((item) => {
+            const marcado = valoresId.includes(item.id);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-bg"
+                onClick={() => alternar(item.id)}
+              >
+                <span
+                  className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border"
+                  style={marcado ? { background: "#1D9E75", borderColor: "#1D9E75" } : { borderColor: "var(--border)" }}
+                >
+                  {marcado && <i className="ti ti-check" style={{ fontSize: 9, color: "#fff" }} />}
+                </span>
+                {etiqueta(item)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type ItemFacturado = {
   facturaId: string;
   descripcion: string;
@@ -1473,24 +1569,33 @@ function ReportesTab({
   // al darle a "Aplicar filtros" (calcado del botón del mockup), así una
   // búsqueda de email no recalcula todo con cada letra. "vista" es la
   // excepción: cambia la tarjeta de abajo al instante, es solo presentación.
-  const [draftCliente, setDraftCliente] = useState("");
+  // draftCliente ahora es un ARRAY (24 sept 2026, pedido de Joel: "si quiero
+  // agrupar más clientes me deja también" — comparando con FreshBooks, que
+  // permite marcar varios clientes a la vez, no uno solo). Ver ComboMultiple.
+  const [draftCliente, setDraftCliente] = useState<string[]>([]);
   const [draftServicio, setDraftServicio] = useState("");
   const [draftCategoria, setDraftCategoria] = useState("");
   const [draftEstado, setDraftEstado] = useState("");
   const [draftEmail, setDraftEmail] = useState("");
   const [vista, setVista] = useState<VistaReporte>("cliente");
-  const [filtros, setFiltros] = useState({ cliente: "", servicio: "", categoria: "", estado: "", email: "" });
+  const [filtros, setFiltros] = useState<{ cliente: string[]; servicio: string; categoria: string; estado: string; email: string }>({
+    cliente: [],
+    servicio: "",
+    categoria: "",
+    estado: "",
+    email: "",
+  });
 
   function aplicarFiltros() {
     setFiltros({ cliente: draftCliente, servicio: draftServicio, categoria: draftCategoria, estado: draftEstado, email: draftEmail });
   }
   function limpiarFiltros() {
-    setDraftCliente("");
+    setDraftCliente([]);
     setDraftServicio("");
     setDraftCategoria("");
     setDraftEstado("");
     setDraftEmail("");
-    setFiltros({ cliente: "", servicio: "", categoria: "", estado: "", email: "" });
+    setFiltros({ cliente: [], servicio: "", categoria: "", estado: "", email: "" });
   }
 
   useEffect(() => {
@@ -1546,7 +1651,7 @@ function ReportesTab({
     return itemsFacturados.filter((it) => {
       if (it.estado === "borrador") return false;
       if (it.fecha_emision < desde || it.fecha_emision > hasta) return false;
-      if (filtros.cliente && it.clientId !== filtros.cliente) return false;
+      if (filtros.cliente.length > 0 && !filtros.cliente.includes(it.clientId ?? "")) return false;
       if (filtros.servicio && it.serviceId !== filtros.servicio) return false;
       if (filtros.categoria && it.servicioTipo !== filtros.categoria) return false;
       if (filtros.email && !(it.clientEmail ?? "").toLowerCase().includes(filtros.email.toLowerCase())) return false;
@@ -1570,7 +1675,7 @@ function ReportesTab({
     return facturas.filter((f) => {
       if (f.estado === "borrador") return false;
       if (f.fecha_emision < desde || f.fecha_emision > hasta) return false;
-      if (filtros.cliente && f.client_id !== filtros.cliente) return false;
+      if (filtros.cliente.length > 0 && !filtros.cliente.includes(f.client_id ?? "")) return false;
       if (filtros.estado && estadoMostrado(f) !== filtros.estado) return false;
       if (filtros.email) {
         const email = (f.client_id ? clientePorId.get(f.client_id)?.email : null) ?? "";
@@ -1790,7 +1895,7 @@ function ReportesTab({
     const p = new URLSearchParams();
     p.set("desde", desde);
     p.set("hasta", hasta);
-    if (filtros.cliente) p.set("clienteId", filtros.cliente);
+    for (const id of filtros.cliente) p.append("clienteId", id);
     if (filtros.servicio) p.set("servicioId", filtros.servicio);
     if (filtros.categoria) p.set("categoria", filtros.categoria);
     if (filtros.estado) p.set("estado", filtros.estado);
@@ -1851,16 +1956,17 @@ function ReportesTab({
       <div className="vc-card mb-3">
         <p className="mb-2.5 text-xs uppercase tracking-wide text-muted">Filtrar por</p>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Cliente">
-            <ComboBuscable
-              items={clients}
-              valorId={draftCliente}
-              onSeleccionar={setDraftCliente}
-              etiqueta={(c) => c.name}
-              etiquetaTodos="Todos los clientes"
-              placeholder="Buscar cliente..."
-            />
-          </Field>
+          <div className="col-span-2">
+            <Field label="Cliente (puedes elegir varios)">
+              <ComboMultiple
+                items={clients}
+                valoresId={draftCliente}
+                onCambiar={setDraftCliente}
+                etiqueta={(c) => c.name}
+                placeholder="Todos los clientes — buscar para agregar..."
+              />
+            </Field>
+          </div>
           <Field label="Servicio">
             <ComboBuscable
               items={servicios}

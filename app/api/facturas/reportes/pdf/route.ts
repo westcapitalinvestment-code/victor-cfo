@@ -33,7 +33,11 @@ export async function GET(req: NextRequest) {
   // (no se revisaba el error de la query, ver abajo).
   const desde = searchParams.get("desde") || "0001-01-01";
   const hasta = searchParams.get("hasta") || new Date().toISOString().slice(0, 10);
-  const clienteId = searchParams.get("clienteId");
+  // getAll, no get (24 sept 2026, pedido de Joel: "si quiero agrupar más
+  // clientes me deja también" — antes solo se podía filtrar por UN cliente
+  // a la vez; ahora la pantalla manda ?clienteId=... repetido por cada uno
+  // seleccionado, igual que FreshBooks permite marcar varios).
+  const clienteIds = searchParams.getAll("clienteId");
   const estadoFiltro = searchParams.get("estado");
   const email = searchParams.get("email");
   const entityId = searchParams.get("entityId");
@@ -41,13 +45,13 @@ export async function GET(req: NextRequest) {
   let facturasQuery = supabase
     .from("invoices")
     .select(
-      "id, subtotal, total, retencion_pct, retencion_monto, estado, fecha_emision, fecha_vencimiento, metodo_pago, entity_id, client_id, clients(name, email)"
+      "id, numero, subtotal, total, retencion_pct, retencion_monto, estado, fecha_emision, fecha_vencimiento, metodo_pago, entity_id, client_id, clients(name, email)"
     )
     .eq("owner_id", user.id)
     .neq("estado", "borrador")
     .gte("fecha_emision", desde)
     .lte("fecha_emision", hasta);
-  if (clienteId) facturasQuery = facturasQuery.eq("client_id", clienteId);
+  if (clienteIds.length > 0) facturasQuery = facturasQuery.in("client_id", clienteIds);
   if (entityId) facturasQuery = facturasQuery.eq("entity_id", entityId);
 
   const { data: facturasData, error: facturasError } = await facturasQuery;
@@ -134,21 +138,56 @@ export async function GET(req: NextRequest) {
         .in("invoice_id", facturas.map((f) => f.id))
     : { data: [] };
 
-  const porServicio = (() => {
-    const mapa = new Map<string, { nombre: string; total: number; unidades: number }>();
+  // Ventas por ítem (24 sept 2026, pedido de Joel: "no se que hicistes pero
+  // no me sirve ese reporte, mira como lo hace freshbook" + "en ambos
+  // reportes deben salir los items" + "me sigue gustando mas la opcion de
+  // freshbook pq me pone la fecha... y esa categoria de Top 15 creo q no
+  // debe existir"). Reemplaza el viejo resumen "Por servicio (top 15)":
+  // ya NO colapsa a un total por servicio ni corta en 15 — lista cada línea
+  // real de factura (cliente, factura #, fecha, precio unit., cantidad,
+  // total), agrupada por servicio, igual que el Item Sales de FreshBooks y
+  // que la vista "Ventas por ítem" en pantalla/Excel. Sin límite: si Joel
+  // filtra a un cliente con 750 líneas, las 750 salen.
+  const facturaPorId = new Map(facturas.map((f) => [f.id, f]));
+  const ventasPorItem = (() => {
+    const mapa = new Map<
+      string,
+      {
+        nombre: string;
+        total: number;
+        unidades: number;
+        filas: { cliente: string; numero: string; fecha: string; precioUnitario: number; cantidad: number; total: number }[];
+      }
+    >();
     for (const it of itemsData ?? []) {
       const key = (it as any).service_id ?? `desc:${(it as any).descripcion}`;
       const nombre = (it as any).services?.nombre ?? (it as any).descripcion;
       const total = Number((it as any).subtotal_linea ?? (it as any).cantidad * (it as any).precio_unitario);
-      const actual = mapa.get(key) ?? { nombre, total: 0, unidades: 0 };
+      const f = facturaPorId.get((it as any).invoice_id);
+      const actual = mapa.get(key) ?? {
+        nombre,
+        total: 0,
+        unidades: 0,
+        filas: [] as { cliente: string; numero: string; fecha: string; precioUnitario: number; cantidad: number; total: number }[],
+      };
       actual.total += total;
       // unidades (24 sept 2026, pedido de Joel) — suma la columna cantidad
       // real de invoice_items, no el número de líneas: "(1)" antes era 1
       // LÍNEA, no las 22 unidades de CHRA que esa línea representaba.
       actual.unidades += Number((it as any).cantidad ?? 1);
+      actual.filas.push({
+        cliente: f?.clients?.name ?? "Sin cliente",
+        numero: f?.numero ?? "",
+        fecha: f?.fecha_emision ?? "",
+        precioUnitario: Number((it as any).precio_unitario ?? 0),
+        cantidad: Number((it as any).cantidad ?? 1),
+        total,
+      });
       mapa.set(key, actual);
     }
-    return [...mapa.values()].sort((a, b) => b.total - a.total).slice(0, 15);
+    const grupos = [...mapa.values()].sort((a, b) => b.total - a.total);
+    for (const g of grupos) g.filas.sort((a, b) => a.fecha.localeCompare(b.fecha));
+    return grupos;
   })();
 
   const pdf = await PDFDocument.create();
@@ -252,10 +291,23 @@ export async function GET(req: NextRequest) {
     filaTabla(`${c.nombre} (${c.count})`, formatMoney(c.facturado));
   }
 
-  encabezadoSeccion("Por servicio (top 15)");
-  if (porServicio.length === 0) filaTabla("No hay líneas de factura en este período.", "");
-  for (const s of porServicio) {
-    filaTabla(`${s.nombre} (${s.unidades} unid.)`, formatMoney(s.total));
+  encabezadoSeccion("Ventas por ítem");
+  if (ventasPorItem.length === 0) filaTabla("No hay líneas de factura en este período.", "");
+  for (const g of ventasPorItem) {
+    espacio(55);
+    y -= 2;
+    texto(g.nombre, margin, y, { f: bold, size: 10, color: teal });
+    textoDerecha(`${g.unidades} unid.  ·  ${formatMoney(g.total)}`, width - margin, y, { size: 9, f: bold, color: teal });
+    y -= 14;
+    for (const fila of g.filas) {
+      espacio(38);
+      texto(fila.cliente, margin, y, { size: 8.5, color: negro });
+      texto(fila.numero ? `#${fila.numero}` : "Sin #", margin + 190, y, { size: 8.5, color: gris });
+      texto(fila.fecha ? formatFecha(fila.fecha) : "", margin + 250, y, { size: 8.5, color: gris });
+      textoDerecha(`${fila.cantidad} × ${formatMoney(fila.precioUnitario)} = ${formatMoney(fila.total)}`, width - margin, y, { size: 8.5 });
+      y -= 12;
+    }
+    y -= 6;
   }
 
   encabezadoSeccion("Retenciones SURI");
