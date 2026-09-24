@@ -895,6 +895,54 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "listar_seguimientos_pendientes",
+    description:
+      "'Seguimientos de clientes' (Pro) — trae los clientes a los que les toca (o ya se les venció) un servicio " +
+      "periódico de mantenimiento (ej. A/C, fumigación) según lo que el dueño configuró en el catálogo de " +
+      "Servicios ('Recordarle al cliente cada... X meses'). Se crean solos cuando se marca pagada una factura de " +
+      "un servicio con ese intervalo configurado — ver factura-detalle.tsx. OBLIGATORIO: úsala cuando el usuario " +
+      "pregunte 'a quién le toca darle seguimiento', 'qué clientes se me están yendo', o algo parecido — este es " +
+      "justamente el problema real que Joel describió: 'negocio que no crece es por falta de organización... si " +
+      "ellos me hubieran llamado cada 6 meses estarían facturando más'. Devuelve cliente, servicio, fecha en que " +
+      "le toca, teléfono y dirección (para coordinar rutas) de cada uno. NUNCA inventes seguimientos que no estén " +
+      "en la base de datos.",
+    input_schema: {
+      type: "object",
+      properties: {
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio a consultar. Si se omite y el usuario tiene varias, se consultan todas juntas.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "actualizar_seguimiento_estado",
+    description:
+      "Actualiza el estado de un seguimiento de cliente pendiente — úsala cuando el usuario diga que ya llamó o " +
+      "escribió al cliente (nuevo_estado: 'contactado'), que ya coordinaron cita (nuevo_estado: 'agendado'), que " +
+      "ya le volvió a hacer el servicio y quiere cerrar el ciclo (nuevo_estado: 'completado' — OJO: esto no " +
+      "genera el próximo seguimiento automáticamente, eso solo pasa al marcar pagada una factura nueva de ese " +
+      "servicio), o que decidió no darle más seguimiento por ahora (nuevo_estado: 'descartado'). Busca el " +
+      "seguimiento por nombre del cliente (y opcionalmente servicio) — si hay más de una coincidencia entre los " +
+      "pendientes, pregúntale al usuario cuál antes de actualizar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cliente_nombre: { type: "string", description: "Nombre (o parte) del cliente cuyo seguimiento se va a actualizar." },
+        servicio_nombre: { type: "string", description: "Nombre (o parte) del servicio, si hace falta para desambiguar entre varios seguimientos del mismo cliente." },
+        nuevo_estado: {
+          type: "string",
+          enum: ["contactado", "agendado", "completado", "descartado"],
+          description: "Nuevo estado del seguimiento.",
+        },
+        nota: { type: "string", description: "Nota opcional sobre el contacto (ej. qué dijo el cliente, cuándo quedaron)." },
+      },
+      required: ["cliente_nombre", "nuevo_estado"],
+    },
+  },
+  {
     name: "proyeccion_margen_negocio",
     description:
       "Proyecta el margen (ganancia) del negocio combinando lo YTD real, el ritmo de ingreso/gasto de lo que va " +
@@ -3822,6 +3870,111 @@ export async function executeVictorTool(
             ? `\n\nFacturas VENCIDAS (${vencidas.length}, de toda la cartera, no solo del periodo):\n${lineasVencidas.join("\n")}${vencidas.length > 10 ? `\n(+ ${vencidas.length - 10} más)` : ""}`
             : "\n\nNo hay facturas vencidas."),
       };
+    }
+
+    case "listar_seguimientos_pendientes": {
+      // "Seguimientos de clientes" (24 sept 2026) — ver comentario grande en
+      // factura-detalle.tsx y migración 0095. Mismo criterio que
+      // reporte_ingresos_por_cliente: sin alcance "Personal" (Facturación es
+      // exclusivamente de negocio), default a todas las entidades juntas.
+      let alcanceSeg = await resolverAlcanceTransacciones(
+        supabase,
+        ownerId,
+        typeof input.entidad_nombre === "string" ? input.entidad_nombre : null
+      );
+      if (!alcanceSeg.ok) return { ok: false, message: alcanceSeg.message };
+      if (alcanceSeg.modo === "personal" && typeof input.entidad_nombre !== "string") {
+        alcanceSeg = { ok: true, modo: "todas", entityId: null, alcanceLabel: "todas las entidades de negocio" };
+      }
+
+      let querySeg = supabase
+        .from("seguimientos_clientes")
+        .select("id, fecha_proximo, estado, clients(name, telefono, address), services(nombre)")
+        .eq("owner_id", ownerId)
+        .in("estado", ["pendiente", "contactado", "agendado"])
+        .order("fecha_proximo", { ascending: true });
+      if (alcanceSeg.modo === "entidad") querySeg = querySeg.eq("entity_id", alcanceSeg.entityId);
+
+      const { data: seguimientosData, error: seguimientosDataError } = await querySeg;
+      if (seguimientosDataError) return { ok: false, message: `No se pudo revisar los seguimientos: ${seguimientosDataError.message}` };
+      if (!seguimientosData || seguimientosData.length === 0) {
+        return { ok: true, message: `No hay seguimientos pendientes en ${alcanceSeg.alcanceLabel}.` };
+      }
+
+      const hoySeg = fechaHoyPR();
+      const lineasSeg = seguimientosData.map((s) => {
+        const clienteJoin = Array.isArray(s.clients) ? s.clients[0] : s.clients;
+        const servicioJoin = Array.isArray(s.services) ? s.services[0] : s.services;
+        const vencidoSeg = (s.fecha_proximo as string) < hoySeg;
+        const cuando = vencidoSeg ? `VENCIDO desde ${s.fecha_proximo}` : `le toca el ${s.fecha_proximo}`;
+        return (
+          `- ${clienteJoin?.name ?? "Cliente"} — ${servicioJoin?.nombre ?? "servicio"}, ${cuando}` +
+          `${clienteJoin?.telefono ? `, tel. ${clienteJoin.telefono}` : ""}` +
+          `${clienteJoin?.address ? `, dirección: ${clienteJoin.address}` : ""}` +
+          `${s.estado !== "pendiente" ? ` [${s.estado}]` : ""}`
+        );
+      });
+
+      return { ok: true, message: `Seguimientos pendientes en ${alcanceSeg.alcanceLabel} (${seguimientosData.length}):\n${lineasSeg.join("\n")}` };
+    }
+
+    case "actualizar_seguimiento_estado": {
+      const clienteBuscado = String(input.cliente_nombre ?? "").trim();
+      const nuevoEstadoSeg = String(input.nuevo_estado ?? "").trim();
+      if (!clienteBuscado || !["contactado", "agendado", "completado", "descartado"].includes(nuevoEstadoSeg)) {
+        return { ok: false, message: "Faltan datos válidos (cliente y nuevo estado) para actualizar el seguimiento." };
+      }
+      const servicioBuscado = typeof input.servicio_nombre === "string" ? input.servicio_nombre.trim() : "";
+      const notaSeg = typeof input.nota === "string" && input.nota.trim() ? input.nota.trim() : null;
+
+      const { data: candidatosSeg, error: buscarSegError } = await supabase
+        .from("seguimientos_clientes")
+        .select("id, notas, clients(name), services(nombre)")
+        .eq("owner_id", ownerId)
+        .in("estado", ["pendiente", "contactado", "agendado"]);
+      if (buscarSegError) return { ok: false, message: `No se pudo buscar el seguimiento: ${buscarSegError.message}` };
+
+      const normalizadaCliente = clienteBuscado.toLowerCase();
+      let matches = (candidatosSeg ?? []).filter((s) => {
+        const clienteJoin = Array.isArray(s.clients) ? s.clients[0] : s.clients;
+        return (clienteJoin?.name ?? "").toLowerCase().includes(normalizadaCliente);
+      });
+      if (servicioBuscado) {
+        const normalizadaServicio = servicioBuscado.toLowerCase();
+        matches = matches.filter((s) => {
+          const servicioJoin = Array.isArray(s.services) ? s.services[0] : s.services;
+          return (servicioJoin?.nombre ?? "").toLowerCase().includes(normalizadaServicio);
+        });
+      }
+
+      if (matches.length === 0) {
+        return { ok: false, message: `No encontré ningún seguimiento pendiente parecido a "${clienteBuscado}".` };
+      }
+      if (matches.length > 1) {
+        const nombres = matches.map((s) => {
+          const clienteJoin = Array.isArray(s.clients) ? s.clients[0] : s.clients;
+          const servicioJoin = Array.isArray(s.services) ? s.services[0] : s.services;
+          return `${clienteJoin?.name ?? "?"} (${servicioJoin?.nombre ?? "?"})`;
+        });
+        return {
+          ok: false,
+          message: `Hay varios seguimientos parecidos a "${clienteBuscado}" (${nombres.join(", ")}). Pídele al usuario que aclare cuál (o el servicio).`,
+        };
+      }
+
+      const seguimientoObjetivo = matches[0];
+      const { error: updateSegError } = await supabase
+        .from("seguimientos_clientes")
+        .update({
+          estado: nuevoEstadoSeg,
+          ...(notaSeg ? { notas: seguimientoObjetivo.notas ? `${seguimientoObjetivo.notas}\n${notaSeg}` : notaSeg } : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", seguimientoObjetivo.id);
+      if (updateSegError) return { ok: false, message: `No se pudo actualizar el seguimiento: ${updateSegError.message}` };
+
+      const clienteJoinObjetivo = Array.isArray(seguimientoObjetivo.clients) ? seguimientoObjetivo.clients[0] : seguimientoObjetivo.clients;
+      return { ok: true, message: `Seguimiento de "${clienteJoinObjetivo?.name ?? clienteBuscado}" actualizado a "${nuevoEstadoSeg}".` };
     }
 
     case "reporte_pagos_contratistas": {

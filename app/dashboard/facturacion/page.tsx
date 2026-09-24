@@ -68,7 +68,7 @@ export default async function FacturacionPage({
     .order("fecha_emision", { ascending: false });
   let serviciosQuery = supabase
     .from("services")
-    .select("id, nombre, descripcion, tipo, precio, ivu_exento, activo, entity_id")
+    .select("id, nombre, descripcion, tipo, precio, ivu_exento, activo, entity_id, intervalo_seguimiento_meses")
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false });
   let cotizacionesQuery = supabase

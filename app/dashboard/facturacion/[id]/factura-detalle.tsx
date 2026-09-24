@@ -13,12 +13,22 @@ type Item = {
   cantidad: number;
   precio_unitario: number;
   subtotal_linea: number | null;
+  // Para "Seguimientos de clientes" (24 sept 2026) — al marcar la factura
+  // pagada, se revisa si el servicio de cada línea tiene
+  // intervalo_seguimiento_meses configurado en el catálogo.
+  service_id: string | null;
 };
 
 type Adjunto = { id: string; nombre_archivo: string };
 
 type Factura = {
   id: string;
+  // owner_id/entity_id/client_id (24 sept 2026) — necesarios para crear el
+  // registro en seguimientos_clientes al marcar pagada (no venían antes
+  // porque la pantalla solo usaba clients(...)/business_entities(...)).
+  owner_id: string;
+  entity_id: string | null;
+  client_id: string;
   numero: string;
   subtotal: number;
   ivu_pct: number;
@@ -90,6 +100,12 @@ function hoyVencida(f: Factura): boolean {
 
 function hoyISO(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function sumarMeses(fechaISO: string, meses: number): string {
+  const d = new Date(`${fechaISO}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + meses);
+  return d.toISOString().slice(0, 10);
 }
 
 // Convierte cualquier formato de teléfono guardado (787-555-0123, (787)
@@ -173,6 +189,69 @@ export default function FacturaDetalle({
   const vencida = hoyVencida(factura);
   const estadoTexto = vencida ? "vencida" : factura.estado;
 
+  // "Seguimientos de clientes" (24 sept 2026, pedido de Joel: negocios de
+  // mantenimiento pierden clientes por falta de organización — "el del A/C
+  // fue el 9 enero 2024 y no le he realizado más ninguno"). Al marcar la
+  // factura pagada, si alguna línea usa un servicio del catálogo con
+  // intervalo_seguimiento_meses configurado, se crea o actualiza un
+  // seguimiento con la próxima fecha para que VICTOR/el dueño le vuelvan a
+  // dar seguimiento a ese cliente. NO se manda ninguna factura/cotización —
+  // solo queda el registro para el cron de recordatorios (ver
+  // app/api/cron/seguimientos-clientes).
+  //
+  // Usa SELECT-then-INSERT-or-UPDATE en vez de .upsert() porque el índice
+  // único de la tabla es parcial (WHERE estado IN (...)) y Supabase-js no
+  // apunta onConflict a índices parciales de forma confiable.
+  async function crearSeguimientosSiAplica(fechaServicio: string) {
+    const serviceIds = Array.from(new Set(items.map((it) => it.service_id).filter((id): id is string => !!id)));
+    if (serviceIds.length === 0) return;
+
+    const { data: servicios } = await supabase
+      .from("services")
+      .select("id, intervalo_seguimiento_meses")
+      .in("id", serviceIds);
+    const conSeguimiento = (servicios ?? []).filter(
+      (s): s is { id: string; intervalo_seguimiento_meses: number } => !!s.intervalo_seguimiento_meses
+    );
+    if (conSeguimiento.length === 0) return;
+
+    for (const s of conSeguimiento) {
+      const fechaProximo = sumarMeses(fechaServicio, s.intervalo_seguimiento_meses);
+      const { data: existente } = await supabase
+        .from("seguimientos_clientes")
+        .select("id")
+        .eq("client_id", factura.client_id)
+        .eq("service_id", s.id)
+        .in("estado", ["pendiente", "contactado", "agendado"])
+        .maybeSingle();
+
+      if (existente) {
+        await supabase
+          .from("seguimientos_clientes")
+          .update({
+            fecha_servicio: fechaServicio,
+            fecha_proximo: fechaProximo,
+            factura_origen_id: factura.id,
+            estado: "pendiente",
+            ultimo_recordatorio_enviado_en: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existente.id);
+      } else {
+        await supabase.from("seguimientos_clientes").insert({
+          owner_id: factura.owner_id,
+          entity_id: factura.entity_id,
+          client_id: factura.client_id,
+          service_id: s.id,
+          factura_origen_id: factura.id,
+          fecha_servicio: fechaServicio,
+          fecha_proximo: fechaProximo,
+          estado: "pendiente",
+        });
+      }
+    }
+  }
+
   async function actualizarEstado(nuevoEstado: string, extra?: { metodo_pago?: string; fecha_pago?: string }) {
     setLoading(true);
     setError(null);
@@ -180,11 +259,15 @@ export default function FacturaDetalle({
       .from("invoices")
       .update({ estado: nuevoEstado, ...(extra ?? {}) })
       .eq("id", factura.id);
-    setLoading(false);
     if (updateError) {
+      setLoading(false);
       setError(updateError.message);
       return;
     }
+    if (nuevoEstado === "pagada") {
+      await crearSeguimientosSiAplica(extra?.fecha_pago ?? factura.fecha_pago ?? hoyISO());
+    }
+    setLoading(false);
     router.refresh();
   }
 

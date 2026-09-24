@@ -99,6 +99,12 @@ type Servicio = {
   ivu_exento: boolean;
   activo: boolean;
   entity_id: string | null;
+  // Cada cuántos meses volver a contactar al cliente por este servicio (24
+  // sept 2026, pedido de Joel: "el del A/C fue el 9 enero 2024 y no le he
+  // realizado más ninguno... si ellos me hubieran llamado cada 6 meses
+  // estarían facturando más"). null = este servicio no genera seguimiento
+  // — sigue funcionando igual que antes para cualquiera que no lo use.
+  intervalo_seguimiento_meses: number | null;
 };
 
 type Cotizacion = {
@@ -126,6 +132,10 @@ const TABS = [
   { id: "cotizaciones", label: "Cotizaciones", icon: "ti-file-description" },
   { id: "clientes", label: "Clientes", icon: "ti-users" },
   { id: "servicios", label: "Servicios", icon: "ti-package" },
+  // "Seguimientos de clientes" (24 sept 2026, pedido de Joel) — recordatorios
+  // de mantenimiento/servicio periódico, ver ServiciosTab (campo "recordar
+  // cada X meses") y factura-detalle.tsx (crearSeguimientosSiAplica).
+  { id: "seguimientos", label: "Seguimientos", icon: "ti-bell-ringing" },
   { id: "reportes", label: "Reportes", icon: "ti-chart-bar" },
 ] as const;
 
@@ -310,6 +320,7 @@ export default function FacturacionPortal({
       {!modoAdmin && tab === "servicios" && (
         <ServiciosTab servicios={servicios} entidadId={entidadId} ownerIdEfectivo={ownerIdEfectivo} />
       )}
+      {!modoAdmin && tab === "seguimientos" && <SeguimientosTab entidadId={entidadId} />}
       {!modoAdmin && tab === "reportes" && (
         <ReportesTab
           facturas={facturas}
@@ -880,6 +891,8 @@ function ServiciosTab({
   // es la excepción, no la regla. Antes cualquier servicio nuevo salía
   // exento por default aunque la entidad tuviera IVU activo.
   const [ivuExento, setIvuExento] = useState(false);
+  // Seguimiento (24 sept 2026) — "" = no recordar, si no un número de meses.
+  const [seguimientoMeses, setSeguimientoMeses] = useState("");
 
   function abrirNuevo() {
     setFormAbierto("nuevo");
@@ -888,6 +901,7 @@ function ServiciosTab({
     setTipo("fijo");
     setPrecio("");
     setIvuExento(true);
+    setSeguimientoMeses("");
     setError(null);
   }
 
@@ -898,6 +912,7 @@ function ServiciosTab({
     setTipo(s.tipo as (typeof TIPOS_SERVICIO)[number]["value"]);
     setPrecio(String(s.precio));
     setIvuExento(s.ivu_exento);
+    setSeguimientoMeses(s.intervalo_seguimiento_meses ? String(s.intervalo_seguimiento_meses) : "");
     setError(null);
   }
 
@@ -915,6 +930,8 @@ function ServiciosTab({
       return;
     }
 
+    const intervaloSeguimiento = seguimientoMeses.trim() ? Number(seguimientoMeses) : null;
+
     if (formAbierto === "nuevo") {
       const { data, error: insertError } = await supabase
         .from("services")
@@ -926,8 +943,9 @@ function ServiciosTab({
           tipo,
           precio: Number(precio),
           ivu_exento: ivuExento,
+          intervalo_seguimiento_meses: intervaloSeguimiento,
         })
-        .select("id, nombre, descripcion, tipo, precio, ivu_exento, activo, entity_id")
+        .select("id, nombre, descripcion, tipo, precio, ivu_exento, activo, entity_id, intervalo_seguimiento_meses")
         .single();
       setGuardando(false);
       if (insertError || !data) {
@@ -939,7 +957,14 @@ function ServiciosTab({
     } else if (formAbierto) {
       const { error: updateError } = await supabase
         .from("services")
-        .update({ nombre: nombre.trim(), descripcion: descripcion.trim() || null, tipo, precio: Number(precio), ivu_exento: ivuExento })
+        .update({
+          nombre: nombre.trim(),
+          descripcion: descripcion.trim() || null,
+          tipo,
+          precio: Number(precio),
+          ivu_exento: ivuExento,
+          intervalo_seguimiento_meses: intervaloSeguimiento,
+        })
         .eq("id", formAbierto);
       setGuardando(false);
       if (updateError) {
@@ -949,7 +974,15 @@ function ServiciosTab({
       setLista((prev) =>
         prev.map((s) =>
           s.id === formAbierto
-            ? { ...s, nombre: nombre.trim(), descripcion: descripcion.trim() || null, tipo, precio: Number(precio), ivu_exento: ivuExento }
+            ? {
+                ...s,
+                nombre: nombre.trim(),
+                descripcion: descripcion.trim() || null,
+                tipo,
+                precio: Number(precio),
+                ivu_exento: ivuExento,
+                intervalo_seguimiento_meses: intervaloSeguimiento,
+              }
             : s
         )
       );
@@ -1046,6 +1079,24 @@ function ServiciosTab({
             <input type="checkbox" checked={ivuExento} onChange={(e) => setIvuExento(e.target.checked)} />
             No aplica IVU (servicio profesional)
           </label>
+          <div>
+            <label className="mb-1 block text-xs text-muted">
+              Recordarle al cliente cada... (opcional — mantenimientos, evaluaciones periódicas)
+            </label>
+            <select className="vc-input" value={seguimientoMeses} onChange={(e) => setSeguimientoMeses(e.target.value)}>
+              <option value="">No dar seguimiento</option>
+              <option value="1">1 mes</option>
+              <option value="3">3 meses</option>
+              <option value="6">6 meses</option>
+              <option value="12">1 año</option>
+            </select>
+            {seguimientoMeses && (
+              <p className="mt-1 text-xs text-muted">
+                Cuando le factures este servicio a un cliente y marques la factura como pagada, VICTOR te avisa cuando le
+                vuelva a tocar — para que no se te pierda como cliente.
+              </p>
+            )}
+          </div>
           <div className="flex gap-2">
             <button className="vc-btn-primary flex-1" disabled={!nombre || !precio || guardando} onClick={guardar}>
               {guardando ? "Guardando..." : "Guardar"}
@@ -1538,6 +1589,198 @@ type ItemFacturado = {
   clientNombre: string;
   clientEmail: string | null;
 };
+
+type Seguimiento = {
+  id: string;
+  client_id: string;
+  service_id: string | null;
+  entity_id: string | null;
+  fecha_servicio: string;
+  fecha_proximo: string;
+  estado: string;
+  notas: string | null;
+  clients: { name: string; telefono: string | null; address: string | null; email: string | null } | null;
+  services: { nombre: string } | null;
+};
+
+// Mismo helper que factura-detalle.tsx — convierte cualquier formato de
+// teléfono guardado en solo dígitos con código de país para el link de
+// WhatsApp.
+function telefonoWhatsappSeguimiento(telefono: string): string {
+  const digitos = telefono.replace(/\D/g, "");
+  if (digitos.length === 10) return `1${digitos}`;
+  return digitos;
+}
+
+// "Seguimientos de clientes" (24 sept 2026, pedido de Joel — ver comentario
+// grande en factura-detalle.tsx). Cliente-side fetch propio, calcado del
+// patrón de ReportesTab, para no tener que hilar seguimientos_clientes por
+// los ~11 archivos que arman basePath/ownerIdEfectivo. Solo se muestra al
+// dueño (no en modoAdmin) — mismo criterio que Cotizaciones/Servicios/Reportes.
+function SeguimientosTab({ entidadId }: { entidadId: string | null }) {
+  const supabase = createClient();
+  const [lista, setLista] = useState<Seguimiento[] | null>(null);
+  const [actualizandoId, setActualizandoId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    supabase
+      .from("seguimientos_clientes")
+      .select(
+        "id, client_id, service_id, entity_id, fecha_servicio, fecha_proximo, estado, notas, clients(name, telefono, address, email), services(nombre)"
+      )
+      .in("estado", ["pendiente", "contactado", "agendado"])
+      .order("fecha_proximo", { ascending: true })
+      .then(({ data }) => {
+        if (!activo) return;
+        setLista((data as any) ?? []);
+      });
+    return () => {
+      activo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filtrados = useMemo(() => {
+    if (!lista) return [];
+    if (!entidadId) return lista;
+    return lista.filter((s) => s.entity_id === entidadId);
+  }, [lista, entidadId]);
+
+  const hoy = hoyISO();
+  const vencidos = filtrados.filter((s) => s.fecha_proximo < hoy);
+  const proximos = filtrados.filter((s) => s.fecha_proximo >= hoy);
+
+  async function marcarContactado(id: string) {
+    setActualizandoId(id);
+    await supabase
+      .from("seguimientos_clientes")
+      .update({ estado: "contactado", updated_at: new Date().toISOString() })
+      .eq("id", id);
+    setLista((prev) => (prev ? prev.map((s) => (s.id === id ? { ...s, estado: "contactado" } : s)) : prev));
+    setActualizandoId(null);
+  }
+
+  async function descartar(id: string) {
+    setActualizandoId(id);
+    await supabase
+      .from("seguimientos_clientes")
+      .update({ estado: "descartado", updated_at: new Date().toISOString() })
+      .eq("id", id);
+    setLista((prev) => (prev ? prev.filter((s) => s.id !== id) : prev));
+    setActualizandoId(null);
+  }
+
+  function linkWhatsapp(s: Seguimiento): string | null {
+    if (!s.clients?.telefono) return null;
+    const servicioNombre = s.services?.nombre ?? "tu servicio";
+    const mensaje = `Hola ${s.clients.name}, te escribimos porque ya se acerca la fecha de tu próximo ${servicioNombre.toLowerCase()} — ¿coordinamos?`;
+    return `https://wa.me/${telefonoWhatsappSeguimiento(s.clients.telefono)}?text=${encodeURIComponent(mensaje)}`;
+  }
+
+  if (lista === null) {
+    return <div className="vc-card text-center text-sm text-muted">Cargando seguimientos...</div>;
+  }
+
+  if (filtrados.length === 0) {
+    return (
+      <Proximamente
+        icono="ti-bell-ringing"
+        titulo="Sin seguimientos pendientes"
+        texto="Cuando factures un servicio que tenga 'Recordarle al cliente cada...' configurado en Servicios y marques la factura pagada, aquí aparece cuándo le vuelve a tocar a ese cliente — para llamarlo o coordinar la ruta antes de que se te olvide."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {vencidos.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-medium text-red">Vencidos ({vencidos.length})</p>
+          <div className="space-y-2">
+            {vencidos.map((s) => (
+              <FilaSeguimiento
+                key={s.id}
+                s={s}
+                vencido
+                onContactado={marcarContactado}
+                onDescartar={descartar}
+                cargando={actualizandoId === s.id}
+                linkWhatsapp={linkWhatsapp(s)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      {proximos.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-medium text-muted">Próximos ({proximos.length})</p>
+          <div className="space-y-2">
+            {proximos.map((s) => (
+              <FilaSeguimiento
+                key={s.id}
+                s={s}
+                onContactado={marcarContactado}
+                onDescartar={descartar}
+                cargando={actualizandoId === s.id}
+                linkWhatsapp={linkWhatsapp(s)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FilaSeguimiento({
+  s,
+  vencido = false,
+  onContactado,
+  onDescartar,
+  cargando,
+  linkWhatsapp,
+}: {
+  s: Seguimiento;
+  vencido?: boolean;
+  onContactado: (id: string) => void;
+  onDescartar: (id: string) => void;
+  cargando: boolean;
+  linkWhatsapp: string | null;
+}) {
+  return (
+    <div className="vc-card">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">{s.clients?.name ?? "Cliente"}</p>
+          <p className="text-xs text-muted">
+            {s.services?.nombre ?? "Servicio"} · {vencido ? "Venció" : "Le toca"} el {formatFecha(s.fecha_proximo)}
+          </p>
+          {/* Dirección para coordinar rutas (24 sept 2026, pedido de Joel:
+              "tambien seria importante tener la direccion para coordinar
+              las rutas") — solo se muestra, no arma rutas automáticas. */}
+          {s.clients?.address && <p className="mt-0.5 text-xs text-muted">📍 {s.clients.address}</p>}
+          {s.estado === "contactado" && <p className="mt-0.5 text-xs text-teal">Ya contactado</p>}
+        </div>
+      </div>
+      <div className="mt-2 flex gap-2">
+        {linkWhatsapp && (
+          <a href={linkWhatsapp} target="_blank" rel="noreferrer" className="vc-btn-secondary flex-1 text-center text-xs">
+            WhatsApp
+          </a>
+        )}
+        {s.estado !== "contactado" && (
+          <button onClick={() => onContactado(s.id)} disabled={cargando} className="vc-btn-secondary flex-1 text-xs">
+            Marcar contactado
+          </button>
+        )}
+        <button onClick={() => onDescartar(s.id)} disabled={cargando} className="vc-btn-secondary flex-1 text-xs">
+          Descartar
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ReportesTab({
   facturas,

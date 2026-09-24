@@ -876,3 +876,69 @@ export async function sendEscalacionSoporteEmail(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+// "Seguimientos de clientes" (24 sept 2026, pedido de Joel — ver el
+// comentario grande en factura-detalle.tsx). A DIFERENCIA de
+// sendInvoiceEmail, este correo NO es una factura ni una cotización — es un
+// mensaje amistoso de "ya te toca" para negocios de mantenimiento (A/C,
+// fumigación, etc.) cuyo cliente lleva meses sin volver. Joel fue explícito
+// en que esto no debía sentirse como cobro frío: "no se le va a enviar una
+// factura o una cotización fria". Lo dispara app/api/cron/seguimientos-clientes.
+export async function sendFollowUpReminderEmail(params: {
+  clientEmail: string;
+  clientName: string | null;
+  entityName: string | null;
+  servicioNombre: string;
+  fechaUltimoServicio: string | null;
+  replyToEmail?: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { clientEmail, clientName, entityName, servicioNombre, fechaUltimoServicio, replyToEmail } = params;
+  const saludoNombre = clientName || "";
+  const negocio = entityName || "";
+  const fromRecordatorio = negocio ? `${negocio} vía VICTOR CFO <${FROM_ADDRESS}>` : FROM;
+  const ultimaVezPart = fechaUltimoServicio
+    ? ` Tu último ${servicioNombre.toLowerCase()} fue el ${new Date(`${fechaUltimoServicio}T00:00:00Z`).toLocaleDateString("es-PR", { timeZone: "UTC" })}.`
+    : "";
+
+  const textoPlano =
+    `Hola${saludoNombre ? ` ${saludoNombre}` : ""},\n\n` +
+    `Te escribimos${negocio ? ` de parte de ${negocio}` : ""} porque ya se acerca (o ya pasó) la fecha de tu próximo ${servicioNombre}.${ultimaVezPart}\n\n` +
+    `Si quieres coordinar, contéstanos este correo y lo agendamos.\n\n` +
+    `¡Gracias por tu confianza!\n\n` +
+    `— ${negocio || "VICTOR CFO"}\n`;
+
+  const htmlSeguro = {
+    saludo: saludoNombre ? escapeHtml(saludoNombre) : "",
+    negocio: negocio ? escapeHtml(negocio) : "",
+    servicio: escapeHtml(servicioNombre),
+  };
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <p>Hola${htmlSeguro.saludo ? ` ${htmlSeguro.saludo}` : ""},</p>
+  <p>Te escribimos${htmlSeguro.negocio ? ` de parte de <strong>${htmlSeguro.negocio}</strong>` : ""} porque ya se acerca (o ya pasó) la fecha de tu próximo <strong>${htmlSeguro.servicio}</strong>.${ultimaVezPart}</p>
+  <p>Si quieres coordinar, solo contesta este correo y lo agendamos.</p>
+  <p>¡Gracias por tu confianza!</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 11px; color: #bbb;">Enviado a través de VICTOR CFO<br/><a href="${SITE_URL}" style="color: #bbb;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: fromRecordatorio,
+      to: clientEmail,
+      ...(replyToEmail ? { replyTo: replyToEmail } : {}),
+      subject: `${negocio ? `${negocio}: ` : ""}¿Coordinamos tu próximo ${servicioNombre}?`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
