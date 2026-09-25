@@ -749,11 +749,11 @@ export default function VictorChat({
               </p>
               <div className="rounded-lg border border-teal bg-teal/[.06] p-3 text-center">
                 <p className="text-2xl font-semibold text-teal">
-                  ${precioUpgrade}
+                  <span className="text-sm font-normal">desde </span>${precioUpgrade}
                   <span className="text-sm font-normal">/mes</span>
                 </p>
                 {esReferido && <p className="text-xs font-medium text-teal">Primer mes gratis</p>}
-                <p className="text-xs text-muted">Desde Core · Cancela cuando quieras</p>
+                <p className="text-xs text-muted">Cancela cuando quieras</p>
               </div>
               {upgradeError && <p className="text-center text-xs text-red">{upgradeError}</p>}
               <button onClick={activarCore} className="vc-btn-primary" disabled={upgradeLoading}>
