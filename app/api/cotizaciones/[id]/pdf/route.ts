@@ -64,7 +64,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     try {
       const bytes = await descargarBytesR2(entidad.logo_r2_key);
       logoImg = entidad.logo_r2_key.endsWith(".png") ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
-      const escala = Math.min(140 / logoImg.width, 50 / logoImg.height, 1);
+      // Caja más grande (pedido de Joel, 25 sept 2026): mismo tamaño que en
+      // la factura, para que se vea con más presencia y aire arriba.
+      const escala = Math.min(220 / logoImg.width, 90 / logoImg.height, 1);
       logoDims = { width: logoImg.width * escala, height: logoImg.height * escala };
     } catch (err) {
       console.error("No se pudo incrustar el logo en el PDF:", err);
@@ -183,7 +185,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     yNeg -= 12;
   }
 
-  const yLogoAbajo = logoImg ? yLogo - logoDims.height - 24 : yLogo;
+  const yLogoAbajo = logoImg ? yLogo - logoDims.height - 30 : yLogo;
   let y = Math.min(yLogoAbajo, yNeg) - 14;
 
   page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1.5, color: marca });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import sharp from "sharp";
 import { createClient } from "@/lib/supabase/server";
 import { subirArchivoR2, borrarArchivoR2 } from "@/lib/r2";
 
@@ -7,10 +8,15 @@ import { subirArchivoR2, borrarArchivoR2 } from "@/lib/r2";
 // business_entities.logo_r2_key — mismo patrón que /api/documentos/upload,
 // pero de un solo archivo (reemplaza el anterior si ya había uno).
 const TAMANO_MAX_BYTES = 5 * 1024 * 1024;
-// Solo PNG/JPG — pdf-lib (la librería que arma el PDF) no puede incrustar
-// WEBP, así que no lo aceptamos aquí para no tener un logo que se sube
-// bien pero luego no aparece en la factura.
-const TIPOS_PERMITIDOS = ["image/png", "image/jpeg", "image/jpg"];
+// Aceptamos PNG/JPG/WEBP y los normalizamos todos a un PNG limpio con
+// sharp antes de guardarlos (ver abajo). Antes se guardaba el archivo tal
+// cual llegaba, y algunos JPG (progresivos, CMYK, etc.) se subían bien y
+// se veían en la vista previa (el navegador los decodifica sin problema),
+// pero pdf-lib no podía incrustarlos al generar la factura — fallaba en
+// silencio y el logo simplemente no aparecía en el PDF. Normalizar todo a
+// PNG aquí resuelve la causa raíz para cualquier logo, de cualquier
+// usuario, de una vez.
+const TIPOS_PERMITIDOS = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
 
 export async function POST(req: NextRequest) {
   const supabase = createClient();
@@ -38,6 +44,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Solo se aceptan imágenes PNG, JPG o WEBP." }, { status: 400 });
   }
 
+  // Normaliza a un PNG limpio (fondo transparente preservado) — así
+  // garantizamos que pdf-lib SIEMPRE pueda incrustarlo en la factura,
+  // sin importar cómo venía codificada la imagen original.
+  let bufferPng: Buffer;
+  try {
+    bufferPng = await sharp(Buffer.from(await file.arrayBuffer()))
+      .png()
+      .toBuffer();
+  } catch (err) {
+    console.error("Error normalizando el logo a PNG:", err);
+    return NextResponse.json(
+      { error: "Esa imagen no se pudo procesar. Prueba con otro archivo (PNG o JPG)." },
+      { status: 400 }
+    );
+  }
+
   const { data: entidad, error: fetchError } = await supabase
     .from("business_entities")
     .select("id, logo_r2_key")
@@ -49,12 +71,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Entidad no encontrada." }, { status: 404 });
   }
 
-  const extension = file.type === "image/png" ? "png" : "jpg";
-  const key = `logos/${user.id}/${entityId}-${randomUUID()}.${extension}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
+  // Siempre .png, porque ya normalizamos arriba con sharp.
+  const key = `logos/${user.id}/${entityId}-${randomUUID()}.png`;
 
   try {
-    await subirArchivoR2(key, buffer, file.type);
+    await subirArchivoR2(key, bufferPng, "image/png");
   } catch (err) {
     console.error("Error subiendo logo a R2:", err);
     return NextResponse.json({ error: "No se pudo subir el logo. Intenta de nuevo." }, { status: 500 });
