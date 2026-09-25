@@ -360,10 +360,10 @@ export default function CuentasPage() {
       {mensaje && <p className="mb-3 text-xs text-teal">{mensaje}</p>}
       {mostrandoUpsell && (
         <div className="vc-card mb-3 text-center">
-          <p className="mb-1 text-sm font-medium">Conectar banco es parte de Core</p>
+          <p className="mb-1 text-sm font-medium">Conectar banco</p>
           <p className="mb-3 text-xs text-muted">
             En el plan gratis puedes categorizar por CSV — conectar tu banco de verdad (BPPR, FirstBank,
-            Oriental, Mercury) se activa con Core.
+            Oriental, Mercury) se activa con Core o Pro.
           </p>
           <div className="mb-3 rounded-lg border border-teal bg-teal/[.06] p-3">
             <p className="text-2xl font-semibold text-teal">

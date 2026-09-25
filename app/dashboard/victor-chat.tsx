@@ -709,7 +709,7 @@ export default function VictorChat({
             <div className="flex-1">
               <p className="text-sm font-medium text-white">VICTOR</p>
               <p className="text-xs text-white/75">
-                {bloqueado ? "Desbloquéalo con Core" : "Tu CFO personal · siempre disponible"}
+                {bloqueado ? "Desbloquéalo con Core o Pro" : "Tu CFO personal · siempre disponible"}
               </p>
             </div>
             <button
@@ -733,9 +733,19 @@ export default function VictorChat({
                 className="mx-auto h-14 w-14 rounded-full object-cover"
                 style={{ background: "#fff" }}
               />
-              <p className="text-center text-sm font-medium text-text">Hablar con VICTOR es parte de Core</p>
+              {/* 25 sept 2026, ajustes pedidos por Joel viendo esta tarjeta en
+                  una cuenta gratis real: (1) "Hablar con VICTOR es parte de
+                  Core" sonaba a que Core es la única opción — hay quien le
+                  conviene más Pro (negocio), así que el copy ya no nombra un
+                  plan específico. (2) "tu plata" era colombianismo, no como
+                  habla nadie en PR — "tu dinero". (3) el precio fijo
+                  "$14.99/mes" sin más contexto se leía como EL precio único,
+                  cuando Pro cuesta $49.99 — ahora dice "desde $14.99/mes" y
+                  el botón activa Core (el plan de entrada más barato) pero
+                  deja claro que es el punto de partida, no el único precio. */}
+              <p className="text-center text-sm font-medium text-text">Habla con VICTOR</p>
               <p className="text-center text-xs text-muted">
-                Analiza tus gastos, arma tu plan y contesta lo que sea de tu plata, 24/7 — se activa con Core.
+                Analiza tus gastos, arma tu plan y contesta lo que sea de tu dinero, 24/7 — se activa con Core o Pro.
               </p>
               <div className="rounded-lg border border-teal bg-teal/[.06] p-3 text-center">
                 <p className="text-2xl font-semibold text-teal">
@@ -743,7 +753,7 @@ export default function VictorChat({
                   <span className="text-sm font-normal">/mes</span>
                 </p>
                 {esReferido && <p className="text-xs font-medium text-teal">Primer mes gratis</p>}
-                <p className="text-xs text-muted">Cancela cuando quieras</p>
+                <p className="text-xs text-muted">Desde Core · Cancela cuando quieras</p>
               </div>
               {upgradeError && <p className="text-center text-xs text-red">{upgradeError}</p>}
               <button onClick={activarCore} className="vc-btn-primary" disabled={upgradeLoading}>
@@ -751,14 +761,22 @@ export default function VictorChat({
                   ? "Conectando con Stripe..."
                   : esReferido
                     ? `Activar Core — primer mes gratis`
-                    : `Activar Core — $${precioUpgrade}/mes`}
+                    : `Activar Core — desde $${precioUpgrade}/mes`}
               </button>
+              {/* Referidos (25 sept 2026, pedido de Joel: "no veo el plan de
+                  referido" — el link ya existe en Configuración, pero aquí,
+                  en el momento exacto en que alguien se topa con el paywall
+                  de VICTOR, es donde más sentido tiene recordarle que puede
+                  conseguirlo gratis refiriendo). */}
+              <a href="/dashboard/config#referidos" className="text-center text-xs font-medium text-teal underline">
+                🎁 O consíguelo gratis refiriendo a alguien
+              </a>
               {/* Sin Core, este usuario no tiene a VICTOR para preguntarle
                   nada (30 agosto 2026, pedido de Joel) — que no se sienta
                   solo: le dejamos una salida directa a soporte humano justo
                   aquí, donde normalmente le hablaría a VICTOR. */}
               <a
-                href="mailto:soporte@westcapitalventuresllc.com"
+                href="mailto:soporte@victorcfo.com"
                 className="text-center text-xs text-muted underline"
               >
                 ¿Tienes una pregunta o un problema? Escríbenos directamente

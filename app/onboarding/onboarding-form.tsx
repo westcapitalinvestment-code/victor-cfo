@@ -122,7 +122,7 @@ export default function OnboardingForm({ initialFullName }: { initialFullName: s
       {error && (
         <p className="text-xs text-red">
           {error} Si sigue pasando,{" "}
-          <a href="mailto:soporte@westcapitalventuresllc.com" className="underline">
+          <a href="mailto:soporte@victorcfo.com" className="underline">
             escríbenos
           </a>
           .

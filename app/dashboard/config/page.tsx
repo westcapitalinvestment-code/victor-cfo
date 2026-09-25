@@ -98,7 +98,7 @@ export default async function ConfigPage() {
           ¿Tienes una pregunta o algo no está funcionando? Escríbenos, te contestamos lo antes posible.
         </p>
         <a
-          href="mailto:soporte@westcapitalventuresllc.com"
+          href="mailto:soporte@victorcfo.com"
           className="mt-2 block rounded-lg border border-teal p-3 text-center text-sm font-medium text-teal no-underline"
           style={{ background: "rgba(29,158,117,.1)" }}
         >

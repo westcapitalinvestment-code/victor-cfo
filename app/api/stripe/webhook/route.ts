@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { getStripe, esPlanValido, priceIdAddonTecnicos, todosLosPriceIdsDePlanes } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
-import { sendReferralCreditEmail, sendWelcomeEmail } from "@/lib/email";
+import { sendReferralCreditEmail, sendReferralCreditoPendienteEmail, sendWelcomeEmail } from "@/lib/email";
 import { enviarEventoCAPI } from "@/lib/meta-capi";
 
 // Rollover de créditos de IA (migración 0064, 3 sept 2026, pedido de Joel:
@@ -500,12 +500,18 @@ async function procesarCreditoReferido(
     .select("id, stripe_customer_id, stripe_subscription_id, plan, email, full_name")
     .eq("id", referido.referred_by)
     .maybeSingle();
-  // Si el que refirió nunca ha pagado (plan gratis, sin suscripción real en
-  // Stripe), no hay factura a la cual aplicarle un crédito — por diseño no
-  // se premia en ese caso (ver migración 0031: el descuento de referido
-  // siempre fue pensado para "quien ya paga").
-  if (!referidor?.stripe_customer_id || !referidor.stripe_subscription_id) return;
+  if (!referidor) return;
   if (!referido.stripe_subscription_id) return;
+
+  // Si el que refirió nunca ha pagado (plan gratis, sin suscripción real en
+  // Stripe), no hay factura a la cual aplicarle un crédito de Stripe — pero
+  // en vez de perder el premio (como era antes), se guarda como crédito
+  // PENDIENTE: 30 días para que active un plan de pago y ese crédito se le
+  // sume como días extra de trial (ver checkout/route.ts y migración 0099,
+  // pedido de Joel 25 sept 2026). Necesita tarjeta igual que cualquier
+  // suscripción — el "premio" es no pagar hasta que se acabe el trial
+  // extendido, no un regalo sin compromiso.
+  const esReferidorGratis = !referidor.stripe_customer_id || !referidor.stripe_subscription_id;
 
   try {
     // El monto sale del plan del REFERIDO (no del plan del referidor, como
@@ -543,7 +549,34 @@ async function procesarCreditoReferido(
     const montoCreditoConTope = Math.max(0, Math.min(montoCredito, topeAnual - acumuladoEsteAño));
     if (montoCreditoConTope <= 0) return; // tope alcanzado este año — se reintenta cuando el año ruede
 
-    await getStripe().customers.createBalanceTransaction(referidor.stripe_customer_id, {
+    if (esReferidorGratis) {
+      // Crédito pendiente de activación (25 sept 2026, migración 0099) —
+      // nada que tocar en Stripe todavía (no hay customer), se guarda como
+      // fila pendiente con 30 días para canjearlo como trial extendido en
+      // /api/stripe/checkout.
+      const expiraEn = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      await supabase.from("referral_rewards").insert({
+        referrer_id: referidor.id,
+        referred_id: referido.id,
+        credit_cents: montoCreditoConTope,
+        pendiente_activacion: true,
+        expires_at: expiraEn.toISOString(),
+      });
+
+      if (referidor.email) {
+        await sendReferralCreditoPendienteEmail({
+          toEmail: referidor.email,
+          toName: referidor.full_name,
+          referredName: referido.full_name,
+          creditoCentavos: montoCreditoConTope,
+          expiraEn,
+        });
+      }
+      return;
+    }
+
+    await getStripe().customers.createBalanceTransaction(referidor.stripe_customer_id!, {
       amount: -montoCreditoConTope,
       currency: invoice.currency || "usd",
       description:
@@ -556,6 +589,7 @@ async function procesarCreditoReferido(
       referrer_id: referidor.id,
       referred_id: referido.id,
       credit_cents: montoCreditoConTope,
+      redeemed_at: new Date().toISOString(),
     });
 
     // Aviso por correo (8 sept 2026, pedido de Joel) — segundo canal además

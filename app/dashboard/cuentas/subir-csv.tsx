@@ -440,9 +440,9 @@ export default function SubirEstado({
         <>
           {bloqueadoPdf ? (
             <div className="text-center">
-              <p className="mb-2 text-sm font-medium">Leer PDF con IA es parte de Core</p>
+              <p className="mb-2 text-sm font-medium">Leer PDF con IA</p>
               <p className="mb-3 text-xs text-muted">
-                Extraer transacciones de un PDF usa inteligencia artificial — se activa junto con Core.
+                Extraer transacciones de un PDF usa inteligencia artificial — se activa con Core o Pro.
                 Mientras tanto, usa la pestaña de CSV / QuickBooks de arriba, que es gratis.
               </p>
               <button className="text-xs text-muted underline" onClick={onCerrar}>

@@ -329,6 +329,91 @@ export async function sendReferralCreditEmail(params: {
   }
 }
 
+// Crédito pendiente de activación para referidor en plan gratis (25 sept
+// 2026, migración 0099, pedido de Joel: "fulano que referiste acaba de
+// hacer su pago... tienes $$$ ahora puedas activar tu plan, y una fecha
+// para que lo use, sino pues los pierde — esa es la idea que siga
+// refiriendo y le salga gratis a él"). A diferencia de
+// sendReferralCreditEmail (que avisa de un crédito YA aplicado a una
+// factura), este avisa de un crédito que todavía hay que CANJEAR activando
+// un plan de pago (con tarjeta) dentro de 30 días — se convierte en días
+// extra de trial en el checkout (ver app/api/stripe/checkout/route.ts), no
+// en un descuento en efectivo.
+export async function sendReferralCreditoPendienteEmail(params: {
+  toEmail: string;
+  toName: string | null;
+  referredName: string | null;
+  creditoCentavos: number;
+  expiraEn: Date;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName, referredName, creditoCentavos, expiraEn } = params;
+  const saludoNombre = toName || "";
+  const montoTexto = `$${(creditoCentavos / 100).toFixed(2)}`;
+  const referidoTexto = referredName ? referredName : "tu referido";
+  const fechaTexto = expiraEn.toLocaleDateString("es-PR", { timeZone: "America/Puerto_Rico", day: "numeric", month: "long" });
+  const activarUrl = `${SITE_URL}/dashboard/config#referidos`;
+
+  const textoPlano =
+    `Hola${saludoNombre ? ` ${saludoNombre}` : ""},\n\n` +
+    `Buenas noticias: ${referidoTexto} acaba de empezar a pagar su plan en VICTOR CFO. Como tú todavía estás en el plan gratis, ` +
+    `te ganaste ${montoTexto} en días gratis para cuando actives tu propio plan (Core o Pro) — se te suman como días de prueba ` +
+    `extra al momento de activarlo, así que no pagas nada hasta que se acaben.\n\n` +
+    `Ojo: tienes hasta el ${fechaTexto} para activarlo, si no, lo pierdes. Y mientras más gente refieras, más días gratis ` +
+    `acumulas — puede salirte completamente gratis si sigues refiriendo.\n\n` +
+    `Actívalo aquí:\n${activarUrl}\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = {
+    saludo: saludoNombre ? escapeHtml(saludoNombre) : "",
+    referido: escapeHtml(referidoTexto),
+  };
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>Hola${htmlSeguro.saludo ? ` ${htmlSeguro.saludo}` : ""},</p>
+  <p>🎉 Buenas noticias: <strong>${htmlSeguro.referido}</strong> acaba de empezar a pagar su plan en VICTOR CFO.</p>
+  <div style="text-align: center; margin: 24px 0;">
+    <div style="display: inline-block; background: #eefaf4; border: 1px solid #1D9E75; border-radius: 12px; padding: 16px 28px;">
+      <div style="font-size: 28px; font-weight: 700; color: #14543d;">${montoTexto}</div>
+      <div style="font-size: 13px; color: #14543d;">en días gratis para tu propio plan</div>
+    </div>
+  </div>
+  <p>Como todavía estás en el plan gratis, esto se te suma como días de prueba extra cuando actives Core o Pro — no pagas nada hasta que se acaben.</p>
+  <div style="background: #FEF3E2; border: 1px solid #D97706; border-radius: 10px; padding: 14px; margin: 20px 0;">
+    <p style="margin: 0; font-size: 14px; color: #B45309;"><strong>Tienes hasta el ${fechaTexto}</strong> para activarlo — si no, lo pierdes.</p>
+  </div>
+  <p style="font-size: 14px;">Y mientras más gente refieras, más días acumulas — puede salirte completamente gratis si sigues refiriendo.</p>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${activarUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Activar mi plan</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: `🎉 ${montoTexto} en días gratis te esperan — actívalos antes del ${fechaTexto}`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
 // Envío automático de factura al cliente (3 sept 2026, pedido de Joel: "en
 // FreshBooks cuando ponía que una factura era recurrente, automáticamente
 // todos los 1 y 15 se enviaban solas") — lo llama el cron de
