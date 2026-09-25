@@ -564,20 +564,33 @@ export async function sendWelcomeGratisEmail(params: {
 
   // El plan gratis NO tiene chat con VICTOR ni conexión de banco (ver
   // app/dashboard/victor-chat.tsx, bloqueado = plan==='gratis') — esta copy
-  // solo promete lo que de verdad tiene: cuentas manuales, Citas, Metas y
-  // Bóveda. El upsell a Core es honesto sobre qué desbloquea, no un genérico
-  // "actualiza ya".
+  // solo promete lo que de verdad tiene, y es honesta en que gran parte del
+  // trabajo (categorizar, recordar) lo hace la persona, no VICTOR. Sin eso
+  // el correo prometía implícitamente un asistente que el plan gratis no
+  // tiene, y quien lo abriera esperando eso se iba a sentir engañado.
+  //
+  // 25 sept 2026, reescrito con Joel: (1) se quitó "ahora mismo" del
+  // encabezado — hacía sentir la lista como algo menor/de consuelo en vez
+  // de un beneficio real; (2) los pasos van en el orden real en que se
+  // usan (primero agregar la cuenta, LUEGO subir el estado — antes estaban
+  // al revés); (3) se aclaró en cada paso que la persona categoriza y
+  // agenda ella misma, VICTOR no está haciendo nada por detrás en este
+  // plan — esa es la razón real de pagar, no un genérico "desbloquea más";
+  // (4) el cierre vende el upgrade explicando qué hace VICTOR de verdad
+  // (categoriza, recuerda citas, avisa de documentos pendientes) en vez de
+  // solo el precio.
   const pasos: [string, string][] = [
-    ["Añade tus cuentas a mano", "En Cuentas puedes agregar tus bancos o tarjetas manualmente y llevar tus gastos e ingresos organizados, sin conectar nada."],
-    ["Usa Citas como tu asistente diario", "Agenda tus compromisos ahí y VICTOR te los recuerda, para que no se te olvide nada importante."],
-    ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en la Bóveda guardar pólizas, contratos o cualquier documento importante."],
+    ["Ve a Cuentas y agrega tu cuenta", "Primero agrega tu banco o tarjeta como cuenta manual — de ahí vas a poder subir tus estados de cuenta."],
+    ["Sube tu estado de cuenta y categoriza tus gastos", "Importa el CSV o Excel que descargas de tu banco. En el plan gratis tú mismo revisas y categorizas cada movimiento — una vez lo haces, lo ves todo organizado en tu dashboard."],
+    ["Usa Citas para anotar tus compromisos", "Agenda ahí lo que necesites — pagos, vencimientos, lo que sea — y queda guardado en un solo lugar."],
   ];
 
   const textoPlano =
     (saludoNombre ? `¡Bienvenido, ${saludoNombre}, a VICTOR CFO!\n\n` : `¡Bienvenido a VICTOR CFO!\n\n`) +
-    `Esto es lo que puedes hacer con tu cuenta gratis ahora mismo:\n\n` +
+    `Así le sacas provecho a tu cuenta gratis, paso a paso:\n\n` +
     pasos.map(([titulo, texto], i) => `${i + 1}. ${titulo} — ${texto}`).join("\n\n") +
-    `\n\nCon Core ($14.99/mes) desbloqueas lo que más te va a ahorrar tiempo: conectar tu banco de verdad (sin escribir nada a mano) y hablar con VICTOR, que categoriza tus gastos solo y contesta cualquier duda de tus finanzas al momento.\n\n` +
+    `\n\nPiénsalo como tu Excel de siempre, pero ya organizado y a mano cuando lo necesites.\n\n` +
+    `Para la experiencia completa — que VICTOR categorice tus transacciones automáticamente, te recuerde tus citas y avise de documentos pendientes antes de que venzan — puedes escoger un plan: Core (personal) o Pro (si tienes negocio).\n\n` +
     `Entra a tu cuenta aquí:\n${dashboardUrl}\n\n` +
     `Cualquier duda o pregunta, escríbenos a soporte@victorcfo.com y te responderemos en la brevedad posible.\n\n` +
     `— VICTOR CFO\n` +
@@ -605,11 +618,12 @@ export async function sendWelcomeGratisEmail(params: {
     <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
   </div>
   <p>${htmlSeguro ? `¡Bienvenido, <strong>${htmlSeguro}</strong>, a VICTOR CFO!` : `¡Bienvenido a VICTOR CFO!`}</p>
-  <p>Esto es lo que puedes hacer con tu cuenta <strong>gratis</strong> ahora mismo:</p>
+  <p>Así le sacas provecho a tu cuenta <strong>gratis</strong>, paso a paso:</p>
   <div style="margin: 24px 0;">${pasosHtml}</div>
+  <p style="font-size: 14px; color: #555;">Piénsalo como tu Excel de siempre, pero ya organizado y a mano cuando lo necesites.</p>
   <div style="background: #f6faf8; border: 1px solid #d8ece4; border-radius: 10px; padding: 16px; margin: 24px 0;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px;">Con Core ($14.99/mes) desbloqueas:</p>
-    <p style="margin: 0; font-size: 14px; color: #333;">Conectar tu banco de verdad (sin escribir nada a mano) y hablar con VICTOR — categoriza tus gastos solo y contesta cualquier duda de tus finanzas al momento.</p>
+    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px;">Para la experiencia completa, con Core o Pro:</p>
+    <p style="margin: 0; font-size: 14px; color: #333;">VICTOR categoriza tus transacciones automáticamente, te recuerda tus citas y avisa de documentos pendientes antes de que venzan.</p>
   </div>
   <div style="text-align: center; margin: 28px 0;">
     <a href="${dashboardUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Entrar a mi cuenta</a>
@@ -933,6 +947,184 @@ export async function sendFollowUpReminderEmail(params: {
       to: clientEmail,
       ...(replyToEmail ? { replyTo: replyToEmail } : {}),
       subject: `${negocio ? `${negocio}: ` : ""}¿Coordinamos tu próximo ${servicioNombre}?`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
+// ============================================================================
+// Secuencia de nurture para plan gratis (25 sept 2026, migración 0098) —
+// pedido de Joel: ya que capturamos el email en el registro gratis de 1
+// clic, aprovechar esa dirección para convertir a Core/Pro con 2 correos
+// más además de la bienvenida del día 0 (sendWelcomeGratisEmail):
+//   día 2 — sendNurtureFeaturesGratisEmail: qué puede hacer YA sin pagar
+//   día 5 — sendNurtureTrialOfertaEmail: empuje a probar 7 días de pago
+// Los dispara app/api/cron/nurture-emails, uno por día, con su propia
+// columna de idempotencia cada uno (nurture_features_gratis_enviado_at /
+// nurture_trial_oferta_enviado_at).
+// ============================================================================
+
+export async function sendNurtureFeaturesGratisEmail(params: {
+  toEmail: string;
+  toName: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName } = params;
+  const saludoNombre = toName || "";
+  const dashboardUrl = `${SITE_URL}/dashboard`;
+
+  // Ángulo distinto al de la bienvenida del día 0 (25 sept 2026, pedido de
+  // Joel: "el día 2 hay que enviarle un mensaje de valor explicativo de
+  // algo de organizarse, metas, citas o lo que sea" — el día 0 ya cubre
+  // subir el CSV/Excel, así que este correo NO lo repite. Es un check-in
+  // con 3 acciones concretas de "organízate" en vez de una lista de
+  // features — más práctico que el de bienvenida, con la idea de que a
+  // los 2 días ya vio el dashboard pero quizás no tocó nada todavía.
+  //
+  // Ojo con no prometer de más (mismo ajuste que sendWelcomeGratisEmail):
+  // en plan gratis no hay chat con VICTOR, así que nada de "dile a VICTOR"
+  // ni "VICTOR te lo recuerda" — Citas y Bóveda SÍ mandan recordatorio por
+  // notificación push (el cron no distingue plan, ver
+  // app/api/cron/notificaciones-push), pero eso es la app avisando, no
+  // VICTOR conversando contigo.
+  const pasos: [string, string][] = [
+    ["Pon tu primera Meta", "Crea una Meta desde el dashboard y anota cuánto quieres ahorrar — así ves tu progreso organizado, sin llevar la cuenta a mano."],
+    ["Agenda algo en Citas", "Un pago pendiente, una cita médica, lo que sea — actívale las notificaciones y te llega un aviso antes de la fecha."],
+    ["Guarda un documento en la Bóveda", "Sube una póliza, un contrato o el marbete del carro — todo en un solo lugar, con notificación antes de que venza."],
+  ];
+
+  const textoPlano =
+    (saludoNombre ? `Hola ${saludoNombre},\n\n` : `Hola,\n\n`) +
+    `¿Cómo va todo con VICTOR CFO? Si todavía no le has dado uso a tu cuenta gratis, aquí van 3 cosas rápidas para organizarte desde ya:\n\n` +
+    pasos.map(([titulo, texto], i) => `${i + 1}. ${titulo} — ${texto}`).join("\n\n") +
+    `\n\nEntra aquí:\n${dashboardUrl}\n\n` +
+    `Cualquier duda o pregunta, escríbenos a soporte@victorcfo.com y te respondemos en la brevedad posible.\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = saludoNombre ? escapeHtml(saludoNombre) : "";
+
+  const pasosHtml = pasos
+    .map(
+      ([titulo, texto], i) => `
+  <div style="display: flex; gap: 14px; margin-bottom: 20px;">
+    <div style="flex-shrink: 0; width: 28px; height: 28px; border-radius: 9999px; background: #eefaf4; color: #14543d; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center;">${i + 1}</div>
+    <div>
+      <p style="margin: 0 0 4px 0; font-weight: 600;">${escapeHtml(titulo)}</p>
+      <p style="margin: 0; color: #555; font-size: 14px;">${escapeHtml(texto)}</p>
+    </div>
+  </div>`
+    )
+    .join("");
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${htmlSeguro ? `Hola, <strong>${htmlSeguro}</strong>,` : `Hola,`}</p>
+  <p>¿Cómo va todo con VICTOR CFO? Si todavía no le has dado uso a tu cuenta <strong>gratis</strong>, aquí van 3 cosas rápidas para organizarte desde ya:</p>
+  <div style="margin: 24px 0;">${pasosHtml}</div>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${dashboardUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Entrar a mi cuenta</a>
+  </div>
+  <p style="font-size: 14px;">Cualquier duda o pregunta, escríbenos a <a href="mailto:soporte@victorcfo.com" style="color: #1D9E75;">soporte@victorcfo.com</a> y te responderemos en la brevedad posible.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: "3 cosas rápidas para organizarte con VICTOR CFO",
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
+export async function sendNurtureTrialOfertaEmail(params: {
+  toEmail: string;
+  toName: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName } = params;
+  const saludoNombre = toName || "";
+  // Manda directo al upgrade de Core con el trial de 7 días ya activo (ver
+  // trial_period_days en app/api/stripe/checkout/route.ts) — no a /registro
+  // (esa persona ya tiene cuenta) ni a completar-pago (es para quien pagó y
+  // no terminó). /dashboard/config es donde ya vive el upgrade de plan.
+  const upgradeUrl = `${SITE_URL}/dashboard/config?upgrade=core`;
+
+  const beneficios: [string, string][] = [
+    ["Tu banco conectado de verdad", "Nada de escribir a mano ni subir CSV — tus gastos e ingresos aparecen solos, todos los días."],
+    ["VICTOR por chat, 24/7", "Pregúntale cualquier cosa de tus finanzas y te contesta al momento, con tus datos reales."],
+    ["Reportes listos para Hacienda", "Cuando llegue el momento, ya tienes todo organizado — no un mes de trabajo atrasado."],
+  ];
+
+  const textoPlano =
+    (saludoNombre ? `Hola ${saludoNombre},\n\n` : `Hola,\n\n`) +
+    `Ya llevas unos días usando VICTOR CFO gratis — ¿qué tal si pruebas lo demás sin compromiso? 7 días gratis de Core, cancela cuando quieras:\n\n` +
+    beneficios.map(([titulo, texto], i) => `${i + 1}. ${titulo} — ${texto}`).join("\n\n") +
+    `\n\nActiva tu prueba aquí:\n${upgradeUrl}\n\n` +
+    `Cualquier duda o pregunta, escríbenos a soporte@victorcfo.com y te respondemos en la brevedad posible.\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = saludoNombre ? escapeHtml(saludoNombre) : "";
+
+  const beneficiosHtml = beneficios
+    .map(
+      ([titulo, texto], i) => `
+  <div style="display: flex; gap: 14px; margin-bottom: 20px;">
+    <div style="flex-shrink: 0; width: 28px; height: 28px; border-radius: 9999px; background: #eefaf4; color: #14543d; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center;">${i + 1}</div>
+    <div>
+      <p style="margin: 0 0 4px 0; font-weight: 600;">${escapeHtml(titulo)}</p>
+      <p style="margin: 0; color: #555; font-size: 14px;">${escapeHtml(texto)}</p>
+    </div>
+  </div>`
+    )
+    .join("");
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${htmlSeguro ? `Hola, <strong>${htmlSeguro}</strong>,` : `Hola,`}</p>
+  <p>Ya llevas unos días usando VICTOR CFO gratis — ¿qué tal si pruebas lo demás sin compromiso? <strong>7 días gratis de Core</strong>, cancela cuando quieras.</p>
+  <div style="margin: 24px 0;">${beneficiosHtml}</div>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${upgradeUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Probar 7 días gratis</a>
+  </div>
+  <p style="font-size: 14px;">Cualquier duda o pregunta, escríbenos a <a href="mailto:soporte@victorcfo.com" style="color: #1D9E75;">soporte@victorcfo.com</a> y te responderemos en la brevedad posible.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: "7 días gratis para probar todo VICTOR CFO",
       text: textoPlano,
       html: htmlCorreo,
     });

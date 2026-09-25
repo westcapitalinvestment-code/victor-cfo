@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/seguimientos-clientes",
       "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/nurture-emails",
+      "schedule": "0 18 * * *"
     }
   ]
 }

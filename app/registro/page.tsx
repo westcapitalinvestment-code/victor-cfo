@@ -135,6 +135,13 @@ function RegistroForm() {
   // email y psw" — mismo patrón que el botón "Continue with Email" de Luna
   // Money, que también aparece colapsado junto a Google/Apple).
   const [mostrarEmailForm, setMostrarEmailForm] = useState(false);
+  // Sección de pago colapsada por default (25 sept 2026) — el camino gratis
+  // con Google/email es ahora lo primero que se ve y lo único que hace
+  // falta para crear cuenta; escoger Core/Pro y pagar de una vez queda
+  // como opción secundaria para quien ya sabe que lo quiere, un toggle más
+  // abajo. Antes era al revés (pago primario, gratis secundario) y esa era
+  // exactamente la fricción que estaba matando la conversión del anuncio.
+  const [mostrarPlanPago, setMostrarPlanPago] = useState(false);
   // Línea única que aclara trial + precio real (11 sept 2026, pedido de
   // Joel: "hay que aclarar que son 7 días gratis y luego ($14.99-$49.99) el
   // plan que escoja mensual" — reemplaza los 2 párrafos sueltos que había
@@ -155,13 +162,22 @@ function RegistroForm() {
   // Joel fue explícito en que ese debe ser el primario; "Empezar gratis"
   // se queda con email/contraseña, que ya es la ruta de menor fricción
   // porque no hay nada que cobrar.
-  async function continuarConOAuth(provider: "google" | "apple") {
+  async function continuarConOAuth(provider: "google" | "apple", esGratis = false) {
     setError(null);
     setOauthEnCurso(provider);
 
     const params = new URLSearchParams({ plan, ciclo });
     if (refId) params.set("ref", refId);
     if (socioCodigo) params.set("socio", socioCodigo);
+    // Registro simplificado (25 sept 2026, pedido de Joel tras ver que la
+    // campaña de Facebook casi no convertía: de 149 landing views solo 1
+    // llegó a crear cuenta — el formulario pedía escoger plan+ciclo+aceptar
+    // términos antes de dejar ni tocar un botón. Ahora Google también sirve
+    // para el camino gratis, sin pasar por Stripe — el callback ya sabía
+    // manejar esto (ver app/auth/callback/route.ts, "gratis" query param +
+    // aplicar_datos_registro_oauth de la migración 0083), solo faltaba que
+    // el botón de arriba lo pidiera.
+    if (esGratis) params.set("gratis", "true");
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -276,7 +292,11 @@ function RegistroForm() {
 
   async function handleRegistro(e: React.FormEvent) {
     e.preventDefault();
-    crearCuenta(false);
+    // El submit del <form> (Enter en el campo de contraseña, o el botón
+    // "Crear cuenta y pagar") solo debe cobrar si la persona abrió el email
+    // form desde la sección de pago — si no, aunque le dé Enter, sigue
+    // siendo el camino gratis (25 sept 2026, ver mostrarPlanPago arriba).
+    crearCuenta(mostrarPlanPago);
   }
 
   if (revisaCorreo) {
@@ -352,87 +372,13 @@ function RegistroForm() {
           <form onSubmit={handleRegistro} className="vc-card flex flex-col gap-3 p-8">
             <div className="mb-1 text-center">
               <p className="text-5xl font-bold leading-none text-teal">GRATIS</p>
-              <p className="mt-2 text-sm text-muted">
-                {esReferido ? `tu primer mes de ${plan === "pro" ? "Pro" : "Core"}` : "por 7 días"}
-              </p>
+              <p className="mt-2 text-sm text-muted">crea tu cuenta en un clic</p>
             </div>
 
-            {/* Tabs Core/Pro (11 sept 2026, pedido de Joel: "que tengan color
-                al seleccionarlas" — antes la opción activa solo se veía
-                blanca/elevada, ahora lleva teal sólido, bien visible). */}
-            <div className="mb-1 flex justify-center gap-1 rounded-full bg-bg p-1 text-sm">
-              <button
-                type="button"
-                onClick={() => setPlan("core")}
-                className={`flex-1 rounded-full px-4 py-2 font-medium transition-colors ${
-                  plan === "core" ? "bg-teal text-white shadow-sm" : "text-muted"
-                }`}
-              >
-                Core
-              </button>
-              <button
-                type="button"
-                onClick={() => setPlan("pro")}
-                className={`flex-1 rounded-full px-4 py-2 font-medium transition-colors ${
-                  plan === "pro" ? "bg-teal text-white shadow-sm" : "text-muted"
-                }`}
-              >
-                Pro (negocio)
-              </button>
-            </div>
-
-            {/* Radio cards Mensual/Anual (11 sept 2026, pedido de Joel: "las
-                descripciones más pegadas al precio" — precio en una sola
-                línea con " · ", centrado verticalmente con la etiqueta, en
-                vez de 2 líneas sueltas). */}
-            <div className="mb-1 flex flex-col gap-2">
-              <label
-                className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm ${
-                  ciclo === "anual" ? "border-teal bg-teal/[.06]" : "border-border"
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="ciclo"
-                    checked={ciclo === "anual"}
-                    onChange={() => setCiclo("anual")}
-                    className="accent-teal"
-                  />
-                  <span className="font-medium text-text">Anual</span>
-                  <span className="rounded-full bg-teal px-2 py-0.5 text-[0.65rem] font-semibold text-white">
-                    Ahorra {ahorroPct}%
-                  </span>
-                </span>
-                <span className="text-xs text-muted">
-                  ${anualPorMes}/mes · ${preciosPlan.anual.normal}/año
-                </span>
-              </label>
-
-              <label
-                className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm ${
-                  ciclo === "mensual" ? "border-teal bg-teal/[.06]" : "border-border"
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="ciclo"
-                    checked={ciclo === "mensual"}
-                    onChange={() => setCiclo("mensual")}
-                    className="accent-teal"
-                  />
-                  <span className="font-medium text-text">Mensual</span>
-                </span>
-                <span className="text-xs text-muted">${preciosPlan.mensual.normal}/mes</span>
-              </label>
-            </div>
-
-            {/* Aclaración de trial + precio real, en 1 línea (11 sept 2026,
-                pedido de Joel: "hay que aclarar que son 7 días gratis y
-                luego [precio] el plan que escoja mensual"). */}
-            <p className="text-center text-xs text-muted">{finePrint}</p>
-
+            {/* Términos primero, un solo checkbox, antes de cualquier botón
+                (25 sept 2026) — es el único requisito real antes de poder
+                crear cuenta gratis; ya no hace falta escoger plan ni ciclo
+                para esto. */}
             <label className="flex items-start gap-2 text-xs text-muted">
               <input
                 type="checkbox"
@@ -450,7 +396,7 @@ function RegistroForm() {
                 <Link href="/terminos" target="_blank" className="font-medium text-teal">
                   Términos de Servicio
                 </Link>
-                , incluyendo el uso de Plaid para conectar mi banco.
+                .
               </span>
             </label>
 
@@ -458,18 +404,21 @@ function RegistroForm() {
 
             {!mostrarEmailForm ? (
               <>
-                {/* Apple queda oculto por ahora (10 sept 2026, pedido de
-                    Joel: "si comenzamos con Google por ahora") — requiere
-                    Apple Developer Program ($99/año) + Services ID/Key
-                    ID/private key, mucho más setup que Google.
-                    continuarConOAuth("apple") ya funciona y el callback ya
-                    lo soporta — cuando Joel complete el lado de Apple, esto
-                    es re-mostrar el botón, nada más. */}
+                {/* Camino gratis primero (25 sept 2026, pedido de Joel tras
+                    ver que la campaña de Facebook casi no convertía —
+                    escoger plan+ciclo+aceptar términos antes de poder
+                    registrarse era demasiada fricción para tráfico frío de
+                    un anuncio). Google gratis es ahora el botón principal:
+                    un clic, sin pasar por Stripe, sin escoger plan. Apple
+                    queda oculto por ahora (10 sept 2026, pedido de Joel) —
+                    requiere Apple Developer Program; continuarConOAuth ya
+                    lo soporta, solo falta re-mostrar el botón cuando esté
+                    listo. */}
                 <button
                   type="button"
-                  className="vc-btn-secondary flex items-center justify-center gap-2"
+                  className="vc-btn-primary flex items-center justify-center gap-2"
                   disabled={loading || !!oauthEnCurso || !aceptaTerminos}
-                  onClick={() => continuarConOAuth("google")}
+                  onClick={() => continuarConOAuth("google", true)}
                 >
                   <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
                     <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z" />
@@ -477,16 +426,9 @@ function RegistroForm() {
                     <path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.5C29.4 34.8 26.8 36 24 36c-5.3 0-9.7-3.1-11.3-7.6l-6.5 5c3.6 6.4 10.1 10.6 17.8 10.6z" />
                     <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.5l6.5 5.5C40.5 36.6 44 30.9 44 24c0-1.3-.1-2.7-.4-3.5z" />
                   </svg>
-                  {oauthEnCurso === "google" ? "..." : "Continuar con Google"}
+                  {oauthEnCurso === "google" ? "..." : "Continuar con Google — gratis"}
                 </button>
 
-                {/* Tarjeta "Continuar con email" (11 sept 2026, pedido de
-                    Joel: "quítale lo de email y contraseña que sea una
-                    tarjeta de 'continuar con email' y luego si la selecciona
-                    se abra la oportunidad para crear el email y psw" — antes
-                    los campos de email/contraseña estaban siempre visibles;
-                    ahora son un paso aparte, igual que el botón "Continue
-                    with Email" de Luna Money). */}
                 <button
                   type="button"
                   className="vc-btn-secondary"
@@ -498,24 +440,112 @@ function RegistroForm() {
                 >
                   Continuar con email
                 </button>
-
-                <div className="my-1 flex items-center gap-2 text-xs text-muted">
-                  <span className="h-px flex-1 bg-border" />
-                  <span>o</span>
-                  <span className="h-px flex-1 bg-border" />
-                </div>
-
-                <button
-                  type="button"
-                  className="vc-btn-secondary"
-                  disabled={loading || !aceptaTerminos}
-                  onClick={() => crearCuenta(true)}
-                >
-                  {loading && accionEnCurso === "gratis" ? "Creando cuenta..." : "Empezar gratis (limitada)"}
-                </button>
                 <p className="text-center text-[0.7rem] text-muted">
                   Gratis: Bóveda, Metas, Citas y categorizar por CSV. Sin conectar banco ni chat con VICTOR.
                 </p>
+
+                <button
+                  type="button"
+                  className="mt-1 text-center text-xs text-muted hover:text-teal"
+                  onClick={() => setMostrarPlanPago((v) => !v)}
+                >
+                  {mostrarPlanPago ? "‹ Ocultar planes de pago" : "¿Prefieres desbloquear todo de una vez (banco + VICTOR)? ›"}
+                </button>
+
+                {/* Sección de pago, ahora secundaria y colapsada por default
+                    (25 sept 2026 — antes era la primaria; ver comentario en
+                    mostrarPlanPago arriba). Mismo comportamiento de siempre
+                    una vez se abre: escoger Core/Pro, Mensual/Anual, y pagar
+                    con Google o email. */}
+                {mostrarPlanPago && (
+                  <div className="mt-1 flex flex-col gap-3 rounded-lg border border-border p-4">
+                    <div className="flex justify-center gap-1 rounded-full bg-bg p-1 text-sm">
+                      <button
+                        type="button"
+                        onClick={() => setPlan("core")}
+                        className={`flex-1 rounded-full px-4 py-2 font-medium transition-colors ${
+                          plan === "core" ? "bg-teal text-white shadow-sm" : "text-muted"
+                        }`}
+                      >
+                        Core
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPlan("pro")}
+                        className={`flex-1 rounded-full px-4 py-2 font-medium transition-colors ${
+                          plan === "pro" ? "bg-teal text-white shadow-sm" : "text-muted"
+                        }`}
+                      >
+                        Pro (negocio)
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <label
+                        className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm ${
+                          ciclo === "anual" ? "border-teal bg-teal/[.06]" : "border-border"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="ciclo"
+                            checked={ciclo === "anual"}
+                            onChange={() => setCiclo("anual")}
+                            className="accent-teal"
+                          />
+                          <span className="font-medium text-text">Anual</span>
+                          <span className="rounded-full bg-teal px-2 py-0.5 text-[0.65rem] font-semibold text-white">
+                            Ahorra {ahorroPct}%
+                          </span>
+                        </span>
+                        <span className="text-xs text-muted">
+                          ${anualPorMes}/mes · ${preciosPlan.anual.normal}/año
+                        </span>
+                      </label>
+
+                      <label
+                        className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm ${
+                          ciclo === "mensual" ? "border-teal bg-teal/[.06]" : "border-border"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="ciclo"
+                            checked={ciclo === "mensual"}
+                            onChange={() => setCiclo("mensual")}
+                            className="accent-teal"
+                          />
+                          <span className="font-medium text-text">Mensual</span>
+                        </span>
+                        <span className="text-xs text-muted">${preciosPlan.mensual.normal}/mes</span>
+                      </label>
+                    </div>
+
+                    <p className="text-center text-xs text-muted">{finePrint}</p>
+
+                    <button
+                      type="button"
+                      className="vc-btn-secondary flex items-center justify-center gap-2"
+                      disabled={loading || !!oauthEnCurso || !aceptaTerminos}
+                      onClick={() => continuarConOAuth("google", false)}
+                    >
+                      {oauthEnCurso === "google" ? "..." : `Pagar con Google — ${plan === "pro" ? "Pro" : "Core"}`}
+                    </button>
+                    <button
+                      type="button"
+                      className="vc-btn-secondary"
+                      disabled={loading}
+                      onClick={() => {
+                        setError(null);
+                        setMostrarEmailForm(true);
+                      }}
+                    >
+                      Pagar con email
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -538,9 +568,24 @@ function RegistroForm() {
                   required
                 />
 
-                <button type="submit" className="vc-btn-primary mt-1" disabled={loading || !aceptaTerminos}>
-                  {loading && accionEnCurso === "pago" ? "Creando cuenta..." : "Crear cuenta"}
-                </button>
+                {/* Si la persona abrió el email form desde la sección de
+                    pago (mostrarPlanPago), el submit crea cuenta pagando;
+                    si no, gratis — el botón "Crear cuenta gratis" de abajo
+                    siempre está disponible como salida rápida. */}
+                {mostrarPlanPago ? (
+                  <button type="submit" className="vc-btn-primary mt-1" disabled={loading || !aceptaTerminos}>
+                    {loading && accionEnCurso === "pago" ? "Creando cuenta..." : "Crear cuenta y pagar"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="vc-btn-primary mt-1"
+                    disabled={loading || !aceptaTerminos || !email || !password}
+                    onClick={() => crearCuenta(true)}
+                  >
+                    {loading && accionEnCurso === "gratis" ? "Creando cuenta..." : "Crear cuenta gratis"}
+                  </button>
+                )}
 
                 <button
                   type="button"

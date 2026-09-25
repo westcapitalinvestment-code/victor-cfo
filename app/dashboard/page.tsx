@@ -6,6 +6,7 @@ import { formatMoney } from "@/lib/format";
 import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import GastosPendientesCard from "./gastos-pendientes-card";
 import ResumenCard from "./resumen-card";
+import ResumenReglasCard from "./resumen-reglas-card";
 
 // Primer día del mes SIGUIENTE a "YYYY-MM" — mismo helper que en
 // /dashboard/gastos/page.tsx, copiado aquí para no crear una dependencia
@@ -13,6 +14,16 @@ import ResumenCard from "./resumen-card";
 function primerDiaDelMesSiguiente(mesYYYYMM: string): string {
   const [anio, mes] = mesYYYYMM.split("-").map(Number);
   return new Date(anio, mes, 1).toISOString().slice(0, 10);
+}
+
+// "YYYY-MM" del mes ANTERIOR a uno dado — usado por la tarjeta "Tu resumen
+// del mes" (25 sept 2026) para comparar el gasto del mes actual contra el
+// mes justo antes, sin depender del selector de mes de arriba (esa tarjeta
+// siempre habla del mes actual real, ver comentario junto a su cálculo).
+function mesAnterior(mesYYYYMM: string): string {
+  const [anio, mes] = mesYYYYMM.split("-").map(Number);
+  const fecha = new Date(anio, mes - 2, 1); // mes es 1-indexado; mes-2 = mes anterior en índice 0
+  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function etiquetaMes(mesYYYYMM: string): string {
@@ -354,6 +365,78 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     })
   );
 
+  // "Tu resumen del mes" (25 sept 2026, pedido de Joel) — tarjeta de valor
+  // real para el plan gratis: cero llamadas a VICTOR/Claude, puro SQL
+  // agregado sobre transactions, igual que el resto del Inicio. A
+  // propósito usa SIEMPRE el mes actual real (mesActualStr) y no
+  // mesSeleccionado — el punto de esta tarjeta es "cómo vas este mes",
+  // no un histórico cualquiera que el usuario haya tocado en el selector
+  // de arriba. Necesita hacienda_category_id (que la consulta de
+  // Ingresos/Gastos de arriba no trae) para poder sacar la categoría con
+  // mayor gasto, así que va en su propia consulta en vez de reusar
+  // `transacciones`.
+  const inicioMesActualResumen = `${mesActualStr}-01`;
+  const finMesActualResumen = primerDiaDelMesSiguiente(mesActualStr);
+  const mesAnteriorStr = mesAnterior(mesActualStr);
+  const inicioMesAnteriorResumen = `${mesAnteriorStr}-01`;
+  const finMesAnteriorResumen = inicioMesActualResumen;
+
+  const [{ data: transaccionesMesActualResumen }, { data: transaccionesMesAnteriorResumen }] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("amount, tipo_flujo, hacienda_category_id")
+      .eq("owner_id", user.id)
+      .is("entity_id", null)
+      .eq("es_duplicada", false)
+      .gte("fecha", inicioMesActualResumen)
+      .lt("fecha", finMesActualResumen),
+    supabase
+      .from("transactions")
+      .select("amount, tipo_flujo")
+      .eq("owner_id", user.id)
+      .is("entity_id", null)
+      .eq("es_duplicada", false)
+      .gte("fecha", inicioMesAnteriorResumen)
+      .lt("fecha", finMesAnteriorResumen),
+  ]);
+
+  const gastoMesActualResumen = (transaccionesMesActualResumen ?? []).reduce(
+    (sum, t) => sum + (t.tipo_flujo === "gasto" ? Number(t.amount) : 0),
+    0
+  );
+  const gastoMesAnteriorResumen = (transaccionesMesAnteriorResumen ?? []).reduce(
+    (sum, t) => sum + (t.tipo_flujo === "gasto" ? Number(t.amount) : 0),
+    0
+  );
+
+  // Categoría con mayor gasto del mes — suma por hacienda_category_id y se
+  // queda con la más alta. nombrePorCategoriaResumen reusa `categorias`
+  // (hacienda_categories) que ya se trajo arriba para GastosPendientesCard,
+  // así no se repite esa consulta.
+  const nombrePorCategoriaResumen = new Map((categorias ?? []).map((c) => [c.id, c.nombre]));
+  const gastoPorCategoriaResumen = new Map<number, number>();
+  for (const t of transaccionesMesActualResumen ?? []) {
+    if (t.tipo_flujo !== "gasto" || !t.hacienda_category_id) continue;
+    gastoPorCategoriaResumen.set(
+      t.hacienda_category_id,
+      (gastoPorCategoriaResumen.get(t.hacienda_category_id) ?? 0) + Number(t.amount)
+    );
+  }
+  let categoriaTopResumen: { nombre: string; monto: number } | null = null;
+  for (const [catId, monto] of gastoPorCategoriaResumen) {
+    if (!categoriaTopResumen || monto > categoriaTopResumen.monto) {
+      categoriaTopResumen = { nombre: nombrePorCategoriaResumen.get(catId) ?? "Sin categorizar", monto };
+    }
+  }
+
+  // % vs. mes anterior — null (no "0%") cuando el mes anterior no tiene
+  // gasto real con que comparar, para no decir "subiste infinito%" ni
+  // inventar un "0% de cambio" que no significa nada sin línea base.
+  const pctVsMesAnteriorResumen =
+    gastoMesAnteriorResumen > 0
+      ? Math.round(((gastoMesActualResumen - gastoMesAnteriorResumen) / gastoMesAnteriorResumen) * 100)
+      : null;
+
   // Resumen y proyección (5 sept 2026) — reemplaza el tab "Resumen" que se
   // quitó. Mismo cálculo exacto que tenía app/dashboard/resumen/page.tsx
   // (ahora eliminado), pero SOLO con transacciones personales (entity_id
@@ -510,6 +593,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <p className="mt-0.5 text-[10px] text-muted">{bancoConectado ? "cuentas de inversión" : "conecta tu banco"}</p>
         </div>
       </div>
+
+      {/* "Tu resumen del mes" (25 sept 2026) — regalo real al plan gratis:
+          nada de VICTOR/IA aquí, solo SQL sobre las transacciones que el
+          usuario ya tiene (manuales o importadas). Ver comentario grande
+          junto al cálculo arriba. */}
+      <ResumenReglasCard
+        mesLabel={etiquetaMes(mesActualStr)}
+        gastoMes={gastoMesActualResumen}
+        categoriaTop={categoriaTopResumen}
+        pctVsMesAnterior={pctVsMesAnteriorResumen}
+      />
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {/* METAS */}
