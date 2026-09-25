@@ -177,9 +177,7 @@ export default function Topbar({
       <div className="vc-topbar">
         <div className="vc-topbar-top">
           <div className="vc-topbar-logo flex items-center gap-2.5">
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-teal text-sm font-medium text-white">
-              V
-            </div>
+            <img src="/victor-avatar.png" alt="VICTOR" className="h-9 w-9 flex-shrink-0 rounded-full object-cover" style={{ background: "#fff" }} />
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="vc-logo-name">VICTOR</span>

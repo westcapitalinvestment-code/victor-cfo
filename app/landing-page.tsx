@@ -13,6 +13,7 @@ export default function LandingPage() {
     <div className={styles.root}>
       <nav className={styles.nav}>
         <div className={styles.navLogo}>
+          <img src="/victor-avatar.png" alt="VICTOR" className={styles.navLogoImg} />
           VICTOR<span>.cfo</span>
         </div>
         <div className={styles.navLinks}>

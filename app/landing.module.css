@@ -37,6 +37,11 @@
   font-family: 'Courier New', monospace;
   font-size: 1rem; font-weight: 600;
   color: var(--teal-mid); letter-spacing: 0.02em;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.navLogoImg {
+  width: 28px; height: 28px; border-radius: 9999px;
+  background: #fff; object-fit: cover; flex-shrink: 0;
 }
 .navLogo span { color: var(--white); }
 .navLinks { display: flex; gap: 2rem; align-items: center; }

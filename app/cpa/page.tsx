@@ -64,9 +64,7 @@ export default async function CpaPortalPage() {
     <div className="vc-shell">
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal text-sm font-medium text-white">
-            V
-          </div>
+          <img src="/victor-avatar.png" alt="VICTOR" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" style={{ background: "#fff" }} />
           <span className="text-base font-medium">VICTOR</span>
           <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-[10px] font-medium text-teal">
             Portal CPA
