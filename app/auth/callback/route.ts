@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { enviarBienvenidaInicial } from "@/lib/bienvenida-inicial";
+import { enviarEventoCAPI } from "@/lib/meta-capi";
 
 // Callback de OAuth (Google/Apple) — Supabase redirige aquí con ?code=...
 // después de que el usuario autoriza en el proveedor (10 sept 2026, pedido
@@ -43,6 +44,35 @@ export async function GET(req: NextRequest) {
   // usuario que ya la recibió, esto no hace nada. Fire-and-forget.
   if (sesionData.user?.id) {
     enviarBienvenidaInicial(sesionData.user.id).catch(() => {});
+
+    // Meta CAPI: evento Lead para registros nuevos por Google (26 sept 2026,
+    // hallazgo de Joel al revisar por qué la campaña no se movía) —
+    // fbqTrack("Lead") solo vivía en app/registro/page.tsx, el camino de
+    // email/contraseña. El camino de Google (ahora el botón principal desde
+    // el 25 sept) nunca avisaba nada, porque el navegador se va directo a
+    // Google antes de que corra ese JS del cliente — Meta quedaba ciego a
+    // las conversiones reales que SÍ estaban pasando por el botón
+    // principal, y sin esa señal el algoritmo no tenía con qué aprender.
+    // Se manda server-side aquí, una vez que ya hay sesión confirmada.
+    // Solo cuenta como Lead si la cuenta se acaba de crear (< 5 min) — un
+    // login normal de un usuario viejo por Google no debe reportarse otra
+    // vez como una conversión nueva.
+    const creadaHaceMs = sesionData.user.created_at
+      ? Date.now() - new Date(sesionData.user.created_at).getTime()
+      : Infinity;
+    if (creadaHaceMs < 5 * 60 * 1000) {
+      enviarEventoCAPI({
+        eventName: "Lead",
+        email: sesionData.user.email,
+        fbp: req.cookies.get("_fbp")?.value,
+        fbc: req.cookies.get("_fbc")?.value,
+        clientIp:
+          req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || undefined,
+        userAgent: req.headers.get("user-agent") || undefined,
+        eventSourceUrl: `${origin}/registro`,
+        customData: { plan: plan || "gratis", gratis, via: "google" },
+      }).catch(() => {});
+    }
   }
 
   // Aplica referido/socio/plan-gratis si venían en la URL — no-op si no hay
