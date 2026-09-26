@@ -77,6 +77,40 @@ const SOCIO_CODIGO_RE = /^[A-Z0-9]{4,20}$/i;
 
 type PlanPago = "core" | "pro";
 
+// Checkbox de términos repetido dentro de CADA tarjeta (26 sept 2026, pedido
+// de Joel) — antes vivía una sola vez arriba de las 3 tarjetas y "casi no se
+// veía", así que nadie entendía por qué los botones quedaban apagados hasta
+// marcarlo. Con borde/fondo propio por tarjeta, es imposible no verlo.
+function TerminosCheckbox({
+  aceptaTerminos,
+  setAceptaTerminos,
+}: {
+  aceptaTerminos: boolean;
+  setAceptaTerminos: (v: boolean) => void;
+}) {
+  return (
+    <label className="mb-2 flex items-start gap-2 rounded-lg border border-border bg-bg px-2.5 py-2 text-left text-[0.7rem] leading-snug text-text">
+      <input
+        type="checkbox"
+        checked={aceptaTerminos}
+        onChange={(e) => setAceptaTerminos(e.target.checked)}
+        className="mt-0.5 h-4 w-4 shrink-0 accent-teal"
+      />
+      <span>
+        Acepto la{" "}
+        <Link href="/privacidad" target="_blank" className="font-medium text-teal underline">
+          Política de Privacidad
+        </Link>{" "}
+        y los{" "}
+        <Link href="/terminos" target="_blank" className="font-medium text-teal underline">
+          Términos de Servicio
+        </Link>
+        .
+      </span>
+    </label>
+  );
+}
+
 function RegistroForm() {
   const router = useRouter();
   const supabase = createClient();
@@ -332,27 +366,6 @@ function RegistroForm() {
         <div className={mostrarEmailForm ? "w-full max-w-md" : "w-full max-w-4xl"}>
           {!mostrarEmailForm ? (
             <>
-              <label className="mb-4 flex items-start justify-center gap-2 text-center text-xs text-muted">
-                <input
-                  type="checkbox"
-                  checked={aceptaTerminos}
-                  onChange={(e) => setAceptaTerminos(e.target.checked)}
-                  className="mt-0.5"
-                  required
-                />
-                <span>
-                  Acepto la{" "}
-                  <Link href="/privacidad" target="_blank" className="font-medium text-teal">
-                    Política de Privacidad
-                  </Link>{" "}
-                  y los{" "}
-                  <Link href="/terminos" target="_blank" className="font-medium text-teal">
-                    Términos de Servicio
-                  </Link>
-                  .
-                </span>
-              </label>
-
               {error && <p className="mb-3 text-center text-xs text-red">{error}</p>}
 
               {/* Toggle Mensual/Anual, aplica a las tarjetas de Core y Pro */}
@@ -389,9 +402,10 @@ function RegistroForm() {
                     <li className="text-muted">✕ Sin banco conectado</li>
                     <li className="text-muted">✕ Sin chat con VICTOR</li>
                   </ul>
+                  <TerminosCheckbox aceptaTerminos={aceptaTerminos} setAceptaTerminos={setAceptaTerminos} />
                   <button
                     type="button"
-                    className="vc-btn-secondary flex items-center justify-center gap-2"
+                    className="vc-btn-primary flex items-center justify-center gap-2"
                     disabled={loading || !!oauthEnCurso || !aceptaTerminos}
                     onClick={() => continuarConOAuth("google", true, "core")}
                   >
@@ -432,6 +446,7 @@ function RegistroForm() {
                     <li className="text-text">✓ Reportes listos para Hacienda</li>
                   </ul>
                   <p className="text-xs text-muted">{finePrint("core")}</p>
+                  <TerminosCheckbox aceptaTerminos={aceptaTerminos} setAceptaTerminos={setAceptaTerminos} />
                   <button
                     type="button"
                     className="vc-btn-primary flex items-center justify-center gap-2"
@@ -475,9 +490,10 @@ function RegistroForm() {
                     <li className="text-text">✓ Reportes multi-entidad</li>
                   </ul>
                   <p className="text-xs text-muted">{finePrint("pro")}</p>
+                  <TerminosCheckbox aceptaTerminos={aceptaTerminos} setAceptaTerminos={setAceptaTerminos} />
                   <button
                     type="button"
-                    className="vc-btn-secondary flex items-center justify-center gap-2"
+                    className="vc-btn-primary flex items-center justify-center gap-2"
                     disabled={loading || !!oauthEnCurso || !aceptaTerminos}
                     onClick={() => continuarConOAuth("google", false, "pro")}
                   >
