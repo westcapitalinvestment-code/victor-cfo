@@ -299,10 +299,14 @@
   scroll-margin-top: 120px;
 }
 .sociosBadge {
-  display: inline-block; font-family: 'Courier New', monospace; font-size: 0.7rem;
-  color: #B45309; letter-spacing: 0.04em; margin-bottom: 0.75rem;
+  /* 27 sept 2026 — Joel: "el nombre de Embajadores está muy pequeño en la
+     tarjeta". Subido de 0.7rem/normal a 1rem/700 y con más separador
+     visual (era el mismo tamaño que un sectionLabel normal, pero aquí es
+     la única etiqueta visible del bloque, así que necesitaba más peso). */
+  display: inline-block; font-family: 'Courier New', monospace; font-size: 1rem;
+  font-weight: 700; color: #B45309; letter-spacing: 0.04em; margin-bottom: 0.75rem;
 }
-.sociosBanner h3 { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.6rem; }
+.sociosBanner h3 { font-size: 1.7rem; font-weight: 700; margin-bottom: 0.6rem; }
 .sociosBanner p { color: var(--muted); font-size: 0.92rem; line-height: 1.6; max-width: 560px; margin: 0 auto 1.5rem; }
 .sociosBtn {
   display: inline-block; background: #D97706; color: #fff !important; text-decoration: none;
@@ -548,7 +552,14 @@
 .footerSub { font-size: 0.75rem; color: var(--muted); }
 
 @media(max-width:640px){
-  .navLinks { display: none; }
+  /* Bug real reportado por un visitante (27 sept 2026): "no veo ningun
+     registro" — en móvil esto escondía TODO .navLinks, incluyendo el
+     botón "Comienza Gratis" (.navCta) que enlaza a /registro. No había
+     ningún CTA visible en el header hasta bajar toda la página. Ahora
+     solo se esconden los links de navegación (Inicio/Cómo funciona/etc.)
+     y el botón de registro se queda siempre visible arriba a la derecha. */
+  .navLinks { gap: 0; }
+  .navLinks a:not(.navCta) { display: none; }
   .stats { grid-template-columns: 1fr 1fr; }
   .stat { border-bottom: 1px solid var(--border); }
 }

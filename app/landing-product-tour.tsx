@@ -14,11 +14,14 @@ import styles from "./landing.module.css";
 
 type TabId = "inicio" | "victor" | "facturacion" | "gastos";
 
+// El tab se llama "Transacciones" (no "Gastos") porque la lista mezcla
+// gastos e ingresos — mismo nombre que usa la app real desde el rename
+// Gastos→Transacciones (ver lib/victor/tools.ts y /dashboard/gastos).
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "inicio", label: "Inicio", icon: "🏠" },
   { id: "victor", label: "Chat con VICTOR", icon: "💬" },
   { id: "facturacion", label: "Facturación", icon: "🧾" },
-  { id: "gastos", label: "Gastos", icon: "💳" },
+  { id: "gastos", label: "Transacciones", icon: "💳" },
 ];
 
 export default function LandingProductTour() {
@@ -210,7 +213,7 @@ function TourGastos() {
   return (
     <div className={styles.tourScreen}>
       <div className={styles.tourScreenHead}>
-        <div className={styles.tourGreeting}>Gastos e ingresos</div>
+        <div className={styles.tourGreeting}>Transacciones</div>
         <div className={styles.tourSubtle}>Septiembre 2026</div>
       </div>
       <div className={styles.tourList}>

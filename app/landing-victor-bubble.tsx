@@ -19,7 +19,9 @@ const SALUDO_INICIAL: Msg = {
 };
 
 export default function LandingVictorBubble() {
-  const [abierto, setAbierto] = useState(false);
+  // Abierto por default (pedido de Joel, 27 sept 2026) — que el visitante
+  // vea el chat ya desplegado al entrar en vez de tener que buscarlo.
+  const [abierto, setAbierto] = useState(true);
   const [mensajes, setMensajes] = useState<Msg[]>([SALUDO_INICIAL]);
   const [texto, setTexto] = useState("");
   const [cargando, setCargando] = useState(false);
