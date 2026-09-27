@@ -302,6 +302,135 @@
 }
 .sociosBtn:hover { opacity: 0.85; }
 
+/* PRODUCT TOUR — sección interactiva "haz click y explora" (27 sept 2026,
+   pedido de Joel tras ver holded.com: le gustó cómo su landing te deja
+   navegar mockups reales del producto haciendo click). Pestañas +
+   "ventana de app" reusando el mismo lenguaje visual del .terminal del
+   hero (barra con 3 puntos, fondo oscuro), pero mostrando pantallas
+   reales de la app en vez de texto de terminal. */
+.tourWrap { max-width: 900px; margin: 0 auto; }
+.tourTabs {
+  display: flex; flex-wrap: wrap; gap: 0.6rem;
+  justify-content: center; margin-bottom: 1.5rem;
+}
+.tourTab {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  background: var(--card); border: 1px solid var(--border);
+  color: var(--muted); font-size: 0.85rem; font-weight: 500;
+  padding: 0.6rem 1.1rem; border-radius: 100px;
+  cursor: pointer; transition: all 0.2s;
+}
+.tourTab:hover { border-color: var(--teal); color: var(--white); }
+.tourTabActive {
+  background: var(--teal-dim); border-color: var(--teal);
+  color: var(--teal-mid);
+}
+.tourTabIcon { font-size: 0.95rem; }
+
+.tourFrame {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.45);
+}
+.tourFrameBar {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.65rem 1rem; background: #060d17;
+  border-bottom: 1px solid var(--border);
+}
+.tourFrameBody { padding: 1.75rem; min-height: 360px; }
+
+.tourScreen {
+  animation: tourFadeIn 0.35s ease;
+  display: flex; flex-direction: column; gap: 1rem;
+}
+@keyframes tourFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tourScreenHead { display: flex; align-items: center; justify-content: space-between; }
+.tourGreeting { font-size: 1.05rem; font-weight: 700; color: var(--white); }
+.tourSubtle { font-size: 0.78rem; color: var(--muted); }
+.tourPill {
+  font-size: 0.7rem; font-weight: 600; color: var(--teal-mid);
+  background: var(--teal-dim); border: 1px solid #0D9E7535;
+  padding: 0.3rem 0.75rem; border-radius: 100px;
+}
+.tourPillTeal {
+  font-size: 0.75rem; font-weight: 600; color: #fff;
+  background: var(--teal); padding: 0.45rem 0.9rem; border-radius: 7px;
+  cursor: pointer;
+}
+
+.tourBalanceCard {
+  background: #0A1220; border: 1px solid var(--border);
+  border-radius: 10px; padding: 1.25rem;
+}
+.tourBalanceNum { font-size: 1.9rem; font-weight: 700; color: var(--white); margin: 0.2rem 0 0.6rem; }
+.tourBalanceRow { display: flex; gap: 1.25rem; font-size: 0.78rem; }
+.tourUp { color: #22C55E; }
+.tourDown { color: var(--muted); }
+
+.tourAlert {
+  display: flex; gap: 0.7rem; align-items: flex-start;
+  background: #241a0a; border: 1px solid #7C4A0A;
+  border-radius: 10px; padding: 0.9rem 1.1rem;
+  font-size: 0.85rem; color: var(--white);
+}
+
+.tourMiniGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+.tourMiniCard {
+  background: #0A1220; border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.85rem 1rem;
+}
+.tourMiniNum { font-size: 1rem; font-weight: 700; color: var(--white); margin-top: 0.15rem; }
+
+.tourList { display: flex; flex-direction: column; gap: 0.5rem; }
+.tourListRow {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #0A1220; border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.8rem 1rem;
+}
+.tourListName { font-size: 0.9rem; font-weight: 600; color: var(--white); }
+.tourAmountWhite { font-size: 0.9rem; font-weight: 600; color: var(--white); }
+.tourAmountGreen { font-size: 0.9rem; font-weight: 600; color: #22C55E; }
+.tourBadgeGreen, .tourBadgeAmber, .tourBadgeRed {
+  font-size: 0.7rem; font-weight: 600; padding: 0.25rem 0.6rem; border-radius: 100px;
+}
+.tourBadgeGreen { background: #0D9E7522; color: #22C55E; }
+.tourBadgeAmber { background: #F59E0B22; color: #F59E0B; }
+.tourBadgeRed { background: #EF444422; color: #EF4444; }
+
+.tourChatMsg { display: flex; gap: 0.6rem; align-items: flex-start; }
+.tourChatMsgUser { justify-content: flex-end; }
+.tourChatVictor {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  background: var(--teal); color: #fff; font-family: 'Courier New', monospace;
+  font-size: 0.75rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.tourBubbleVictor {
+  background: #0A1220; border: 1px solid var(--border);
+  border-radius: 10px 10px 10px 2px; padding: 0.7rem 0.95rem;
+  font-size: 0.85rem; color: var(--white); line-height: 1.55; max-width: 420px;
+}
+.tourBubbleUser {
+  background: var(--teal-dim); border: 1px solid #0D9E7535;
+  border-radius: 10px 10px 2px 10px; padding: 0.7rem 0.95rem;
+  font-size: 0.85rem; color: var(--teal-mid); max-width: 300px;
+}
+.tourChatInputBar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #0A1220; border: 1px solid var(--border);
+  border-radius: 100px; padding: 0.7rem 1.1rem; margin-top: 0.3rem;
+}
+.tourChatSend { color: var(--teal-mid); font-size: 0.9rem; }
+
+@media(max-width:640px){
+  .tourFrameBody { padding: 1.1rem; }
+  .tourMiniGrid { grid-template-columns: 1fr; }
+}
+
 /* FOOTER */
 .footer {
   border-top: 1px solid var(--border); padding: 2rem 6%;
