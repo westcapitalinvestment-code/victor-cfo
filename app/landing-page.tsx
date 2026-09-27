@@ -2,6 +2,7 @@ import Link from "next/link";
 import styles from "./landing.module.css";
 import LandingPricing from "./landing-pricing";
 import LandingProductTour from "./landing-product-tour";
+import LandingVictorBubble from "./landing-victor-bubble";
 
 // Landing page público de VICTOR (victorcfo.com) — calcado de
 // "VICTOR — Tu CFO Virtual.html". Vive dentro de la misma app Next.js
@@ -426,6 +427,8 @@ export default function LandingPage() {
       <a href="#" className={styles.backTop} title="Inicio">
         ↑
       </a>
+
+      <LandingVictorBubble />
 
       <footer className={styles.footer}>
         <div className={styles.footerLogo}>VICTOR — Tu CFO Virtual</div>

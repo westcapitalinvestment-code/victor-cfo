@@ -66,7 +66,9 @@
 }
 
 .backTop {
-  position: fixed; bottom: 2rem; right: 2rem; z-index: 99;
+  /* corrido a la izquierda de la burbuja de VICTOR (bubbleFab vive en
+     right:2rem, z-index:200) para que no se encimen */
+  position: fixed; bottom: 2rem; right: 6rem; z-index: 99;
   background: var(--teal); color: #fff;
   width: 44px; height: 44px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -452,6 +454,88 @@
 @media(max-width:640px){
   .tourFrameBody { padding: 1.1rem; }
   .tourMiniGrid { grid-template-columns: 1fr; }
+}
+
+/* BURBUJA DE VICTOR — chat flotante estilo Intercom en el landing (27 sept
+   2026, pedido de Joel). Pública, sin login — pega a /api/victor-landing. */
+.bubbleFab {
+  position: fixed; bottom: 2rem; right: 2rem; z-index: 200;
+  width: 60px; height: 60px; border-radius: 50%;
+  background: var(--teal); border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 10px 30px rgba(13,158,117,0.4);
+  font-size: 1.3rem; color: #fff;
+  transition: transform 0.15s;
+}
+.bubbleFab:hover { transform: scale(1.05); }
+.bubbleFabImg { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; }
+
+.bubblePanel {
+  position: fixed; bottom: 6.5rem; right: 2rem; z-index: 200;
+  width: 340px; max-width: calc(100vw - 2.5rem);
+  height: 460px; max-height: calc(100vh - 9rem);
+  background: #fff; border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: 0 30px 60px rgba(15,23,42,0.25);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.bubblePanelHead {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.9rem 1rem; background: var(--teal);
+}
+.bubbleAvatarImg { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: #fff; }
+.bubblePanelTitle { font-size: 0.9rem; font-weight: 700; color: #fff; }
+.bubblePanelSub { font-size: 0.72rem; color: rgba(255,255,255,0.8); }
+.bubbleCloseBtn {
+  background: rgba(255,255,255,0.2); border: none; border-radius: 50%;
+  width: 26px; height: 26px; color: #fff; cursor: pointer; font-size: 0.8rem;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+
+.bubbleBody {
+  flex: 1; overflow-y: auto; padding: 1rem;
+  display: flex; flex-direction: column; gap: 0.6rem;
+  background: var(--card);
+}
+.bubbleMsgVictor {
+  align-self: flex-start; max-width: 85%;
+  background: #fff; border: 1px solid var(--border);
+  border-radius: 10px 10px 10px 2px; padding: 0.6rem 0.85rem;
+  font-size: 0.85rem; color: var(--white); line-height: 1.5;
+  white-space: pre-wrap;
+}
+.bubbleMsgUser {
+  align-self: flex-end; max-width: 85%;
+  background: var(--teal-dim); border: 1px solid #0D9E7535;
+  border-radius: 10px 10px 2px 10px; padding: 0.6rem 0.85rem;
+  font-size: 0.85rem; color: var(--teal-mid); line-height: 1.5;
+  white-space: pre-wrap;
+}
+.bubbleError {
+  align-self: center; font-size: 0.75rem; color: #B91C1C;
+  background: #FEE2E2; border-radius: 8px; padding: 0.5rem 0.75rem;
+}
+
+.bubbleInputBar {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.7rem; border-top: 1px solid var(--border); background: #fff;
+}
+.bubbleInput {
+  flex: 1; border: 1px solid var(--border); border-radius: 100px;
+  padding: 0.55rem 0.9rem; font-size: 0.85rem; outline: none;
+  background: var(--card); color: var(--white);
+}
+.bubbleInput:focus { border-color: var(--teal); }
+.bubbleSendBtn {
+  background: var(--teal); color: #fff; border: none; border-radius: 50%;
+  width: 34px; height: 34px; flex-shrink: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 0.85rem;
+}
+.bubbleSendBtn:disabled { opacity: 0.5; cursor: default; }
+
+@media(max-width:480px){
+  .bubblePanel { right: 1.25rem; bottom: 5.75rem; width: calc(100vw - 2.5rem); }
+  .bubbleFab { right: 1.25rem; bottom: 1.25rem; }
+  .backTop { display: none; } /* en móvil, la burbuja sola basta abajo a la derecha */
 }
 
 /* FOOTER */
