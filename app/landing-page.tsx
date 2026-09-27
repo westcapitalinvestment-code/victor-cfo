@@ -49,9 +49,12 @@ export default function LandingPage() {
         </p>
 
         <div className={styles.heroActions}>
-          <a href="#precios" className={styles.btnPrimary}>
+          {/* Antes iba a #precios — causaba confusión: el visitante daba
+              clic en "Comienza Gratis" y caía en la sección de precios en
+              vez de arrancar el registro (reporte de Joel, 27 sept 2026). */}
+          <Link href="/registro" className={styles.btnPrimary}>
             Comienza Gratis
-          </a>
+          </Link>
           <a href="#como-funciona" className={styles.btnGhost}>
             Ver cómo funciona →
           </a>
