@@ -8,14 +8,19 @@
    razón: :root es global y pisaría --card/--border/--muted de globals.css. */
 
 .root {
-  --dark:    #080F1A;
-  --card:    #0D1623;
+  /* 27 sept 2026 — Joel pidió pasar el landing a fondo blanco (más
+     visibilidad/confianza que el dark original). Como todo el CSS de
+     abajo consume estas variables en vez de colores fijos, basta con
+     voltear la paleta aquí: --dark ahora es el blanco de fondo,
+     --white ahora es el texto oscuro. El resto de las reglas no cambia. */
+  --dark:    #FFFFFF;
+  --card:    #F7F9FB;
   --teal:    #0D9E75;
-  --teal-mid:#5DCAA5;
-  --teal-dim:#0D9E7518;
-  --white:   #F0F6FF;
-  --muted:   #94A3B8;
-  --border:  #1A2740;
+  --teal-mid:#0B8A61;
+  --teal-dim:#0D9E7514;
+  --white:   #0B1220;
+  --muted:   #5B6B7C;
+  --border:  #E4E9EF;
 
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   background: var(--dark);
@@ -30,7 +35,8 @@
   position: sticky; top: 0; left: 0; right: 0; z-index: 100;
   display: flex; align-items: center; justify-content: space-between;
   padding: 1rem 6%;
-  background: rgba(8,15,26,0.98);
+  background: rgba(255,255,255,0.94);
+  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
 }
 .navLogo {
@@ -199,7 +205,7 @@
 .victorMessage { font-size: 1rem; color: var(--white); line-height: 1.8; max-width: 600px; }
 .victorMessage strong { color: var(--teal-mid); }
 .victorGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; margin-top:2rem; }
-.victorFeature { background:#0A1220; border:1px solid var(--border); border-radius:8px; padding:1rem; }
+.victorFeature { background:#F1F4F7; border:1px solid var(--border); border-radius:8px; padding:1rem; }
 .victorFeatureIcon { font-size:1.2rem; margin-bottom:0.5rem; }
 .victorFeatureTitle { font-size:0.9rem; font-weight:600; margin-bottom:0.3rem; }
 .victorFeatureDesc { font-size:0.82rem; color:var(--muted); line-height:1.5; }
@@ -292,7 +298,7 @@
 }
 .sociosBadge {
   display: inline-block; font-family: 'Courier New', monospace; font-size: 0.7rem;
-  color: #E8A33D; letter-spacing: 0.04em; margin-bottom: 0.75rem;
+  color: #B45309; letter-spacing: 0.04em; margin-bottom: 0.75rem;
 }
 .sociosBanner h3 { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.6rem; }
 .sociosBanner p { color: var(--muted); font-size: 0.92rem; line-height: 1.6; max-width: 560px; margin: 0 auto 1.5rem; }
@@ -303,11 +309,15 @@
 .sociosBtn:hover { opacity: 0.85; }
 
 /* PRODUCT TOUR — sección interactiva "haz click y explora" (27 sept 2026,
-   pedido de Joel tras ver holded.com: le gustó cómo su landing te deja
-   navegar mockups reales del producto haciendo click). Pestañas +
-   "ventana de app" reusando el mismo lenguaje visual del .terminal del
-   hero (barra con 3 puntos, fondo oscuro), pero mostrando pantallas
-   reales de la app en vez de texto de terminal. */
+   pedido de Joel tras ver holded.com). Reconstruida el mismo día a partir
+   del mockup real "victor_pro_master" (el HTML que Joel ya usa como
+   referencia de producto) en vez de un mockup genérico inventado: mismas
+   proporciones de tarjeta de balance, misma lista de facturas con badges
+   de estado, mismo chat de VICTOR — pero recoloreada a la paleta clara
+   del landing (antes era dark). Los datos son ficticios/genéricos, sin
+   nombres ni datos de Joel/VIP Medical/WCV. Avanza sola cada pocos
+   segundos como una demo (ver useEffect en el componente) y se pausa si
+   el usuario hace clic en una pestaña. */
 .tourWrap { max-width: 900px; margin: 0 auto; }
 .tourTabs {
   display: flex; flex-wrap: wrap; gap: 0.6rem;
@@ -328,16 +338,16 @@
 .tourTabIcon { font-size: 0.95rem; }
 
 .tourFrame {
-  background: var(--card); border: 1px solid var(--border);
+  background: #fff; border: 1px solid var(--border);
   border-radius: 12px; overflow: hidden;
-  box-shadow: 0 30px 60px rgba(0,0,0,0.45);
+  box-shadow: 0 30px 60px rgba(15,23,42,0.12);
 }
 .tourFrameBar {
   display: flex; align-items: center; gap: 0.4rem;
-  padding: 0.65rem 1rem; background: #060d17;
+  padding: 0.65rem 1rem; background: #F7F9FB;
   border-bottom: 1px solid var(--border);
 }
-.tourFrameBody { padding: 1.75rem; min-height: 360px; }
+.tourFrameBody { padding: 1.75rem; min-height: 380px; background: #fff; }
 
 .tourScreen {
   animation: tourFadeIn 0.35s ease;
@@ -362,44 +372,52 @@
   cursor: pointer;
 }
 
+/* tarjeta de balance teal sólido, igual que .bal del producto real */
 .tourBalanceCard {
-  background: #0A1220; border: 1px solid var(--border);
-  border-radius: 10px; padding: 1.25rem;
+  background: var(--teal); border-radius: 14px; padding: 1.15rem 1.25rem;
 }
-.tourBalanceNum { font-size: 1.9rem; font-weight: 700; color: var(--white); margin: 0.2rem 0 0.6rem; }
-.tourBalanceRow { display: flex; gap: 1.25rem; font-size: 0.78rem; }
-.tourUp { color: #22C55E; }
-.tourDown { color: var(--muted); }
+.tourBalanceLbl { font-size: 0.7rem; color: rgba(255,255,255,0.75); }
+.tourBalanceNum { font-size: 1.9rem; font-weight: 700; color: #fff; margin: 0.2rem 0 0.6rem; letter-spacing: -0.02em; }
+.tourBalanceRow { display: flex; justify-content: space-between; gap: 1.25rem; font-size: 0.75rem; }
+.tourUp { color: #9FE1CB; font-weight: 600; }
+.tourDown { color: rgba(255,255,255,0.7); }
 
 .tourAlert {
   display: flex; gap: 0.7rem; align-items: flex-start;
-  background: #241a0a; border: 1px solid #7C4A0A;
+  background: #FFFBEB; border: 1px solid #F3D488;
   border-radius: 10px; padding: 0.9rem 1.1rem;
   font-size: 0.85rem; color: var(--white);
 }
 
-.tourMiniGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+.tourMiniGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
 .tourMiniCard {
-  background: #0A1220; border: 1px solid var(--border);
-  border-radius: 8px; padding: 0.85rem 1rem;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.75rem 0.9rem;
 }
 .tourMiniNum { font-size: 1rem; font-weight: 700; color: var(--white); margin-top: 0.15rem; }
 
 .tourList { display: flex; flex-direction: column; gap: 0.5rem; }
 .tourListRow {
-  display: flex; align-items: center; justify-content: space-between;
-  background: #0A1220; border: 1px solid var(--border);
-  border-radius: 8px; padding: 0.8rem 1rem;
+  display: flex; align-items: center; gap: 0.7rem;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.7rem 0.9rem;
 }
-.tourListName { font-size: 0.9rem; font-weight: 600; color: var(--white); }
+.tourAvatar {
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 0.7rem; font-weight: 700;
+}
+.tourListInfo { flex: 1; min-width: 0; }
+.tourListName { font-size: 0.88rem; font-weight: 600; color: var(--white); }
+.tourListRight { text-align: right; flex-shrink: 0; }
 .tourAmountWhite { font-size: 0.9rem; font-weight: 600; color: var(--white); }
-.tourAmountGreen { font-size: 0.9rem; font-weight: 600; color: #22C55E; }
+.tourAmountGreen { font-size: 0.9rem; font-weight: 600; color: #15803D; }
 .tourBadgeGreen, .tourBadgeAmber, .tourBadgeRed {
-  font-size: 0.7rem; font-weight: 600; padding: 0.25rem 0.6rem; border-radius: 100px;
+  font-size: 0.68rem; font-weight: 600; padding: 0.2rem 0.55rem; border-radius: 100px; margin-top: 0.15rem; display: inline-block;
 }
-.tourBadgeGreen { background: #0D9E7522; color: #22C55E; }
-.tourBadgeAmber { background: #F59E0B22; color: #F59E0B; }
-.tourBadgeRed { background: #EF444422; color: #EF4444; }
+.tourBadgeGreen { background: #DCFCE7; color: #15803D; }
+.tourBadgeAmber { background: #FEF3C7; color: #92400E; }
+.tourBadgeRed { background: #FEE2E2; color: #B91C1C; }
 
 .tourChatMsg { display: flex; gap: 0.6rem; align-items: flex-start; }
 .tourChatMsgUser { justify-content: flex-end; }
@@ -410,7 +428,7 @@
   display: flex; align-items: center; justify-content: center;
 }
 .tourBubbleVictor {
-  background: #0A1220; border: 1px solid var(--border);
+  background: var(--card); border: 1px solid var(--border);
   border-radius: 10px 10px 10px 2px; padding: 0.7rem 0.95rem;
   font-size: 0.85rem; color: var(--white); line-height: 1.55; max-width: 420px;
 }
@@ -421,10 +439,15 @@
 }
 .tourChatInputBar {
   display: flex; align-items: center; justify-content: space-between;
-  background: #0A1220; border: 1px solid var(--border);
+  background: var(--card); border: 1px solid var(--border);
   border-radius: 100px; padding: 0.7rem 1.1rem; margin-top: 0.3rem;
 }
 .tourChatSend { color: var(--teal-mid); font-size: 0.9rem; }
+.tourChatQuick { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.tourChatQuickBtn {
+  background: var(--teal-dim); border: 1px solid #0D9E7535; color: var(--teal-mid);
+  font-size: 0.75rem; padding: 0.4rem 0.8rem; border-radius: 100px;
+}
 
 @media(max-width:640px){
   .tourFrameBody { padding: 1.1rem; }
