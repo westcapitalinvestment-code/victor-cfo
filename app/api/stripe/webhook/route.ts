@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { getStripe, esPlanValido, priceIdAddonTecnicos, todosLosPriceIdsDePlanes } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
-import { sendReferralCreditEmail, sendReferralCreditoPendienteEmail, sendWelcomeEmail } from "@/lib/email";
+import { sendReferralCreditEmail, sendReferralCreditoPendienteEmail, sendWelcomeEmail, sendCancellationWinbackEmail } from "@/lib/email";
 import { enviarEventoCAPI } from "@/lib/meta-capi";
 
 // Rollover de créditos de IA (migración 0064, 3 sept 2026, pedido de Joel:
@@ -338,6 +338,20 @@ export async function POST(req: NextRequest) {
         const userId = subscription.metadata?.supabase_user_id;
         if (!userId) break;
 
+        // Guardarraíl de idempotencia (27 sept 2026) — Stripe puede
+        // reintentar la entrega de este webhook (timeout, 5xx nuestro,
+        // etc.). Sin este check, un reintento generaría un SEGUNDO código
+        // promo y un SEGUNDO correo de "¿qué pasó?" para la misma
+        // cancelación. Si el usuario YA está 'cancelled', no repetimos
+        // nada de lo de abajo — solo dejamos que el resto del case corra
+        // por si acaso (no hay nada más después).
+        const { data: usuarioAntesDeCancelar } = await supabase
+          .from("users")
+          .select("email, full_name, plan, plan_status")
+          .eq("id", userId)
+          .maybeSingle();
+        const yaEstabaCancelado = usuarioAntesDeCancelar?.plan_status === "cancelled";
+
         // cancelled_at (migración 0028) es lo que usa el Dashboard de
         // Operaciones para calcular cancelaciones-del-mes y churn rate —
         // sin esta fecha solo se sabe el estado actual, no cuándo pasó.
@@ -364,6 +378,62 @@ export async function POST(req: NextRequest) {
             addon_tecnicos_item_id: null,
           })
           .eq("id", userId);
+
+        // Correo de "win-back" al cancelar (27 sept 2026, pedido de Joel:
+        // "que de manera automatica como el email de bienvenida se le
+        // envia uno si cancelan haciendo unas preguntas para saber la
+        // razon y ofrecerle alguna recompenza a ver si vuelve"). La
+        // recompensa es un código de promoción REAL de Stripe — no una
+        // promesa — creado aquí mismo: un coupon de 100% off "once" (un
+        // mes gratis del plan que tenía) más un promotion_code de un solo
+        // uso, restringido a este customer específico (nadie más lo puede
+        // usar) y válido 30 días. allow_promotion_codes ya está en true
+        // en /api/stripe/checkout, así que el código funciona tal cual en
+        // la pantalla de pago sin tocar nada más.
+        if (!yaEstabaCancelado && usuarioAntesDeCancelar?.email) {
+          const DIAS_VALIDEZ_PROMO = 30;
+          let promoCode: string | null = null;
+
+          try {
+            const stripe = getStripe();
+            const customerId =
+              typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+
+            const coupon = await stripe.coupons.create({
+              percent_off: 100,
+              duration: "once",
+              name: "Mes gratis — reactivación",
+            });
+
+            const codigoLegible = `VUELVE${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+            const promo = await stripe.promotionCodes.create({
+              promotion: { type: "coupon", coupon: coupon.id },
+              code: codigoLegible,
+              customer: customerId,
+              max_redemptions: 1,
+              expires_at: Math.floor(Date.now() / 1000) + DIAS_VALIDEZ_PROMO * 24 * 60 * 60,
+            });
+            promoCode = promo.code;
+          } catch (err) {
+            // Si Stripe falla creando el cupón, el correo igual sale sin
+            // código (sendCancellationWinbackEmail lo maneja) — no
+            // tumbamos el webhook por esto, la cancelación ya quedó
+            // registrada, que es lo que de verdad importa.
+            console.error("No se pudo crear el código promo de reactivación:", err);
+          }
+
+          try {
+            await sendCancellationWinbackEmail({
+              toEmail: usuarioAntesDeCancelar.email,
+              toName: usuarioAntesDeCancelar.full_name,
+              plan: (usuarioAntesDeCancelar.plan as "core" | "pro" | "proplus") ?? "core",
+              promoCode,
+              diasValidez: DIAS_VALIDEZ_PROMO,
+            });
+          } catch (err) {
+            console.error("No se pudo enviar el correo de cancelación/win-back:", err);
+          }
+        }
         break;
       }
 

@@ -1219,3 +1219,106 @@ export async function sendNurtureTrialOfertaEmail(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+// Correo automático al CANCELAR (27 sept 2026, pedido de Joel: "que de
+// manera automatica como el email de bienvenida se le envia uno si
+// cancelan haciendo unas preguntas para saber la razon y ofrecerle alguna
+// recompenza a ver si vuelve o contestar alguna duda o miedo que lo
+// motivo a cancelar"). Se dispara desde el webhook de Stripe
+// (customer.subscription.deleted) — mismo patrón que sendWelcomeEmail: si
+// falla el envío no tumba el webhook, la cancelación ya quedó registrada.
+//
+// Tres cosas en un solo correo:
+//   1. Pregunta la razón real (reply directo, sin formulario — replyTo va
+//      a soporte@victorcfo.com, que ya cae en soporte_conversaciones vía
+//      Resend Inbound, así que la respuesta la ve Joel o el agente).
+//   2. La recompensa es un código de promoción real de Stripe
+//      (promoCode), generado por el webhook al momento de cancelar,
+//      restringido a este customer, válido por diasValidez días — no una
+//      promesa vacía. Si por lo que sea no se pudo crear (ej. Stripe
+//      caído), promoCode viene null y esa sección simplemente no sale.
+//   3. Invita a resolver cualquier duda/miedo antes de irse del todo —
+//      mismo buzón de soporte, mismo flujo de siempre.
+export async function sendCancellationWinbackEmail(params: {
+  toEmail: string;
+  toName: string | null;
+  plan: "core" | "pro" | "proplus";
+  promoCode: string | null;
+  diasValidez: number;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName, plan, promoCode, diasValidez } = params;
+  const saludoNombre = toName || "";
+  const nombrePlan = plan === "pro" || plan === "proplus" ? "Pro" : "Core";
+  const reactivarUrl = `${SITE_URL}/login`;
+
+  const preguntasRazon = [
+    "¿Era muy caro para lo que usabas?",
+    "¿No te acostumbraste o se te olvidó usarlo?",
+    "¿Algo no funcionó como esperabas?",
+    "¿Encontraste otra opción?",
+  ];
+
+  const parrafoRecompensa = promoCode
+    ? `Si quieres darle otra oportunidad, tienes ${diasValidez} días para volver con un mes de ${nombrePlan} completamente gratis — usa el código ${promoCode} al reactivar tu cuenta.`
+    : `Si quieres darle otra oportunidad, escríbenos y vemos qué podemos hacer para que vuelvas.`;
+
+  const textoPlano =
+    (saludoNombre ? `Hola ${saludoNombre},\n\n` : `Hola,\n\n`) +
+    `Vimos que cancelaste tu cuenta de VICTOR CFO ${nombrePlan}. Antes que nada, gracias por haberlo probado.\n\n` +
+    `¿Nos cuentas qué pasó? Solo responde este correo, léelo una persona real de VICTOR CFO — no una encuesta:\n\n` +
+    preguntasRazon.map((p) => `- ${p}`).join("\n") +
+    `\n\n${parrafoRecompensa}\n\n` +
+    (promoCode ? `Entra aquí para reactivar:\n${reactivarUrl}\n\n` : "") +
+    `Y si hay alguna duda o algo que te preocupaba de la app, también respóndenos — con gusto te la resolvemos.\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = saludoNombre ? escapeHtml(saludoNombre) : "";
+
+  const preguntasHtml = preguntasRazon.map((p) => `<li style="margin-bottom: 6px;">${escapeHtml(p)}</li>`).join("");
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${htmlSeguro ? `Hola, <strong>${htmlSeguro}</strong>,` : `Hola,`}</p>
+  <p>Vimos que cancelaste tu cuenta de VICTOR CFO ${nombrePlan}. Antes que nada, gracias por haberlo probado.</p>
+  <p>¿Nos cuentas qué pasó? Solo responde este correo — lo lee una persona real de VICTOR CFO, no una encuesta:</p>
+  <ul style="font-size: 14px; color: #555; padding-left: 20px; margin: 12px 0 24px;">${preguntasHtml}</ul>
+  ${
+    promoCode
+      ? `<div style="background: #eefaf4; border-radius: 10px; padding: 16px 18px; margin-bottom: 24px;">
+    <p style="margin: 0 0 8px 0; font-weight: 600;">Si quieres darle otra oportunidad</p>
+    <p style="margin: 0; font-size: 14px; color: #14543d;">Tienes <strong>${diasValidez} días</strong> para volver con <strong>un mes de ${nombrePlan} completamente gratis</strong> — usa el código <strong style="font-family: monospace; background: #d9f2e6; padding: 2px 6px; border-radius: 4px;">${escapeHtml(promoCode)}</strong> al reactivar.</p>
+  </div>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${reactivarUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Reactivar mi cuenta</a>
+  </div>`
+      : `<p style="font-size: 14px;">Si quieres darle otra oportunidad, escríbenos y vemos qué podemos hacer para que vuelvas.</p>`
+  }
+  <p style="font-size: 14px;">Y si hay alguna duda o algo que te preocupaba de la app, también respóndenos — con gusto te la resolvemos.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      replyTo: "soporte@victorcfo.com",
+      subject: `${saludoNombre ? saludoNombre + ", " : ""}¿qué pasó? (y un mes gratis si quieres volver)`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
