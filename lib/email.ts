@@ -1332,3 +1332,52 @@ export async function sendCancellationWinbackEmail(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+// Correo manual de soporte, escrito y enviado por Joel desde el Dashboard
+// de Operaciones (27 sept 2026, pedido de Joel: el botón "Email" de
+// Cancelados recientes usaba un link mailto, que abre el cliente de
+// correo del navegador y sale con SU dirección personal, no
+// soporte@victorcfo.com — "no me gusta"). Esta función sí manda el correo
+// de verdad, desde el servidor, con remitente soporte@victorcfo.com fijo
+// (victorcfo.com ya está verificado en Resend), sin depender de qué
+// cliente de correo tenga configurado Joel en su computadora.
+const FROM_SOPORTE = "VICTOR CFO <soporte@victorcfo.com>";
+
+export async function sendMensajeSoporteManual(params: {
+  toEmail: string;
+  asunto: string;
+  mensaje: string;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, asunto, mensaje } = params;
+  const mensajeSeguro = escapeHtml(mensaje).replace(/\n/g, "<br/>");
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${mensajeSeguro}</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM_SOPORTE,
+      to: toEmail,
+      replyTo: "soporte@victorcfo.com",
+      subject: asunto,
+      text: mensaje,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
