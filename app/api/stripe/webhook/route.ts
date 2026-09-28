@@ -361,8 +361,22 @@ export async function POST(req: NextRequest) {
         // pregunta al usuario en su Cancellation Flow del portal — si no
         // usó ese flow (ej. lo cancelamos nosotros a mano desde Stripe)
         // este campo viene null, así que no siempre va a haber razón.
+        //
+        // FIX (28 sept 2026, bug real encontrado por Joel con la
+        // cancelación de Luis Vélez: Stripe mostraba "too_expensive" en su
+        // propio Dashboard pero no llegaba al nuestro) — Stripe tiene DOS
+        // campos distintos dentro de cancellation_details: `reason` es el
+        // TRIGGER técnico de la cancelación (cancellation_requested,
+        // payment_disputed, payment_failed — casi siempre
+        // cancellation_requested), y `feedback` es la categoría que el
+        // usuario de verdad escogió en el Cancellation Flow (too_expensive,
+        // unused, missing_features, etc. — exactamente las llaves de
+        // RAZON_CANCELACION_LABEL en dashboard/cfo/page.tsx). Estábamos
+        // leyendo `reason` en vez de `feedback`, así que este campo casi
+        // siempre venía "cancellation_requested" (que no está en el mapa de
+        // labels) o null — nunca la razón real que el usuario marcó.
         const cancelacion = (subscription as any).cancellation_details as
-          | { reason?: string | null; comment?: string | null }
+          | { reason?: string | null; feedback?: string | null; comment?: string | null }
           | null
           | undefined;
 
@@ -378,7 +392,7 @@ export async function POST(req: NextRequest) {
           .update({
             plan_status: "cancelled",
             cancelled_at: new Date().toISOString(),
-            cancellation_reason: cancelacion?.reason ?? null,
+            cancellation_reason: cancelacion?.feedback ?? null,
             cancellation_comment: cancelacion?.comment ?? null,
             ...(encuestaToken ? { cancellation_survey_token: encuestaToken } : {}),
             // Si se cancela la suscripción entera, el addon Equipo se va
