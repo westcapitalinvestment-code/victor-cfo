@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import Stripe from "stripe";
 import { getStripe, esPlanValido, priceIdAddonTecnicos, todosLosPriceIdsDePlanes } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -365,6 +366,13 @@ export async function POST(req: NextRequest) {
           | null
           | undefined;
 
+        // Token de un solo uso para /encuesta-cancelacion (27 sept 2026) —
+        // así el link del correo identifica al usuario sin exponer su id
+        // real ni pedirle que inicie sesión (la cuenta ya está cancelada).
+        // Se genera SIEMPRE que no estuviera ya cancelado, aunque luego el
+        // envío del correo falle — no hace daño tener el token guardado.
+        const encuestaToken = !yaEstabaCancelado ? randomUUID() : null;
+
         await supabase
           .from("users")
           .update({
@@ -372,6 +380,7 @@ export async function POST(req: NextRequest) {
             cancelled_at: new Date().toISOString(),
             cancellation_reason: cancelacion?.reason ?? null,
             cancellation_comment: cancelacion?.comment ?? null,
+            ...(encuestaToken ? { cancellation_survey_token: encuestaToken } : {}),
             // Si se cancela la suscripción entera, el addon Equipo se va
             // con ella — no queda un item huérfano cobrando por su cuenta.
             addon_tecnicos_status: "inactivo",
@@ -405,10 +414,19 @@ export async function POST(req: NextRequest) {
               name: "Mes gratis — reactivación",
             });
 
-            const codigoLegible = `VUELVE${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+            // Código legible fijo (27 sept 2026, pedido de Joel: "no me
+            // gusta el codigo vuelvexxxxx, mejor ponerle Trial30") — el
+            // SDK de Stripe permite reusar el mismo texto de código entre
+            // clientes distintos siempre que cada uno esté restringido a
+            // un customer específico (customer: customerId abajo), así
+            // que TRIAL30 funciona igual para todo el que cancele. Si por
+            // lo que sea ESTE customer ya tuviera un TRIAL30 activo sin
+            // vencer (ej. canceló, reactivó y volvió a cancelar en menos
+            // de 30 días), Stripe rechaza el duplicado y el catch de abajo
+            // deja promoCode en null — el correo sale igual, sin código.
             const promo = await stripe.promotionCodes.create({
               promotion: { type: "coupon", coupon: coupon.id },
-              code: codigoLegible,
+              code: "TRIAL30",
               customer: customerId,
               max_redemptions: 1,
               expires_at: Math.floor(Date.now() / 1000) + DIAS_VALIDEZ_PROMO * 24 * 60 * 60,
@@ -429,6 +447,7 @@ export async function POST(req: NextRequest) {
               plan: (usuarioAntesDeCancelar.plan as "core" | "pro" | "proplus") ?? "core",
               promoCode,
               diasValidez: DIAS_VALIDEZ_PROMO,
+              encuestaToken,
             });
           } catch (err) {
             console.error("No se pudo enviar el correo de cancelación/win-back:", err);

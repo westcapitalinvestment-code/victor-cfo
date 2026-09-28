@@ -1228,39 +1228,44 @@ export async function sendNurtureTrialOfertaEmail(params: {
 // (customer.subscription.deleted) — mismo patrón que sendWelcomeEmail: si
 // falla el envío no tumba el webhook, la cancelación ya quedó registrada.
 //
+// Ajustado el mismo día (feedback de Joel: "no comprendo la parte que
+// dice léelo una persona real... debe ser algo como que opciones que
+// pueda marcar y enviar y una caja de comentario") — la razón ya NO se
+// pide por reply de correo (confuso: sonaba a encuesta pero pedía texto
+// libre). Ahora el botón lleva a /encuesta-cancelacion, una página real
+// con checkboxes (mismas 8 razones que ya usa el Cancellation Flow de
+// Stripe / RAZON_CANCELACION_LABEL en el Dashboard de Operaciones) más
+// una caja de comentario libre. El reply-to a soporte@victorcfo.com se
+// mantiene aparte, para dudas o preocupaciones sueltas — no para la razón
+// formal de cancelación.
+//
 // Tres cosas en un solo correo:
-//   1. Pregunta la razón real (reply directo, sin formulario — replyTo va
-//      a soporte@victorcfo.com, que ya cae en soporte_conversaciones vía
-//      Resend Inbound, así que la respuesta la ve Joel o el agente).
+//   1. Botón a la encuesta real (checkboxes + comentario) vía
+//      encuestaToken de un solo uso — no expone el user id.
 //   2. La recompensa es un código de promoción real de Stripe
 //      (promoCode), generado por el webhook al momento de cancelar,
 //      restringido a este customer, válido por diasValidez días — no una
 //      promesa vacía. Si por lo que sea no se pudo crear (ej. Stripe
 //      caído), promoCode viene null y esa sección simplemente no sale.
 //   3. Invita a resolver cualquier duda/miedo antes de irse del todo —
-//      mismo buzón de soporte, mismo flujo de siempre.
+//      reply directo a soporte@victorcfo.com, mismo buzón de siempre.
 export async function sendCancellationWinbackEmail(params: {
   toEmail: string;
   toName: string | null;
   plan: "core" | "pro" | "proplus";
   promoCode: string | null;
   diasValidez: number;
+  encuestaToken: string | null;
 }): Promise<{ sent: boolean; reason?: string }> {
   if (!resend) {
     return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
   }
 
-  const { toEmail, toName, plan, promoCode, diasValidez } = params;
+  const { toEmail, toName, plan, promoCode, diasValidez, encuestaToken } = params;
   const saludoNombre = toName || "";
   const nombrePlan = plan === "pro" || plan === "proplus" ? "Pro" : "Core";
   const reactivarUrl = `${SITE_URL}/login`;
-
-  const preguntasRazon = [
-    "¿Era muy caro para lo que usabas?",
-    "¿No te acostumbraste o se te olvidó usarlo?",
-    "¿Algo no funcionó como esperabas?",
-    "¿Encontraste otra opción?",
-  ];
+  const encuestaUrl = encuestaToken ? `${SITE_URL}/encuesta-cancelacion?t=${encuestaToken}` : null;
 
   const parrafoRecompensa = promoCode
     ? `Si quieres darle otra oportunidad, tienes ${diasValidez} días para volver con un mes de ${nombrePlan} completamente gratis — usa el código ${promoCode} al reactivar tu cuenta.`
@@ -1269,17 +1274,16 @@ export async function sendCancellationWinbackEmail(params: {
   const textoPlano =
     (saludoNombre ? `Hola ${saludoNombre},\n\n` : `Hola,\n\n`) +
     `Vimos que cancelaste tu cuenta de VICTOR CFO ${nombrePlan}. Antes que nada, gracias por haberlo probado.\n\n` +
-    `¿Nos cuentas qué pasó? Solo responde este correo, léelo una persona real de VICTOR CFO — no una encuesta:\n\n` +
-    preguntasRazon.map((p) => `- ${p}`).join("\n") +
-    `\n\n${parrafoRecompensa}\n\n` +
+    (encuestaUrl
+      ? `¿Nos cuentas qué pasó? Es una pregunta de 30 segundos, marca lo que aplique:\n${encuestaUrl}\n\n`
+      : "") +
+    `${parrafoRecompensa}\n\n` +
     (promoCode ? `Entra aquí para reactivar:\n${reactivarUrl}\n\n` : "") +
-    `Y si hay alguna duda o algo que te preocupaba de la app, también respóndenos — con gusto te la resolvemos.\n\n` +
+    `Y si hay alguna duda o algo que te preocupaba de la app, responde este correo — con gusto te la resolvemos.\n\n` +
     `— VICTOR CFO\n` +
     `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
 
   const htmlSeguro = saludoNombre ? escapeHtml(saludoNombre) : "";
-
-  const preguntasHtml = preguntasRazon.map((p) => `<li style="margin-bottom: 6px;">${escapeHtml(p)}</li>`).join("");
 
   const htmlCorreo = `
 <div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
@@ -1289,8 +1293,14 @@ export async function sendCancellationWinbackEmail(params: {
   </div>
   <p>${htmlSeguro ? `Hola, <strong>${htmlSeguro}</strong>,` : `Hola,`}</p>
   <p>Vimos que cancelaste tu cuenta de VICTOR CFO ${nombrePlan}. Antes que nada, gracias por haberlo probado.</p>
-  <p>¿Nos cuentas qué pasó? Solo responde este correo — lo lee una persona real de VICTOR CFO, no una encuesta:</p>
-  <ul style="font-size: 14px; color: #555; padding-left: 20px; margin: 12px 0 24px;">${preguntasHtml}</ul>
+  ${
+    encuestaUrl
+      ? `<p>¿Nos cuentas qué pasó? Es una pregunta de 30 segundos, marca lo que aplique:</p>
+  <div style="text-align: center; margin: 20px 0 28px;">
+    <a href="${encuestaUrl}" style="background: #fff; color: #1D9E75; border: 2px solid #1D9E75; padding: 10px 26px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Contarles qué pasó</a>
+  </div>`
+      : ""
+  }
   ${
     promoCode
       ? `<div style="background: #eefaf4; border-radius: 10px; padding: 16px 18px; margin-bottom: 24px;">
@@ -1302,7 +1312,7 @@ export async function sendCancellationWinbackEmail(params: {
   </div>`
       : `<p style="font-size: 14px;">Si quieres darle otra oportunidad, escríbenos y vemos qué podemos hacer para que vuelvas.</p>`
   }
-  <p style="font-size: 14px;">Y si hay alguna duda o algo que te preocupaba de la app, también respóndenos — con gusto te la resolvemos.</p>
+  <p style="font-size: 14px;">Y si hay alguna duda o algo que te preocupaba de la app, responde este correo — con gusto te la resolvemos.</p>
   <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
   <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
 </div>`.trim();

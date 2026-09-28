@@ -418,7 +418,17 @@ export default async function CfoPage() {
                   <p className="truncate text-[11px] text-muted">{u.email}</p>
                   {(u.cancellation_reason || u.cancellation_comment) && (
                     <p className="mt-0.5 text-[11px] text-amb">
-                      {u.cancellation_reason ? RAZON_CANCELACION_LABEL[u.cancellation_reason] ?? u.cancellation_reason : null}
+                      {/* cancellation_reason puede traer varias razones separadas
+                          por coma (27 sept 2026) — cuando viene de nuestra propia
+                          /encuesta-cancelacion, que deja marcar más de una opción
+                          a la vez, a diferencia del Cancellation Flow nativo de
+                          Stripe que solo permite una. */}
+                      {u.cancellation_reason
+                        ? u.cancellation_reason
+                            .split(",")
+                            .map((r: string) => RAZON_CANCELACION_LABEL[r.trim()] ?? r.trim())
+                            .join(", ")
+                        : null}
                       {u.cancellation_reason && u.cancellation_comment ? " — " : null}
                       {u.cancellation_comment ? `"${u.cancellation_comment}"` : null}
                     </p>
