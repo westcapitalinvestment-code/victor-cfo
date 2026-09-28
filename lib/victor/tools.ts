@@ -739,6 +739,59 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    // 28 sept 2026, pedido de Joel ("esa parte no la puedo hacer yo desde
+    // el chat... eso es algo que Victor no puede hacer?"): antes VICTOR
+    // solo podía categorizar el depósito que llega al banco, pero no tenía
+    // forma de marcar la factura correspondiente como pagada — el usuario
+    // tenía que hacerlo a mano en Facturación. Mismo patrón de dos pasos
+    // que previsualizar_factura/crear_factura: primero busca y muestra,
+    // luego confirma.
+    name: "buscar_factura_pendiente",
+    description:
+      "Busca facturas SIN PAGAR (no incluye las ya marcadas pagada) por nombre de cliente y/o número de " +
+      "factura, para que el usuario confirme cuál es antes de marcarla pagada. SIEMPRE llama esta herramienta " +
+      "primero cuando el usuario pida marcar una factura como pagada — nunca llames marcar_factura_pagada sin " +
+      "haber buscado antes y sin que el usuario haya confirmado explícitamente cuál factura y cómo le llegó el " +
+      "pago.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cliente_nombre: { type: "string", description: "Nombre (o parte) del cliente de la factura." },
+        numero_factura: { type: "string", description: "Número (o parte) de la factura, si el usuario lo dio." },
+      },
+    },
+  },
+  {
+    name: "marcar_factura_pagada",
+    description:
+      "Marca de verdad una factura como pagada (mismo efecto que el botón 'Registrar pago' en Facturación) — " +
+      "guarda método y fecha de pago, y si algún servicio de la factura tiene seguimiento configurado, crea o " +
+      "actualiza ese seguimiento. IMPORTANTE: NUNCA llames esta herramienta directo — SIEMPRE llama primero " +
+      "buscar_factura_pendiente, muéstrale al usuario cuál factura encontraste (número, cliente, total), y " +
+      "espera su confirmación explícita del número de factura y del método de pago antes de llamar esta " +
+      "herramienta. Esta acción no se puede deshacer por chat — si el usuario se equivoca, debe corregirla a " +
+      "mano en Facturación.",
+    input_schema: {
+      type: "object",
+      properties: {
+        factura_numero: {
+          type: "string",
+          description: "Número EXACTO de la factura a marcar pagada, tal como lo confirmó el usuario o como salió en buscar_factura_pendiente.",
+        },
+        metodo_pago: {
+          type: "string",
+          enum: ["ATH Móvil", "ATH Móvil Business", "Transferencia", "Cheque", "Efectivo", "Tarjeta", "Otro"],
+          description: "Cómo llegó el pago. Si el usuario no lo menciona, pregúntale — no asumas.",
+        },
+        fecha_pago: {
+          type: "string",
+          description: "Fecha en que llegó el pago, formato YYYY-MM-DD. Si no se menciona, usa hoy.",
+        },
+      },
+      required: ["factura_numero", "metodo_pago"],
+    },
+  },
+  {
     name: "crear_categoria_personal",
     description:
       "Crea una categoría de gasto NUEVA, personal del usuario (no la ve nadie más, no toca el catálogo " +
@@ -3443,6 +3496,163 @@ export async function executeVictorTool(
           `Factura ${resultado.numeroPreview} creada como BORRADOR para ${resultado.cliente.name} — total ` +
           `$${resultado.total.toFixed(2)}. Queda en la pantalla de Facturación para que el usuario la revise y ` +
           `la envíe él mismo (WhatsApp/PDF) cuando quiera.`,
+      };
+    }
+
+    case "buscar_factura_pendiente": {
+      const nombreCliente = typeof input.cliente_nombre === "string" ? input.cliente_nombre.trim() : "";
+      const numeroFactura = typeof input.numero_factura === "string" ? input.numero_factura.trim() : "";
+      if (!nombreCliente && !numeroFactura) {
+        return { ok: false, message: "Falta el nombre del cliente o el número de factura para buscarla." };
+      }
+
+      let query = supabase
+        .from("invoices")
+        .select("id, numero, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
+        .eq("owner_id", ownerId)
+        .neq("estado", "pagada")
+        .order("fecha_emision", { ascending: false })
+        .limit(15);
+      if (numeroFactura) query = query.ilike("numero", `%${numeroFactura}%`);
+
+      const { data: facturas, error } = await query;
+      if (error) return { ok: false, message: `No se pudo buscar la factura: ${error.message}` };
+
+      let candidatas = facturas ?? [];
+      if (nombreCliente) {
+        const buscado = nombreCliente.toLowerCase();
+        candidatas = candidatas.filter((f) => ((f.clients as { name?: string } | null)?.name ?? "").toLowerCase().includes(buscado));
+      }
+
+      if (candidatas.length === 0) {
+        return {
+          ok: true,
+          message:
+            `No encontré ninguna factura sin pagar que coincida` +
+            `${nombreCliente ? ` con "${nombreCliente}"` : ""}${numeroFactura ? ` (número ${numeroFactura})` : ""}. ` +
+            `Puede que ya esté pagada, o el nombre/número no coincida exactamente — pregúntale al usuario.`,
+        };
+      }
+
+      const lista = candidatas
+        .slice(0, 8)
+        .map((f) => {
+          const nombreC = (f.clients as { name?: string } | null)?.name ?? "sin cliente";
+          return `Factura ${f.numero} — ${nombreC} — $${Number(f.total).toFixed(2)} — estado: ${f.estado}${f.fecha_vencimiento ? ` — vence ${f.fecha_vencimiento}` : ""}`;
+        })
+        .join("\n");
+
+      return {
+        ok: true,
+        message:
+          `Facturas sin pagar encontradas:\n${lista}\n\nMuéstraselas al usuario tal cual y pídele que confirme ` +
+          `el número exacto de la que quiere marcar pagada y cómo le llegó el pago (método), antes de llamar ` +
+          `marcar_factura_pagada. Nunca la marques pagada sin esa confirmación explícita.`,
+      };
+    }
+
+    case "marcar_factura_pagada": {
+      const numeroFactura = typeof input.factura_numero === "string" ? input.factura_numero.trim() : "";
+      if (!numeroFactura) return { ok: false, message: "Falta el número de factura a marcar como pagada." };
+
+      const metodoPago = typeof input.metodo_pago === "string" && input.metodo_pago.trim() ? input.metodo_pago.trim() : null;
+      if (!metodoPago) return { ok: false, message: "Falta el método de pago — pregúntaselo al usuario, no lo asumas." };
+      const fechaPago = typeof input.fecha_pago === "string" && input.fecha_pago.trim() ? input.fecha_pago.trim() : fechaHoyPR();
+
+      const { data: candidatas, error: buscarError } = await supabase
+        .from("invoices")
+        .select("id, numero, total, estado, entity_id, client_id, clients(name)")
+        .eq("owner_id", ownerId)
+        .neq("estado", "pagada")
+        .ilike("numero", `%${numeroFactura}%`);
+
+      if (buscarError) return { ok: false, message: `No se pudo buscar la factura: ${buscarError.message}` };
+      if (!candidatas || candidatas.length === 0) {
+        return {
+          ok: false,
+          message: `No encontré ninguna factura sin pagar con número "${numeroFactura}". Usa buscar_factura_pendiente primero para confirmar el número exacto.`,
+        };
+      }
+      if (candidatas.length > 1) {
+        return {
+          ok: false,
+          message: `Hay varias facturas sin pagar que coinciden con "${numeroFactura}" (${candidatas.map((f) => f.numero).join(", ")}). Pídele al usuario el número exacto.`,
+        };
+      }
+
+      const factura = candidatas[0];
+      const nombreCliente = (factura.clients as { name?: string } | null)?.name ?? "cliente";
+
+      const { error: updateError } = await supabase
+        .from("invoices")
+        .update({ estado: "pagada", metodo_pago: metodoPago, fecha_pago: fechaPago })
+        .eq("id", factura.id);
+
+      if (updateError) return { ok: false, message: `No se pudo marcar la factura como pagada: ${updateError.message}` };
+
+      // Mismo efecto secundario que el botón manual "Registrar pago" en
+      // Facturación (factura-detalle.tsx, crearSeguimientosSiAplica) — si
+      // alguna línea usa un servicio del catálogo con seguimiento
+      // configurado, crea/actualiza ese seguimiento. Nunca bloquea la
+      // respuesta si falla — el pago ya quedó registrado, que es lo que
+      // importa; el seguimiento es secundario.
+      try {
+        const { data: items } = await supabase.from("invoice_items").select("service_id").eq("invoice_id", factura.id);
+        const serviceIds = Array.from(new Set((items ?? []).map((it) => it.service_id).filter((id): id is string => !!id)));
+        if (serviceIds.length > 0) {
+          const { data: servicios } = await supabase
+            .from("services")
+            .select("id, intervalo_seguimiento_meses")
+            .in("id", serviceIds);
+          const conSeguimiento = (servicios ?? []).filter(
+            (s): s is { id: string; intervalo_seguimiento_meses: number } => !!s.intervalo_seguimiento_meses
+          );
+          for (const s of conSeguimiento) {
+            const fechaProximoD = new Date(`${fechaPago}T00:00:00Z`);
+            fechaProximoD.setUTCMonth(fechaProximoD.getUTCMonth() + s.intervalo_seguimiento_meses);
+            const fechaProximo = fechaProximoD.toISOString().slice(0, 10);
+
+            const { data: existente } = await supabase
+              .from("seguimientos_clientes")
+              .select("id")
+              .eq("client_id", factura.client_id)
+              .eq("service_id", s.id)
+              .in("estado", ["pendiente", "contactado", "agendado"])
+              .maybeSingle();
+
+            if (existente) {
+              await supabase
+                .from("seguimientos_clientes")
+                .update({
+                  fecha_servicio: fechaPago,
+                  fecha_proximo: fechaProximo,
+                  factura_origen_id: factura.id,
+                  estado: "pendiente",
+                  ultimo_recordatorio_enviado_en: null,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", existente.id);
+            } else {
+              await supabase.from("seguimientos_clientes").insert({
+                owner_id: ownerId,
+                entity_id: factura.entity_id,
+                client_id: factura.client_id,
+                service_id: s.id,
+                factura_origen_id: factura.id,
+                fecha_servicio: fechaPago,
+                fecha_proximo: fechaProximo,
+                estado: "pendiente",
+              });
+            }
+          }
+        }
+      } catch {
+        // Silencioso a propósito — ver comentario arriba.
+      }
+
+      return {
+        ok: true,
+        message: `Factura ${factura.numero} de ${nombreCliente} marcada como pagada vía ${metodoPago} el ${fechaPago}.`,
       };
     }
 
