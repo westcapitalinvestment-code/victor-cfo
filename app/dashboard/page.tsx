@@ -7,6 +7,7 @@ import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import GastosPendientesCard from "./gastos-pendientes-card";
 import ResumenCard from "./resumen-card";
 import ResumenReglasCard from "./resumen-reglas-card";
+import AlertasPatronCard, { type AlertaRegla } from "./alertas-patron-card";
 
 // Primer día del mes SIGUIENTE a "YYYY-MM" — mismo helper que en
 // /dashboard/gastos/page.tsx, copiado aquí para no crear una dependencia
@@ -381,10 +382,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const inicioMesAnteriorResumen = `${mesAnteriorStr}-01`;
   const finMesAnteriorResumen = inicioMesActualResumen;
 
+  // description_raw agregado a ambas queries (28 sept 2026) — antes solo
+  // traían amount/tipo_flujo/hacienda_category_id porque "Tu resumen del
+  // mes" no lo necesitaba; las alertas de patrón de abajo (comercio nuevo,
+  // cargo recurrente que subió) sí necesitan saber DE DÓNDE vino cada
+  // cargo, así que se reusan estas mismas dos queries en vez de abrir dos
+  // más.
   const [{ data: transaccionesMesActualResumen }, { data: transaccionesMesAnteriorResumen }] = await Promise.all([
     supabase
       .from("transactions")
-      .select("amount, tipo_flujo, hacienda_category_id")
+      .select("amount, tipo_flujo, hacienda_category_id, description_raw")
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .eq("es_duplicada", false)
@@ -392,7 +399,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       .lt("fecha", finMesActualResumen),
     supabase
       .from("transactions")
-      .select("amount, tipo_flujo")
+      .select("amount, tipo_flujo, description_raw")
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .eq("es_duplicada", false)
@@ -436,6 +443,186 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     gastoMesAnteriorResumen > 0
       ? Math.round(((gastoMesActualResumen - gastoMesAnteriorResumen) / gastoMesAnteriorResumen) * 100)
       : null;
+
+  // ==========================================================================
+  // ALERTAS INTELIGENTES (28 sept 2026, pedido de Joel: "alertas de patron y
+  // alertas de salud financiera", igual que "Tu resumen del mes" arriba —
+  // cero llamadas a VICTOR/Claude, puro SQL/JS. Ver AlertasPatronCard para
+  // cómo se presentan. Cinco reglas, cada una activa como máximo 1 alerta:
+  //
+  // PATRÓN (algo inusual en el gasto):
+  //  1. Categoría que subió fuerte vs. el promedio de los últimos 3 meses.
+  //  2. Comercio nuevo (nunca visto antes) con un cargo alto.
+  //  3. Cargo recurrente (mismo comercio, mismo mes vs. el anterior) que
+  //     subió de precio.
+  //
+  // SALUD FINANCIERA (el panorama general):
+  //  4. Déficit del mes — gastaste más de lo que entró.
+  //  5. Meta de ahorro estancada — más de 30 días sin moverse.
+  // ==========================================================================
+
+  const alertasReglas: AlertaRegla[] = [];
+
+  // --- 1. Categoría que subió vs. promedio de los últimos 3 meses ---------
+  // Ventana de 3 meses justo ANTES del mes actual (m-1, m-2, m-3) — reusa el
+  // helper mesAnterior() encadenado 3 veces en vez de abrir uno nuevo.
+  const mesM1 = mesAnteriorStr; // ya calculado arriba para el % simple
+  const mesM2 = mesAnterior(mesM1);
+  const mesM3 = mesAnterior(mesM2);
+  const inicio3MesesAtras = `${mesM3}-01`;
+
+  const { data: transacciones3MesesResumen } = await supabase
+    .from("transactions")
+    .select("amount, tipo_flujo, hacienda_category_id")
+    .eq("owner_id", user.id)
+    .is("entity_id", null)
+    .eq("es_duplicada", false)
+    .gte("fecha", inicio3MesesAtras)
+    .lt("fecha", inicioMesActualResumen);
+
+  const gastoPorCategoria3Meses = new Map<number, number>();
+  for (const t of transacciones3MesesResumen ?? []) {
+    if (t.tipo_flujo !== "gasto" || !t.hacienda_category_id) continue;
+    gastoPorCategoria3Meses.set(t.hacienda_category_id, (gastoPorCategoria3Meses.get(t.hacienda_category_id) ?? 0) + Number(t.amount));
+  }
+
+  let mejorSubidaCategoria: { nombre: string; actual: number; promedio: number; pct: number } | null = null;
+  for (const [catId, montoActual] of gastoPorCategoriaResumen) {
+    const totalPrevio = gastoPorCategoria3Meses.get(catId) ?? 0;
+    const promedio = totalPrevio / 3;
+    if (promedio <= 0) continue; // sin línea base real, no comparamos
+    const diferencia = montoActual - promedio;
+    if (diferencia < 20) continue; // subida mínima $20 para que valga la pena avisar
+    const pct = Math.round((diferencia / promedio) * 100);
+    if (pct < 30) continue; // subida mínima 30%
+    if (!mejorSubidaCategoria || pct > mejorSubidaCategoria.pct) {
+      mejorSubidaCategoria = { nombre: nombrePorCategoriaResumen.get(catId) ?? "Sin categorizar", actual: montoActual, promedio, pct };
+    }
+  }
+  if (mejorSubidaCategoria) {
+    alertasReglas.push({
+      tipo: "patron",
+      icono: "📈",
+      texto: `Gastaste ${mejorSubidaCategoria.pct}% más en ${mejorSubidaCategoria.nombre} que tu promedio de los últimos 3 meses (${formatMoney(mejorSubidaCategoria.promedio)} → ${formatMoney(mejorSubidaCategoria.actual)}).`,
+    });
+  }
+
+  // --- 2. Comercio nuevo con cargo alto ------------------------------------
+  // "Nuevo" = su description_raw nunca apareció ANTES del mes actual, en
+  // todo el historial. Se normaliza a mayúsculas/trim para no fallar por un
+  // espacio o mayúscula de más entre transacciones del mismo comercio.
+  const { data: descripcionesHistoricasRaw } = await supabase
+    .from("transactions")
+    .select("description_raw")
+    .eq("owner_id", user.id)
+    .is("entity_id", null)
+    .eq("es_duplicada", false)
+    .lt("fecha", inicioMesActualResumen)
+    .not("description_raw", "is", null)
+    .limit(3000);
+  const comerciosHistoricos = new Set(
+    (descripcionesHistoricasRaw ?? []).map((t) => (t.description_raw || "").trim().toUpperCase())
+  );
+
+  const UMBRAL_COMERCIO_NUEVO = 50;
+  let mejorComercioNuevo: { comercio: string; monto: number } | null = null;
+  for (const t of transaccionesMesActualResumen ?? []) {
+    if (t.tipo_flujo !== "gasto" || !t.description_raw) continue;
+    const monto = Number(t.amount);
+    if (monto < UMBRAL_COMERCIO_NUEVO) continue;
+    const normalizado = t.description_raw.trim().toUpperCase();
+    if (comerciosHistoricos.has(normalizado)) continue;
+    if (!mejorComercioNuevo || monto > mejorComercioNuevo.monto) {
+      mejorComercioNuevo = { comercio: t.description_raw.trim(), monto };
+    }
+  }
+  if (mejorComercioNuevo) {
+    alertasReglas.push({
+      tipo: "patron",
+      icono: "🆕",
+      texto: `Cargo nuevo de ${formatMoney(mejorComercioNuevo.monto)} en "${mejorComercioNuevo.comercio}" — primera vez que aparece en tu historial.`,
+    });
+  }
+
+  // --- 3. Cargo recurrente que subió de precio -----------------------------
+  // Mismo comercio (description_raw normalizado) presente en el mes actual
+  // Y en el mes anterior — si el total de este mes es notablemente más alto,
+  // avisa. No distingue "subió de precio" de "compraste más veces" — para
+  // este propósito (avisar que algo cambió con ese comercio) da igual.
+  const gastoPorComercioActual = new Map<string, { total: number; nombre: string }>();
+  for (const t of transaccionesMesActualResumen ?? []) {
+    if (t.tipo_flujo !== "gasto" || !t.description_raw) continue;
+    const key = t.description_raw.trim().toUpperCase();
+    const prev = gastoPorComercioActual.get(key);
+    gastoPorComercioActual.set(key, { total: (prev?.total ?? 0) + Number(t.amount), nombre: t.description_raw.trim() });
+  }
+  const gastoPorComercioAnterior = new Map<string, number>();
+  for (const t of transaccionesMesAnteriorResumen ?? []) {
+    if (t.tipo_flujo !== "gasto" || !t.description_raw) continue;
+    const key = t.description_raw.trim().toUpperCase();
+    gastoPorComercioAnterior.set(key, (gastoPorComercioAnterior.get(key) ?? 0) + Number(t.amount));
+  }
+
+  let mejorCargoSubio: { comercio: string; actual: number; anterior: number; pct: number } | null = null;
+  for (const [key, { total: actual, nombre }] of gastoPorComercioActual) {
+    const anterior = gastoPorComercioAnterior.get(key) ?? 0;
+    if (anterior <= 0) continue; // no es "recurrente" si no estaba el mes pasado
+    const diferencia = actual - anterior;
+    if (diferencia < 5) continue;
+    const pct = Math.round((diferencia / anterior) * 100);
+    if (pct < 15) continue;
+    if (!mejorCargoSubio || pct > mejorCargoSubio.pct) {
+      mejorCargoSubio = { comercio: nombre, actual, anterior, pct };
+    }
+  }
+  if (mejorCargoSubio) {
+    alertasReglas.push({
+      tipo: "patron",
+      icono: "💳",
+      texto: `"${mejorCargoSubio.comercio}" te salió más caro este mes: ${formatMoney(mejorCargoSubio.anterior)} → ${formatMoney(mejorCargoSubio.actual)} (+${mejorCargoSubio.pct}%) vs. el mes pasado.`,
+    });
+  }
+
+  // --- 4. Déficit del mes (salud financiera) -------------------------------
+  const ingresoMesActualResumen = (transaccionesMesActualResumen ?? []).reduce(
+    (sum, t) => sum + (t.tipo_flujo === "ingreso" ? Math.abs(Number(t.amount)) : 0),
+    0
+  );
+  if (ingresoMesActualResumen > 0 && gastoMesActualResumen > ingresoMesActualResumen) {
+    alertasReglas.push({
+      tipo: "salud",
+      icono: "⚠️",
+      texto: `Vas en déficit este mes: gastaste ${formatMoney(gastoMesActualResumen)} pero solo entraron ${formatMoney(ingresoMesActualResumen)} — ${formatMoney(gastoMesActualResumen - ingresoMesActualResumen)} de diferencia.`,
+    });
+  }
+
+  // --- 5. Meta de ahorro estancada (salud financiera) ----------------------
+  // La meta ACTIVA que lleva más tiempo sin moverse (updated_at más viejo) —
+  // si pasó el umbral de 30 días y todavía no está completa, avisa. Query
+  // aparte (no la de arriba, que trae solo las 3 más recientes por
+  // created_at) porque la meta estancada puede no ser una de esas 3.
+  const { data: metaMasEstancada } = await supabase
+    .from("goals")
+    .select("name, current_amount, target_amount, updated_at")
+    .eq("owner_id", user.id)
+    .is("entity_id", null)
+    .eq("status", "activa")
+    .order("updated_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const UMBRAL_DIAS_META_ESTANCADA = 30;
+  if (metaMasEstancada && Number(metaMasEstancada.current_amount) < Number(metaMasEstancada.target_amount)) {
+    const diasSinMover = Math.floor((hoy.getTime() - new Date(metaMasEstancada.updated_at).getTime()) / (1000 * 60 * 60 * 24));
+    if (diasSinMover >= UMBRAL_DIAS_META_ESTANCADA) {
+      const faltante = Number(metaMasEstancada.target_amount) - Number(metaMasEstancada.current_amount);
+      alertasReglas.push({
+        tipo: "salud",
+        icono: "🐌",
+        texto: `Tu meta "${metaMasEstancada.name}" no se actualiza hace ${diasSinMover} días — todavía le faltan ${formatMoney(faltante)} para completarse.`,
+      });
+    }
+  }
 
   // Resumen y proyección (5 sept 2026) — reemplaza el tab "Resumen" que se
   // quitó. Mismo cálculo exacto que tenía app/dashboard/resumen/page.tsx
@@ -604,6 +791,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         categoriaTop={categoriaTopResumen}
         pctVsMesAnterior={pctVsMesAnteriorResumen}
       />
+
+      {/* "Alertas inteligentes" (28 sept 2026) — patrón + salud financiera,
+          mismo espíritu sin-IA que la tarjeta de arriba. Ver el bloque
+          grande de cálculo junto a alertasReglas más arriba. */}
+      <AlertasPatronCard alertas={alertasReglas} />
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {/* METAS */}
