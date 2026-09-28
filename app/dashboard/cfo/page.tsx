@@ -6,6 +6,7 @@ import { saludoPorHora, fechaHoraLegiblePR, fechaHoyPR } from "@/lib/hora-pr";
 import { PRECIOS } from "@/lib/costo-ia";
 import { PLAN_LABEL } from "@/lib/plan-label";
 import Colapsable from "./colapsable";
+import EmailCanceladoBoton from "./email-cancelado-boton";
 import UsuariosPanel from "./usuarios-panel";
 import SociosPanel from "./socios-panel";
 
@@ -412,7 +413,7 @@ export default async function CfoPage() {
         <Colapsable titulo="Cancelados recientes (últimos 30 días)" contador={canceladosRecientes.length}>
           <div className="flex flex-col gap-2">
             {canceladosRecientes.map((u) => (
-              <div key={u.id} className="flex items-center justify-between gap-2 border-b border-border py-2 text-sm last:border-0">
+              <div key={u.id} className="border-b border-border py-2 text-sm last:border-0">
                 <div className="min-w-0">
                   <p className="truncate">{u.full_name || "Sin nombre"} <span className="text-[11px] text-muted">· {fmtFecha(u.cancelled_at)}</span></p>
                   <p className="truncate text-[11px] text-muted">{u.email}</p>
@@ -437,12 +438,7 @@ export default async function CfoPage() {
                     <p className="mt-0.5 text-[11px] text-muted">Sin razón capturada (canceló fuera del portal de Stripe).</p>
                   )}
                 </div>
-                <a
-                  href={`mailto:${u.email}?subject=${encodeURIComponent("¿Qué te hizo cancelar VICTOR CFO?")}`}
-                  className="shrink-0 rounded-pill border border-teal px-3 py-1.5 text-[11px] font-medium text-teal"
-                >
-                  Email
-                </a>
+                <EmailCanceladoBoton toEmail={u.email} toName={u.full_name} />
               </div>
             ))}
           </div>
