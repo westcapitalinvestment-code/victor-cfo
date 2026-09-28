@@ -283,14 +283,28 @@ export default function FacturacionPortal({
           )}
         </div>
         <div
-          className="flex"
-          style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 4, gap: 3 }}
+          // 28 sept 2026, pedido de Joel: con 6 pestañas en una sola fila
+          // ("Facturas Cotizaciones Clientes Servicios Seguimientos
+          // Reportes") la última se cortaba fuera de pantalla en el
+          // celular — "creo q es mejor poner 3 arriba y 3 abajo". Grid de 3
+          // columnas en vez de flex: con 6 pestañas visibles quedan 2 filas
+          // parejas; con 2 (modoAdmin: Facturas + Clientes) cabe todo en
+          // una sola fila sin dejar espacio raro.
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            padding: 4,
+            gap: 3,
+          }}
         >
           {tabsVisibles.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className="flex flex-1 flex-col items-center gap-0.5"
+              className="flex flex-col items-center gap-0.5"
               style={{
                 padding: "9px 4px",
                 fontSize: 11,
