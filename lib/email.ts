@@ -1381,3 +1381,68 @@ export async function sendMensajeSoporteManual(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+// Aviso de pago fallido (28 sept 2026) — caso real: Eduardo Rosario Amador
+// tomó el trial de 7 días de Pro, hizo el onboarding completo, y al
+// terminar el trial Stripe intentó cobrar de verdad y la tarjeta falló por
+// fondos insuficientes. El webhook (customer.subscription.updated) baja la
+// cuenta a plan_status='incomplete' correctamente, pero hasta ahora nadie
+// le avisaba — se quedaba fuera del dashboard sin saber por qué. Este
+// correo cierra ese hueco: portalUrl es una sesión de Stripe Billing Portal
+// ya generada (el usuario puede actualizar su tarjeta y reintentar el cobro
+// ahí mismo, sin tener que iniciar sesión en VICTOR CFO primero).
+export async function sendPaymentFailedEmail(params: {
+  toEmail: string;
+  toName: string | null;
+  portalUrl: string;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName, portalUrl } = params;
+  const saludoNombre = toName || "";
+
+  const textoPlano =
+    (saludoNombre ? `Hola ${saludoNombre},\n\n` : `Hola,\n\n`) +
+    `Intentamos cobrar tu suscripción de VICTOR CFO y el pago no pasó — normalmente es algo simple, como fondos insuficientes o una tarjeta vencida. Mientras esto no se resuelva, tu cuenta queda sin acceso al dashboard.\n\n` +
+    `Actualiza tu método de pago aquí (es la página segura de Stripe, no pedimos tu tarjeta por correo):\n\n` +
+    `${portalUrl}\n\n` +
+    `En cuanto el pago pase, tu cuenta se reactiva sola — no hace falta que hagas nada más.\n\n` +
+    `Cualquier duda, escríbenos a soporte@victorcfo.com.\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = saludoNombre ? escapeHtml(saludoNombre) : "";
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${htmlSeguro ? `Hola, <strong>${htmlSeguro}</strong>,` : `Hola,`}</p>
+  <p>Intentamos cobrar tu suscripción de VICTOR CFO y el pago no pasó — normalmente es algo simple, como fondos insuficientes o una tarjeta vencida. Mientras esto no se resuelva, tu cuenta queda sin acceso al dashboard.</p>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${portalUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Actualizar método de pago</a>
+  </div>
+  <p style="font-size: 14px;">Es la página segura de Stripe — no pedimos tu tarjeta por correo. En cuanto el pago pase, tu cuenta se reactiva sola, no hace falta que hagas nada más.</p>
+  <p style="font-size: 14px;">Cualquier duda, escríbenos a <a href="mailto:soporte@victorcfo.com" style="color: #1D9E75;">soporte@victorcfo.com</a>.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: "Tu pago no pasó — actualiza tu tarjeta",
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}

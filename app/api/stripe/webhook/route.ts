@@ -4,7 +4,7 @@ import Stripe from "stripe";
 import { getStripe, esPlanValido, priceIdAddonTecnicos, todosLosPriceIdsDePlanes } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
-import { sendReferralCreditEmail, sendReferralCreditoPendienteEmail, sendWelcomeEmail, sendCancellationWinbackEmail } from "@/lib/email";
+import { sendReferralCreditEmail, sendReferralCreditoPendienteEmail, sendWelcomeEmail, sendCancellationWinbackEmail, sendPaymentFailedEmail } from "@/lib/email";
 import { enviarEventoCAPI } from "@/lib/meta-capi";
 
 // Rollover de créditos de IA (migración 0064, 3 sept 2026, pedido de Joel:
@@ -294,11 +294,48 @@ export async function POST(req: NextRequest) {
         if (estado === "active" || estado === "trialing") plan_status = "active";
         else if (estado === "canceled") plan_status = "cancelled";
 
+        // Aviso de pago fallido (28 sept 2026, pedido de Joel: caso real de
+        // un usuario cuyo trial de 7 días terminó, el cobro real falló por
+        // fondos insuficientes, y se quedó fuera del dashboard sin saber
+        // por qué). Leemos el estado ANTES de pisar la fila, para detectar
+        // el momento exacto en que pasa de active→incomplete — no en cada
+        // evento con estado incomplete (Stripe reintenta el cobro varias
+        // veces y no queremos mandar el correo cada vez).
+        const { data: perfilPrevio } = await supabase
+          .from("users")
+          .select("plan_status, email, full_name, stripe_customer_id, payment_failed_notified_at")
+          .eq("id", userId)
+          .maybeSingle();
+
         const datosActualizar: Record<string, unknown> = {
           stripe_subscription_id: subscription.id,
           plan_status,
         };
         if (esPlanValido(plan)) datosActualizar.plan = plan;
+
+        const eraActivo = perfilPrevio?.plan_status === "active";
+        const yaAvisado = !!perfilPrevio?.payment_failed_notified_at;
+
+        if (plan_status === "incomplete" && eraActivo && !yaAvisado && perfilPrevio?.stripe_customer_id) {
+          try {
+            const portalSession = await getStripe().billingPortal.sessions.create({
+              customer: perfilPrevio.stripe_customer_id,
+              return_url: `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.victorcfo.com"}/dashboard/config`,
+            });
+            await sendPaymentFailedEmail({
+              toEmail: perfilPrevio.email as string,
+              toName: (perfilPrevio.full_name as string) ?? null,
+              portalUrl: portalSession.url,
+            });
+            datosActualizar.payment_failed_notified_at = new Date().toISOString();
+          } catch (err) {
+            console.error("[stripe-webhook] error enviando aviso de pago fallido:", err);
+          }
+        } else if (plan_status === "active" && yaAvisado) {
+          // Se recuperó el pago — limpiamos la marca para que un fallo
+          // FUTURO sí vuelva a avisar.
+          datosActualizar.payment_failed_notified_at = null;
+        }
 
         // Aquí SÍ tenemos el objeto completo de la suscripción en el propio
         // evento — no hace falta una llamada aparte. Esto es lo que

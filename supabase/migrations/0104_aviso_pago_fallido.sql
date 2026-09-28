@@ -1,0 +1,24 @@
+-- ============================================================================
+-- VICTOR CFO — 0104: aviso automático de pago fallido (28 sept 2026)
+-- ============================================================================
+-- Caso real: Eduardo Rosario Amador se registró el 21 sept, activó el
+-- trial de 7 días de Pro, hizo el onboarding completo (de ahí el gasto de
+-- IA que Joel vio en el Dashboard de Operaciones), y el 28 sept — al
+-- terminar el trial y Stripe intentar el primer cobro real ($49.99) — la
+-- tarjeta fue rechazada por fondos insuficientes. Stripe mandó
+-- customer.subscription.updated con estado "past_due"/"incomplete", y
+-- nuestro webhook (correctamente) bajó su cuenta a plan_status='incomplete',
+-- bloqueándolo del dashboard. El problema: NADIE le avisó — Eduardo no
+-- tiene forma de saber que falló su pago ni cómo arreglarlo. Joel: "estan
+-- cogiendo los 7 dias gratis y luego cancelan" — con este aviso, al menos
+-- los que de verdad quieren seguir (tarjeta con fondos insuficientes es a
+-- veces solo mal timing) tienen la oportunidad real de arreglarlo.
+--
+-- payment_failed_notified_at: evita mandar el correo más de una vez por
+-- cada episodio de fallo (Stripe reintenta el cobro varias veces en un
+-- par de semanas, cada intento fallido dispara otro subscription.updated).
+-- Se limpia a NULL en cuanto el pago se recupera (plan_status vuelve a
+-- 'active'), para que un fallo FUTURO sí vuelva a avisar.
+-- ============================================================================
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_failed_notified_at timestamptz;
