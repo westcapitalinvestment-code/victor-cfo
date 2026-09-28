@@ -46,6 +46,7 @@ export type EntidadCompleta = {
   logo_r2_key: string | null;
   brand_color: string | null;
   ath_movil_business_path: string | null;
+  ath_movil_public_token?: string | null;
   stripe_connect_account_id?: string | null;
   stripe_connect_charges_enabled?: boolean | null;
 };
@@ -143,6 +144,17 @@ export default function EntidadForm({
   // Móvil Business. Con este campo lleno, Nueva/Editar Factura puede
   // mostrar el estimado de cuánto le llega neto con el 2.25% que cobra BPPR.
   const [athMovilPath, setAthMovilPath] = useState(entidad?.ath_movil_business_path ?? "");
+  // Public Token de ATH Móvil Business (28 sept 2026, pedido de Joel: "un
+  // POS con QR... que quizás pueda ser ATH Móvil también") — a diferencia
+  // del pATH de arriba (que solo sirve para MOSTRAR cómo pagarle y estimar
+  // el fee), este token es lo que activa de verdad el Payment Button
+  // oficial de Evertec (athmovil_base.js) en la página pública /cobro/[id]
+  // — permite generar un cobro real con monto fijo que el cliente confirma
+  // desde su app de ATH Móvil, no solo un pATH que el cliente busca a mano.
+  // Se configura en la app de ATH Business → Ajustes → Configuración de
+  // Ecommerce. No es secreto (viaja al navegador del cliente), así que se
+  // guarda en texto plano igual que el pATH.
+  const [athPublicToken, setAthPublicToken] = useState(entidad?.ath_movil_public_token ?? "");
 
   // Certificado de relevo — la SUBIDA a R2 solo puede pasar con una entidad
   // que ya existe (necesita el id real para la key), igual que el logo. Pero
@@ -265,6 +277,7 @@ export default function EntidadForm({
       payment_methods: metodosCobro,
       invoice_footer: invoiceFooter || null,
       ath_movil_business_path: metodosCobro.includes("ATH Móvil") ? athMovilPath.trim() || null : null,
+      ath_movil_public_token: metodosCobro.includes("ATH Móvil") ? athPublicToken.trim() || null : null,
     };
   }
 
@@ -671,6 +684,22 @@ export default function EntidadForm({
                   configuras en la app de ATH Móvil Business, no aquí. Con esto lleno, Facturación te muestra cuánto te
                   llega neto (BPPR cobra 2.25% por pago, mínimo $0.06).
                 </p>
+                <div className="mt-3">
+                  <Field label="Public Token de ATH Móvil Business (opcional — para cobrar con QR)">
+                    <input
+                      className="vc-input"
+                      value={athPublicToken}
+                      onChange={(e) => setAthPublicToken(e.target.value)}
+                      placeholder="a66ce73d04f2087615f6320b724defc5b4eedc55"
+                    />
+                  </Field>
+                  <p className="mt-1 text-xs text-muted">
+                    Con esto lleno, tus facturas pueden generar un código QR que tu cliente escanea y paga de verdad
+                    por ATH Móvil (confirma en su app, sin tener que buscarte a mano por el pATH). Lo encuentras en
+                    la app de ATH Business → Ajustes → Configuración de Ecommerce. Sin este token, el QR solo ofrece
+                    pagar con tarjeta.
+                  </p>
+                </div>
               </div>
             )}
             {metodosCobro.includes("Stripe") && modo === "editar" && entidad?.id && (

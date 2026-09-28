@@ -476,6 +476,20 @@ function FacturasTab({
           <option value="vencidas">Vencidas</option>
           <option value="borradores">Borradores</option>
         </select>
+        {/* Cobro Rápido (28 sept 2026, pedido de Joel: "que ningún cliente
+            se vaya sin pagar porque la plataforma no soporte algo") — para
+            cobros en persona sin factura formal previa: monto, cliente
+            opcional, y directo al QR. No sale en modoAdmin — es un cobro de
+            campo del dueño/técnico, no una tarea administrativa de oficina. */}
+        {!modoAdmin && (
+          <Link
+            href="/dashboard/facturacion/cobro-rapido"
+            className="flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-border px-2.5 py-2.5 text-xs font-medium hover:opacity-80"
+            style={{ width: "auto" }}
+          >
+            ⚡ Cobro
+          </Link>
+        )}
         <Link
           href={`${basePath}/nueva`}
           className="flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-2.5 text-xs font-medium text-white hover:opacity-90"

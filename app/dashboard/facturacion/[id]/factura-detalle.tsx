@@ -1,10 +1,19 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import QRCode from "react-qr-code";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney, formatFecha } from "@/lib/format";
+
+// 28 sept 2026, pedido de Joel: "que ningún cliente se vaya sin pagar
+// porque la plataforma no soporte algo" — el QR apunta a /cobro/[id]
+// (página pública nueva), que le ofrece al cliente Tarjeta (con Apple
+// Pay/Google Pay automático via Stripe Checkout) Y ATH Móvil real, sin que
+// tenga que escoger cuál QR escanear — un solo código, el cliente decide
+// adentro.
+const SITE_URL = "https://www.victorcfo.com";
 
 type Item = {
   id: string;
@@ -169,6 +178,15 @@ export default function FacturaDetalle({
   // después.
   const [cobrando, setCobrando] = useState(false);
   const [linkCobro, setLinkCobro] = useState<string | null>(null);
+  const [mostrarQR, setMostrarQR] = useState(false);
+  // Cobro Rápido (28 sept 2026) redirige aquí con ?qr=1 justo después de
+  // crear la factura mínima, para que el QR ya esté abierto y el dueño no
+  // tenga que buscar el botón — el punto de Cobro Rápido es no perder
+  // tiempo con el cliente esperando al lado.
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams?.get("qr") === "1") setMostrarQR(true);
+  }, [searchParams]);
 
   const [enviandoEmail, setEnviandoEmail] = useState(false);
   // Confirmación visible de envío (21 sept 2026, pedido de Joel: le dio
@@ -817,6 +835,33 @@ export default function FacturaDetalle({
                 </div>
                 <button type="button" className="text-left text-muted underline" onClick={() => setLinkCobro(null)}>
                   Generar otro link
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {factura.estado !== "pagada" && (
+          // QR de cobro en persona (28 sept 2026, pedido de Joel: "que
+          // ningún cliente se vaya sin pagar porque la plataforma no
+          // soporte algo") — apunta a la página pública /cobro/[id], que le
+          // ofrece al cliente Tarjeta (Apple Pay/Google Pay incluidos, sin
+          // nada que configurar aparte) y ATH Móvil real si la entidad
+          // tiene su Public Token configurado. No depende de tener Stripe
+          // Connect activo — con solo el pATH/token de ATH Móvil ya sirve.
+          <div className="no-imprimir flex flex-col gap-2 border-t border-border pt-3">
+            {!mostrarQR ? (
+              <button className="vc-btn-secondary" onClick={() => setMostrarQR(true)}>
+                📱 Mostrar QR para cobrar
+              </button>
+            ) : (
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-border p-4">
+                <p className="text-xs text-muted">Que el cliente escanee y escoja cómo pagar</p>
+                <div style={{ background: "#fff", padding: 12, borderRadius: 8 }}>
+                  <QRCode value={`${SITE_URL}/cobro/${factura.id}`} size={160} />
+                </div>
+                <button type="button" className="text-xs text-muted underline" onClick={() => setMostrarQR(false)}>
+                  Ocultar
                 </button>
               </div>
             )}
