@@ -53,12 +53,20 @@ function fmtFecha(iso: string | null) {
     : "—";
 }
 
-// Umbral real de la Sección 1062.03 (retención de servicios) — $1,500/año a
-// un mismo socio. No se guarda SSN/EIN todavía (fuera de alcance de v1);
-// esto solo AVISA cuando un socio cruza el umbral en el año calendario, y
-// Joel resuelve la recolección de datos contributivos y la 480.6 por fuera
-// de la app en ese momento (ver migración 0070).
-const UMBRAL_1062_CENTAVOS = 150_000;
+// Dos umbrales reales de Hacienda PR sobre pagos por servicios a un mismo
+// socio en el año calendario (confirmado con Joel, 29 sept 2026) — no son
+// el mismo umbral, son dos cosas distintas:
+//   - $500: hay que DECLARARLO en el Modelo 480.6A, aunque no se le
+//     retenga nada (Joel nunca retiene aquí en v1 — el pago es efectivo
+//     real, no pasa por Stripe balance).
+//   - $1,500 (Sección 1062.03): el EXCESO sobre esto queda sujeto a
+//     retención en el origen, y ya no se reporta en 480.6A sino en 480.6B.
+// No se guarda SSN/EIN todavía (fuera de alcance de v1); esto solo AVISA
+// cuando un socio cruza cada umbral en el año calendario, y Joel resuelve
+// la recolección de datos contributivos y la 480.6 por fuera de la app en
+// ese momento (ver migración 0070/0071).
+const UMBRAL_DECLARAR_CENTAVOS = 50_000; // $500 — declarar en 480.6A
+const UMBRAL_RETENCION_CENTAVOS = 150_000; // $1,500 — Sección 1062.03, pasa a 480.6B
 
 export default function SociosPanel({
   socios: sociosIniciales,
@@ -220,7 +228,8 @@ export default function SociosPanel({
                     propias
                       .filter((c) => c.estado === "pendiente" && c.createdAt && new Date(c.createdAt) >= inicioAño)
                       .reduce((sum, c) => sum + c.comisionCentavos, 0);
-                  const cercaDelUmbral = acumuladoEsteAño >= UMBRAL_1062_CENTAVOS;
+                  const pasoRetencion = acumuladoEsteAño >= UMBRAL_RETENCION_CENTAVOS;
+                  const pasoDeclarar = !pasoRetencion && acumuladoEsteAño >= UMBRAL_DECLARAR_CENTAVOS;
                   const linkPago = s.paymentToken ? `${origin}/socios/pago/${s.paymentToken}` : null;
                   const revelado = datosRevelados[s.id];
 
@@ -281,10 +290,17 @@ export default function SociosPanel({
                         </div>
                       )}
 
-                      {cercaDelUmbral && (
+                      {pasoRetencion && (
                         <p className="mt-1.5 rounded-md bg-amb/10 px-2 py-1 text-[11px] text-amb">
-                          ⚠️ Lleva {fmt(acumuladoEsteAño)} este año — pasó el umbral de $1,500 de la Sección 1062.03.
-                          Pide datos contributivos antes de seguir pagando (fuera de la app).
+                          ⚠️ Lleva {fmt(acumuladoEsteAño)} este año — pasó los $1,500 de la Sección 1062.03. El
+                          exceso queda sujeto a retención y se declara en el Modelo 480.6B (ya no en 480.6A). Pide
+                          datos contributivos antes de seguir pagando (fuera de la app).
+                        </p>
+                      )}
+                      {pasoDeclarar && (
+                        <p className="mt-1.5 rounded-md bg-teal/5 px-2 py-1 text-[11px] text-muted">
+                          ℹ️ Lleva {fmt(acumuladoEsteAño)} este año — ya hay que declararlo en el Modelo 480.6A
+                          (a partir de $500/año), aunque no se le retenga nada.
                         </p>
                       )}
 

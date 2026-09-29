@@ -92,6 +92,37 @@ const TIPOS_RETENCION = [
   { value: "480.6A", label: "480.6A — exento de retención" },
 ] as const;
 
+// Dos umbrales reales de Hacienda PR sobre pagos por servicios a un mismo
+// contratista en el año calendario (29 sept 2026, pedido de Joel: "creame
+// la logica... para que el usuario sepa, eso le da valor") — mismo par de
+// umbrales que ya existían para el Programa de Socios (socios-panel.tsx),
+// ahora también visibles para el USUARIO de la app sobre SUS PROPIOS
+// contratistas:
+//   - $500/año: hay que declararlo en el Modelo 480.6A, aunque el
+//     contratista esté marcado como exento (retention_type='480.6A') y no
+//     se le retenga nada.
+//   - $1,500/año (Sección 1062.03): el EXCESO sobre esto queda sujeto a
+//     retención en el origen y pasa a reportarse en 480.6B — aunque el
+//     contratista esté marcado hoy como '480.6A' en su ficha. Esto solo
+//     AVISA; no cambia automáticamente retention_type ni el % que se
+//     retiene en la próxima corrida — eso lo decide el usuario a mano.
+// NOTA: gross_amount en vendor_retenciones está en dólares (no centavos,
+// a diferencia de socios_comisiones) — estos umbrales van en dólares.
+const UMBRAL_DECLARAR_DOLARES = 500;
+const UMBRAL_RETENCION_DOLARES = 1_500;
+
+// Suma de gross_amount por contratista en el año calendario dado — misma
+// fuente de verdad que Reportes (period_start/period_end de cada corrida).
+function acumuladoAnualPorVendor(retenciones: Retencion[], anio: number): Map<string, number> {
+  const mapa = new Map<string, number>();
+  for (const r of retenciones) {
+    const fecha = r.period_end ?? r.period_start ?? r.created_at;
+    if (!fecha || Number(fecha.slice(0, 4)) !== anio) continue;
+    mapa.set(r.vendor_id, (mapa.get(r.vendor_id) ?? 0) + Number(r.gross_amount));
+  }
+  return mapa;
+}
+
 // Portal de Pagos a contratistas (2 sept 2026, pedido de Joel). Alcance
 // acordado: el sistema calcula bruto/retención 480.6/neto por corrida de
 // pago — Joel toma esos números y los sube a mano al ACH de BPPR, como hace
@@ -201,7 +232,13 @@ export default function PagosPortal({
         />
       )}
       {tab === "contratistas" && (
-        <ContratistasTab vendors={vendors} entidadId={entidadId} retencionDefault={retencionDefault} ownerIdEfectivo={ownerIdEfectivo} />
+        <ContratistasTab
+          vendors={vendors}
+          retenciones={retenciones}
+          entidadId={entidadId}
+          retencionDefault={retencionDefault}
+          ownerIdEfectivo={ownerIdEfectivo}
+        />
       )}
       {tab === "reportes" && <ReportesTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} vistaGlobal={vistaGlobal} />}
     </div>
@@ -876,11 +913,13 @@ function PagosTab({
 // ============================================================================
 function ContratistasTab({
   vendors,
+  retenciones,
   entidadId,
   retencionDefault,
   ownerIdEfectivo,
 }: {
   vendors: Vendor[];
+  retenciones: Retencion[];
   entidadId: string | null;
   retencionDefault: number;
   ownerIdEfectivo?: string;
@@ -888,6 +927,7 @@ function ContratistasTab({
   const supabase = createClient();
   const router = useRouter();
   const [lista, setLista] = useState(vendors);
+  const acumuladoAnual = useMemo(() => acumuladoAnualPorVendor(retenciones, new Date().getFullYear()), [retenciones]);
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("activos");
   const [formAbierto, setFormAbierto] = useState<"nuevo" | string | null>(null);
@@ -1092,39 +1132,59 @@ function ContratistasTab({
         )}
         {lista.length > 0 && filtrados.length === 0 && <p className="text-xs text-muted">No hay contratistas que coincidan.</p>}
 
-        {filtrados.map((v) => (
-          <div key={v.id} className="border-b border-border py-2.5 text-sm last:border-0">
-            <div className="flex items-center gap-2.5">
-              <div
-                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-                style={{ background: colorAvatar(v.id) }}
-              >
-                {iniciales(v.name)}
-              </div>
-              <button className="min-w-0 flex-1 text-left" onClick={() => abrirEditar(v)}>
-                <p className="truncate">
-                  {v.name} {!v.active && <span className="text-xs text-muted">(archivado)</span>}
-                </p>
-                <p className="truncate text-xs text-muted">
-                  {v.retention_type === "480.6A" ? "480.6A · exento" : `480.6B · ${Number(v.default_retention_pct)}%`}
-                  {v.tax_id ? ` · ${v.tax_id}` : ""}
-                </p>
-              </button>
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <button onClick={() => abrirEditar(v)} className="text-muted hover:text-teal">
-                  <i className="ti ti-edit" style={{ fontSize: 15 }} />
-                </button>
-                <button
-                  onClick={() => toggleActivo(v)}
-                  className="text-xs font-medium text-muted hover:text-teal"
-                  title={v.active ? "Archivar" : "Reactivar"}
+        {filtrados.map((v) => {
+          const acumulado = acumuladoAnual.get(v.id) ?? 0;
+          const pasoRetencion = acumulado >= UMBRAL_RETENCION_DOLARES;
+          const pasoDeclarar = !pasoRetencion && acumulado >= UMBRAL_DECLARAR_DOLARES;
+          return (
+            <div key={v.id} className="border-b border-border py-2.5 text-sm last:border-0">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
+                  style={{ background: colorAvatar(v.id) }}
                 >
-                  <i className={`ti ${v.active ? "ti-archive" : "ti-refresh"}`} style={{ fontSize: 15 }} />
+                  {iniciales(v.name)}
+                </div>
+                <button className="min-w-0 flex-1 text-left" onClick={() => abrirEditar(v)}>
+                  <p className="truncate">
+                    {v.name} {!v.active && <span className="text-xs text-muted">(archivado)</span>}
+                  </p>
+                  <p className="truncate text-xs text-muted">
+                    {v.retention_type === "480.6A" ? "480.6A · exento" : `480.6B · ${Number(v.default_retention_pct)}%`}
+                    {v.tax_id ? ` · ${v.tax_id}` : ""}
+                  </p>
                 </button>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <button onClick={() => abrirEditar(v)} className="text-muted hover:text-teal">
+                    <i className="ti ti-edit" style={{ fontSize: 15 }} />
+                  </button>
+                  <button
+                    onClick={() => toggleActivo(v)}
+                    className="text-xs font-medium text-muted hover:text-teal"
+                    title={v.active ? "Archivar" : "Reactivar"}
+                  >
+                    <i className={`ti ${v.active ? "ti-archive" : "ti-refresh"}`} style={{ fontSize: 15 }} />
+                  </button>
+                </div>
               </div>
+              {/* Umbrales de Hacienda PR (29 sept 2026, pedido de Joel: "que
+                  el sistema lo calcule y me avise... eso le da valor") —
+                  aviso informativo, no cambia retention_type ni el % a mano. */}
+              {pasoRetencion && (
+                <p className="ml-11 mt-1 rounded-md bg-amb/10 px-2 py-1 text-[11px] text-amb">
+                  ⚠️ Le llevas pagado {formatMoney(acumulado)} este año — pasó los $1,500 de la Sección 1062.03. El
+                  exceso queda sujeto a retención y se declara en el Modelo 480.6B, no en 480.6A.
+                </p>
+              )}
+              {pasoDeclarar && (
+                <p className="ml-11 mt-1 rounded-md bg-teal/5 px-2 py-1 text-[11px] text-muted">
+                  ℹ️ Le llevas pagado {formatMoney(acumulado)} este año — a partir de $500 hay que declararlo en el
+                  Modelo 480.6A, aunque no le retengas nada.
+                </p>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );
