@@ -1466,14 +1466,21 @@ export async function sendSocioAprobadoEmail(params: {
   toEmail: string;
   toName: string | null;
   codigo: string;
+  // PIN del portal del vendedor (migración 0107, 29 sept 2026) — solo
+  // viene presente cuando el socio es tipo='vendedor' Y este correo se
+  // dispara justo cuando se le generó el PIN por primera vez (ver
+  // app/api/socios/[id]/route.ts). Un embajador (cpa/influencer/otro)
+  // nunca lo recibe porque nunca tiene portal.
+  pin?: string | null;
 }): Promise<{ sent: boolean; reason?: string }> {
   if (!resend) {
     return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
   }
 
-  const { toEmail, toName, codigo } = params;
+  const { toEmail, toName, codigo, pin } = params;
   const saludoNombre = toName || "";
   const link = `${SITE_URL}/registro?socio=${codigo}`;
+  const linkPortal = `${SITE_URL}/socios/portal`;
 
   let qrBase64: string | null = null;
   try {
@@ -1493,6 +1500,12 @@ export async function sendSocioAprobadoEmail(params: {
     `${link}\n\n` +
     `Te adjuntamos también tu código QR (mismo link) — guárdalo en el celular o imprímelo para ` +
     `enseñárselo en persona a un negocio que quiera registrarse ahí mismo.\n\n` +
+    (pin
+      ? `Tu portal de vendedor — ahí ves tus clientes, tu comisión cobrada y pendiente:\n` +
+        `${linkPortal}\n` +
+        `Código: ${codigo}\n` +
+        `PIN: ${pin}\n\n`
+      : "") +
     `Cualquier duda, contáctanos directamente.\n\n` +
     `— VICTOR CFO\n` +
     `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
@@ -1519,6 +1532,18 @@ export async function sendSocioAprobadoEmail(params: {
   ${
     qrBase64
       ? `<p style="font-size: 13px; text-align: center; color: #666;">Te adjuntamos tu código QR (mismo link) — guárdalo o imprímelo para enseñárselo en persona a un negocio que quiera registrarse ahí mismo.</p>`
+      : ""
+  }
+  ${
+    pin
+      ? `<div style="text-align: center; margin: 24px 0;">
+    <p style="font-size: 13px; margin-bottom: 8px;">Tu portal de vendedor — ahí ves tus clientes y tu comisión:</p>
+    <a href="${linkPortal}" style="color: #1D9E75; font-size: 14px;">${linkPortal}</a>
+    <div style="display: inline-block; margin-top: 10px; background: #eefaf4; border: 1px solid #1D9E75; border-radius: 12px; padding: 10px 20px;">
+      <div style="font-size: 12px; color: #14543d;">PIN</div>
+      <div style="font-size: 20px; font-weight: 700; color: #14543d; font-family: monospace;">${escapeHtml(pin)}</div>
+    </div>
+  </div>`
       : ""
   }
   <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />

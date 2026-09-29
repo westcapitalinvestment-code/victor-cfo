@@ -36,6 +36,21 @@ export type ComisionFila = {
   createdAt: string | null;
 };
 
+// Estado por cliente de un vendedor (modelo 70/30, migración 0107, 29 sept
+// 2026) — el founder lo usa para el desglose por vendedor: cuántos
+// clientes, en qué estado, y cuánto ingreso mensual bruto le generan a
+// WCV (setentaCentavos+treintaCentavos = el monto base mensual equivalente
+// del plan de ese cliente) para comparar contra la comisión pagada.
+export type VendedorClienteFila = {
+  id: string;
+  socioId: string;
+  ciclo: "mensual" | "anual";
+  primerPagoAt: string | null;
+  setentaCentavos: number;
+  treintaCentavos: number;
+  treintaEstado: "pendiente" | "liberada" | "perdida";
+};
+
 const TIPO_LABEL: Record<string, string> = {
   cpa: "CPA/Contador",
   influencer: "Influencer",
@@ -71,9 +86,11 @@ const UMBRAL_RETENCION_CENTAVOS = 150_000; // $1,500 — Sección 1062.03, pasa 
 export default function SociosPanel({
   socios: sociosIniciales,
   comisiones: comisionesIniciales,
+  vendedorClientes = [],
 }: {
   socios: SocioFila[];
   comisiones: ComisionFila[];
+  vendedorClientes?: VendedorClienteFila[];
 }) {
   const [abierto, setAbierto] = useState(false);
   const [socios, setSocios] = useState(sociosIniciales);
@@ -98,6 +115,16 @@ export default function SociosPanel({
     }
     return mapa;
   }, [comisiones]);
+
+  const vendedorClientesPorSocio = useMemo(() => {
+    const mapa = new Map<string, VendedorClienteFila[]>();
+    for (const v of vendedorClientes) {
+      const lista = mapa.get(v.socioId) ?? [];
+      lista.push(v);
+      mapa.set(v.socioId, lista);
+    }
+    return mapa;
+  }, [vendedorClientes]);
 
   async function actualizarSocio(id: string, estado: "aprobado" | "suspendido") {
     setCargando(id);
@@ -303,6 +330,46 @@ export default function SociosPanel({
                           (a partir de $500/año), aunque no se le retenga nada.
                         </p>
                       )}
+
+                      {/* Desglose por vendedor (modelo 70/30, migración 0107, 29 sept
+                          2026) — SOLO el founder ve esto: cuántos clientes trajo, en qué
+                          estado está cada uno, y el ingreso mensual bruto que le generan a
+                          WCV vs. la comisión pagada/pendiente. El vendedor mismo nunca ve
+                          este desglose ni el ingreso de WCV — su portal (/socios/portal)
+                          solo muestra su propia comisión. */}
+                      {s.tipo === "vendedor" && (() => {
+                        const clientesDeEsteVendedor = vendedorClientesPorSocio.get(s.id) ?? [];
+                        if (clientesDeEsteVendedor.length === 0) return null;
+                        const ingresoMensualBruto = clientesDeEsteVendedor.reduce(
+                          (sum, v) => sum + v.setentaCentavos + v.treintaCentavos,
+                          0
+                        );
+                        const enGeneracion = clientesDeEsteVendedor.filter((v) => v.treintaEstado === "pendiente").length;
+                        const cerradosCobrados = clientesDeEsteVendedor.filter((v) => v.treintaEstado === "liberada").length;
+                        const perdidos = clientesDeEsteVendedor.filter((v) => v.treintaEstado === "perdida").length;
+                        return (
+                          <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2 text-[11px]">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium uppercase tracking-wide text-muted">Desglose de vendedor</span>
+                              <a
+                                href={`/api/socios/${s.id}/reporte-vendedor/excel`}
+                                className="rounded-pill border border-border px-2 py-0.5 font-medium text-muted"
+                              >
+                                Descargar Excel
+                              </a>
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted">
+                              <span>{clientesDeEsteVendedor.length} clientes traídos</span>
+                              <span>{enGeneracion} generando comisión</span>
+                              <span>{cerradosCobrados} ciclo completo</span>
+                              {perdidos > 0 && <span>{perdidos} perdidos</span>}
+                            </div>
+                            <p>
+                              Ingreso mensual bruto para WCV: <span className="font-medium text-white">{fmt(ingresoMensualBruto)}</span>
+                            </p>
+                          </div>
+                        );
+                      })()}
 
                       {pendiente.length > 0 && (
                         <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">

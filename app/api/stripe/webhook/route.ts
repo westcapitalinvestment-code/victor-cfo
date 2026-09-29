@@ -439,40 +439,24 @@ export async function POST(req: NextRequest) {
           })
           .eq("id", userId);
 
-        // Clawback de vendedores (equipo de ventas por comisión pura,
-        // migración 0106, 29 sept 2026) — si este cliente cancela dentro de
-        // sus primeros 30 días Y llegó por un vendedor (no un embajador,
-        // que nunca tuvo esta regla), la comisión de entrada se revierte en
-        // vez de pagarse. Protege contra registrar clientes que cancelan
-        // casi de inmediato solo para farmear el bono de entrada. Si la
-        // comisión YA estaba 'pagada' (Joel ya transfirió), no se toca —
-        // no hay forma de deshacer dinero que ya salió; queda para que Joel
-        // lo descuente a mano si aplica.
+        // Modelo 70/30 de vendedores (migración 0107, 29 sept 2026,
+        // reemplaza el clawback de $50 de entrada de la 0106) — si este
+        // cliente cancela con su 30% todavía 'pendiente' (no llegó a su 3er
+        // pago mensual, o no llegaron los 3 meses calendario del caso
+        // anual), ese 30% simplemente nunca se paga: no hay nada que
+        // revertir porque nunca se pagó (a diferencia del bono de entrada
+        // viejo, que si acababa de pagarse SÍ había que revertir). Solo se
+        // marca 'perdida' para que el reporte del founder y el portal del
+        // vendedor dejen de mostrarlo como pendiente para siempre — el
+        // caso anual con pago ya facturado pero cancelado ANTES de los 3
+        // meses también cae aquí; el cron de liberación anual nunca lo va
+        // a tocar porque ya no sigue 'pendiente'.
         if (usuarioAntesDeCancelar?.referido_por_socio_id) {
-          const { data: socioReferidor } = await supabase
-            .from("socios")
-            .select("tipo")
-            .eq("id", usuarioAntesDeCancelar.referido_por_socio_id)
-            .maybeSingle();
-
-          if (socioReferidor?.tipo === "vendedor") {
-            const { data: comisionEntrada } = await supabase
-              .from("socios_comisiones")
-              .select("id, estado, created_at")
-              .eq("referred_id", userId)
-              .eq("tipo_comision", "entrada")
-              .maybeSingle();
-
-            const DIAS_CLAWBACK_VENDEDOR = 30;
-            if (
-              comisionEntrada &&
-              comisionEntrada.estado === "pendiente" &&
-              Date.now() - new Date(comisionEntrada.created_at).getTime() <
-                DIAS_CLAWBACK_VENDEDOR * 24 * 60 * 60 * 1000
-            ) {
-              await supabase.from("socios_comisiones").update({ estado: "reversada" }).eq("id", comisionEntrada.id);
-            }
-          }
+          await supabase
+            .from("socios_vendedor_clientes")
+            .update({ treinta_estado: "perdida" })
+            .eq("referred_id", userId)
+            .eq("treinta_estado", "pendiente");
         }
 
         // Correo de "win-back" al cancelar (27 sept 2026, pedido de Joel:
@@ -816,23 +800,27 @@ async function procesarCreditoReferido(
 //     entró a Pro/Pro+ (aprox. mitad de cada plan, decisión de Joel, 5 sept
 //     2026 — no se calcula del precio real de Stripe a propósito, para que
 //     el monto no se mueva solo si cambian los precios de los planes).
-//   - Vendedor: $50 de entrada (pago único, sube a $62.50 desde el 5to
-//     cliente que paga de verdad en el mismo mes calendario de ese
-//     vendedor) + 10% de lo que esa factura específica cobró de verdad,
-//     una vez por cada uno de sus primeros 3 pagos — aquí SÍ se calcula
-//     del invoice real (mismo principio autofinanciado que el crédito
-//     peer-to-peer), porque la promesa es "10% de lo que pague", no un
-//     número fijo. El clawback de la entrada si el cliente cancela dentro
-//     de sus primeros 30 días vive en el case "customer.subscription.deleted".
+//   - Vendedor (modelo 70/30, migración 0107, 29 sept 2026 — reemplaza el
+//     $50+10%x3 de la 0106, que nunca llegó a pagar comisiones reales):
+//     70% del precio MENSUAL EQUIVALENTE del plan Pro del cliente al
+//     primer pago real (monto FIJO desde ese momento), + el 30% restante
+//     de ese mismo monto base SOLO si el cliente llega vivo a su 3er mes
+//     pagando (3er invoice.paid real si es mensual; a los 3 meses
+//     calendario con suscripción activa si es anual — eso lo resuelve un
+//     cron nuevo, no esta función). Ver procesarComisionVendedor abajo y
+//     migración 0107 para el detalle completo. Solo aplica a Pro/Pro+ — un
+//     vendedor únicamente refiere negocios a Pro.
 const COMISION_SOCIO_CORE_CENTAVOS = 700; // $7.00
 const COMISION_SOCIO_PRO_CENTAVOS = 2_500; // $25.00
-const ENTRADA_VENDEDOR_CENTAVOS = 5_000; // $50.00
-const ENTRADA_VENDEDOR_ESCALON_CENTAVOS = 6_250; // $62.50 (+25%, 5to+ cliente del mes)
-const RECURRENTE_VENDEDOR_CICLOS_MAX = 3;
-const RECURRENTE_VENDEDOR_PORCENTAJE = 0.1;
+const PORCENTAJE_SETENTA_VENDEDOR = 0.7;
 
 async function procesarComisionSocio(
-  referido: { id: string; referido_por_socio_id: string | null; plan: string | null },
+  referido: {
+    id: string;
+    referido_por_socio_id: string | null;
+    plan: string | null;
+    stripe_subscription_id: string | null;
+  },
   invoice: Stripe.Invoice
 ) {
   if (!referido.referido_por_socio_id) return;
@@ -880,65 +868,110 @@ async function procesarComisionSocio(
   }
 }
 
+// Modelo 70/30 (migración 0107, 29 sept 2026). Solo Pro/Pro+ — un vendedor
+// únicamente refiere negocios al plan Pro; si por lo que sea el referido
+// terminó en Core no hay nada que pagar (guardarraíl, no debería pasar en
+// la práctica).
 async function procesarComisionVendedor(
   admin: ReturnType<typeof createAdminClient>,
   socioId: string,
-  referido: { id: string; plan: string | null },
+  referido: { id: string; plan: string | null; stripe_subscription_id: string | null },
   invoice: Stripe.Invoice
 ) {
-  // --- Entrada ($50, o $62.50 desde el 5to cliente pagando este mes) ---
-  const { data: entradaExistente } = await admin
-    .from("socios_comisiones")
-    .select("id")
+  if (referido.plan !== "pro" && referido.plan !== "proplus") return;
+
+  const { data: estadoCliente } = await admin
+    .from("socios_vendedor_clientes")
+    .select("id, ciclo, treinta_centavos, pagos_reales_contados, treinta_estado")
     .eq("referred_id", referido.id)
-    .eq("tipo_comision", "entrada")
     .maybeSingle();
 
-  if (!entradaExistente) {
-    const inicioMes = new Date();
-    inicioMes.setUTCDate(1);
-    inicioMes.setUTCHours(0, 0, 0, 0);
-    const { count: entradasEsteMes } = await admin
-      .from("socios_comisiones")
-      .select("id", { count: "exact", head: true })
-      .eq("socio_id", socioId)
-      .eq("tipo_comision", "entrada")
-      .gte("created_at", inicioMes.toISOString());
+  // --- Primer pago real: crea la fila + paga el 70% ---
+  if (!estadoCliente) {
+    if (!referido.stripe_subscription_id) return;
 
-    const montoEntrada =
-      (entradasEsteMes ?? 0) >= 4 ? ENTRADA_VENDEDOR_ESCALON_CENTAVOS : ENTRADA_VENDEDOR_CENTAVOS;
+    // El intervalo (mensual/anual) y el precio base salen de la
+    // suscripción real en Stripe, no del invoice completo (que puede
+    // traer addons mezclados) — mismo principio que procesarCreditoReferido
+    // arriba: se lee el item que corresponde al PLAN en sí.
+    let intervalo: "month" | "year" | null = null;
+    let montoBase: number | null = null;
+    try {
+      const sub = await getStripe().subscriptions.retrieve(referido.stripe_subscription_id);
+      const priceIdsDePlanes = new Set(todosLosPriceIdsDePlanes());
+      const itemPlan = sub.items.data.find((it) => priceIdsDePlanes.has(it.price.id));
+      montoBase = itemPlan?.price.unit_amount ?? null;
+      intervalo = (itemPlan?.price.recurring?.interval as "month" | "year" | undefined) ?? null;
+    } catch (err) {
+      console.error("No se pudo leer la suscripción del referido para la comisión de vendedor:", err);
+    }
+    if (!montoBase || !intervalo) return;
 
-    const { error } = await admin.from("socios_comisiones").insert({
+    const mensualEquivalenteCentavos = intervalo === "year" ? Math.round(montoBase / 12) : montoBase;
+    const setentaCentavos = Math.round(mensualEquivalenteCentavos * PORCENTAJE_SETENTA_VENDEDOR);
+    // Resta, no round(30%) — así setenta+treinta siempre suma EXACTO el
+    // monto base mensual equivalente, sin perder ni ganar un centavo por
+    // redondeo doble.
+    const treintaCentavos = mensualEquivalenteCentavos - setentaCentavos;
+
+    const { error: errorFila } = await admin.from("socios_vendedor_clientes").insert({
       socio_id: socioId,
       referred_id: referido.id,
-      plan: referido.plan ?? "core",
-      comision_centavos: montoEntrada,
-      tipo_comision: "entrada",
+      ciclo: intervalo === "year" ? "anual" : "mensual",
+      setenta_centavos: setentaCentavos,
+      treinta_centavos: treintaCentavos,
+      pagos_reales_contados: 1,
+    });
+    if (errorFila) {
+      // UNIQUE en referred_id — si esto falla porque Stripe reintentó el
+      // mismo evento y otra ejecución ya insertó la fila primero, no
+      // relanzamos: simplemente no se paga el 70% dos veces.
+      console.error("No se pudo registrar el cliente de vendedor (70/30):", errorFila);
+      return;
+    }
+
+    const { error: errorComision } = await admin.from("socios_comisiones").insert({
+      socio_id: socioId,
+      referred_id: referido.id,
+      plan: referido.plan ?? "pro",
+      comision_centavos: setentaCentavos,
+      tipo_comision: "setenta",
       ciclo_numero: 0,
     });
-    if (error) console.error("No se pudo registrar la comisión de entrada del vendedor:", error);
+    if (errorComision) console.error("No se pudo registrar el 70% del vendedor:", errorComision);
+    return;
   }
 
-  // --- Recurrente (10% de esta factura, hasta 3 veces por cliente) ---
-  const { count: recurrentesExistentes } = await admin
-    .from("socios_comisiones")
-    .select("id", { count: "exact", head: true })
-    .eq("referred_id", referido.id)
-    .eq("tipo_comision", "recurrente");
+  // --- Pagos siguientes: solo importa para el caso mensual (el anual lo
+  // resuelve el cron de 3 meses, no este webhook) ---
+  if (estadoCliente.ciclo !== "mensual" || estadoCliente.treinta_estado !== "pendiente") return;
 
-  const cicloActual = (recurrentesExistentes ?? 0) + 1;
-  if (cicloActual > RECURRENTE_VENDEDOR_CICLOS_MAX) return;
+  const pagosContados = (estadoCliente.pagos_reales_contados ?? 1) + 1;
+  await admin
+    .from("socios_vendedor_clientes")
+    .update({ pagos_reales_contados: pagosContados })
+    .eq("id", estadoCliente.id);
 
-  const montoRecurrente = Math.round((invoice.amount_paid ?? 0) * RECURRENTE_VENDEDOR_PORCENTAJE);
-  if (montoRecurrente <= 0) return;
+  const META_PAGOS_PARA_LIBERAR_TREINTA = 3;
+  if (pagosContados < META_PAGOS_PARA_LIBERAR_TREINTA) return;
 
-  const { error } = await admin.from("socios_comisiones").insert({
+  const { error: errorLiberar } = await admin
+    .from("socios_vendedor_clientes")
+    .update({ treinta_estado: "liberada", treinta_liberada_at: new Date().toISOString() })
+    .eq("id", estadoCliente.id)
+    .eq("treinta_estado", "pendiente"); // guardarraíl anti doble-liberación si Stripe reintenta el evento
+  if (errorLiberar) {
+    console.error("No se pudo marcar liberado el 30% del vendedor:", errorLiberar);
+    return;
+  }
+
+  const { error: errorComisionTreinta } = await admin.from("socios_comisiones").insert({
     socio_id: socioId,
     referred_id: referido.id,
-    plan: referido.plan ?? "core",
-    comision_centavos: montoRecurrente,
-    tipo_comision: "recurrente",
-    ciclo_numero: cicloActual,
+    plan: referido.plan ?? "pro",
+    comision_centavos: estadoCliente.treinta_centavos,
+    tipo_comision: "treinta",
+    ciclo_numero: 0,
   });
-  if (error) console.error("No se pudo registrar la comisión recurrente del vendedor:", error);
+  if (errorComisionTreinta) console.error("No se pudo registrar el 30% del vendedor:", errorComisionTreinta);
 }

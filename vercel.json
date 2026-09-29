@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/nurture-emails",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/liberar-comision-anual-vendedor",
+      "schedule": "0 19 * * *"
     }
   ]
 }

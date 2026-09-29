@@ -58,6 +58,7 @@ export default async function CfoPage() {
     { data: creditosCompras },
     { data: socios },
     { data: comisionesSocios },
+    { data: vendedorClientes },
     { data: creditosReferidos },
   ] = await Promise.all([
     admin
@@ -89,6 +90,13 @@ export default async function CfoPage() {
     admin
       .from("socios_comisiones")
       .select("id, socio_id, plan, comision_centavos, estado, created_at"),
+    // Estado por cliente de vendedor (modelo 70/30, migración 0107, 29 sept
+    // 2026) — el panel lo usa para el desglose por vendedor (cuántos
+    // clientes, en qué estado, y el ingreso mensual bruto que le generan a
+    // WCV, para que Joel compare comisión pagada vs ingreso real).
+    admin
+      .from("socios_vendedor_clientes")
+      .select("id, socio_id, referred_id, ciclo, primer_pago_at, setenta_centavos, treinta_centavos, treinta_estado"),
     // Créditos de referidos peer-to-peer (migración 0062, 8 sept 2026,
     // pedido de Joel: "¿como yo veo eso para efectos contables?"). OJO: esto
     // NO es un gasto en efectivo — es un descuento sobre la próxima factura
@@ -405,6 +413,15 @@ export default async function CfoPage() {
           comisionCentavos: Number(c.comision_centavos),
           estado: c.estado as "pendiente" | "pagada",
           createdAt: c.created_at,
+        }))}
+        vendedorClientes={(vendedorClientes ?? []).map((v) => ({
+          id: v.id,
+          socioId: v.socio_id,
+          ciclo: v.ciclo as "mensual" | "anual",
+          primerPagoAt: v.primer_pago_at,
+          setentaCentavos: Number(v.setenta_centavos),
+          treintaCentavos: Number(v.treinta_centavos),
+          treintaEstado: v.treinta_estado as "pendiente" | "liberada" | "perdida",
         }))}
       />
 
