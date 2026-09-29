@@ -13,6 +13,7 @@ import ReferralLink from "../referral-link";
 import EliminarCuenta from "../eliminar-cuenta";
 import EditarCuenta from "../editar-cuenta";
 import ReiniciarDemo from "../reiniciar-demo";
+import ApiKeysConfig from "../api-keys-config";
 
 export default async function ConfigPage() {
   const supabase = createClient();
@@ -125,6 +126,10 @@ export default async function ConfigPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {(profile?.plan === "pro" || profile?.plan === "proplus") && (
+        <ApiKeysConfig entities={(entities ?? []).map((e) => ({ id: e.id, name: e.name }))} />
       )}
 
       <ReferralLink
