@@ -18,6 +18,7 @@
     "next": "14.2.35",
     "pdf-lib": "^1.17.1",
     "plaid": "^45.0.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@types/node": "^20.14.15",
     "@types/react": "^18.3.3",
+    "@types/qrcode": "^1.5.6",
     "@types/react-dom": "^18.3.0",
     "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.4.20",

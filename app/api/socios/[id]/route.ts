@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esFounder } from "@/lib/founder";
+import { sendSocioAprobadoEmail } from "@/lib/email";
 
 // Aprobar/suspender un socio — solo el founder (mismo panel que el
 // Dashboard de Operaciones, ver app/dashboard/cfo/socios-panel.tsx). Al
@@ -47,7 +48,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const admin = createAdminClient();
   const { data: socio } = await admin
     .from("socios")
-    .select("id, nombre, codigo, payment_token")
+    .select("id, nombre, codigo, payment_token, email")
     .eq("id", params.id)
     .maybeSingle();
   if (!socio) return NextResponse.json({ error: "Socio no encontrado." }, { status: 404 });
@@ -69,7 +70,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       for (let intento = 0; intento < 5; intento++) {
         const codigo = generarCodigo(socio.nombre);
         const { error } = await admin.from("socios").update({ ...datosActualizar, codigo }).eq("id", params.id);
-        if (!error) return NextResponse.json({ ok: true, codigo, paymentToken: socio.payment_token });
+        if (!error) {
+          if (socio.email) {
+            sendSocioAprobadoEmail({ toEmail: socio.email, toName: socio.nombre, codigo }).catch(() => {});
+          }
+          return NextResponse.json({ ok: true, codigo, paymentToken: socio.payment_token });
+        }
       }
       return NextResponse.json({ error: "No se pudo generar un código único, intenta de nuevo." }, { status: 500 });
     }
@@ -77,6 +83,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const { error } = await admin.from("socios").update(datosActualizar).eq("id", params.id);
   if (error) return NextResponse.json({ error: "No se pudo actualizar el socio." }, { status: 500 });
+
+  // Si ya tenía código (reaprobación tras suspensión), también le mandamos
+  // el correo con su QR — puede que lo haya perdido o nunca lo haya
+  // guardado la primera vez.
+  if (estado === "aprobado" && socio.codigo && socio.email) {
+    sendSocioAprobadoEmail({ toEmail: socio.email, toName: socio.nombre, codigo: socio.codigo }).catch(() => {});
+  }
 
   return NextResponse.json({ ok: true, codigo: socio.codigo, paymentToken: socio.payment_token });
 }

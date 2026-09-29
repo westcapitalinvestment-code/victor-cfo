@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import QRCode from "qrcode";
 
 // Envío de correo transaccional — hoy solo se usa para la invitación al
 // contable/CPA, pero cualquier otro email futuro (recordatorios, recibos)
@@ -1439,6 +1440,101 @@ export async function sendPaymentFailedEmail(params: {
       subject: "Tu pago no pasó — actualiza tu tarjeta",
       text: textoPlano,
       html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
+// Aprobación de socio (Programa de Socios, migración 0070/0106, 29 sept
+// 2026, pedido de Joel: "que el vendedor reciba su link/QR
+// automáticamente al aprobarlo"). Aplica a los 4 tipos (cpa/influencer/
+// otro/vendedor) — todos comparten el mismo mecanismo de código corto y
+// /registro?socio=CODIGO, así que todos se benefician de tener su QR
+// listo para imprimir o mostrar en el celular, no solo los vendedores.
+//
+// El QR se genera aquí mismo con la librería `qrcode` (server-side, PNG) y
+// se manda como ADJUNTO del correo — no como <img> inline en el HTML,
+// porque muchos clientes de correo (Gmail incluido) bloquean o no
+// renderizan imágenes en data: URL de forma confiable. Como adjunto,
+// siempre llega y el socio lo puede abrir/guardar/imprimir directo desde
+// el correo. El link y el código también van en texto plano en el cuerpo,
+// por si el socio prefiere copiarlo a mano en vez de usar el QR.
+export async function sendSocioAprobadoEmail(params: {
+  toEmail: string;
+  toName: string | null;
+  codigo: string;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName, codigo } = params;
+  const saludoNombre = toName || "";
+  const link = `${SITE_URL}/registro?socio=${codigo}`;
+
+  let qrBase64: string | null = null;
+  try {
+    const qrBuffer = await QRCode.toBuffer(link, { width: 480, margin: 2 });
+    qrBase64 = qrBuffer.toString("base64");
+  } catch (err) {
+    // Si por lo que sea falla la generación del QR, el correo sale igual
+    // con el link en texto — no vale la pena tumbar el aviso por esto.
+    console.error("No se pudo generar el QR del socio:", err);
+  }
+
+  const textoPlano =
+    (saludoNombre ? `Hola ${saludoNombre},\n\n` : `Hola,\n\n`) +
+    `¡Ya estás aprobado en VICTOR CFO! Tu código es ${codigo}.\n\n` +
+    `Este es tu link personal para compartir — cualquier negocio que se registre por aquí queda ` +
+    `conectado a ti automáticamente, sin que tengas que avisarle a nadie:\n\n` +
+    `${link}\n\n` +
+    `Te adjuntamos también tu código QR (mismo link) — guárdalo en el celular o imprímelo para ` +
+    `enseñárselo en persona a un negocio que quiera registrarse ahí mismo.\n\n` +
+    `Cualquier duda, contáctanos directamente.\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = saludoNombre ? escapeHtml(saludoNombre) : "";
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${htmlSeguro ? `Hola, <strong>${htmlSeguro}</strong>,` : `Hola,`}</p>
+  <p>🎉 ¡Ya estás aprobado! Este es tu link personal — cualquier negocio que se registre por aquí queda conectado a ti automáticamente.</p>
+  <div style="text-align: center; margin: 24px 0;">
+    <div style="display: inline-block; background: #eefaf4; border: 1px solid #1D9E75; border-radius: 12px; padding: 14px 24px;">
+      <div style="font-size: 12px; color: #14543d;">Tu código</div>
+      <div style="font-size: 22px; font-weight: 700; color: #14543d; font-family: monospace;">${escapeHtml(codigo)}</div>
+    </div>
+  </div>
+  <div style="text-align: center; margin: 20px 0; word-break: break-all;">
+    <a href="${link}" style="color: #1D9E75; font-size: 14px;">${link}</a>
+  </div>
+  ${
+    qrBase64
+      ? `<p style="font-size: 13px; text-align: center; color: #666;">Te adjuntamos tu código QR (mismo link) — guárdalo o imprímelo para enseñárselo en persona a un negocio que quiera registrarse ahí mismo.</p>`
+      : ""
+  }
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: "Ya estás aprobado — tu link y tu QR de VICTOR CFO",
+      text: textoPlano,
+      html: htmlCorreo,
+      ...(qrBase64
+        ? { attachments: [{ filename: `qr-${codigo}.png`, content: qrBase64 }] }
+        : {}),
     });
     if (error) return { sent: false, reason: error.message };
     return { sent: true };
