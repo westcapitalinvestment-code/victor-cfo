@@ -32,11 +32,16 @@ export type ComisionFila = {
   socioId: string;
   plan: string;
   comisionCentavos: number;
-  estado: "pendiente" | "pagada";
+  estado: "pendiente" | "pagada" | "reversada";
   createdAt: string | null;
 };
 
-const TIPO_LABEL: Record<string, string> = { cpa: "CPA/Contador", influencer: "Influencer", otro: "Otro" };
+const TIPO_LABEL: Record<string, string> = {
+  cpa: "CPA/Contador",
+  influencer: "Influencer",
+  otro: "Otro",
+  vendedor: "Vendedor",
+};
 
 function fmt(centavos: number) {
   return `$${(centavos / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

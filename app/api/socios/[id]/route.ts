@@ -34,6 +34,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: "Estado inválido." }, { status: 400 });
   }
 
+  // tipo (opcional, migración 0106, 29 sept 2026) — el founder puede
+  // reclasificar un socio como 'vendedor' (equipo de ventas por comisión
+  // pura) desde este mismo endpoint de aprobación; el formulario público
+  // de /socios sigue siendo solo cpa/influencer/otro a propósito (un
+  // vendedor entra por relación directa con Joel, no autoservicio).
+  const tipo = body?.tipo;
+  if (tipo !== undefined && !["cpa", "influencer", "otro", "vendedor"].includes(tipo)) {
+    return NextResponse.json({ error: "Tipo inválido." }, { status: 400 });
+  }
+
   const admin = createAdminClient();
   const { data: socio } = await admin
     .from("socios")
@@ -42,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .maybeSingle();
   if (!socio) return NextResponse.json({ error: "Socio no encontrado." }, { status: 404 });
 
-  const datosActualizar: Record<string, unknown> = { estado };
+  const datosActualizar: Record<string, unknown> = { estado, ...(tipo !== undefined ? { tipo } : {}) };
 
   // Genera el código solo la primera vez que se aprueba (si ya tenía uno de
   // una aprobación anterior — ej. se suspendió y se vuelve a aprobar — se

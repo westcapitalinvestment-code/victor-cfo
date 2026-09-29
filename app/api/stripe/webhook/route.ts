@@ -385,7 +385,7 @@ export async function POST(req: NextRequest) {
         // por si acaso (no hay nada más después).
         const { data: usuarioAntesDeCancelar } = await supabase
           .from("users")
-          .select("email, full_name, plan, plan_status")
+          .select("email, full_name, plan, plan_status, referido_por_socio_id")
           .eq("id", userId)
           .maybeSingle();
         const yaEstabaCancelado = usuarioAntesDeCancelar?.plan_status === "cancelled";
@@ -438,6 +438,42 @@ export async function POST(req: NextRequest) {
             addon_tecnicos_item_id: null,
           })
           .eq("id", userId);
+
+        // Clawback de vendedores (equipo de ventas por comisión pura,
+        // migración 0106, 29 sept 2026) — si este cliente cancela dentro de
+        // sus primeros 30 días Y llegó por un vendedor (no un embajador,
+        // que nunca tuvo esta regla), la comisión de entrada se revierte en
+        // vez de pagarse. Protege contra registrar clientes que cancelan
+        // casi de inmediato solo para farmear el bono de entrada. Si la
+        // comisión YA estaba 'pagada' (Joel ya transfirió), no se toca —
+        // no hay forma de deshacer dinero que ya salió; queda para que Joel
+        // lo descuente a mano si aplica.
+        if (usuarioAntesDeCancelar?.referido_por_socio_id) {
+          const { data: socioReferidor } = await supabase
+            .from("socios")
+            .select("tipo")
+            .eq("id", usuarioAntesDeCancelar.referido_por_socio_id)
+            .maybeSingle();
+
+          if (socioReferidor?.tipo === "vendedor") {
+            const { data: comisionEntrada } = await supabase
+              .from("socios_comisiones")
+              .select("id, estado, created_at")
+              .eq("referred_id", userId)
+              .eq("tipo_comision", "entrada")
+              .maybeSingle();
+
+            const DIAS_CLAWBACK_VENDEDOR = 30;
+            if (
+              comisionEntrada &&
+              comisionEntrada.estado === "pendiente" &&
+              Date.now() - new Date(comisionEntrada.created_at).getTime() <
+                DIAS_CLAWBACK_VENDEDOR * 24 * 60 * 60 * 1000
+            ) {
+              await supabase.from("socios_comisiones").update({ estado: "reversada" }).eq("id", comisionEntrada.id);
+            }
+          }
+        }
 
         // Correo de "win-back" al cancelar (27 sept 2026, pedido de Joel:
         // "que de manera automatica como el email de bienvenida se le
@@ -577,7 +613,7 @@ export async function POST(req: NextRequest) {
 
         // --- Programa de Socios (comisión en efectivo, migración 0070) ---
         if (referido.referido_por_socio_id && hayActividadRealPro) {
-          await procesarComisionSocio(referido);
+          await procesarComisionSocio(referido, invoice);
         }
 
         break;
@@ -763,39 +799,64 @@ async function procesarCreditoReferido(
 }
 
 // Comisión del Programa de Socios (CPAs/influencers, migración 0070, 5
-// sept 2026). A diferencia del programa peer-to-peer, aquí NO se toca
-// Stripe balance — el pago es efectivo real por transferencia/ATH
-// Business que Joel hace a mano por fuera de la app; esta función solo deja
-// registrada la comisión como 'pendiente' en socios_comisiones para que el
-// Dashboard de Operaciones la muestre y él la marque 'pagada' cuando
-// transfiera (ver app/api/socios/comisiones/[id]/route.ts).
+// sept 2026 — extendido con el equipo de ventas por comisión pura,
+// migración 0106, 29 sept 2026). A diferencia del programa peer-to-peer,
+// aquí NO se toca Stripe balance — el pago es efectivo real por
+// transferencia/ATH Business que Joel hace a mano por fuera de la app;
+// esta función solo deja registrada la comisión como 'pendiente' en
+// socios_comisiones para que el Dashboard de Operaciones la muestre y él
+// la marque 'pagada' cuando transfiera (ver
+// app/api/socios/comisiones/[id]/route.ts).
 //
-// Montos fijos (no calculados del precio de Stripe, a propósito — para
-// efectivo real conviene un número fijo y presupuestable, no algo que se
-// mueva solo si cambian los precios de los planes): $7 si el referido
-// entró a Core, $25 si entró a Pro/Pro+ — aproximadamente la mitad de cada
-// plan (decisión de Joel, 5 sept 2026), deja margen de sobra sobre lo que
-// esa factura específica acaba de cobrar (autofinanciado) y mantiene un
-// sesgo real hacia Pro (3.57x, similar al 3.3x del programa peer-to-peer).
-// UNA sola vez por cliente (socios_comisiones.referred_id es UNIQUE), SIN
-// tope anual — a diferencia del peer-to-peer, un socio aprobado es una
-// relación de negocio deliberada: "mientras más traiga, más cobra".
+// Ahora hay dos mecánicas completamente distintas bajo el mismo
+// socios_comisiones, según el `tipo` del socio (acordado con Joel en el
+// documento "Esquema de Comisiones — Equipo de Ventas VICTOR CFO"):
+//   - Embajador (cpa/influencer/otro): igual que siempre — monto fijo, UNA
+//     sola vez, sin tope anual. $7 si el referido entró a Core, $25 si
+//     entró a Pro/Pro+ (aprox. mitad de cada plan, decisión de Joel, 5 sept
+//     2026 — no se calcula del precio real de Stripe a propósito, para que
+//     el monto no se mueva solo si cambian los precios de los planes).
+//   - Vendedor: $50 de entrada (pago único, sube a $62.50 desde el 5to
+//     cliente que paga de verdad en el mismo mes calendario de ese
+//     vendedor) + 10% de lo que esa factura específica cobró de verdad,
+//     una vez por cada uno de sus primeros 3 pagos — aquí SÍ se calcula
+//     del invoice real (mismo principio autofinanciado que el crédito
+//     peer-to-peer), porque la promesa es "10% de lo que pague", no un
+//     número fijo. El clawback de la entrada si el cliente cancela dentro
+//     de sus primeros 30 días vive en el case "customer.subscription.deleted".
 const COMISION_SOCIO_CORE_CENTAVOS = 700; // $7.00
 const COMISION_SOCIO_PRO_CENTAVOS = 2_500; // $25.00
+const ENTRADA_VENDEDOR_CENTAVOS = 5_000; // $50.00
+const ENTRADA_VENDEDOR_ESCALON_CENTAVOS = 6_250; // $62.50 (+25%, 5to+ cliente del mes)
+const RECURRENTE_VENDEDOR_CICLOS_MAX = 3;
+const RECURRENTE_VENDEDOR_PORCENTAJE = 0.1;
 
-async function procesarComisionSocio(referido: {
-  id: string;
-  referido_por_socio_id: string | null;
-  plan: string | null;
-}) {
+async function procesarComisionSocio(
+  referido: { id: string; referido_por_socio_id: string | null; plan: string | null },
+  invoice: Stripe.Invoice
+) {
   if (!referido.referido_por_socio_id) return;
 
   const admin = createAdminClient();
 
+  const { data: socio } = await admin
+    .from("socios")
+    .select("id, tipo")
+    .eq("id", referido.referido_por_socio_id)
+    .maybeSingle();
+  if (!socio) return;
+
+  if (socio.tipo === "vendedor") {
+    await procesarComisionVendedor(admin, socio.id, referido, invoice);
+    return;
+  }
+
+  // --- Embajador (cpa/influencer/otro): comportamiento original ---
   const { data: yaPremiado } = await admin
     .from("socios_comisiones")
     .select("id")
     .eq("referred_id", referido.id)
+    .eq("tipo_comision", "entrada")
     .maybeSingle();
   if (yaPremiado) return;
 
@@ -805,14 +866,79 @@ async function procesarComisionSocio(referido: {
       : COMISION_SOCIO_CORE_CENTAVOS;
 
   const { error } = await admin.from("socios_comisiones").insert({
-    socio_id: referido.referido_por_socio_id,
+    socio_id: socio.id,
     referred_id: referido.id,
     plan: referido.plan ?? "core",
     comision_centavos: comisionCentavos,
+    tipo_comision: "entrada",
+    ciclo_numero: 0,
   });
   if (error) {
     // No relanzamos — perder una comisión de socio no debe tumbar el
     // webhook ni afectar la activación de la cuenta del referido.
     console.error("No se pudo registrar la comisión de socio:", error);
   }
+}
+
+async function procesarComisionVendedor(
+  admin: ReturnType<typeof createAdminClient>,
+  socioId: string,
+  referido: { id: string; plan: string | null },
+  invoice: Stripe.Invoice
+) {
+  // --- Entrada ($50, o $62.50 desde el 5to cliente pagando este mes) ---
+  const { data: entradaExistente } = await admin
+    .from("socios_comisiones")
+    .select("id")
+    .eq("referred_id", referido.id)
+    .eq("tipo_comision", "entrada")
+    .maybeSingle();
+
+  if (!entradaExistente) {
+    const inicioMes = new Date();
+    inicioMes.setUTCDate(1);
+    inicioMes.setUTCHours(0, 0, 0, 0);
+    const { count: entradasEsteMes } = await admin
+      .from("socios_comisiones")
+      .select("id", { count: "exact", head: true })
+      .eq("socio_id", socioId)
+      .eq("tipo_comision", "entrada")
+      .gte("created_at", inicioMes.toISOString());
+
+    const montoEntrada =
+      (entradasEsteMes ?? 0) >= 4 ? ENTRADA_VENDEDOR_ESCALON_CENTAVOS : ENTRADA_VENDEDOR_CENTAVOS;
+
+    const { error } = await admin.from("socios_comisiones").insert({
+      socio_id: socioId,
+      referred_id: referido.id,
+      plan: referido.plan ?? "core",
+      comision_centavos: montoEntrada,
+      tipo_comision: "entrada",
+      ciclo_numero: 0,
+    });
+    if (error) console.error("No se pudo registrar la comisión de entrada del vendedor:", error);
+  }
+
+  // --- Recurrente (10% de esta factura, hasta 3 veces por cliente) ---
+  const { count: recurrentesExistentes } = await admin
+    .from("socios_comisiones")
+    .select("id", { count: "exact", head: true })
+    .eq("referred_id", referido.id)
+    .eq("tipo_comision", "recurrente");
+
+  const cicloActual = (recurrentesExistentes ?? 0) + 1;
+  if (cicloActual > RECURRENTE_VENDEDOR_CICLOS_MAX) return;
+
+  const montoRecurrente = Math.round((invoice.amount_paid ?? 0) * RECURRENTE_VENDEDOR_PORCENTAJE);
+  if (montoRecurrente <= 0) return;
+
+  const { error } = await admin.from("socios_comisiones").insert({
+    socio_id: socioId,
+    referred_id: referido.id,
+    plan: referido.plan ?? "core",
+    comision_centavos: montoRecurrente,
+    tipo_comision: "recurrente",
+    ciclo_numero: cicloActual,
+  });
+  if (error) console.error("No se pudo registrar la comisión recurrente del vendedor:", error);
 }
