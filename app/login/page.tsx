@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -22,6 +22,20 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // App nativa (30 sept 2026): el WebView de Capacitor abre directo en
+  // /login (ver capacitor.config.ts) en vez del landing de mercadeo —
+  // pero eso significa que alguien que cierra y vuelve a abrir la app con
+  // la sesión todavía activa vería este formulario otra vez en vez de su
+  // dashboard. Este chequeo cubre ese caso (y de paso también aplica en
+  // la web: si alguien llega a /login ya con sesión, lo manda directo).
+  useEffect(() => {
+    if (cerradaPorInactividad) return; // no interrumpir el mensaje de "te sacamos por inactividad"
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) router.replace("/dashboard");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // "¿Olvidaste tu contraseña?" — modo aparte dentro de la misma pantalla
   // (no hace falta otra ruta solo para esto). Cambia el formulario a pedir

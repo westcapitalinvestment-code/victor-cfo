@@ -16,24 +16,21 @@ const config: CapacitorConfig = {
   appId: "com.victorcfo.app",
   appName: "VICTOR CFO",
   webDir: "public", // no se usa para servir nada (server.url manda), pero Capacitor lo exige
+  // server.url apunta directo a /login (no a la raíz) — pedido de Joel:
+  // "todas las apps abren en el login", con un botón ahí ("Comienza
+  // ahora") para crear cuenta si no la tiene. app/login/page.tsx ya
+  // manda solo a /dashboard si detecta sesión activa (para cuando cierras
+  // y reabres la app con la sesión todavía viva). Antes esto se resolvía
+  // detectando el User-Agent del WebView en app/page.tsx, pero apuntar
+  // directo aquí es más simple y no depende de nada del lado del
+  // servidor — la app nativa nunca pasa por el landing.
   server: {
-    url: "https://www.victorcfo.com",
+    url: "https://www.victorcfo.com/login",
     androidScheme: "https",
     // cleartext: false — todo pasa por HTTPS real, nunca HTTP.
   },
-  // appendUserAgent marca el User-Agent del WebView nativo para que
-  // app/page.tsx pueda distinguir "alguien abrió la app de verdad" de
-  // "alguien visitó victorcfo.com en un navegador normal" — así la app
-  // abre directo en /login (como cualquier app) en vez del landing de
-  // mercadeo, que solo tiene sentido para visitantes web nuevos. Va por
-  // plataforma (no en `server` global) porque la versión de @capacitor/cli
-  // instalada en Vercel no reconoce ese campo a nivel global.
-  android: {
-    appendUserAgent: "VictorCFOApp",
-  },
   ios: {
     contentInset: "automatic",
-    appendUserAgent: "VictorCFOApp",
   },
   plugins: {
     PushNotifications: {
