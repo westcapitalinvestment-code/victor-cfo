@@ -463,6 +463,30 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   const alertasReglas: AlertaRegla[] = [];
 
+  // Helper compartido por las reglas 2 y 3 (28 sept 2026, fix de bug real
+  // reportado por Joel): muchas descripciones de banco para transferencias
+  // recurrentes (ej. "TRANF ATM TAISHA APONTE 2229 ON 09/13/26") incluyen la
+  // FECHA del cargo dentro del propio texto — comparar el string crudo hace
+  // que la misma transferencia semanal se vea "nueva" cada mes porque la
+  // fecha cambia. Se le quita el sufijo " ON MM/DD/YY" (u otro separador de
+  // fecha común) antes de normalizar, así el mismo comercio/persona
+  // recurrente sí hace match entre meses.
+  const normalizarComercio = (raw: string) =>
+    raw
+      .trim()
+      .toUpperCase()
+      .replace(/\s+ON\s+\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\s*$/i, "")
+      .replace(/\s+\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\s*$/, "")
+      .trim();
+
+  // Categorías tipo "Ahorro e inversión" (28 sept 2026, fix de bug real
+  // reportado por Joel): mover más dinero a una meta/cuenta de ahorro es
+  // BUENA noticia, no un gasto que subió — las reglas 1 y 3 de abajo excluyen
+  // cualquier categoría cuyo nombre contenga "ahorro" para no avisar como si
+  // fuera algo negativo.
+  const esCategoriaAhorro = (nombreCategoria: string | undefined) =>
+    (nombreCategoria ?? "").toLowerCase().includes("ahorro");
+
   // --- 1. Categoría que subió vs. promedio de los últimos 3 meses ---------
   // Ventana de 3 meses justo ANTES del mes actual (m-1, m-2, m-3) — reusa el
   // helper mesAnterior() encadenado 3 veces en vez de abrir uno nuevo.
@@ -488,6 +512,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   let mejorSubidaCategoria: { nombre: string; actual: number; promedio: number; pct: number } | null = null;
   for (const [catId, montoActual] of gastoPorCategoriaResumen) {
+    const nombreCat = nombrePorCategoriaResumen.get(catId);
+    if (esCategoriaAhorro(nombreCat)) continue; // ahorrar más no es una alerta negativa
     const totalPrevio = gastoPorCategoria3Meses.get(catId) ?? 0;
     const promedio = totalPrevio / 3;
     if (promedio <= 0) continue; // sin línea base real, no comparamos
@@ -521,16 +547,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     .not("description_raw", "is", null)
     .limit(3000);
   const comerciosHistoricos = new Set(
-    (descripcionesHistoricasRaw ?? []).map((t) => (t.description_raw || "").trim().toUpperCase())
+    (descripcionesHistoricasRaw ?? []).map((t) => normalizarComercio(t.description_raw || ""))
   );
 
   const UMBRAL_COMERCIO_NUEVO = 50;
   let mejorComercioNuevo: { comercio: string; monto: number } | null = null;
   for (const t of transaccionesMesActualResumen ?? []) {
     if (t.tipo_flujo !== "gasto" || !t.description_raw) continue;
+    if (esCategoriaAhorro(nombrePorCategoriaResumen.get(t.hacienda_category_id ?? -1))) continue;
     const monto = Number(t.amount);
     if (monto < UMBRAL_COMERCIO_NUEVO) continue;
-    const normalizado = t.description_raw.trim().toUpperCase();
+    const normalizado = normalizarComercio(t.description_raw);
     if (comerciosHistoricos.has(normalizado)) continue;
     if (!mejorComercioNuevo || monto > mejorComercioNuevo.monto) {
       mejorComercioNuevo = { comercio: t.description_raw.trim(), monto };
@@ -552,14 +579,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const gastoPorComercioActual = new Map<string, { total: number; nombre: string }>();
   for (const t of transaccionesMesActualResumen ?? []) {
     if (t.tipo_flujo !== "gasto" || !t.description_raw) continue;
-    const key = t.description_raw.trim().toUpperCase();
+    if (esCategoriaAhorro(nombrePorCategoriaResumen.get(t.hacienda_category_id ?? -1))) continue;
+    const key = normalizarComercio(t.description_raw);
     const prev = gastoPorComercioActual.get(key);
     gastoPorComercioActual.set(key, { total: (prev?.total ?? 0) + Number(t.amount), nombre: t.description_raw.trim() });
   }
   const gastoPorComercioAnterior = new Map<string, number>();
   for (const t of transaccionesMesAnteriorResumen ?? []) {
     if (t.tipo_flujo !== "gasto" || !t.description_raw) continue;
-    const key = t.description_raw.trim().toUpperCase();
+    const key = normalizarComercio(t.description_raw);
     gastoPorComercioAnterior.set(key, (gastoPorComercioAnterior.get(key) ?? 0) + Number(t.amount));
   }
 
