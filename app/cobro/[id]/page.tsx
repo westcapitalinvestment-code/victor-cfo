@@ -43,7 +43,7 @@ const ATH_SCRIPT_SRC = "https://payments.athmovil.com/api/modal/js/athmovil_base
 
 export default function CobroPage() {
   const params = useParams();
-  const id = typeof params.id === "string" ? params.id : Array.isArray(params.id) ? params.id[0] : "";
+  const id = typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : "";
 
   const [info, setInfo] = useState<InfoCobro | null>(null);
   const [cargando, setCargando] = useState(true);

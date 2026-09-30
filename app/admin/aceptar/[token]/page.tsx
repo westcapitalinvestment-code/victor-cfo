@@ -17,7 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 export default function AceptarInvitacionAdminPage() {
   const router = useRouter();
   const params = useParams();
-  const token = typeof params.token === "string" ? params.token : Array.isArray(params.token) ? params.token[0] : "";
+  const token = typeof params?.token === "string" ? params.token : Array.isArray(params?.token) ? params.token[0] : "";
   const supabase = createClient();
 
   const [cargando, setCargando] = useState(true);
