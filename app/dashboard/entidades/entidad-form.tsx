@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import CobroTarjeta from "./cobro-tarjeta";
+import ConectarShopify from "./conectar-shopify";
 
 // Formulario completo de entidad de negocio — calcado campo por campo de
 // "VICTOR — Dashboard Pro.html" (sección Configuración: Perfil/Fiscal/
@@ -49,6 +50,8 @@ export type EntidadCompleta = {
   ath_movil_public_token?: string | null;
   stripe_connect_account_id?: string | null;
   stripe_connect_charges_enabled?: boolean | null;
+  shopify_shop_domain?: string | null;
+  shopify_conectado?: boolean | null;
 };
 
 // Paleta de colores de marca (pedido de Joel, 1 sept 2026): para que la
@@ -716,6 +719,17 @@ export default function EntidadForm({
               </p>
             )}
           </div>
+
+          {modo === "editar" && entidad?.id && (
+            <div className="vc-card">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Integraciones</p>
+              <ConectarShopify
+                entityId={entidad.id}
+                conectado={entidad.shopify_conectado}
+                shopDomainActual={entidad.shopify_shop_domain}
+              />
+            </div>
+          )}
 
           <div className="vc-card">
             <Field label="Pie de factura (opcional)">
