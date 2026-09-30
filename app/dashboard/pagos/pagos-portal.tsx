@@ -92,24 +92,32 @@ const TIPOS_RETENCION = [
   { value: "480.6A", label: "480.6A — exento de retención" },
 ] as const;
 
-// Dos umbrales reales de Hacienda PR sobre pagos por servicios a un mismo
-// contratista en el año calendario (29 sept 2026, pedido de Joel: "creame
-// la logica... para que el usuario sepa, eso le da valor") — mismo par de
-// umbrales que ya existían para el Programa de Socios (socios-panel.tsx),
-// ahora también visibles para el USUARIO de la app sobre SUS PROPIOS
-// contratistas:
-//   - $500/año: hay que declararlo en el Modelo 480.6A, aunque el
-//     contratista esté marcado como exento (retention_type='480.6A') y no
-//     se le retenga nada.
-//   - $1,500/año (Sección 1062.03): el EXCESO sobre esto queda sujeto a
-//     retención en el origen y pasa a reportarse en 480.6B — aunque el
-//     contratista esté marcado hoy como '480.6A' en su ficha. Esto solo
-//     AVISA; no cambia automáticamente retention_type ni el % que se
-//     retiene en la próxima corrida — eso lo decide el usuario a mano.
+// Umbral real de Hacienda PR (Sección 1062.03) sobre pagos por servicios a
+// un mismo contratista en el año calendario (confirmado por el CPA de Joel
+// — 30 sept 2026 — corrige un error de esta misma lógica que tenía DOS
+// umbrales, $500 para "declarar" y $1,500 para "retener": ese segundo
+// número no existe en la ley. Es un solo umbral de $500, y la retención
+// del 10%/6% aplica sobre el EXCESO de $500 acumulado en el año, no sobre
+// el pago completo una vez se cruza el umbral. Ver retencionMarginal() más
+// abajo para el cálculo real.
 // NOTA: gross_amount en vendor_retenciones está en dólares (no centavos,
-// a diferencia de socios_comisiones) — estos umbrales van en dólares.
+// a diferencia de socios_comisiones) — este umbral va en dólares.
 const UMBRAL_DECLARAR_DOLARES = 500;
-const UMBRAL_RETENCION_DOLARES = 1_500;
+
+// Retención real sobre pagos por servicios (Sección 1062.03): solo la
+// porción de ESTE pago que hace que el acumulado del año supere los $500
+// paga retención — no el pago completo. Ej.: si ya le llevas pagado $400
+// este año y le pagas $300 más ($700 acumulado), la retención es sobre
+// $200 ($700 - $500), no sobre los $300 completos. Si ya había pasado los
+// $500 antes de este pago, la retención es sobre el pago completo (el
+// acumulado previo ya "usó" los primeros $500 exentos).
+function retencionMarginal(acumuladoPrevio: number, montoPago: number, pct: number): number {
+  if (pct <= 0 || montoPago <= 0) return 0;
+  const excesoPrevio = Math.max(0, acumuladoPrevio - UMBRAL_DECLARAR_DOLARES);
+  const excesoNuevo = Math.max(0, acumuladoPrevio + montoPago - UMBRAL_DECLARAR_DOLARES);
+  const baseTributable = excesoNuevo - excesoPrevio;
+  return Math.round(baseTributable * (pct / 100) * 100) / 100;
+}
 
 // Suma de gross_amount por contratista en el año calendario dado — misma
 // fuente de verdad que Reportes (period_start/period_end de cada corrida).
@@ -433,18 +441,25 @@ function PagosTab({
     return override !== undefined && override !== "" ? Number(override) : Number(v.default_retention_pct);
   }
 
+  // anioActual hace falta ANTES de filas — la retención marginal necesita
+  // saber cuánto se le lleva pagado al contratista en el año de la fecha
+  // del pago, no del año de hoy (por si se registra un pago atrasado).
+  const anioActual = Number(fechaPago.slice(0, 4));
+  const acumuladoAnual = useMemo(() => acumuladoAnualPorVendor(retenciones, anioActual), [retenciones, anioActual]);
+
   const filas = useMemo(() => {
     return activos
       .map((v) => {
         const bruto = Number(montos[v.id] || 0);
         const pct = pctDe(v);
-        const retenido = Math.round(bruto * (pct / 100) * 100) / 100;
+        const acumuladoPrevio = acumuladoAnual.get(v.id) ?? 0;
+        const retenido = retencionMarginal(acumuladoPrevio, bruto, pct);
         const neto = bruto - retenido;
         return { vendor: v, bruto, pct, retenido, neto };
       })
       .filter((f) => f.bruto > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activos, montos, pcts]);
+  }, [activos, montos, pcts, acumuladoAnual]);
 
   const totalBruto = filas.reduce((s, f) => s + f.bruto, 0);
   const totalRetenido = filas.reduce((s, f) => s + f.retenido, 0);
@@ -453,7 +468,6 @@ function PagosTab({
   // Pote de "ya retenido este trimestre" — mismo cálculo que usará Reportes,
   // aquí solo como referencia rápida mientras registra la corrida.
   const trimestreActual = trimestreDe(fechaPago);
-  const anioActual = Number(fechaPago.slice(0, 4));
   const { desde: desdeTrim, hasta: hastaTrim } = rangoTrimestre(anioActual, trimestreActual);
   const retenidoTrimestre = retenciones
     .filter((r) => r.period_end && r.period_end >= desdeTrim && r.period_end <= hastaTrim)
@@ -657,7 +671,7 @@ function PagosTab({
             const pct = pcts[v.id] !== undefined ? pcts[v.id] : String(v.default_retention_pct);
             const brutoNum = Number(bruto || 0);
             const pctNum = Number(pct || 0);
-            const retenido = Math.round(brutoNum * (pctNum / 100) * 100) / 100;
+            const retenido = retencionMarginal(acumuladoAnual.get(v.id) ?? 0, brutoNum, pctNum);
             const neto = brutoNum - retenido;
             return (
               <div key={v.id} className="flex items-center gap-2 py-2.5">
@@ -1134,8 +1148,7 @@ function ContratistasTab({
 
         {filtrados.map((v) => {
           const acumulado = acumuladoAnual.get(v.id) ?? 0;
-          const pasoRetencion = acumulado >= UMBRAL_RETENCION_DOLARES;
-          const pasoDeclarar = !pasoRetencion && acumulado >= UMBRAL_DECLARAR_DOLARES;
+          const pasoDeclarar = acumulado >= UMBRAL_DECLARAR_DOLARES;
           return (
             <div key={v.id} className="border-b border-border py-2.5 text-sm last:border-0">
               <div className="flex items-center gap-2.5">
@@ -1167,19 +1180,16 @@ function ContratistasTab({
                   </button>
                 </div>
               </div>
-              {/* Umbrales de Hacienda PR (29 sept 2026, pedido de Joel: "que
-                  el sistema lo calcule y me avise... eso le da valor") —
-                  aviso informativo, no cambia retention_type ni el % a mano. */}
-              {pasoRetencion && (
-                <p className="ml-11 mt-1 rounded-md bg-amb/10 px-2 py-1 text-[11px] text-amb">
-                  ⚠️ Le llevas pagado {formatMoney(acumulado)} este año — pasó los $1,500 de la Sección 1062.03. El
-                  exceso queda sujeto a retención y se declara en el Modelo 480.6B, no en 480.6A.
-                </p>
-              )}
+              {/* Umbral de Hacienda PR, Sección 1062.03 (29 sept 2026, pedido
+                  de Joel: "que el sistema lo calcule y me avise... eso le da
+                  valor", corregido 30 sept 2026 — un solo umbral de $500, la
+                  retención aplica sobre el exceso, no sobre el pago completo).
+                  Aviso informativo, no cambia retention_type ni el % a mano. */}
               {pasoDeclarar && (
-                <p className="ml-11 mt-1 rounded-md bg-teal/5 px-2 py-1 text-[11px] text-muted">
-                  ℹ️ Le llevas pagado {formatMoney(acumulado)} este año — a partir de $500 hay que declararlo en el
-                  Modelo 480.6A, aunque no le retengas nada.
+                <p className="ml-11 mt-1 rounded-md bg-amb/10 px-2 py-1 text-[11px] text-amb">
+                  ⚠️ Le llevas pagado {formatMoney(acumulado)} este año — pasó los $500 de la Sección 1062.03. Hay que
+                  declararlo en el Modelo 480.6SP; si está sujeto a retención, el exceso sobre $500 lleva 10% (o 6%
+                  con relevo).
                 </p>
               )}
             </div>
