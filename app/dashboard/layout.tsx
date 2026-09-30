@@ -9,6 +9,7 @@ import BadgeUpdater from "./badge-updater";
 import AutoRefresh from "./auto-refresh";
 import PinGate from "./pin-gate";
 import SessionTimeoutGate from "./session-timeout-gate";
+import NativeBootstrap from "./native-bootstrap";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Si el usuario todavía no pasó por el onboarding conversacional de
@@ -83,6 +84,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <PinGate>
       <SessionTimeoutGate />
+      <NativeBootstrap />
       <div className="pb-24">
         <Topbar
           fullName={fullName}

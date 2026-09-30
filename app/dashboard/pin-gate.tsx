@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import { BiometricAuth } from "@aparajita/capacitor-biometric-auth";
 import { EVENTO_BLOQUEAR_POR_INACTIVIDAD } from "./session-timeout-gate";
 
 // Bloqueo rápido de la app con PIN de 4 dígitos — envuelve TODO el
@@ -30,7 +32,10 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [verificando, setVerificando] = useState(false);
   const [bloqueadoPorIntentos, setBloqueadoPorIntentos] = useState(false);
+  const [biometriaDisponible, setBiometriaDisponible] = useState(false);
+  const [probandoBiometria, setProbandoBiometria] = useState(false);
   const intentosFallidos = useRef(0);
+  const yaIntentoBiometriaAuto = useRef(false);
 
   useEffect(() => {
     fetch("/api/pin")
@@ -97,6 +102,59 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Face ID / Touch ID (30 sept 2026, app empacada con Capacitor) — solo
+  // tiene sentido DENTRO de la app nativa; en el navegador/PWA no existe
+  // este plugin. Ojo importante: la biometría solo confirma "esta es la
+  // misma persona que ya tenía el celular desbloqueado" — NO reemplaza la
+  // verificación del servidor. Por eso, tras un OK biométrico, igual se
+  // hace un ping liviano a /api/pin (requiere sesión de Supabase viva)
+  // antes de desbloquear — si la sesión expiró, la biometría sola no basta.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    BiometricAuth.checkBiometry()
+      .then((r) => setBiometriaDisponible(r.isAvailable))
+      .catch(() => setBiometriaDisponible(false));
+  }, []);
+
+  async function desbloquearConBiometria() {
+    if (probandoBiometria || verificando || bloqueadoPorIntentos) return;
+    setProbandoBiometria(true);
+    setError(null);
+    try {
+      await BiometricAuth.authenticate({
+        reason: "Desbloquea VICTOR CFO",
+        cancelTitle: "Usar PIN",
+        allowDeviceCredential: true,
+      });
+      const res = await fetch("/api/pin");
+      if (!res.ok) throw new Error("sesión no válida");
+      setEstado("desbloqueado");
+      setDigitos("");
+      intentosFallidos.current = 0;
+    } catch {
+      // Cancelado por el usuario, no disponible, o sesión inválida — se
+      // queda en la pantalla de PIN normal, sin contar como intento fallido
+      // (eso es solo para PINs incorrectos, no para biometría cancelada).
+    } finally {
+      setProbandoBiometria(false);
+    }
+  }
+
+  // Intento automático UNA vez al entrar a la pantalla de bloqueo — así el
+  // usuario no tiene que tocar nada si su celular ya reconoce su cara/huella,
+  // igual que cualquier app nativa de verdad. Se resetea cada vez que se
+  // vuelve a "bloqueado" (nuevo ciclo de bloqueo) para volver a intentar.
+  useEffect(() => {
+    if (estado !== "bloqueado" || !biometriaDisponible) {
+      if (estado !== "bloqueado") yaIntentoBiometriaAuto.current = false;
+      return;
+    }
+    if (yaIntentoBiometriaAuto.current) return;
+    yaIntentoBiometriaAuto.current = true;
+    desbloquearConBiometria();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estado, biometriaDisponible]);
+
   function tocarDigito(d: string) {
     if (verificando || bloqueadoPorIntentos) return;
     const nuevo = (digitos + d).slice(0, 4);
@@ -150,6 +208,17 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
         </div>
 
         {error && <p className="mb-4 max-w-xs text-center text-xs text-red">{error}</p>}
+
+        {biometriaDisponible && !bloqueadoPorIntentos && (
+          <button
+            onClick={desbloquearConBiometria}
+            disabled={probandoBiometria || verificando}
+            className="mb-6 rounded-pill border border-teal px-4 py-2 text-sm font-medium text-teal"
+            style={{ background: "rgba(29,158,117,.1)" }}
+          >
+            {probandoBiometria ? "Verificando..." : "Usar Face ID / Touch ID"}
+          </button>
+        )}
 
         {bloqueadoPorIntentos ? (
           <a href="/login" className="rounded-pill border border-teal px-4 py-2 text-sm font-medium text-teal">

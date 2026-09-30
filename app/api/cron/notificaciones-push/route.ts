@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { enviarPush } from "@/lib/push";
+import { enviarPush, enviarPushNativoPorOwner } from "@/lib/push";
 import { fechaHoyPR } from "@/lib/hora-pr";
 
 // Cron diario — le manda un push de verdad (suena/aparece en el celular,
@@ -36,14 +36,20 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  const { data: subs, error: subsError } = await supabase
-    .from("push_subscriptions")
-    .select("id, owner_id, endpoint, p256dh, auth");
+  const [{ data: subs, error: subsError }, { data: subsNativos }] = await Promise.all([
+    supabase.from("push_subscriptions").select("id, owner_id, endpoint, p256dh, auth"),
+    // App nativa (Capacitor) — un owner puede tener SOLO app nativa y nada
+    // de Web Push, así que se le suma al set de owners a revisar aparte.
+    supabase.from("native_push_tokens").select("owner_id"),
+  ]);
 
   if (subsError) return NextResponse.json({ error: subsError.message }, { status: 500 });
-  if (!subs || subs.length === 0) return NextResponse.json({ ok: true, usuariosNotificados: 0 });
+  const haySubs = (subs && subs.length > 0) || (subsNativos && subsNativos.length > 0);
+  if (!haySubs) return NextResponse.json({ ok: true, usuariosNotificados: 0 });
 
-  const ownerIds = Array.from(new Set(subs.map((s) => s.owner_id)));
+  const ownerIds = Array.from(
+    new Set([...(subs ?? []).map((s) => s.owner_id), ...(subsNativos ?? []).map((s) => s.owner_id)])
+  );
   const hoy = new Date();
   const msPorDia = 24 * 60 * 60 * 1000;
   // hoyISO ancla a la fecha de CALENDARIO en Puerto Rico (fechaHoyPR), no a
@@ -174,7 +180,7 @@ export async function GET(req: NextRequest) {
       }
 
       const body = partes.join(" · ");
-      const misSubs = subs.filter((s) => s.owner_id === ownerId);
+      const misSubs = (subs ?? []).filter((s) => s.owner_id === ownerId);
 
       // Marcar los umbrales/recordatorios cruzados ANTES de intentar el
       // push — el aviso ya se decidió mostrar (push aquí y/o saludo diario
@@ -201,6 +207,10 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      // Mismo aviso por el canal nativo (app de App Store/Google Play), si
+      // este owner tiene algún token registrado ahí.
+      await enviarPushNativoPorOwner(ownerId, { title: "VICTOR CFO", body, url });
+
       usuariosNotificados++;
       resultados[ownerId] = { notificado: true, body, dispositivos: misSubs.length };
     } catch (err) {
@@ -214,7 +224,7 @@ export async function GET(req: NextRequest) {
   // adivinar en vez de ver el detalle real por usuario.
   console.log(
     "[notificaciones-push]",
-    JSON.stringify({ usuariosNotificados, suscripcionesExpiradas, totalSuscripciones: subs.length, resultados })
+    JSON.stringify({ usuariosNotificados, suscripcionesExpiradas, totalSuscripciones: (subs ?? []).length, resultados })
   );
 
   return NextResponse.json({ ok: true, usuariosNotificados, suscripcionesExpiradas, resultados });

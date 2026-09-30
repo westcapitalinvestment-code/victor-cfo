@@ -1,6 +1,7 @@
 import webpush from "web-push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esFounder } from "@/lib/founder";
+import { enviarPushNativo } from "@/lib/push-nativo";
 
 // Helper único para mandar notificaciones push de verdad (Web Push /
 // VAPID) — lo usa tanto el cron diario (lib/push.ts → notificaciones-push)
@@ -100,8 +101,45 @@ export async function notificarFounder(payload: PayloadNotificacion): Promise<vo
         await admin.from("push_subscriptions").delete().eq("id", sub.id);
       }
     }
+
+    // Igual, pero por los tokens NATIVOS (app de App Store/Google Play) de
+    // este mismo usuario — un usuario puede tener la PWA Y la app nativa a
+    // la vez, así que se manda por ambos canales sin que se estorben.
+    const { data: subsNativos } = await admin
+      .from("native_push_tokens")
+      .select("id, platform, token")
+      .eq("owner_id", founderId);
+    for (const sub of subsNativos ?? []) {
+      const resultado = await enviarPushNativo(sub.platform as "ios" | "android", sub.token, payload);
+      if (resultado.expirada) {
+        await admin.from("native_push_tokens").delete().eq("id", sub.id);
+      }
+    }
   } catch {
     // Best-effort — un fallo aquí nunca debe tumbar el flujo que lo llamó
     // (ej. el webhook de soporte, que ya mandó el correo de escalación).
+  }
+}
+
+// Mismo patrón que enviarPush()/notificarFounder() pero para CUALQUIER
+// usuario (no solo el founder) — pensado para el cron diario de
+// notificaciones-push y cualquier otro sitio que ya recorra
+// push_subscriptions y quiera avisar también por el canal nativo sin
+// duplicar la lógica de expiración.
+export async function enviarPushNativoPorOwner(ownerId: string, payload: PayloadNotificacion): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    const { data: subsNativos } = await admin
+      .from("native_push_tokens")
+      .select("id, platform, token")
+      .eq("owner_id", ownerId);
+    for (const sub of subsNativos ?? []) {
+      const resultado = await enviarPushNativo(sub.platform as "ios" | "android", sub.token, payload);
+      if (resultado.expirada) {
+        await admin.from("native_push_tokens").delete().eq("id", sub.id);
+      }
+    }
+  } catch {
+    // Best-effort.
   }
 }

@@ -10,8 +10,13 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.0",
+    "@aparajita/capacitor-biometric-auth": "^10.0.0",
     "@aws-sdk/client-s3": "^3.685.0",
     "@aws-sdk/s3-request-presigner": "^3.685.0",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/camera": "^8.2.4",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/push-notifications": "^8.1.2",
     "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.45.4",
     "exceljs": "^4.4.0",
@@ -32,9 +37,12 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
     "@types/node": "^20.14.15",
-    "@types/react": "^18.3.3",
     "@types/qrcode": "^1.5.6",
+    "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.4.20",

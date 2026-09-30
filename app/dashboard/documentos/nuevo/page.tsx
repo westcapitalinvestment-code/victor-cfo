@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { camaraNativaDisponible, tomarFotoNativa } from "@/lib/capacitor-camera";
 
 type ArchivoPendiente = { localId: string; file: File; etiqueta: string };
 
@@ -43,6 +44,19 @@ export default function NuevoDocumentoPage() {
 
   function quitarArchivo(localId: string) {
     setArchivos((prev) => prev.filter((a) => a.localId !== localId));
+  }
+
+  // Dentro de la app nativa (Capacitor) usa la cámara real del sistema en
+  // vez del input HTML — mismo resultado final (un File en `archivos`),
+  // pero se siente nativo de verdad en vez de abrir el picker del navegador.
+  async function tomarFoto() {
+    if (!camaraNativaDisponible()) {
+      inputCamaraRef.current?.click();
+      return;
+    }
+    const file = await tomarFotoNativa().catch(() => null);
+    if (!file) return; // usuario canceló, o el plugin falló — no hay nada que agregar
+    setArchivos((prev) => [...prev, { localId: `${Date.now()}-${Math.random()}`, file, etiqueta: "" }]);
   }
 
   async function crearDocumento() {
@@ -176,7 +190,7 @@ export default function NuevoDocumentoPage() {
             <button
               type="button"
               className="flex-1 rounded-pill border border-border py-2 text-sm font-medium hover:opacity-80"
-              onClick={() => inputCamaraRef.current?.click()}
+              onClick={tomarFoto}
             >
               📷 Tomar foto
             </button>

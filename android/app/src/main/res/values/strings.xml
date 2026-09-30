@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VICTOR CFO</string>
+    <string name="title_activity_main">VICTOR CFO</string>
+    <string name="package_name">com.victorcfo.app</string>
+    <string name="custom_url_scheme">com.victorcfo.app</string>
+</resources>
