@@ -20,15 +20,20 @@ const config: CapacitorConfig = {
     url: "https://www.victorcfo.com",
     androidScheme: "https",
     // cleartext: false — todo pasa por HTTPS real, nunca HTTP.
-    // Marca el User-Agent del WebView nativo para que app/page.tsx pueda
-    // distinguir "alguien abrió la app de verdad" de "alguien visitó
-    // victorcfo.com en un navegador normal" — así la app abre directo en
-    // /login (como cualquier app) en vez del landing de mercadeo, que solo
-    // tiene sentido para visitantes web nuevos.
+  },
+  // appendUserAgent marca el User-Agent del WebView nativo para que
+  // app/page.tsx pueda distinguir "alguien abrió la app de verdad" de
+  // "alguien visitó victorcfo.com en un navegador normal" — así la app
+  // abre directo en /login (como cualquier app) en vez del landing de
+  // mercadeo, que solo tiene sentido para visitantes web nuevos. Va por
+  // plataforma (no en `server` global) porque la versión de @capacitor/cli
+  // instalada en Vercel no reconoce ese campo a nivel global.
+  android: {
     appendUserAgent: "VictorCFOApp",
   },
   ios: {
     contentInset: "automatic",
+    appendUserAgent: "VictorCFOApp",
   },
   plugins: {
     PushNotifications: {
