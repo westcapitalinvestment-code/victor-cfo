@@ -48,7 +48,7 @@ export default async function PagosPage() {
 
   let vendorsQuery = supabase
     .from("vendors")
-    .select("id, name, tax_id, vendor_type, retention_type, default_retention_pct, active, entity_id")
+    .select("id, name, tax_id, vendor_type, retention_type, default_retention_pct, is_corporation, active, entity_id")
     .eq("owner_id", user.id)
     .order("name", { ascending: true });
   let retencionesQuery = supabase

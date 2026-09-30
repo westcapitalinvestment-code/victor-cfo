@@ -14,9 +14,26 @@ type Vendor = {
   vendor_type: string;
   retention_type: string | null;
   default_retention_pct: number;
+  is_corporation: boolean;
   active: boolean;
   entity_id: string | null;
 };
+
+// Las 4 casillas reales del Modelo 480.6SP (Sección 1062.03) — confirmado
+// con el CPA de Joel y con un 480.6SP real de su compañía, 30 sept 2026.
+// No son "480.6A"/"480.6B" como dos formularios separados: es un solo
+// formulario (480.6SP) con 4 casillas según sujeto/exento × individuo/
+// corporación. retention_type sigue guardando internamente "480.6A"
+// (exento) / "480.6B" (sujeto) por compatibilidad con los datos ya
+// guardados — solo cambia cómo se le muestra al usuario. is_corporation
+// (migración 0112) guarda el eje individuo/corporación.
+function casilla480_6SP(v: { retention_type: string | null; is_corporation: boolean }): { numero: number; label: string } {
+  const sujeto = v.retention_type === "480.6B";
+  if (!sujeto && !v.is_corporation) return { numero: 1, label: "Casilla 1 — individuo, no sujeto a retención" };
+  if (!sujeto && v.is_corporation) return { numero: 2, label: "Casilla 2 — corporación/entidad, no sujeta a retención" };
+  if (sujeto && !v.is_corporation) return { numero: 3, label: "Casilla 3 — individuo, sujeto a retención" };
+  return { numero: 4, label: "Casilla 4 — corporación/entidad, sujeta a retención" };
+}
 
 type Retencion = {
   id: string;
@@ -87,9 +104,12 @@ function rangoTrimestre(anio: number, trimestre: number): { desde: string; hasta
   };
 }
 
+// Valores internos sin cambiar ("480.6A"/"480.6B") por compatibilidad con
+// datos ya guardados — el label ya no los nombra como formularios
+// separados (corregido 30 sept 2026, ver nota en casilla480_6SP()).
 const TIPOS_RETENCION = [
-  { value: "480.6B", label: "480.6B — sujeto a retención" },
-  { value: "480.6A", label: "480.6A — exento de retención" },
+  { value: "480.6B", label: "Sujeto a retención" },
+  { value: "480.6A", label: "Exento de retención" },
 ] as const;
 
 // Umbral real de Hacienda PR (Sección 1062.03) sobre pagos por servicios a
@@ -952,6 +972,9 @@ function ContratistasTab({
   const [taxId, setTaxId] = useState("");
   const [retentionType, setRetentionType] = useState<(typeof TIPOS_RETENCION)[number]["value"]>("480.6B");
   const [pct, setPct] = useState(String(retencionDefault));
+  // Migración 0112 (30 sept 2026) — segundo eje del Modelo 480.6SP, junto a
+  // retentionType decide la casilla real (1/2/3/4, ver casilla480_6SP()).
+  const [isCorporation, setIsCorporation] = useState(false);
 
   function abrirNuevo() {
     setFormAbierto("nuevo");
@@ -959,6 +982,7 @@ function ContratistasTab({
     setTaxId("");
     setRetentionType("480.6B");
     setPct(String(retencionDefault));
+    setIsCorporation(false);
     setError(null);
   }
 
@@ -968,6 +992,7 @@ function ContratistasTab({
     setTaxId(v.tax_id ?? "");
     setRetentionType((v.retention_type as (typeof TIPOS_RETENCION)[number]["value"]) || "480.6B");
     setPct(String(v.default_retention_pct));
+    setIsCorporation(v.is_corporation ?? false);
     setError(null);
   }
 
@@ -1001,9 +1026,10 @@ function ContratistasTab({
           vendor_type: "contratista_servicios",
           retention_type: retentionType,
           default_retention_pct: Number(pct || 0),
+          is_corporation: isCorporation,
           active: true,
         })
-        .select("id, name, tax_id, vendor_type, retention_type, default_retention_pct, active, entity_id")
+        .select("id, name, tax_id, vendor_type, retention_type, default_retention_pct, is_corporation, active, entity_id")
         .single();
       setGuardando(false);
       if (insertError || !data) {
@@ -1016,7 +1042,13 @@ function ContratistasTab({
     } else if (formAbierto) {
       const { error: updateError } = await supabase
         .from("vendors")
-        .update({ name: name.trim(), tax_id: taxId.trim() || null, retention_type: retentionType, default_retention_pct: Number(pct || 0) })
+        .update({
+          name: name.trim(),
+          tax_id: taxId.trim() || null,
+          retention_type: retentionType,
+          default_retention_pct: Number(pct || 0),
+          is_corporation: isCorporation,
+        })
         .eq("id", formAbierto);
       setGuardando(false);
       if (updateError) {
@@ -1026,7 +1058,14 @@ function ContratistasTab({
       setLista((prev) =>
         prev.map((v) =>
           v.id === formAbierto
-            ? { ...v, name: name.trim(), tax_id: taxId.trim() || null, retention_type: retentionType, default_retention_pct: Number(pct || 0) }
+            ? {
+                ...v,
+                name: name.trim(),
+                tax_id: taxId.trim() || null,
+                retention_type: retentionType,
+                default_retention_pct: Number(pct || 0),
+                is_corporation: isCorporation,
+              }
             : v
         )
       );
@@ -1125,6 +1164,15 @@ function ContratistasTab({
               <span className="text-xs text-muted">%</span>
             </div>
           </div>
+          {/* Migración 0112 (30 sept 2026) — junto a retentionType decide la
+              casilla real del 480.6SP (1/2/3/4, ver casilla480_6SP()). */}
+          <label className="flex items-center gap-2 text-xs text-muted">
+            <input type="checkbox" checked={isCorporation} onChange={(e) => setIsCorporation(e.target.checked)} />
+            Es corporación o entidad (no individuo)
+          </label>
+          <p className="text-[11px] text-muted">
+            {casilla480_6SP({ retention_type: retentionType, is_corporation: isCorporation }).label}
+          </p>
           <div className="flex gap-2">
             <button className="vc-btn-primary flex-1" disabled={!name.trim() || guardando} onClick={guardar}>
               {guardando ? "Guardando..." : "Guardar"}
@@ -1163,7 +1211,8 @@ function ContratistasTab({
                     {v.name} {!v.active && <span className="text-xs text-muted">(archivado)</span>}
                   </p>
                   <p className="truncate text-xs text-muted">
-                    {v.retention_type === "480.6A" ? "480.6A · exento" : `480.6B · ${Number(v.default_retention_pct)}%`}
+                    {`Casilla ${casilla480_6SP(v).numero}`}
+                    {v.retention_type === "480.6B" ? ` · ${Number(v.default_retention_pct)}%` : " · exento"}
                     {v.tax_id ? ` · ${v.tax_id}` : ""}
                   </p>
                 </button>
@@ -1320,7 +1369,7 @@ function ComboBuscableVendor<T extends { id: string }>({
 
 // ============================================================================
 // Tab: Reportes — resumen trimestral por contratista (lo que Joel necesita
-// para llenar el 480.6A/B) + export PDF/Excel.
+// para llenar el Modelo 480.6SP) + export PDF/Excel.
 // ============================================================================
 function ReportesTab({
   vendors,
@@ -1491,7 +1540,7 @@ function ReportesTab({
       </div>
 
       <div className="vc-card mb-3">
-        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Resumen — para el 480.6A/B</p>
+        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Resumen — para el Modelo 480.6SP</p>
         <div className="flex justify-between py-0.5 text-sm">
           <span className="text-muted">Bruto pagado</span>
           <span>{formatMoney(totalBruto)}</span>
