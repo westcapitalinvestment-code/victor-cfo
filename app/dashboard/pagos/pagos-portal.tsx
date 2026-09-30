@@ -1500,6 +1500,12 @@ function ReportesTab({
   // hizo en Facturación) — el CSV route se deja intacto pero sin usar.
   const excelHref = `/api/pagos/reportes/excel?${paramsExport}`;
   const pdfHref = `/api/pagos/reportes/pdf?${paramsExport}`;
+  // Exportación año-fiscal del 480.6SP (30 sept 2026, tarea #743) — siempre
+  // el año calendario completo (no el rango de arriba), con SSN/EIN y la
+  // casilla real de cada contratista, lo que Joel le entrega a su CPA.
+  const anioActual480_6SP = Number(hoyISO().slice(0, 4));
+  const paramsExport480_6SP = `anio=${anioActual480_6SP}${!vistaGlobal && entidadId ? `&entityId=${entidadId}` : ""}`;
+  const export480_6SPHref = `/api/pagos/reportes/480-6sp?${paramsExport480_6SP}`;
 
   return (
     <>
@@ -1655,6 +1661,19 @@ function ReportesTab({
         </a>
         <a href={excelHref} className="vc-btn-secondary flex-1 text-center">
           Exportar Excel
+        </a>
+      </div>
+
+      {/* Exportación año-fiscal del 480.6SP para el CPA (tarea #743) —
+          aparte de los botones de arriba porque siempre es el año completo,
+          no el período que esté filtrado en pantalla. */}
+      <div className="vc-card mt-3">
+        <p className="mb-1 text-xs uppercase tracking-wide text-muted">Para el CPA — año fiscal completo</p>
+        <p className="mb-2 text-xs text-muted">
+          CSV con casilla (1-4), SSN/EIN y totales de {anioActual480_6SP} — solo contratistas que cruzaron los $500.
+        </p>
+        <a href={export480_6SPHref} className="vc-btn-secondary block text-center">
+          Exportar 480.6SP {anioActual480_6SP}
         </a>
       </div>
     </>
