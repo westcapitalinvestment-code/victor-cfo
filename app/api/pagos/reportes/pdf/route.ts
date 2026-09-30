@@ -6,7 +6,7 @@ import { formatMoney, formatFecha, slugificar } from "@/lib/format";
 
 // PDF del resumen de Pagos a contratistas (2 sept 2026, pedido de Joel) —
 // mismo patrón que /api/facturas/reportes/pdf (pdf-lib, misma paginación),
-// pero con un solo bloque: Resumen + Por contratista, para el 480.6A/B.
+// pero con un solo bloque: Resumen + Por contratista, para el Modelo 480.6SP.
 export async function GET(req: NextRequest) {
   const supabase = createClient();
   const {
@@ -171,7 +171,7 @@ export async function GET(req: NextRequest) {
   filaTabla("Retenido (crédito para remesar)", formatMoney(totalRetenido), { color: amb });
   filaTabla("Neto pagado", formatMoney(totalNeto), { bold: true, color: teal });
 
-  encabezadoSeccion("Por contratista — para el 480.6A/B");
+  encabezadoSeccion("Por contratista — para el Modelo 480.6SP");
   if (porContratista.length === 0) {
     filaTabla("No hay pagos registrados en este período.", "");
   } else {

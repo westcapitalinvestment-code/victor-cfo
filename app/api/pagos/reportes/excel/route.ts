@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
 
   const buffer = await generarReporteExcel({
     tituloEmpresa: nombreTitular,
-    tituloReporte: "Reporte de Pagos a Contratistas — 480.6A/B",
+    tituloReporte: "Reporte de Pagos a Contratistas — Modelo 480.6SP",
     periodo: `${formatFecha(desde)} — ${formatFecha(hasta)}`,
     logo,
     columnas,

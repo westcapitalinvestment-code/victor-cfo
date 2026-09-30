@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 // CSV del resumen trimestral de Pagos a contratistas (2 sept 2026) — lo que
-// Joel necesita para llenar el 480.6A/B por contratista. Mismo patrón que
+// Joel necesita para llenar el Modelo 480.6SP por contratista. Mismo patrón que
 // /api/facturas/reportes/csv: se recalcula server-side a partir de los
 // filtros (desde/hasta/entityId), no se manda la tabla ya armada por query.
 function escaparCsv(valor: string): string {

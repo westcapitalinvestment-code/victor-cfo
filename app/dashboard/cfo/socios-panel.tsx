@@ -68,20 +68,17 @@ function fmtFecha(iso: string | null) {
     : "—";
 }
 
-// Dos umbrales reales de Hacienda PR sobre pagos por servicios a un mismo
-// socio en el año calendario (confirmado con Joel, 29 sept 2026) — no son
-// el mismo umbral, son dos cosas distintas:
-//   - $500: hay que DECLARARLO en el Modelo 480.6A, aunque no se le
-//     retenga nada (Joel nunca retiene aquí en v1 — el pago es efectivo
-//     real, no pasa por Stripe balance).
-//   - $1,500 (Sección 1062.03): el EXCESO sobre esto queda sujeto a
-//     retención en el origen, y ya no se reporta en 480.6A sino en 480.6B.
-// No se guarda SSN/EIN todavía (fuera de alcance de v1); esto solo AVISA
-// cuando un socio cruza cada umbral en el año calendario, y Joel resuelve
-// la recolección de datos contributivos y la 480.6 por fuera de la app en
-// ese momento (ver migración 0070/0071).
-const UMBRAL_DECLARAR_CENTAVOS = 50_000; // $500 — declarar en 480.6A
-const UMBRAL_RETENCION_CENTAVOS = 150_000; // $1,500 — Sección 1062.03, pasa a 480.6B
+// Umbral real de Hacienda PR (Sección 1062.03) sobre pagos por servicios a
+// un mismo socio en el año calendario — corregido 30 sept 2026 (mismo fix
+// que pagos-portal.tsx: un solo umbral de $500, no dos umbrales separados
+// de $500/$1,500 — ese segundo número no existe en la ley, confirmado con
+// el CPA de Joel). A partir de $500 acumulado hay que declararlo en el
+// Modelo 480.6SP; el exceso sobre $500 queda sujeto a retención (Joel
+// nunca retiene aquí en v1 — el pago es efectivo real, no pasa por Stripe
+// balance, así que esto solo AVISA). No se guarda SSN/EIN todavía (fuera
+// de alcance de v1); Joel resuelve la recolección de datos contributivos
+// y la 480.6SP por fuera de la app en ese momento (ver migración 0070/0071).
+const UMBRAL_DECLARAR_CENTAVOS = 50_000; // $500 — declarar en 480.6SP
 
 export default function SociosPanel({
   socios: sociosIniciales,
@@ -255,8 +252,7 @@ export default function SociosPanel({
                     propias
                       .filter((c) => c.estado === "pendiente" && c.createdAt && new Date(c.createdAt) >= inicioAño)
                       .reduce((sum, c) => sum + c.comisionCentavos, 0);
-                  const pasoRetencion = acumuladoEsteAño >= UMBRAL_RETENCION_CENTAVOS;
-                  const pasoDeclarar = !pasoRetencion && acumuladoEsteAño >= UMBRAL_DECLARAR_CENTAVOS;
+                  const pasoDeclarar = acumuladoEsteAño >= UMBRAL_DECLARAR_CENTAVOS;
                   const linkPago = s.paymentToken ? `${origin}/socios/pago/${s.paymentToken}` : null;
                   const revelado = datosRevelados[s.id];
 
@@ -317,17 +313,11 @@ export default function SociosPanel({
                         </div>
                       )}
 
-                      {pasoRetencion && (
-                        <p className="mt-1.5 rounded-md bg-amb/10 px-2 py-1 text-[11px] text-amb">
-                          ⚠️ Lleva {fmt(acumuladoEsteAño)} este año — pasó los $1,500 de la Sección 1062.03. El
-                          exceso queda sujeto a retención y se declara en el Modelo 480.6B (ya no en 480.6A). Pide
-                          datos contributivos antes de seguir pagando (fuera de la app).
-                        </p>
-                      )}
                       {pasoDeclarar && (
-                        <p className="mt-1.5 rounded-md bg-teal/5 px-2 py-1 text-[11px] text-muted">
-                          ℹ️ Lleva {fmt(acumuladoEsteAño)} este año — ya hay que declararlo en el Modelo 480.6A
-                          (a partir de $500/año), aunque no se le retenga nada.
+                        <p className="mt-1.5 rounded-md bg-amb/10 px-2 py-1 text-[11px] text-amb">
+                          ⚠️ Lleva {fmt(acumuladoEsteAño)} este año — pasó los $500 de la Sección 1062.03. Hay que
+                          declararlo en el Modelo 480.6SP; el exceso sobre $500 queda sujeto a retención. Pide datos
+                          contributivos antes de seguir pagando (fuera de la app).
                         </p>
                       )}
 

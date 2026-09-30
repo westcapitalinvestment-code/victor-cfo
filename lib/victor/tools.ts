@@ -921,10 +921,10 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
   {
     name: "reporte_pagos_contratistas",
     description:
-      "Trae el desglose REAL del módulo Pagos (Pro) por contratista — bruto pagado, retenido (crédito 480.6/480.6A " +
-      "para Hacienda), y neto pagado — para un rango de fechas y una entidad de negocio. Mismo cálculo exacto que " +
-      "usa la pantalla Pagos → Reportes y su export CSV/PDF. OBLIGATORIO: úsala SIEMPRE que el usuario pregunte " +
-      "cuánto le ha pagado a un contratista, cuánto ha retenido en total para el 480.6A/B, o pida un análisis de " +
+      "Trae el desglose REAL del módulo Pagos (Pro) por contratista — bruto pagado, retenido (crédito Modelo " +
+      "480.6SP para Hacienda), y neto pagado — para un rango de fechas y una entidad de negocio. Mismo cálculo " +
+      "exacto que usa la pantalla Pagos → Reportes y su export CSV/PDF. OBLIGATORIO: úsala SIEMPRE que el usuario " +
+      "pregunte cuánto le ha pagado a un contratista, cuánto ha retenido en total para el 480.6SP, o pida un análisis de " +
       "gastos de contratistas/nómina externa del negocio — NUNCA inventes esos números. También ÚSALA para " +
       "explicar qué compone un depósito o lote bancario específico (ej. una transacción de Pagos/nómina que " +
       "salió del banco): pon desde=hasta=esa fecha exacta y usa el detalle individual que trae la respuesta — " +

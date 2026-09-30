@@ -151,6 +151,44 @@ function acumuladoAnualPorVendor(retenciones: Retencion[], anio: number): Map<st
   return mapa;
 }
 
+// Modelo 480.9A — depósito mensual de las retenciones de la Sección
+// 1062.03, vence el día 15 del mes SIGUIENTE al mes en que se hizo el pago
+// (no trimestral, a diferencia del 480.6SP que es anual). Esto solo AVISA
+// cuánto hay que depositar y cuándo vence — Joel remesa a SURI por fuera de
+// la app (marcar como "remesado" es roadmap, tarea #317).
+// Regla: si hoy es día 1-15, el depósito pendiente es el del mes PASADO
+// (vence hoy, día 15). Si hoy es día 16+, el depósito pendiente es el del
+// mes EN CURSO (vence el día 15 del mes que viene) — todavía no ha vencido.
+function estadoDeposito480_9A(
+  retenciones: Retencion[],
+  entidadId: string | null,
+  vistaGlobal: boolean,
+  hoy: Date
+): { anio: number; mes: number; totalDolares: number; vence: Date; vencido: boolean } {
+  const diaHoy = hoy.getDate();
+  // Mes de referencia (0-indexado) cuyo depósito nos interesa mostrar.
+  const refFecha = new Date(hoy.getFullYear(), hoy.getMonth() - (diaHoy <= 15 ? 1 : 0), 1);
+  const anio = refFecha.getFullYear();
+  const mes = refFecha.getMonth(); // 0-11
+  const vence = new Date(anio, mes + 1, 15);
+
+  let total = 0;
+  for (const r of retenciones) {
+    if (!vistaGlobal && entidadId && r.entity_id !== entidadId) continue;
+    const fecha = r.period_end ?? r.period_start ?? r.created_at;
+    if (!fecha) continue;
+    const f = new Date(fecha);
+    if (f.getFullYear() === anio && f.getMonth() === mes) total += Number(r.retention_amount);
+  }
+
+  return { anio, mes, totalDolares: total, vence, vencido: hoy > vence && total > 0 };
+}
+
+const MESES_ES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
 // Portal de Pagos a contratistas (2 sept 2026, pedido de Joel). Alcance
 // acordado: el sistema calcula bruto/retención 480.6/neto por corrida de
 // pago — Joel toma esos números y los sube a mano al ACH de BPPR, como hace
@@ -1443,6 +1481,14 @@ function ReportesTab({
   const totalRetenido = porContratista.reduce((s, c) => s + c.retenido, 0);
   const totalNeto = porContratista.reduce((s, c) => s + c.neto, 0);
 
+  // Depósito 480.9A (30 sept 2026, tarea #742) — independiente del filtro de
+  // período de arriba (Trimestre/Rango): siempre muestra el mes calendario
+  // que le toca depositar a Joel AHORA mismo, no el rango que esté mirando.
+  const deposito = useMemo(
+    () => estadoDeposito480_9A(retenciones, entidadId, vistaGlobal, new Date()),
+    [retenciones, entidadId, vistaGlobal]
+  );
+
   // vistaGlobal: NUNCA mandar entityId — la lista de arriba (porContratista)
   // tampoco filtra por entidad en ese modo, así que el export tiene que
   // traer exactamente lo mismo que ya se ve en pantalla (ver comentario en
@@ -1523,6 +1569,27 @@ function ReportesTab({
           </div>
         )}
       </div>
+
+      {deposito.totalDolares > 0 && (
+        <div
+          className={`vc-card mb-3 ${deposito.vencido ? "border-red/40 bg-red/5" : "border-amb/30 bg-amb/5"}`}
+        >
+          <p className="mb-1 text-xs uppercase tracking-wide text-muted">Depósito mensual — Modelo 480.9A</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm">
+                Retenido en {MESES_ES[deposito.mes]} {deposito.anio}:{" "}
+                <span className="font-medium">{formatMoney(deposito.totalDolares)}</span>
+              </p>
+              <p className={`text-xs ${deposito.vencido ? "text-red" : "text-muted"}`}>
+                {deposito.vencido
+                  ? `⚠️ Venció el ${formatFecha(deposito.vence.toISOString().slice(0, 10))} — deposítalo en SURI cuanto antes.`
+                  : `Vence el ${formatFecha(deposito.vence.toISOString().slice(0, 10))} (día 15 del mes siguiente).`}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="vc-card mb-3">
         <p className="mb-1 text-xs uppercase tracking-wide text-muted">Contratista</p>
