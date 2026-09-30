@@ -1133,6 +1133,19 @@ function ContratistasTab({
 
   return (
     <>
+      {/* Importador de pagos históricos (30 sept 2026, pedido de Joel: un
+          contratista que llega a mitad de año con data de otro sistema no
+          debería esperar a enero para que el acumulado de $500 y el
+          480.6SP le funcionen) — ver /api/pagos/csv/importar. */}
+      <div className="mb-2 flex justify-end gap-3 text-[11px]">
+        <Link href={`/dashboard/pagos/importaciones${entidadId ? `?entidadId=${entidadId}` : ""}`} className="font-medium text-muted hover:text-teal">
+          Importaciones anteriores
+        </Link>
+        <Link href={`/dashboard/pagos/importar${entidadId ? `?entidadId=${entidadId}` : ""}`} className="font-medium text-teal hover:opacity-80">
+          Importar histórico (CSV) →
+        </Link>
+      </div>
+
       <div className="mb-3 flex gap-1.5">
         <div className="relative min-w-0 flex-1">
           <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-teal" />
