@@ -22,6 +22,16 @@ allprojects {
         google()
         mavenCentral()
     }
+    // Varios plugins de Capacitor (cámara, biometría, push, app) traen cada
+    // uno su propia copia vieja de kotlin-stdlib-jdk7/jdk8 — desde Kotlin
+    // 1.8 esas clases ya viven directo en kotlin-stdlib, así que tener las
+    // dos versiones al mismo tiempo duplica clases y tumba el build
+    // ("Duplicate class kotlin.jvm.jdk8..."). Se excluyen en todos los
+    // módulos para que todo use la copia única de kotlin-stdlib.
+    configurations.all {
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+    }
 }
 
 task clean(type: Delete) {
