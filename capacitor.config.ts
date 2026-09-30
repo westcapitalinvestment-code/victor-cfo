@@ -20,6 +20,12 @@ const config: CapacitorConfig = {
     url: "https://www.victorcfo.com",
     androidScheme: "https",
     // cleartext: false — todo pasa por HTTPS real, nunca HTTP.
+    // Marca el User-Agent del WebView nativo para que app/page.tsx pueda
+    // distinguir "alguien abrió la app de verdad" de "alguien visitó
+    // victorcfo.com en un navegador normal" — así la app abre directo en
+    // /login (como cualquier app) en vez del landing de mercadeo, que solo
+    // tiene sentido para visitantes web nuevos.
+    appendUserAgent: "VictorCFOApp",
   },
   ios: {
     contentInset: "automatic",
