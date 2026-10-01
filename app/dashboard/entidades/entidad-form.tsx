@@ -52,6 +52,10 @@ export type EntidadCompleta = {
   stripe_connect_charges_enabled?: boolean | null;
   shopify_shop_domain?: string | null;
   shopify_conectado?: boolean | null;
+  ach_bank_name?: string | null;
+  ach_routing_number?: string | null;
+  ach_account_type?: string | null;
+  ach_company_id?: string | null;
 };
 
 // Paleta de colores de marca (pedido de Joel, 1 sept 2026): para que la
@@ -731,6 +735,24 @@ export default function EntidadForm({
             </div>
           )}
 
+          {/* Cuenta ACH originadora (30 sept 2026, pedido de Joel: exportar
+              archivo NACHA para subir al portal del banco en vez de copiar/
+              pegar nombre+monto a mano) — de aquí sale el dinero de cada
+              Corrida de Pago. Solo en modo editar, igual que Relevo/Logo:
+              hace falta el id real de la entidad para guardar vía API
+              (el número de cuenta se cifra en el servidor, no puede pasar
+              por el insert directo de Supabase que usa el resto del form). */}
+          {modo === "editar" && entidad?.id && (
+            <CuentaACHEntidad
+              entityId={entidad.id}
+              bankNameActual={entidad.ach_bank_name}
+              routingActual={entidad.ach_routing_number}
+              accountTypeActual={entidad.ach_account_type}
+              companyIdActual={entidad.ach_company_id}
+              tieneCuenta={!!entidad.ach_routing_number}
+            />
+          )}
+
           <div className="vc-card">
             <Field label="Pie de factura (opcional)">
               <textarea className="vc-input" rows={2} value={invoiceFooter} onChange={(e) => setInvoiceFooter(e.target.value)} />
@@ -836,6 +858,117 @@ function SelectorColorFactura({ color, onChange }: { color: string; onChange: (h
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Bancos de PR con routing number conocido — Joel confirmó que la mayoría
+// de sus clientes bancean con estos 3 (conversación con su CPA Gem, 30 sept
+// 2026). "Otro" deja escribir el routing a mano.
+const BANCOS_ACH: { nombre: string; routing: string }[] = [
+  { nombre: "BPPR", routing: "021502011" },
+  { nombre: "FirstBank", routing: "021502228" },
+  { nombre: "Oriental", routing: "021502914" },
+];
+
+function CuentaACHEntidad({
+  entityId,
+  bankNameActual,
+  routingActual,
+  accountTypeActual,
+  companyIdActual,
+  tieneCuenta,
+}: {
+  entityId: string;
+  bankNameActual?: string | null;
+  routingActual?: string | null;
+  accountTypeActual?: string | null;
+  companyIdActual?: string | null;
+  tieneCuenta: boolean;
+}) {
+  const [bankName, setBankName] = useState(bankNameActual ?? "BPPR");
+  const [routing, setRouting] = useState(routingActual ?? BANCOS_ACH[0].routing);
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountType, setAccountType] = useState(accountTypeActual === "savings" ? "savings" : "checking");
+  const [companyId, setCompanyId] = useState(companyIdActual ?? "");
+  const [guardando, setGuardando] = useState(false);
+  const [guardado, setGuardado] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function escogerBanco(nombre: string) {
+    setBankName(nombre);
+    const preset = BANCOS_ACH.find((b) => b.nombre === nombre);
+    if (preset) setRouting(preset.routing);
+  }
+
+  async function guardar() {
+    setGuardando(true);
+    setError(null);
+    setGuardado(false);
+    const res = await fetch(`/api/entidades/${entityId}/banca`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bankName, routingNumber: routing, accountNumber, accountType, companyId }),
+    });
+    setGuardando(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "No se pudo guardar la cuenta ACH.");
+      return;
+    }
+    setAccountNumber("");
+    setGuardado(true);
+    setTimeout(() => setGuardado(false), 2500);
+  }
+
+  return (
+    <div className="vc-card">
+      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Cuenta ACH — para exportar archivo NACHA</p>
+      <p className="mb-3 text-xs text-muted">
+        De esta cuenta sale el dinero cuando descargas el archivo .ach de una Corrida de Pago para subirlo al portal de tu
+        banco. Opcional — si no la llenas, sigues pudiendo copiar/pegar los pagos a mano como hasta ahora.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Banco">
+          <select className="vc-input" value={bankName} onChange={(e) => escogerBanco(e.target.value)}>
+            {BANCOS_ACH.map((b) => (
+              <option key={b.nombre} value={b.nombre}>
+                {b.nombre}
+              </option>
+            ))}
+            <option value="Otro">Otro</option>
+          </select>
+        </Field>
+        <Field label="Routing number">
+          <input className="vc-input" value={routing} onChange={(e) => setRouting(e.target.value)} maxLength={9} />
+        </Field>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <Field label={tieneCuenta ? "Número de cuenta (dejar en blanco = no cambiar)" : "Número de cuenta"}>
+          <input
+            className="vc-input"
+            value={accountNumber}
+            onChange={(e) => setAccountNumber(e.target.value)}
+            placeholder={tieneCuenta ? "•••• ya archivada" : ""}
+          />
+        </Field>
+        <Field label="Tipo">
+          <select className="vc-input" value={accountType} onChange={(e) => setAccountType(e.target.value)}>
+            <option value="checking">Checking</option>
+            <option value="savings">Savings</option>
+          </select>
+        </Field>
+      </div>
+      <div className="mt-2">
+        <Field label="Company ID (lo da tu banco para originar ACH — a veces es 1 + tu EIN)">
+          <input className="vc-input" value={companyId} onChange={(e) => setCompanyId(e.target.value)} placeholder="1660123456" />
+        </Field>
+      </div>
+      {error && <p className="mt-2 text-xs text-red">{error}</p>}
+      {guardado && <p className="mt-2 text-xs text-teal">✓ Cuenta ACH guardada.</p>}
+      <button type="button" className="vc-btn-secondary mt-3" disabled={guardando} onClick={guardar}>
+        {guardando ? "Guardando..." : "Guardar cuenta ACH"}
+      </button>
     </div>
   );
 }

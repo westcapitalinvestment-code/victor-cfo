@@ -25,6 +25,12 @@ type Vendor = {
   relevo_r2_key?: string | null;
   relevo_pct?: number | null;
   relevo_fecha_expiracion?: string | null;
+  // Migración 0118 (30 sept 2026): cuenta bancaria del contratista para el
+  // archivo NACHA — bank_account_number_enc NUNCA se trae al cliente (se
+  // descifra solo en el servidor al generar el archivo), por eso no está en
+  // este tipo; aquí solo lo que hace falta para saber si ya está completa.
+  bank_routing_number?: string | null;
+  bank_account_type?: string | null;
 };
 
 // Estado real del relevo de un contratista, comparado contra hoy (fecha de
@@ -465,6 +471,53 @@ function PagosTab({
   const inputArchivoEvidenciaRef = useRef<HTMLInputElement>(null);
   const retencionEvidenciaObjetivo = useRef<string | null>(null);
 
+  // Archivo ACH/NACHA (30 sept 2026, pedido de Joel — segunda mitad de "crear
+  // los 2, uno para los tecnologicos... y el NACHA para los que tiran ACH").
+  // Selección de pagos "pendiente" para armar un solo archivo .ach que se
+  // sube al portal del banco en vez de copiar/pegar nombre+monto a mano.
+  const [seleccionNacha, setSeleccionNacha] = useState<Set<string>>(new Set());
+  const [descargandoNacha, setDescargandoNacha] = useState(false);
+  const [nachaError, setNachaError] = useState<string | null>(null);
+  const [nachaAvisos, setNachaAvisos] = useState<string | null>(null);
+
+  async function descargarNacha() {
+    if (seleccionNacha.size === 0) return;
+    setDescargandoNacha(true);
+    setNachaError(null);
+    setNachaAvisos(null);
+    const ids = [...seleccionNacha];
+    // Todas las filas seleccionadas deberían ser de la misma entidad (un
+    // archivo NACHA sale de UNA sola cuenta originadora) — se usa la
+    // entidad de la primera fila seleccionada; si alguna otra es de otra
+    // entidad, el backend la excluye y avisa en vez de fallar todo.
+    const primeraFila = retenciones.find((r) => r.id === ids[0]);
+    const entityIdParaNacha = primeraFila?.entity_id ?? entidadId ?? "";
+    try {
+      const res = await fetch(`/api/pagos/nacha?ids=${ids.join(",")}&entityId=${entityIdParaNacha}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setNachaError(data.error ?? "No se pudo generar el archivo ACH.");
+        setDescargandoNacha(false);
+        return;
+      }
+      const avisos = res.headers.get("X-Nacha-Avisos");
+      if (avisos) setNachaAvisos(decodeURIComponent(avisos));
+      const blob = await res.blob();
+      const nombreArchivo =
+        res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ?? "pagos.ach";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombreArchivo;
+      a.click();
+      URL.revokeObjectURL(url);
+      setSeleccionNacha(new Set());
+    } catch {
+      setNachaError("No se pudo generar el archivo ACH. Intenta de nuevo.");
+    }
+    setDescargandoNacha(false);
+  }
+
   function abrirCamaraEvidencia(retencionId: string) {
     retencionEvidenciaObjetivo.current = retencionId;
     inputCamaraEvidenciaRef.current?.click();
@@ -731,6 +784,7 @@ function PagosTab({
         .slice(0, 20),
     [retenciones, eliminados]
   );
+  const nachaSeleccionables = useMemo(() => historialOrdenado.filter((r) => r.remittance_status === "pendiente"), [historialOrdenado]);
 
   async function eliminarRetencion(id: string) {
     if (!confirm("¿Eliminar este registro de pago? Esto no revierte nada en el banco, solo borra el número de aquí.")) return;
@@ -1032,6 +1086,34 @@ function PagosTab({
 
       <SeccionColapsable titulo={`Pagos recientes${historialOrdenado.length > 0 ? ` (${historialOrdenado.length})` : ""}`} defaultAbierta={false}>
         {historialOrdenado.length === 0 && <p className="text-xs text-muted">Todavía no has registrado ningún pago.</p>}
+        {/* Selección para archivo ACH/NACHA (30 sept 2026, pedido de Joel: el
+            otro camino además de copiar/pegar — un archivo .ach para subir
+            al portal del banco). Solo pagos "pendiente" (los ya remesados no
+            hace falta volver a pagarlos). */}
+        {nachaSeleccionables.length > 0 && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-teal/30 bg-teal/5 px-2.5 py-2">
+            <label className="flex items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={seleccionNacha.size > 0 && seleccionNacha.size === nachaSeleccionables.length}
+                onChange={(e) =>
+                  setSeleccionNacha(e.target.checked ? new Set(nachaSeleccionables.map((r) => r.id)) : new Set())
+                }
+              />
+              {seleccionNacha.size > 0 ? `${seleccionNacha.size} seleccionado(s)` : "Seleccionar todos los pendientes"}
+            </label>
+            <button
+              type="button"
+              disabled={seleccionNacha.size === 0 || descargandoNacha}
+              className="vc-btn-secondary flex-shrink-0 text-xs"
+              onClick={descargarNacha}
+            >
+              {descargandoNacha ? "Generando..." : "Descargar archivo ACH"}
+            </button>
+          </div>
+        )}
+        {nachaError && <p className="mb-2 text-xs text-red">{nachaError}</p>}
+        {nachaAvisos && <p className="mb-2 text-xs text-amb">{nachaAvisos}</p>}
         {historialOrdenado.map((r) => {
           const v = vendorPorId.get(r.vendor_id);
           const adjuntos = adjuntosPorRetencion[r.id] ?? [];
@@ -1039,6 +1121,21 @@ function PagosTab({
           return (
             <div key={r.id} className="border-b border-border py-2 text-sm last:border-0">
               <div className="flex items-center gap-2">
+                {r.remittance_status === "pendiente" && (
+                  <input
+                    type="checkbox"
+                    className="flex-shrink-0"
+                    checked={seleccionNacha.has(r.id)}
+                    onChange={(e) =>
+                      setSeleccionNacha((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(r.id);
+                        else next.delete(r.id);
+                        return next;
+                      })
+                    }
+                  />
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate">{v?.name ?? "Contratista eliminado"}</p>
                   <p className="text-xs text-muted">
@@ -1519,6 +1616,11 @@ function ContratistasTab({
             </div>
           )}
 
+          {/* Cuenta bancaria del contratista (migración 0118, 30 sept 2026)
+              — para el archivo NACHA. Igual que el Relevo, solo aplica a un
+              contratista ya guardado (necesita el id real). */}
+          {relevoVendor && <CuentaBancariaVendor vendor={relevoVendor} />}
+
           <div className="flex gap-2">
             <button className="vc-btn-primary flex-1" disabled={!name.trim() || guardando} onClick={guardar}>
               {guardando ? "Guardando..." : "Guardar"}
@@ -1606,6 +1708,96 @@ function ContratistasTab({
         })}
       </div>
     </>
+  );
+}
+
+// Bancos de PR con routing number conocido — mismo listado que
+// CuentaACHEntidad en entidad-form.tsx (duplicado a propósito, mismo
+// patrón que el resto del código: cada portal trae su propia copia).
+const BANCOS_ACH_VENDOR: { nombre: string; routing: string }[] = [
+  { nombre: "BPPR", routing: "021502011" },
+  { nombre: "FirstBank", routing: "021502228" },
+  { nombre: "Oriental", routing: "021502914" },
+];
+
+// Cuenta bancaria RECEPTORA de un contratista (migración 0118, 30 sept 2026)
+// — a esta cuenta llega el pago cuando Joel sube el archivo NACHA al banco.
+// Mismo patrón que la sección de Relevo justo arriba: componente propio con
+// su botón de Guardar, porque el número de cuenta se cifra en el servidor
+// (no puede pasar por el insert/update directo de Supabase que usa el resto
+// del formulario de contratista).
+function CuentaBancariaVendor({ vendor }: { vendor: Vendor }) {
+  const [bankName, setBankName] = useState("BPPR");
+  const [routing, setRouting] = useState(vendor.bank_routing_number ?? BANCOS_ACH_VENDOR[0].routing);
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountType, setAccountType] = useState(vendor.bank_account_type === "savings" ? "savings" : "checking");
+  const [guardando, setGuardando] = useState(false);
+  const [guardado, setGuardado] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function escogerBanco(nombre: string) {
+    setBankName(nombre);
+    const preset = BANCOS_ACH_VENDOR.find((b) => b.nombre === nombre);
+    if (preset) setRouting(preset.routing);
+  }
+
+  async function guardar() {
+    setGuardando(true);
+    setError(null);
+    setGuardado(false);
+    const res = await fetch(`/api/pagos/vendors/${vendor.id}/banca`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bankName, routingNumber: routing, accountNumber, accountType }),
+    });
+    setGuardando(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "No se pudo guardar la cuenta bancaria.");
+      return;
+    }
+    setAccountNumber("");
+    setGuardado(true);
+    setTimeout(() => setGuardado(false), 2500);
+  }
+
+  const tieneCuenta = !!vendor.bank_routing_number;
+
+  return (
+    <div className="rounded-lg border border-border bg-bg p-2.5">
+      <p className="mb-1 text-xs font-medium">Cuenta bancaria — para archivo NACHA</p>
+      <p className="mb-1.5 text-[11px] text-muted">
+        Opcional. Llénala si vas a pagarle con el archivo .ach en vez de ACH manual o ATH Móvil.
+      </p>
+      <div className="mb-1.5 grid grid-cols-2 gap-2">
+        <select className="vc-input text-xs" value={bankName} onChange={(e) => escogerBanco(e.target.value)}>
+          {BANCOS_ACH_VENDOR.map((b) => (
+            <option key={b.nombre} value={b.nombre}>
+              {b.nombre}
+            </option>
+          ))}
+          <option value="Otro">Otro</option>
+        </select>
+        <select className="vc-input text-xs" value={accountType} onChange={(e) => setAccountType(e.target.value)}>
+          <option value="checking">Checking</option>
+          <option value="savings">Savings</option>
+        </select>
+      </div>
+      <div className="mb-1.5 grid grid-cols-2 gap-2">
+        <input className="vc-input text-xs" value={routing} onChange={(e) => setRouting(e.target.value)} maxLength={9} placeholder="Routing" />
+        <input
+          className="vc-input text-xs"
+          value={accountNumber}
+          onChange={(e) => setAccountNumber(e.target.value)}
+          placeholder={tieneCuenta ? "•••• ya archivada" : "N.º de cuenta"}
+        />
+      </div>
+      {error && <p className="mb-1.5 text-[11px] text-red">{error}</p>}
+      {guardado && <p className="mb-1.5 text-[11px] text-teal">✓ Cuenta guardada.</p>}
+      <button type="button" className="vc-btn-secondary w-full text-xs" disabled={guardando} onClick={guardar}>
+        {guardando ? "Guardando..." : "Guardar cuenta bancaria"}
+      </button>
+    </div>
   );
 }
 
