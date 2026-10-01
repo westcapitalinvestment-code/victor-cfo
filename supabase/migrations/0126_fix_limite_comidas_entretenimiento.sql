@@ -6,6 +6,15 @@
 -- se aplicó a la categoría real ni al texto que VICTOR le muestra al
 -- usuario, así que el dato incorrecto seguía viviendo en dos sitios.
 --
+-- Nota de numeración (1 oct 2026): el Código usa doble numeración — 1
+-- L.P.R.A. § 30137 es el número "de código" (el que usa law.justia.com),
+-- y su equivalente en la numeración "popular" que usa Hacienda en sus
+-- propias cartas/determinaciones es la Sección 1033.17 (confirmado porque
+-- Hacienda cita "Sección 1033.17(a)" para las mismas cláusulas (16)-(17)
+-- de gastos entre partes relacionadas que están en el texto de §30137).
+-- El borrador de #784 había escrito "1033.15" por error — no es esa
+-- sección (esa es de deducciones de individuos, ej. IRA).
+--
 -- Texto exacto verificado en 1 L.P.R.A. § 30137(e)(1)(A) (30 sept/1 oct
 -- 2026, vía law.justia.com — Código de Rentas Internas para un Nuevo
 -- Puerto Rico):
@@ -28,5 +37,5 @@ update hacienda_categories
 set
   nombre = 'Comidas y entretenimiento de negocio',
   deducible_multiplier = 0.25,
-  disclaimer = 'Límite de PR (no es la regla federal de 50%): deducible hasta 25% de lo pagado, con un tope adicional de 25% del ingreso bruto del año (Sección 1033.15 / 1 L.P.R.A. § 30137(e)(1)(A)). VICTOR CFO no calcula el tope final — tu contable lo aplica con el ingreso bruto real del año.'
+  disclaimer = 'Límite de PR (no es la regla federal de 50%): deducible hasta 25% de lo pagado, con un tope adicional de 25% del ingreso bruto del año (Sección 1033.17(e) / 1 L.P.R.A. § 30137(e)(1)(A)). VICTOR CFO no calcula el tope final — tu contable lo aplica con el ingreso bruto real del año.'
 where nombre = 'Comidas de negocio (50% deducible)';
