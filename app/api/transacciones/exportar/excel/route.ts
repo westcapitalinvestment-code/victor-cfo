@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 
   const { data: categorias } = await supabase
     .from("hacienda_categories")
-    .select("id, nombre, linea_anejo_m, linea_schedule_c");
+    .select("id, nombre, linea_anejo_m, linea_schedule_c, disclaimer");
   const categoriaPorId = new Map((categorias ?? []).map((c) => [c.id, c]));
 
   const { data: entidad } = entityId
@@ -84,6 +84,7 @@ export async function GET(req: NextRequest) {
       linea,
       tipo,
       monto: Math.abs(Number(t.amount)),
+      nota: categoria?.disclaimer ?? "",
     };
   });
 
@@ -94,6 +95,10 @@ export async function GET(req: NextRequest) {
     { header: "Línea Anejo M / Schedule C", key: "linea", width: 22 },
     { header: "Tipo", key: "tipo", width: 14 },
     { header: "Monto", key: "monto", width: 14, moneda: true },
+    // #784 — nota de categorías con reglas especiales (ej. límite de
+    // comidas/entretenimiento) para que el contable sepa que debe aplicar
+    // un cálculo adicional; VICTOR CFO solo categoriza, no calcula el tope.
+    { header: "Nota para tu contable", key: "nota", width: 46 },
   ];
 
   // Resumen arriba de la tabla — igual que el PDF (Ingresos/Gastos/

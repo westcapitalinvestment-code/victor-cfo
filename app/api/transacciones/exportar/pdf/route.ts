@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 
   const { data: categorias } = await supabase
     .from("hacienda_categories")
-    .select("id, nombre, linea_anejo_m, linea_schedule_c");
+    .select("id, nombre, linea_anejo_m, linea_schedule_c, disclaimer");
   const categoriaPorId = new Map((categorias ?? []).map((c) => [c.id, c]));
 
   const { data: entidad } = entityId
@@ -69,6 +69,7 @@ export async function GET(req: NextRequest) {
       descripcion: t.description_raw as string,
       nombreCategoria: cat?.nombre ?? "Sin categorizar",
       linea: cat ? cat.linea_anejo_m || cat.linea_schedule_c || "" : "",
+      disclaimer: cat?.disclaimer ?? "",
       tipo,
       monto: Math.abs(Number(t.amount)),
     };
@@ -80,10 +81,10 @@ export async function GET(req: NextRequest) {
   const neto = totalIngreso - totalGasto;
 
   function agruparPorCategoria(tipo: string) {
-    const mapa = new Map<string, { nombre: string; linea: string; total: number; count: number }>();
+    const mapa = new Map<string, { nombre: string; linea: string; disclaimer: string; total: number; count: number }>();
     for (const f of filas) {
       if (f.tipo !== tipo) continue;
-      const actual = mapa.get(f.nombreCategoria) ?? { nombre: f.nombreCategoria, linea: f.linea, total: 0, count: 0 };
+      const actual = mapa.get(f.nombreCategoria) ?? { nombre: f.nombreCategoria, linea: f.linea, disclaimer: f.disclaimer, total: 0, count: 0 };
       actual.total += f.monto;
       actual.count += 1;
       mapa.set(f.nombreCategoria, actual);
@@ -155,6 +156,31 @@ export async function GET(req: NextRequest) {
     textoDerecha(der, width - margin, y, { size: 10, f: opts.bold ? bold : font, color: opts.color ?? negro });
     y -= 15;
   }
+  // #784 — párrafo con salto de línea manual, para las notas largas de
+  // categorías con regla especial (ej. límite comidas/entretenimiento).
+  function parrafo(contenido: string, opts: { f?: typeof font; size?: number; color?: ReturnType<typeof rgb>; anchoMax?: number } = {}) {
+    const f = opts.f ?? font;
+    const size = opts.size ?? 8.5;
+    const anchoMax = opts.anchoMax ?? width - margin * 2;
+    const palabras = contenido.split(" ");
+    let linea = "";
+    for (const palabra of palabras) {
+      const prueba = linea ? `${linea} ${palabra}` : palabra;
+      if (f.widthOfTextAtSize(prueba, size) > anchoMax && linea) {
+        espacio(30);
+        texto(linea, margin, y, { f, size, color: opts.color ?? gris });
+        y -= 11;
+        linea = palabra;
+      } else {
+        linea = prueba;
+      }
+    }
+    if (linea) {
+      espacio(30);
+      texto(linea, margin, y, { f, size, color: opts.color ?? gris });
+      y -= 11;
+    }
+  }
 
   if (logoImg) {
     page.drawImage(logoImg, { x: margin, y: y - logoDims.height, width: logoDims.width, height: logoDims.height });
@@ -187,6 +213,22 @@ export async function GET(req: NextRequest) {
     y -= 4;
     page.drawLine({ start: { x: margin, y: y + 10 }, end: { x: width - margin, y: y + 10 }, thickness: 0.75, color: lineaGris });
     filaTabla("Total gastos", formatMoney(totalGasto), { bold: true, color: rojo });
+  }
+
+  // #784 — notas de categorías con regla de deducción especial (ej. límite
+  // de comidas/entretenimiento, Sección 1033.15). VICTOR CFO categoriza
+  // correctamente pero no calcula el monto deducible final — eso lo hace
+  // el contable con el ingreso bruto real del año.
+  const categoriasConNota = gastosPorCategoria.filter((c) => c.disclaimer);
+  if (categoriasConNota.length > 0) {
+    encabezadoSeccion("Notas para tu contable");
+    for (const c of categoriasConNota) {
+      espacio(40);
+      texto(c.nombre, margin, y, { f: bold, size: 9, color: negro });
+      y -= 12;
+      parrafo(c.disclaimer, { size: 8.5, color: gris });
+      y -= 4;
+    }
   }
 
   if (ingresosPorCategoria.length > 0) {
