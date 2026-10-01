@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
+import type { EstadoResultados } from "@/lib/estado-resultados";
+import { MESES_CORTOS } from "@/lib/estado-resultados";
+
+type DesgloseIvuPropinas = { ivuEstatal: number; ivuMunicipal: number; propinas: number };
+type ResumenPos = { grossSales: number; ivuEstatal: number; ivuMunicipal: number; tips: number; netSales: number };
 
 type IvuTracker = {
   ivu_collected: number;
@@ -80,6 +85,7 @@ type Auditoria = {
 };
 
 const TABS = [
+  { id: "resultados", label: "Resultados", icon: "ti-chart-bar" },
   { id: "ivu", label: "IVU", icon: "ti-receipt-tax" },
   { id: "recibos", label: "Recibos", icon: "ti-camera" },
   { id: "retenciones", label: "Retenciones", icon: "ti-file-percent" },
@@ -114,6 +120,11 @@ export default function CpaTabs({
   clientesExentos,
   estimados,
   auditoria,
+  estadoResultados,
+  anioResultados,
+  desgloseIvuPropinas,
+  resumenPos,
+  tienePos,
 }: {
   ivuApplies: boolean;
   ivuTracker: IvuTracker;
@@ -126,8 +137,13 @@ export default function CpaTabs({
   clientesExentos: ClienteExento[];
   estimados: Estimado[];
   auditoria: Auditoria[];
+  estadoResultados: EstadoResultados;
+  anioResultados: number;
+  desgloseIvuPropinas: DesgloseIvuPropinas;
+  resumenPos: ResumenPos;
+  tienePos: boolean;
 }) {
-  const [tab, setTab] = useState<TabId>("ivu");
+  const [tab, setTab] = useState<TabId>("resultados");
 
   return (
     <div>
@@ -145,8 +161,158 @@ export default function CpaTabs({
         ))}
       </div>
 
+      {tab === "resultados" && (
+        <div className="flex flex-col gap-3">
+          <div className="vc-card">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs uppercase tracking-wide text-muted">Estado de Resultados — {anioResultados}</p>
+              <div className="flex gap-3 text-xs">
+                <a href={`?anio=${anioResultados - 1}`} className="text-muted hover:text-teal">
+                  ← {anioResultados - 1}
+                </a>
+                <a href={`?anio=${anioResultados + 1}`} className="text-muted hover:text-teal">
+                  {anioResultados + 1} →
+                </a>
+              </div>
+            </div>
+            <div className="mb-3 flex flex-wrap gap-4">
+              <div>
+                <p className="text-[11px] text-muted">Ingresos</p>
+                <p className="text-base font-semibold text-grn">{formatMoney(estadoResultados.totalIngresos)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted">Gastos</p>
+                <p className="text-base font-semibold text-red">{formatMoney(estadoResultados.totalGastos)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted">Utilidad neta</p>
+                <p className={`text-base font-semibold ${estadoResultados.utilidadNeta >= 0 ? "text-grn" : "text-red"}`}>
+                  {formatMoney(estadoResultados.utilidadNeta)}
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="whitespace-nowrap px-2 py-1 text-left font-medium text-muted">Categoría</th>
+                    {MESES_CORTOS.map((m) => (
+                      <th key={m} className="whitespace-nowrap px-2 py-1 text-right font-medium text-muted">
+                        {m}
+                      </th>
+                    ))}
+                    <th className="whitespace-nowrap px-2 py-1 text-right font-medium text-muted">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={14} className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                      Ingresos
+                    </td>
+                  </tr>
+                  {estadoResultados.ingresos.map((l) => (
+                    <tr key={`ing-${l.categoriaId ?? "sc"}`} className="border-b border-border/50">
+                      <td className="whitespace-nowrap px-2 py-1">{l.nombre}</td>
+                      {l.porMes.map((v, i) => (
+                        <td key={i} className="whitespace-nowrap px-2 py-1 text-right">
+                          {v ? formatMoney(v, 0) : "—"}
+                        </td>
+                      ))}
+                      <td className="whitespace-nowrap px-2 py-1 text-right font-medium">{formatMoney(l.total, 0)}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan={14} className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                      Gastos
+                    </td>
+                  </tr>
+                  {estadoResultados.gastos.map((l) => (
+                    <tr key={`gas-${l.categoriaId ?? "sc"}`} className="border-b border-border/50">
+                      <td className="whitespace-nowrap px-2 py-1">{l.nombre}</td>
+                      {l.porMes.map((v, i) => (
+                        <td key={i} className="whitespace-nowrap px-2 py-1 text-right">
+                          {v ? formatMoney(v, 0) : "—"}
+                        </td>
+                      ))}
+                      <td className="whitespace-nowrap px-2 py-1 text-right font-medium">{formatMoney(l.total, 0)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-teal">
+                    <td className="whitespace-nowrap px-2 py-1 font-semibold text-teal">Utilidad neta</td>
+                    {estadoResultados.utilidadPorMes.map((v, i) => (
+                      <td key={i} className="whitespace-nowrap px-2 py-1 text-right font-semibold text-teal">
+                        {formatMoney(v, 0)}
+                      </td>
+                    ))}
+                    <td className="whitespace-nowrap px-2 py-1 text-right font-bold text-teal">
+                      {formatMoney(estadoResultados.utilidadNeta, 0)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {tab === "ivu" && (
         <div className="flex flex-col gap-3">
+          {(desgloseIvuPropinas.ivuEstatal > 0 || desgloseIvuPropinas.ivuMunicipal > 0 || desgloseIvuPropinas.propinas > 0) && (
+            <div className="vc-card">
+              <p className="mb-3 text-xs uppercase tracking-wide text-muted">Desglose de facturas — {anioResultados} (#781/#782)</p>
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                <div>
+                  <p className="text-[11px] text-muted">IVU estatal (10.5%)</p>
+                  <p className="font-medium">{formatMoney(desgloseIvuPropinas.ivuEstatal)}</p>
+                  <p className="text-[10px] text-muted">A SURI</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted">IVU municipal (1%)</p>
+                  <p className="font-medium">{formatMoney(desgloseIvuPropinas.ivuMunicipal)}</p>
+                  <p className="text-[10px] text-muted">Al municipio</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted">Propinas excluidas</p>
+                  <p className="font-medium">{formatMoney(desgloseIvuPropinas.propinas)}</p>
+                  <p className="text-[10px] text-muted">No es venta tributable</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tienePos && (
+            <div className="vc-card">
+              <p className="mb-3 text-xs uppercase tracking-wide text-muted">Ventas de POS (Clover/Verifone/Square) — {anioResultados}</p>
+              <p className="mb-2 text-[11px] text-muted">
+                Desglose de reportes de POS subidos por el dueño — NO es un ingreso adicional, es el detalle del depósito que ya llega
+                por el banco.
+              </p>
+              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+                <div>
+                  <p className="text-[11px] text-muted">Venta bruta</p>
+                  <p className="font-medium">{formatMoney(resumenPos.grossSales)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted">IVU estatal</p>
+                  <p className="font-medium">{formatMoney(resumenPos.ivuEstatal)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted">IVU municipal</p>
+                  <p className="font-medium">{formatMoney(resumenPos.ivuMunicipal)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted">Propinas</p>
+                  <p className="font-medium">{formatMoney(resumenPos.tips)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted">Venta neta</p>
+                  <p className="font-medium text-teal">{formatMoney(resumenPos.netSales)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {!ivuApplies ? (
             <div className="vc-card">
               <p className="text-sm text-muted">Esta entidad no aplica a IVU.</p>

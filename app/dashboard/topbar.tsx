@@ -204,21 +204,21 @@ export default function Topbar({
           </div>
         </div>
 
-        {/* Invitar al contable — DESACTIVADO temporalmente (10 sept 2026,
-            pedido de Joel): el Portal CPA todavía no tiene suficiente que
-            ofrecerle a un contable real (ver Estado de Resultados nuevo en
-            construcción). La idea de fondo sigue siendo buena — cliente
-            invita a su contador, el contador termina invitando a sus otros
-            clientes — pero se reactiva cuando el portal esté sólido. Ruta y
-            backend (/dashboard/invitar-contable, account_members) quedan
-            intactos, solo se esconde la entrada desde el topbar. */}
-        {/* <Link href="/dashboard/invitar-contable" className="vc-invite-banner">
+        {/* Invitar al contable — REACTIVADO (1 oct 2026, pedido de Joel): se
+            había escondido el 10 de septiembre porque el Portal CPA no tenía
+            suficiente que ofrecer. Desde entonces se construyó el Estado de
+            Resultados (ahora con su propia pestaña "Resultados" dentro del
+            Portal CPA, ver app/cpa/[entityId]/cpa-tabs.tsx) más todo lo de la
+            sesión con el Gem CPA (propinas, IVU estatal/municipal, SC2916,
+            Relevo por contratista, alerta CBA, desglose de POS) — ya hay
+            contenido real que un contador puede usar, así que se reactiva. */}
+        <Link href="/dashboard/invitar-contable" className="vc-invite-banner">
           <i className="ti ti-user-plus" style={{ fontSize: 15 }} />
           <span>
             <span className="vc-invite-title">Invita a tu contable</span>
             <span className="vc-invite-sub">Acceso gratis · sin costo adicional</span>
           </span>
-        </Link> */}
+        </Link>
       </div>
 
       {/* Tabs de contexto — Personal está disponible en Core. Negocio

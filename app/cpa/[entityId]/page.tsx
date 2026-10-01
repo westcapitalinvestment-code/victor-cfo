@@ -2,13 +2,20 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import CpaTabs from "./cpa-tabs";
+import { calcularEstadoResultados } from "@/lib/estado-resultados";
 
 // Portal CPA — dashboard de un cliente (pantalla "Dashboard" del mockup
 // "VICTOR — Portal CPA.html"). Todo lo que se lee aquí pasa por RLS
 // *_cpa_read (migraciones 0003 y 0023) — si el CPA no tiene acceso a esta
 // entidad, business_entities simplemente no devuelve la fila y se manda a
 // notFound(), nunca hace falta chequearlo "a mano".
-export default async function CpaClientePage({ params }: { params: { entityId: string } }) {
+export default async function CpaClientePage({
+  params,
+  searchParams,
+}: {
+  params: { entityId: string };
+  searchParams: { anio?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
@@ -20,7 +27,7 @@ export default async function CpaClientePage({ params }: { params: { entityId: s
 
   const { data: entidad } = await supabase
     .from("business_entities")
-    .select("id, name, entity_type, ein, ivu_applies")
+    .select("id, name, entity_type, ein, ivu_applies, owner_id")
     .eq("id", entityId)
     .maybeSingle();
 
@@ -31,6 +38,10 @@ export default async function CpaClientePage({ params }: { params: { entityId: s
   const ano = hoy.getFullYear();
   const hoyISO = hoy.toISOString().slice(0, 10);
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
+
+  const anioResultados = Number(searchParams?.anio) || ano;
+  const inicioAnioResultados = `${anioResultados}-01-01`;
+  const finAnioResultados = `${anioResultados}-12-31`;
 
   // Vendors primero — vendor_480_validation y el total de retenciones
   // dependen de la lista de vendor_id de esta entidad.
@@ -112,6 +123,55 @@ export default async function CpaClientePage({ params }: { params: { entityId: s
       .limit(30),
   ]);
 
+  // Estado de Resultados (1 oct 2026, pedido de Joel: "hay que activarlo
+  // para que pueda ver esos reportes" — reactivación de Invita a tu contable
+  // junto con darle al Portal CPA contenido real que mostrar). Misma función
+  // que usa el dueño del negocio en /dashboard/negocio/estado-resultados,
+  // para que el contador vea exactamente la misma matriz mes-a-mes.
+  const er = await calcularEstadoResultados(supabase, { ownerId: entidad.owner_id, entityId, anio: anioResultados });
+
+  // Desglose de IVU estatal/municipal + propinas excluidas (#782/#781, 1 oct
+  // 2026) a nivel de facturas del año — para que el contador vea el pasivo
+  // real a SURI vs. al municipio, y confirme que las propinas no se están
+  // inflando como venta tributable.
+  const { data: facturasDesglose } = await supabase
+    .from("invoices")
+    .select("ivu_estatal_monto, ivu_municipal_monto, propina_monto")
+    .eq("entity_id", entityId)
+    .gte("fecha_emision", inicioAnioResultados)
+    .lte("fecha_emision", finAnioResultados);
+
+  const desgloseIvuPropinas = (facturasDesglose ?? []).reduce(
+    (acc, f) => ({
+      ivuEstatal: acc.ivuEstatal + Number(f.ivu_estatal_monto ?? 0),
+      ivuMunicipal: acc.ivuMunicipal + Number(f.ivu_municipal_monto ?? 0),
+      propinas: acc.propinas + Number(f.propina_monto ?? 0),
+    }),
+    { ivuEstatal: 0, ivuMunicipal: 0, propinas: 0 }
+  );
+
+  // Desglose de ventas de POS (Clover/Verifone/Square, #786) del año — si el
+  // negocio es un restaurante que sube reportes de POS, el contador necesita
+  // ver esto aparte porque no tiene factura propia en VICTOR.
+  const { data: posDelAnio } = await supabase
+    .from("pos_batch_uploads")
+    .select("gross_sales, ivu_estatal_monto, ivu_municipal_monto, tips_monto, net_sales")
+    .eq("entity_id", entityId)
+    .gte("period_start", inicioAnioResultados)
+    .lte("period_end", finAnioResultados);
+
+  const resumenPos = (posDelAnio ?? []).reduce(
+    (acc, p) => ({
+      grossSales: acc.grossSales + Number(p.gross_sales ?? 0),
+      ivuEstatal: acc.ivuEstatal + Number(p.ivu_estatal_monto ?? 0),
+      ivuMunicipal: acc.ivuMunicipal + Number(p.ivu_municipal_monto ?? 0),
+      tips: acc.tips + Number(p.tips_monto ?? 0),
+      netSales: acc.netSales + Number(p.net_sales ?? 0),
+    }),
+    { grossSales: 0, ivuEstatal: 0, ivuMunicipal: 0, tips: 0, netSales: 0 }
+  );
+  const tienePos = (posDelAnio ?? []).length > 0;
+
   // Métricas de facturación del mes en curso, calculadas del lote de
   // facturas ya traído (evita una query aparte solo para sumar).
   const facturasDelMes = (facturas ?? []).filter((f) => f.fecha_emision >= inicioMes);
@@ -157,6 +217,11 @@ export default async function CpaClientePage({ params }: { params: { entityId: s
         clientesExentos={clientesExentos ?? []}
         estimados={estimados ?? []}
         auditoria={auditoria ?? []}
+        estadoResultados={er}
+        anioResultados={anioResultados}
+        desgloseIvuPropinas={desgloseIvuPropinas}
+        resumenPos={resumenPos}
+        tienePos={tienePos}
       />
     </div>
   );
