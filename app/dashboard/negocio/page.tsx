@@ -308,8 +308,6 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
   const en30diasISO = en30dias.toISOString().slice(0, 10);
   const documentosPorVencer = (documentos ?? []).filter((d) => d.fecha_vencimiento && d.fecha_vencimiento <= en30diasISO);
 
-  const totalAlertas = facturasVencidas.length + documentosPorVencer.length + (riesgoCBA ? 1 : 0);
-
   // Resumen y proyección (5 sept 2026) — reemplaza el tab "Resumen" que se
   // quitó. Mismo cálculo que dashboard/page.tsx (Personal), pero SOLO con
   // transacciones de ESTA entidad — nunca se mezcla con Personal ni con
@@ -407,6 +405,8 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
 
   const totalSinValidar480 = contratistasSinValidar480.reduce((s, c) => s + c.total, 0);
   const riesgoCBA = gananciaNegocioYTD > UMBRAL_CBA && contratistasSinValidar480.length > 0;
+
+  const totalAlertas = facturasVencidas.length + documentosPorVencer.length + (riesgoCBA ? 1 : 0);
 
   return (
     <div className="vc-shell">
