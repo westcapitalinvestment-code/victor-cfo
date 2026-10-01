@@ -49,7 +49,7 @@ export default async function PagosPage() {
   let vendorsQuery = supabase
     .from("vendors")
     .select(
-      "id, name, tax_id, vendor_type, retention_type, default_retention_pct, is_corporation, active, entity_id, relevo_r2_key, relevo_pct, relevo_fecha_expiracion, bank_routing_number, bank_account_type"
+      "id, name, tax_id, address, vendor_type, retention_type, default_retention_pct, is_corporation, active, entity_id, relevo_r2_key, relevo_pct, relevo_fecha_expiracion, bank_routing_number, bank_account_type"
     )
     .eq("owner_id", user.id)
     .order("name", { ascending: true });

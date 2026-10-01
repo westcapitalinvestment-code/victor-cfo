@@ -31,6 +31,9 @@ type Vendor = {
   // este tipo; aquí solo lo que hace falta para saber si ya está completa.
   bank_routing_number?: string | null;
   bank_account_type?: string | null;
+  // Migración 0119 (30 sept 2026): dirección postal, para enviarle al
+  // contratista su copia del Modelo 480.6SP por correo.
+  address?: string | null;
 };
 
 // Estado real del relevo de un contratista, comparado contra hoy (fecha de
@@ -1251,6 +1254,9 @@ function ContratistasTab({
 
   const [name, setName] = useState("");
   const [taxId, setTaxId] = useState("");
+  // Migración 0119 (30 sept 2026, pedido de Joel): dirección postal, para
+  // enviarle al contratista su copia del Modelo 480.6SP por correo.
+  const [address, setAddress] = useState("");
   const [retentionType, setRetentionType] = useState<(typeof TIPOS_RETENCION)[number]["value"]>("480.6B");
   const [pct, setPct] = useState(String(retencionDefault));
   // Migración 0112 (30 sept 2026) — segundo eje del Modelo 480.6SP, junto a
@@ -1272,6 +1278,7 @@ function ContratistasTab({
     setFormAbierto("nuevo");
     setName("");
     setTaxId("");
+    setAddress("");
     setRetentionType("480.6B");
     setPct(String(retencionDefault));
     setIsCorporation(false);
@@ -1283,6 +1290,7 @@ function ContratistasTab({
     setFormAbierto(v.id);
     setName(v.name);
     setTaxId(v.tax_id ?? "");
+    setAddress(v.address ?? "");
     setRetentionType((v.retention_type as (typeof TIPOS_RETENCION)[number]["value"]) || "480.6B");
     setPct(String(v.default_retention_pct));
     setIsCorporation(v.is_corporation ?? false);
@@ -1365,13 +1373,16 @@ function ContratistasTab({
           entity_id: entidadId,
           name: name.trim(),
           tax_id: taxId.trim() || null,
+          address: address.trim() || null,
           vendor_type: "contratista_servicios",
           retention_type: retentionType,
           default_retention_pct: Number(pct || 0),
           is_corporation: isCorporation,
           active: true,
         })
-        .select("id, name, tax_id, vendor_type, retention_type, default_retention_pct, is_corporation, active, entity_id")
+        .select(
+          "id, name, tax_id, address, vendor_type, retention_type, default_retention_pct, is_corporation, active, entity_id"
+        )
         .single();
       setGuardando(false);
       if (insertError || !data) {
@@ -1379,7 +1390,11 @@ function ContratistasTab({
         return;
       }
       setLista((prev) => [data as Vendor, ...prev]);
-      setFormAbierto(null);
+      // 30 sept 2026, pedido de Joel: no cerrar el formulario tras crear —
+      // pasar a modo "editar" sobre el contratista recién guardado para que
+      // de una vez aparezcan Relevo y Cuenta Bancaria, sin tener que cerrar
+      // y reabrir manualmente.
+      abrirEditar(data as Vendor);
       router.refresh();
     } else if (formAbierto) {
       const { error: updateError } = await supabase
@@ -1387,6 +1402,7 @@ function ContratistasTab({
         .update({
           name: name.trim(),
           tax_id: taxId.trim() || null,
+          address: address.trim() || null,
           retention_type: retentionType,
           default_retention_pct: Number(pct || 0),
           is_corporation: isCorporation,
@@ -1404,6 +1420,7 @@ function ContratistasTab({
                 ...v,
                 name: name.trim(),
                 tax_id: taxId.trim() || null,
+                address: address.trim() || null,
                 retention_type: retentionType,
                 default_retention_pct: Number(pct || 0),
                 is_corporation: isCorporation,
@@ -1502,6 +1519,12 @@ function ContratistasTab({
             placeholder="Tax ID / SSN (opcional)"
             value={taxId}
             onChange={(e) => setTaxId(e.target.value)}
+          />
+          <input
+            className="vc-input"
+            placeholder="Dirección postal (para enviarle su 480.6SP)"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
           />
           <div className="flex gap-2">
             <select
@@ -2068,64 +2091,77 @@ function ReportesTab({
           2026: "delimitar con color lo que abre abajo... lo mismo en
           Facturas"). La flechita (ti-chevron-down) en el botón activo marca
           cuál opción es la que tiene algo desplegado. */}
-      <div className="mb-3 rounded-xl border border-teal/30 bg-teal/[.05] p-2">
+      <div className="relative mb-3 rounded-xl border border-teal/30 bg-teal/[.05] p-2">
         <div className="flex gap-1.5">
-          {PERIODOS_PAGOS.map((p) => {
+          {PERIODOS_PAGOS.map((p, idx) => {
             const tieneDesplegable = p.value === "trimestre" || p.value === "rango";
+            // 30 sept 2026, pedido de Joel: antes el Q1-Q4/Rango se abría
+            // como una barra de ancho completo debajo de TODOS los botones
+            // (se sentía como una caja suelta aparte). Ahora cada botón con
+            // desplegable es su propio ancla (`relative`) y el panel cuelga
+            // (`absolute`) justo debajo de ESE botón, como un popover real.
+            const esUltimo = idx === PERIODOS_PAGOS.length - 1;
             return (
-              <button
-                key={p.value}
-                onClick={() => {
-                  if (periodo === p.value) {
-                    setPanelAbierto((a) => !a);
-                  } else {
-                    setPeriodo(p.value);
-                    setPanelAbierto(true);
+              <div key={p.value} className="relative flex-1">
+                <button
+                  onClick={() => {
+                    if (periodo === p.value) {
+                      setPanelAbierto((a) => !a);
+                    } else {
+                      setPeriodo(p.value);
+                      setPanelAbierto(true);
+                    }
+                  }}
+                  className="flex w-full items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-medium"
+                  style={
+                    periodo === p.value
+                      ? { background: "#1D9E75", color: "#fff" }
+                      : { background: "var(--card)", color: "var(--muted)", border: "1px solid var(--border)" }
                   }
-                }}
-                className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-medium"
-                style={
-                  periodo === p.value
-                    ? { background: "#1D9E75", color: "#fff" }
-                    : { background: "var(--card)", color: "var(--muted)", border: "1px solid var(--border)" }
-                }
-              >
-                {p.label}
-                {tieneDesplegable && (
-                  <i
-                    className={`ti ti-chevron-down`}
-                    style={{ fontSize: 12, transform: periodo === p.value && panelAbierto ? "rotate(180deg)" : "none", transition: "transform .15s" }}
-                  />
+                >
+                  {p.label}
+                  {tieneDesplegable && (
+                    <i
+                      className="ti ti-chevron-down"
+                      style={{ fontSize: 12, transform: periodo === p.value && panelAbierto ? "rotate(180deg)" : "none", transition: "transform .15s" }}
+                    />
+                  )}
+                </button>
+
+                {p.value === "trimestre" && periodo === "trimestre" && panelAbierto && (
+                  <div
+                    className="absolute top-full z-20 mt-1.5 flex gap-1.5 rounded-lg border border-teal/30 bg-card p-2 shadow-lg"
+                    style={{ left: 0, width: 230 }}
+                  >
+                    <select className="vc-input flex-1" value={trimestre} onChange={(e) => setTrimestre(Number(e.target.value))}>
+                      <option value={1}>Q1 — Ene a Mar</option>
+                      <option value={2}>Q2 — Abr a Jun</option>
+                      <option value={3}>Q3 — Jul a Sep</option>
+                      <option value={4}>Q4 — Oct a Dic</option>
+                    </select>
+                    <input
+                      className="vc-input flex-shrink-0"
+                      style={{ width: 80 }}
+                      type="number"
+                      value={anioTrimestre}
+                      onChange={(e) => setAnioTrimestre(Number(e.target.value))}
+                    />
+                  </div>
                 )}
-              </button>
+
+                {p.value === "rango" && periodo === "rango" && panelAbierto && (
+                  <div
+                    className="absolute top-full z-20 mt-1.5 flex gap-1.5 rounded-lg border border-teal/30 bg-card p-2 shadow-lg"
+                    style={esUltimo ? { right: 0, width: 260 } : { left: 0, width: 260 }}
+                  >
+                    <input type="date" className="vc-input flex-1" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} />
+                    <input type="date" className="vc-input flex-1" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} />
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
-
-        {periodo === "trimestre" && panelAbierto && (
-          <div className="mt-2 flex gap-1.5 border-t border-teal/20 pt-2">
-            <select className="vc-input flex-1" value={trimestre} onChange={(e) => setTrimestre(Number(e.target.value))}>
-              <option value={1}>Q1 — Ene a Mar</option>
-              <option value={2}>Q2 — Abr a Jun</option>
-              <option value={3}>Q3 — Jul a Sep</option>
-              <option value={4}>Q4 — Oct a Dic</option>
-            </select>
-            <input
-              className="vc-input flex-shrink-0"
-              style={{ width: 90 }}
-              type="number"
-              value={anioTrimestre}
-              onChange={(e) => setAnioTrimestre(Number(e.target.value))}
-            />
-          </div>
-        )}
-
-        {periodo === "rango" && panelAbierto && (
-          <div className="mt-2 flex gap-1.5 border-t border-teal/20 pt-2">
-            <input type="date" className="vc-input flex-1" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} />
-            <input type="date" className="vc-input flex-1" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} />
-          </div>
-        )}
       </div>
 
       <div className="vc-card mb-3">

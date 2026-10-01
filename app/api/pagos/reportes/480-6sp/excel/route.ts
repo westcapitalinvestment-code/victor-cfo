@@ -35,7 +35,9 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("vendor_retenciones")
-    .select("vendor_id, gross_amount, retention_amount, period_end, vendors(name, tax_id, retention_type, is_corporation)")
+    .select(
+      "vendor_id, gross_amount, retention_amount, period_end, vendors(name, tax_id, address, retention_type, is_corporation)"
+    )
     .eq("owner_id", user.id)
     .gte("period_end", desde)
     .lte("period_end", hasta);
@@ -46,7 +48,15 @@ export async function GET(req: NextRequest) {
 
   const mapa = new Map<
     string,
-    { nombre: string; taxId: string; retentionType: string | null; isCorporation: boolean; bruto: number; retenido: number }
+    {
+      nombre: string;
+      taxId: string;
+      address: string;
+      retentionType: string | null;
+      isCorporation: boolean;
+      bruto: number;
+      retenido: number;
+    }
   >();
   for (const r of (data ?? []) as any[]) {
     const v = r.vendors;
@@ -56,6 +66,7 @@ export async function GET(req: NextRequest) {
       {
         nombre,
         taxId: v?.tax_id ?? "",
+        address: v?.address ?? "",
         retentionType: v?.retention_type ?? null,
         isCorporation: !!v?.is_corporation,
         bruto: 0,
@@ -81,6 +92,7 @@ export async function GET(req: NextRequest) {
     { header: "Casilla", key: "casilla", width: 10, numero: true },
     { header: "Contratista", key: "nombre", width: 32 },
     { header: "SSN/EIN", key: "taxId", width: 16 },
+    { header: "Dirección postal", key: "address", width: 34 },
     { header: "Tipo", key: "tipo", width: 20 },
     { header: "Bruto pagado", key: "bruto", width: 16, moneda: true },
     { header: "Retenido", key: "retenido", width: 16, moneda: true },
@@ -89,6 +101,7 @@ export async function GET(req: NextRequest) {
     casilla: casilla(f.retentionType, f.isCorporation),
     nombre: f.nombre,
     taxId: f.taxId || "FALTA",
+    address: f.address || "",
     tipo: f.isCorporation ? "Corporación/entidad" : "Individuo",
     bruto: f.bruto,
     retenido: f.retenido,

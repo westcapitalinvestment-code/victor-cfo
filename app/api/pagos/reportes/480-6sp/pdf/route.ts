@@ -35,7 +35,9 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("vendor_retenciones")
-    .select("vendor_id, gross_amount, retention_amount, period_end, vendors(name, tax_id, retention_type, is_corporation)")
+    .select(
+      "vendor_id, gross_amount, retention_amount, period_end, vendors(name, tax_id, address, retention_type, is_corporation)"
+    )
     .eq("owner_id", user.id)
     .gte("period_end", desde)
     .lte("period_end", hasta);
@@ -46,7 +48,15 @@ export async function GET(req: NextRequest) {
 
   const mapa = new Map<
     string,
-    { nombre: string; taxId: string; retentionType: string | null; isCorporation: boolean; bruto: number; retenido: number }
+    {
+      nombre: string;
+      taxId: string;
+      address: string;
+      retentionType: string | null;
+      isCorporation: boolean;
+      bruto: number;
+      retenido: number;
+    }
   >();
   for (const r of (data ?? []) as any[]) {
     const v = r.vendors;
@@ -56,6 +66,7 @@ export async function GET(req: NextRequest) {
       {
         nombre,
         taxId: v?.tax_id ?? "",
+        address: v?.address ?? "",
         retentionType: v?.retention_type ?? null,
         isCorporation: !!v?.is_corporation,
         bruto: 0,
@@ -150,7 +161,7 @@ export async function GET(req: NextRequest) {
     tipo: string,
     bruto: string,
     retenido: string,
-    opts: { bold?: boolean; color?: ReturnType<typeof rgb> } = {}
+    opts: { bold?: boolean; color?: ReturnType<typeof rgb>; direccion?: string } = {}
   ) {
     espacio(50);
     const f = opts.bold ? bold : font;
@@ -165,6 +176,18 @@ export async function GET(req: NextRequest) {
     texto(tipo, xTipo, y, { size: 9.5, f, color: opts.color ?? negro });
     textoDerecha(bruto, xBruto, y, { size: 9.5, f, color: opts.color ?? negro });
     textoDerecha(retenido, xRetenido, y, { size: 9.5, f, color: opts.color ?? negro });
+    // Dirección postal (30 sept 2026, pedido de Joel: "la direccion postal
+    // para cuando se genere la 480.6SP enviarla") — segunda línea chiquita
+    // y gris bajo el nombre, en vez de una columna aparte (no hay espacio
+    // horizontal en esta tabla sin apretar Tipo/Bruto/Retenido).
+    if (opts.direccion) {
+      y -= 11;
+      let direccionMostrar = opts.direccion;
+      while (font.widthOfTextAtSize(direccionMostrar, 7.5) > maxAncho && direccionMostrar.length > 10) {
+        direccionMostrar = direccionMostrar.slice(0, -4) + "…";
+      }
+      texto(direccionMostrar, xContratista, y, { size: 7.5, f: font, color: gris });
+    }
     y -= 15;
   }
 
@@ -203,7 +226,7 @@ export async function GET(req: NextRequest) {
       const num = casilla(f.retentionType, f.isCorporation);
       const tipo = f.isCorporation ? "Corp/entidad" : "Individuo";
       const nombreConTax = `${f.nombre}${f.taxId ? ` (${f.taxId})` : " (FALTA SSN/EIN)"}`;
-      filaContratista(num, nombreConTax, tipo, formatMoney(f.bruto), formatMoney(f.retenido));
+      filaContratista(num, nombreConTax, tipo, formatMoney(f.bruto), formatMoney(f.retenido), { direccion: f.address });
     }
     espacio(40);
     y -= 4;

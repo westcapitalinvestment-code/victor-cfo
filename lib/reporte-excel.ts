@@ -150,15 +150,31 @@ export async function generarReporteExcel(opts: OpcionesReporteExcel): Promise<B
   // entidad también, como la factura") — ocupa la columna 1 en las
   // primeras filas; el texto de marca se corre a la columna 2 para no
   // encimarse quede el logo del tamaño que sea.
+  //
+  // FIX 30 sept 2026: la imagen se ancla flotando sobre la columna 1 con un
+  // ancho de hasta 140px, pero esa columna puede ser mucho más angosta (ej.
+  // "Casilla" width:10 ≈ 70px en 480.6SP) — el logo entonces se desborda
+  // sobre la columna 2 y tapa el título ("VIPVIP Medical Development" en
+  // la captura de Joel). exceljs no reserva espacio automáticamente para
+  // una imagen flotante, así que hay que ensanchar la columna 1 a mano
+  // cuando sea más angosta que el logo ya escalado (regla ~7px por unidad
+  // de ancho de columna de Excel, + un poco de aire).
   const tieneLogo = !!opts.logo;
   const colInicioTexto = tieneLogo && numCols > 1 ? 2 : 1;
   if (opts.logo) {
     const { width: wOriginal, height: hOriginal } = medidasImagen(opts.logo.buffer, opts.logo.extension);
     const escala = Math.min(140 / wOriginal, 46 / hOriginal, 1);
+    const anchoLogoPx = wOriginal * escala;
+    const altoLogoPx = hOriginal * escala;
+    if (numCols > 1) {
+      const anchoMinimoCol1 = anchoLogoPx / 7 + 1.5;
+      const col1 = sheet.getColumn(1);
+      if ((col1.width ?? 0) < anchoMinimoCol1) col1.width = anchoMinimoCol1;
+    }
     const imageId = workbook.addImage({ buffer: opts.logo.buffer as any, extension: opts.logo.extension });
     sheet.addImage(imageId, {
       tl: { col: 0.15, row: 0.15 },
-      ext: { width: wOriginal * escala, height: hOriginal * escala },
+      ext: { width: anchoLogoPx, height: altoLogoPx },
     });
   }
 
