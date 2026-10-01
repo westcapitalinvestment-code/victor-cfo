@@ -47,6 +47,10 @@ type Factura = {
   retencion_monto: number;
   total: number;
   deposito_monto: number | null;
+  // Migración 0123 (1 oct 2026, #781) — propina recibida al cobrar, FUERA
+  // de subtotal/total a propósito: no es venta tributable ni ingreso del
+  // negocio. Ver comentario largo en la migración.
+  propina_monto: number | null;
   estado: string;
   fecha_emision: string;
   fecha_vencimiento: string | null;
@@ -160,6 +164,11 @@ export default function FacturaDetalle({
   // 1") — por defecto hoy, pero editable porque el pago pudo haber llegado
   // otro día.
   const [fechaPago, setFechaPago] = useState(hoyISO());
+  // Propina (migración 0123, 1 oct 2026, #781) — separada del total a
+  // propósito (ver comentario en el tipo Factura). Se captura al mismo
+  // tiempo que el método/fecha de pago porque es cuando el dueño ya sabe
+  // cuánto le dejaron; nunca se suma a lo que la factura "debía" cobrar.
+  const [propina, setPropina] = useState("0");
   const [confirmandoPago, setConfirmandoPago] = useState(false);
   // Editar método/fecha de pago DESPUÉS de marcada pagada (3 sept 2026,
   // pedido de Joel: "pudiera entrar algo equivocado en el pago y si tiene
@@ -274,7 +283,10 @@ export default function FacturaDetalle({
     }
   }
 
-  async function actualizarEstado(nuevoEstado: string, extra?: { metodo_pago?: string; fecha_pago?: string }) {
+  async function actualizarEstado(
+    nuevoEstado: string,
+    extra?: { metodo_pago?: string; fecha_pago?: string; propina_monto?: number }
+  ) {
     setLoading(true);
     setError(null);
     const { error: updateError } = await supabase
@@ -296,11 +308,16 @@ export default function FacturaDetalle({
   function abrirEditarPago() {
     setMetodoPago(factura.metodo_pago ?? METODOS_PAGO[0]);
     setFechaPago(factura.fecha_pago ?? hoyISO());
+    setPropina(String(factura.propina_monto ?? 0));
     setEditandoPago(true);
   }
 
   async function guardarEdicionPago() {
-    await actualizarEstado("pagada", { metodo_pago: metodoPago, fecha_pago: fechaPago });
+    await actualizarEstado("pagada", {
+      metodo_pago: metodoPago,
+      fecha_pago: fechaPago,
+      propina_monto: Number(propina) || 0,
+    });
     setEditandoPago(false);
   }
 
@@ -598,6 +615,12 @@ export default function FacturaDetalle({
               <span>
                 Pagada vía <strong>{factura.metodo_pago}</strong>
                 {factura.fecha_pago && ` el ${formatFecha(factura.fecha_pago)}`}
+                {Number(factura.propina_monto) > 0 && (
+                  <>
+                    {" · "}
+                    propina {formatMoney(Number(factura.propina_monto))} (no es ingreso del negocio)
+                  </>
+                )}
               </span>
             </div>
             {!modoAdmin && (
@@ -634,6 +657,17 @@ export default function FacturaDetalle({
                 style={{ width: "auto" }}
                 value={fechaPago}
                 onChange={(e) => setFechaPago(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="flex-shrink-0 text-muted">Propina recibida</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="vc-input flex-1"
+                value={propina}
+                onChange={(e) => setPropina(e.target.value)}
               />
             </div>
             <div className="flex gap-2">
@@ -939,6 +973,24 @@ export default function FacturaDetalle({
                     value={fechaPago}
                     onChange={(e) => setFechaPago(e.target.value)}
                   />
+                </div>
+                {/* Propina (migración 0123, #781) — a propósito separada del
+                    "Total que debía cobrar" de arriba: no es parte de la
+                    venta ni se incluye en el cálculo de fee/retención, solo
+                    se informa aparte para repartirla a los empleados. */}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="flex-shrink-0 text-muted">¿Dejó propina? (opcional)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="vc-input flex-1"
+                    value={propina}
+                    onChange={(e) => setPropina(e.target.value)}
+                  />
+                </div>
+                <div className="flex">
                   {/* .vc-btn-primary trae width:100% en globals.css — dentro
                       de este flex row eso gana como flex-basis y aplasta el
                       <select> flex-1 al lado (mismo bug de fondo que el de
@@ -948,7 +1000,13 @@ export default function FacturaDetalle({
                     className="vc-btn-primary flex-shrink-0"
                     style={{ width: "auto" }}
                     disabled={loading}
-                    onClick={() => actualizarEstado("pagada", { metodo_pago: metodoPago, fecha_pago: fechaPago })}
+                    onClick={() =>
+                      actualizarEstado("pagada", {
+                        metodo_pago: metodoPago,
+                        fecha_pago: fechaPago,
+                        propina_monto: Number(propina) || 0,
+                      })
+                    }
                   >
                     {loading ? "..." : "Está correcto, confirmar"}
                   </button>
