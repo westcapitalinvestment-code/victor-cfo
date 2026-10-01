@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney, formatFecha } from "@/lib/format";
+import { fechaHoyPR } from "@/lib/hora-pr";
 import ConfirmarPagoModal, { type LineaConfirmacion } from "../confirmar-pago-modal";
 
 type Cliente = {
@@ -159,8 +160,11 @@ function iniciales(nombre: string): string {
   return ((partes[0]?.[0] ?? "") + (partes[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
+// Fix (30 sept 2026): new Date().toISOString() es UTC — en PR, después de
+// las 8pm esto ya da la fecha de mañana. fechaHoyPR() usa la zona
+// America/Puerto_Rico (mismo criterio que el resto de la app).
 function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return fechaHoyPR();
 }
 
 function estaVencida(f: Factura): boolean {

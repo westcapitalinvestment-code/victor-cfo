@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
+import { fechaHoyPR } from "@/lib/hora-pr";
 import GastosEvidenciaTab from "./gastos-evidencia-tab";
 import PeajesTab from "./peajes-tab";
 
@@ -83,8 +84,11 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
+// Fix (30 sept 2026): new Date().toISOString() es UTC — en PR, después de
+// las 8pm esto ya da la fecha de mañana. fechaHoyPR() usa la zona
+// America/Puerto_Rico (mismo criterio que el resto de la app).
 function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return fechaHoyPR();
 }
 
 function telefonoWhatsapp(telefono: string): string {

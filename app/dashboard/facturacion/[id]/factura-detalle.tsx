@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import QRCode from "react-qr-code";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney, formatFecha } from "@/lib/format";
+import { fechaHoyPR } from "@/lib/hora-pr";
 
 // 28 sept 2026, pedido de Joel: "que ningún cliente se vaya sin pagar
 // porque la plataforma no soporte algo" — el QR apunta a /cobro/[id]
@@ -107,8 +108,11 @@ function hoyVencida(f: Factura): boolean {
   return f.estado !== "pagada" && f.estado !== "borrador" && !!f.fecha_vencimiento && f.fecha_vencimiento < new Date().toISOString().slice(0, 10);
 }
 
+// Fix (30 sept 2026): new Date().toISOString() es UTC — en PR, después de
+// las 8pm esto ya da la fecha de mañana. fechaHoyPR() usa la zona
+// America/Puerto_Rico (mismo criterio que el resto de la app).
 function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return fechaHoyPR();
 }
 
 function sumarMeses(fechaISO: string, meses: number): string {

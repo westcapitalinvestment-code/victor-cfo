@@ -8,8 +8,11 @@ import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-ac
 import GastosPendientesCard from "../gastos-pendientes-card";
 import ResumenCard from "../resumen-card";
 
+// Fix (30 sept 2026): new Date().toISOString() es UTC — en PR, después de
+// las 8pm esto ya da la fecha de mañana. fechaHoyPR() (ya importado arriba)
+// usa la zona America/Puerto_Rico.
 function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return fechaHoyPR();
 }
 
 // Mismos helpers que dashboard/page.tsx (Personal) — duplicados aquí a

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney, formatFecha } from "@/lib/format";
+import { fechaHoyPR } from "@/lib/hora-pr";
 import ConfirmarPagoModal, { type LineaConfirmacion } from "../confirmar-pago-modal";
 
 type Vendor = {
@@ -84,14 +85,32 @@ function iniciales(nombre: string): string {
   return ((partes[0]?.[0] ?? "") + (partes[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
+// Fix (30 sept 2026, reportado por Joel): esto usaba new Date().toISOString()
+// crudo, que es UTC — en PR (UTC-4/AST) después de las 8:00pm el reloj UTC ya
+// cruzó a mañana aunque acá todavía no sea medianoche, así que "hoy" y el
+// trimestre/mes calculado a partir de eso salían adelantados un día (o un
+// trimestre entero, si el salto cae el día 1). fechaHoyPR() usa
+// Intl.DateTimeFormat contra "America/Puerto_Rico" — mismo criterio que ya
+// se usa en el resto de la app (lib/hora-pr.ts) desde la tarea #83.
 function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return fechaHoyPR();
 }
 
 // Trimestre calendario (Ene-Mar, Abr-Jun, Jul-Sep, Oct-Dic) — el mismo
 // agrupamiento que pide Hacienda PR para el 480.6A/B.
 function trimestreDe(fechaISO: string): number {
   return Math.ceil(Number(fechaISO.slice(5, 7)) / 3);
+}
+
+// Nombre del mes en español a partir de "YYYY-MM" (30 sept 2026) — para el
+// indicador "Retenido en {mes}" junto al de trimestre.
+const NOMBRES_MES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+function nombreMes(anioMes: string): string {
+  const [anio, mes] = anioMes.split("-");
+  return `${NOMBRES_MES[Number(mes) - 1]} ${anio}`;
 }
 
 function rangoTrimestre(anio: number, trimestre: number): { desde: string; hasta: string } {
@@ -531,6 +550,20 @@ function PagosTab({
     .filter((r) => r.period_end && r.period_end >= desdeTrim && r.period_end <= hastaTrim)
     .reduce((s, r) => s + Number(r.retention_amount), 0);
 
+  // Mismo pote pero por MES. 30 sept 2026, pedido de Joel: "deberia tener
+  // los meses y los quarters" — el depósito real en SURI es mensual
+  // (480.9A, Sección 1062.03), así que el mes es el dato que de verdad
+  // importa para saber cuánto hay que depositar antes del día 15; el
+  // trimestre se deja también porque sigue siendo útil como referencia
+  // de ritmo, no se reemplaza, se añade al lado.
+  const mesActualStr = fechaPago.slice(0, 7); // YYYY-MM
+  const desdeMes = `${mesActualStr}-01`;
+  const ultimoDiaMes = new Date(Number(mesActualStr.slice(0, 4)), Number(mesActualStr.slice(5, 7)), 0).getDate();
+  const hastaMes = `${mesActualStr}-${String(ultimoDiaMes).padStart(2, "0")}`;
+  const retenidoMes = retenciones
+    .filter((r) => r.period_end && r.period_end >= desdeMes && r.period_end <= hastaMes)
+    .reduce((s, r) => s + Number(r.retention_amount), 0);
+
   // Agrupado por entidad — solo para el modal de confirmación. La inmensa
   // mayoría de las veces es un solo grupo (una entidad activa normal); solo
   // aparece más de uno en "vista global" con contratistas de entidades
@@ -718,7 +751,8 @@ function PagosTab({
           />
         </div>
         <p className="mb-2 text-xs text-muted">
-          Retenido en Q{trimestreActual} {anioActual}: <span className="font-medium text-text">{formatMoney(retenidoTrimestre)}</span>
+          Retenido en {nombreMes(mesActualStr)}: <span className="font-medium text-text">{formatMoney(retenidoMes)}</span>
+          {" · "}Q{trimestreActual} {anioActual}: <span className="font-medium text-text">{formatMoney(retenidoTrimestre)}</span>
         </p>
 
         {error && <p className="mb-2 text-xs text-red">{error}</p>}
