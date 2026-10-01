@@ -18,7 +18,22 @@ type Vendor = {
   is_corporation: boolean;
   active: boolean;
   entity_id: string | null;
+  // Migración 0116 (30 sept 2026, pedido de Joel a raíz de la conversación
+  // con su CPA): Certificado de Relevo de Retención archivado por
+  // contratista — sin esto, el 6%/0% que alguien le puso al contratista en
+  // pantalla no tiene respaldo real ante Hacienda (Sección 1062.03(g)).
+  relevo_r2_key?: string | null;
+  relevo_pct?: number | null;
+  relevo_fecha_expiracion?: string | null;
 };
+
+// Estado real del relevo de un contratista, comparado contra hoy (fecha de
+// PR, no UTC — mismo fix de raíz que hoyISO() más abajo).
+function estadoRelevo(v: Vendor, hoyISOStr: string): "vigente" | "vencido" | "ninguno" {
+  if (!v.relevo_r2_key) return "ninguno";
+  if (!v.relevo_fecha_expiracion) return "vigente"; // archivado sin fecha — no asumir vencido
+  return v.relevo_fecha_expiracion >= hoyISOStr ? "vigente" : "vencido";
+}
 
 // Las 4 casillas reales del Modelo 480.6SP (Sección 1062.03) — confirmado
 // con el CPA de Joel y con un 480.6SP real de su compañía, 30 sept 2026.
@@ -532,15 +547,21 @@ function PagosTab({
         const acumuladoPrevio = acumuladoAnual.get(v.id) ?? 0;
         const retenido = retencionMarginal(acumuladoPrevio, bruto, pct);
         const neto = bruto - retenido;
-        return { vendor: v, bruto, pct, retenido, neto };
+        // 30 sept 2026, pedido de Joel: un % menor a 10 (6% o 0%) solo tiene
+        // respaldo real si hay un Certificado de Relevo VIGENTE archivado —
+        // Sección 1062.03(g). Si alguien bajó el % a mano sin eso, se marca
+        // la fila para bloquear "Registrar corrida" más abajo.
+        const relevoOk = pct >= 10 || estadoRelevo(v, fechaPago) === "vigente";
+        return { vendor: v, bruto, pct, retenido, neto, relevoOk };
       })
       .filter((f) => f.bruto > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activos, montos, pcts, acumuladoAnual]);
+  }, [activos, montos, pcts, acumuladoAnual, fechaPago]);
 
   const totalBruto = filas.reduce((s, f) => s + f.bruto, 0);
   const totalRetenido = filas.reduce((s, f) => s + f.retenido, 0);
   const totalNeto = filas.reduce((s, f) => s + f.neto, 0);
+  const filasConProblemaRelevo = filas.filter((f) => !f.relevoOk);
 
   // Pote de "ya retenido este trimestre" — mismo cálculo que usará Reportes,
   // aquí solo como referencia rápida mientras registra la corrida.
@@ -765,8 +786,75 @@ function PagosTab({
             const pctNum = Number(pct || 0);
             const retenido = retencionMarginal(acumuladoAnual.get(v.id) ?? 0, brutoNum, pctNum);
             const neto = brutoNum - retenido;
+            const faltaRelevo = brutoNum > 0 && pctNum < 10 && estadoRelevo(v, fechaPago) !== "vigente";
             return (
-              <div key={v.id} className="flex items-center gap-2 py-2.5">
+              <div key={v.id} className={faltaRelevo ? "py-2.5" : "flex items-center gap-2 py-2.5"}>
+              {faltaRelevo ? (
+                <div className="rounded-lg border border-red/30 bg-red/5 p-2">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
+                      style={{ background: colorAvatar(v.id) }}
+                    >
+                      {iniciales(v.name)}
+                    </div>
+                    <p className="min-w-0 flex-1 truncate text-sm">{v.name}</p>
+                    <button
+                      type="button"
+                      onClick={() => abrirArchivoCorrida(v.id)}
+                      className={`relative flex-shrink-0 ${
+                        (archivosPendientes[v.id]?.length ?? 0) > 0 ? "text-teal" : "text-muted hover:text-teal"
+                      }`}
+                      title="Adjuntar factura de este pago"
+                    >
+                      <i className="ti ti-paperclip" style={{ fontSize: 14 }} />
+                      {(archivosPendientes[v.id]?.length ?? 0) > 0 && (
+                        <span
+                          className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] font-medium text-white"
+                          style={{ background: "#1D9E75" }}
+                        >
+                          {archivosPendientes[v.id]!.length}
+                        </span>
+                      )}
+                    </button>
+                    <div className="relative flex-shrink-0">
+                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted">$</span>
+                      <input
+                        className="vc-input"
+                        style={{ width: 128, paddingLeft: 22 }}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={bruto}
+                        onChange={(e) => setMontos((prev) => ({ ...prev, [v.id]: e.target.value }))}
+                      />
+                    </div>
+                    <div className="flex flex-shrink-0 items-center gap-1">
+                      <input
+                        className="vc-input flex-shrink-0"
+                        style={{ width: 68 }}
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={pct}
+                        onChange={(e) => setPcts((prev) => ({ ...prev, [v.id]: e.target.value }))}
+                      />
+                      <span className="text-xs text-muted">%</span>
+                    </div>
+                    <span className="w-16 flex-shrink-0 text-right text-xs text-amb">-{formatMoney(retenido)}</span>
+                    <span className="w-20 flex-shrink-0 text-right text-sm font-medium">
+                      {formatMoney(brutoNum > 0 ? neto : 0)}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 pl-10 text-[11px] text-red">
+                    ⚠️ Le estás aplicando {pctNum}% pero no tiene Certificado de Relevo vigente archivado — sin ese papel
+                    Hacienda exige el 10% completo. Súbelo en "Contratistas" o pon el % en 10 para poder registrar.
+                  </p>
+                </div>
+              ) : (
+                <>
                 <div
                   className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
                   style={{ background: colorAvatar(v.id) }}
@@ -820,6 +908,8 @@ function PagosTab({
                 </div>
                 <span className="w-16 flex-shrink-0 text-right text-xs text-amb">-{formatMoney(retenido)}</span>
                 <span className="w-20 flex-shrink-0 text-right text-sm font-medium">{formatMoney(brutoNum > 0 ? neto : 0)}</span>
+                </>
+              )}
               </div>
             );
           })}
@@ -866,7 +956,16 @@ function PagosTab({
           onChange={agregarArchivosPendientes}
         />
 
-        <button className="vc-btn-primary mt-3" disabled={filas.length === 0 || guardando} onClick={() => setMostrarConfirmacion(true)}>
+        {filasConProblemaRelevo.length > 0 && (
+          <p className="mt-2 text-[11px] text-red">
+            ⚠️ No se puede registrar la corrida: {filasConProblemaRelevo.length === 1 ? "hay un contratista" : `hay ${filasConProblemaRelevo.length} contratistas`} con % reducido sin Relevo vigente (marcados arriba en rojo).
+          </p>
+        )}
+        <button
+          className="vc-btn-primary mt-3"
+          disabled={filas.length === 0 || guardando || filasConProblemaRelevo.length > 0}
+          onClick={() => setMostrarConfirmacion(true)}
+        >
           {guardando ? "Guardando..." : `Registrar corrida${filas.length > 0 ? ` (${filas.length})` : ""}`}
         </button>
       </div>
@@ -1048,6 +1147,17 @@ function ContratistasTab({
   // retentionType decide la casilla real (1/2/3/4, ver casilla480_6SP()).
   const [isCorporation, setIsCorporation] = useState(false);
 
+  // Relevo de Retención por contratista (migración 0116, 30 sept 2026).
+  // Solo tiene sentido cuando ya existe el vendor (necesita el id para
+  // subir el PDF a R2) — por eso el bloque de UI más abajo solo se muestra
+  // editando, no al crear uno nuevo.
+  const [relevoVendor, setRelevoVendor] = useState<Vendor | null>(null);
+  const [relevoArchivo, setRelevoArchivo] = useState<File | null>(null);
+  const [relevoPctForm, setRelevoPctForm] = useState<"6" | "0">("6");
+  const [relevoFechaExp, setRelevoFechaExp] = useState("");
+  const [relevoSubiendo, setRelevoSubiendo] = useState(false);
+  const [relevoError, setRelevoError] = useState<string | null>(null);
+
   function abrirNuevo() {
     setFormAbierto("nuevo");
     setName("");
@@ -1055,6 +1165,7 @@ function ContratistasTab({
     setRetentionType("480.6B");
     setPct(String(retencionDefault));
     setIsCorporation(false);
+    setRelevoVendor(null);
     setError(null);
   }
 
@@ -1065,7 +1176,56 @@ function ContratistasTab({
     setRetentionType((v.retention_type as (typeof TIPOS_RETENCION)[number]["value"]) || "480.6B");
     setPct(String(v.default_retention_pct));
     setIsCorporation(v.is_corporation ?? false);
+    setRelevoVendor(v);
+    setRelevoArchivo(null);
+    setRelevoPctForm(v.relevo_pct === 0 ? "0" : "6");
+    setRelevoFechaExp(v.relevo_fecha_expiracion ?? "");
+    setRelevoError(null);
     setError(null);
+  }
+
+  async function subirRelevo() {
+    if (!relevoVendor || !relevoArchivo || !relevoFechaExp) return;
+    setRelevoSubiendo(true);
+    setRelevoError(null);
+    const fd = new FormData();
+    fd.append("file", relevoArchivo);
+    fd.append("vendorId", relevoVendor.id);
+    fd.append("relevoPct", relevoPctForm);
+    fd.append("relevoFechaExpiracion", relevoFechaExp);
+    const res = await fetch("/api/pagos/vendors/relevo/upload", { method: "POST", body: fd });
+    const json = await res.json().catch(() => ({}));
+    setRelevoSubiendo(false);
+    if (!res.ok) {
+      setRelevoError(json?.error ?? "No se pudo subir el relevo.");
+      return;
+    }
+    const actualizado: Vendor = {
+      ...relevoVendor,
+      relevo_r2_key: json.key,
+      relevo_pct: Number(relevoPctForm),
+      relevo_fecha_expiracion: relevoFechaExp,
+    };
+    setRelevoVendor(actualizado);
+    setRelevoArchivo(null);
+    setLista((prev) => prev.map((x) => (x.id === actualizado.id ? actualizado : x)));
+  }
+
+  async function borrarRelevo() {
+    if (!relevoVendor) return;
+    setRelevoSubiendo(true);
+    setRelevoError(null);
+    const res = await fetch(`/api/pagos/vendors/${relevoVendor.id}/relevo`, { method: "DELETE" });
+    setRelevoSubiendo(false);
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setRelevoError(json?.error ?? "No se pudo borrar el relevo.");
+      return;
+    }
+    const actualizado: Vendor = { ...relevoVendor, relevo_r2_key: null, relevo_pct: null, relevo_fecha_expiracion: null };
+    setRelevoVendor(actualizado);
+    setRelevoFechaExp("");
+    setLista((prev) => prev.map((x) => (x.id === actualizado.id ? actualizado : x)));
   }
 
   function cambiarTipoRetencion(valor: (typeof TIPOS_RETENCION)[number]["value"]) {
@@ -1258,6 +1418,84 @@ function ContratistasTab({
           <p className="text-[11px] text-muted">
             {casilla480_6SP({ retention_type: retentionType, is_corporation: isCorporation }).label}
           </p>
+
+          {/* Relevo de Retención (migración 0116, 30 sept 2026) — solo
+              aplica a un contratista ya guardado, y solo tiene sentido si
+              está sujeto a retención (si no, no hay nada que relevar). */}
+          {relevoVendor && retentionType === "480.6B" && (
+            <div className="rounded-lg border border-border bg-bg p-2.5">
+              <p className="mb-1.5 text-xs font-medium">Certificado de Relevo de SURI</p>
+              {relevoVendor.relevo_r2_key ? (
+                <>
+                  <p className="mb-1.5 text-[11px] text-muted">
+                    Archivado: {relevoVendor.relevo_pct}% de retención, vence{" "}
+                    {relevoVendor.relevo_fecha_expiracion ? formatFecha(relevoVendor.relevo_fecha_expiracion) : "sin fecha"} —{" "}
+                    <span
+                      className={
+                        estadoRelevo(relevoVendor, hoyISO()) === "vigente" ? "font-medium text-teal" : "font-medium text-red"
+                      }
+                    >
+                      {estadoRelevo(relevoVendor, hoyISO()) === "vigente" ? "vigente" : "VENCIDO"}
+                    </span>
+                  </p>
+                  <div className="flex gap-2">
+                    <a
+                      href={`/api/pagos/vendors/${relevoVendor.id}/relevo`}
+                      target="_blank"
+                      className="text-[11px] font-medium text-teal hover:opacity-80"
+                    >
+                      Ver PDF
+                    </a>
+                    <button
+                      className="text-[11px] font-medium text-red hover:opacity-80"
+                      disabled={relevoSubiendo}
+                      onClick={borrarRelevo}
+                    >
+                      Quitar relevo
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="mb-1.5 text-[11px] text-muted">
+                    Sin relevo archivado — a este contratista se le retiene 10% completo aunque le pongas un % menor arriba,
+                    hasta que subas su Certificado de Relevo.
+                  </p>
+                  <div className="mb-1.5 flex gap-2">
+                    <select
+                      className="vc-input flex-1"
+                      value={relevoPctForm}
+                      onChange={(e) => setRelevoPctForm(e.target.value as "6" | "0")}
+                    >
+                      <option value="6">Relevo parcial (6%)</option>
+                      <option value="0">Relevo total (0%)</option>
+                    </select>
+                    <input
+                      className="vc-input flex-1"
+                      type="date"
+                      value={relevoFechaExp}
+                      onChange={(e) => setRelevoFechaExp(e.target.value)}
+                    />
+                  </div>
+                  <input
+                    className="vc-input mb-1.5 w-full text-xs"
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(e) => setRelevoArchivo(e.target.files?.[0] ?? null)}
+                  />
+                  {relevoError && <p className="mb-1.5 text-[11px] text-red">{relevoError}</p>}
+                  <button
+                    className="vc-btn-primary w-full text-xs"
+                    disabled={!relevoArchivo || !relevoFechaExp || relevoSubiendo}
+                    onClick={subirRelevo}
+                  >
+                    {relevoSubiendo ? "Subiendo..." : "Subir Certificado de Relevo"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button className="vc-btn-primary flex-1" disabled={!name.trim() || guardando} onClick={guardar}>
               {guardando ? "Guardando..." : "Guardar"}
@@ -1300,6 +1538,20 @@ function ContratistasTab({
                     {v.retention_type === "480.6B" ? ` · ${Number(v.default_retention_pct)}%` : " · exento"}
                     {v.tax_id ? ` · ${v.tax_id}` : ""}
                   </p>
+                  {/* Relevo por contratista (30 sept 2026): solo tiene sentido
+                      mostrarlo cuando el % aplicado es menor a 10 — ahí es
+                      donde hace falta el papel que lo respalde. */}
+                  {v.retention_type === "480.6B" && Number(v.default_retention_pct) < 10 && (
+                    <p className="truncate text-[11px]">
+                      {estadoRelevo(v, hoyISO()) === "vigente" && <span className="text-teal">Relevo vigente</span>}
+                      {estadoRelevo(v, hoyISO()) === "vencido" && (
+                        <span className="font-medium text-red">⚠️ Relevo VENCIDO</span>
+                      )}
+                      {estadoRelevo(v, hoyISO()) === "ninguno" && (
+                        <span className="font-medium text-amb">⚠️ Sin relevo archivado</span>
+                      )}
+                    </p>
+                  )}
                 </button>
                 <div className="flex flex-shrink-0 items-center gap-2">
                   <button onClick={() => abrirEditar(v)} className="text-muted hover:text-teal">

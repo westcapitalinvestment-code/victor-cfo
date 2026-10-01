@@ -37,7 +37,9 @@ export default async function AdminPagosPage({ params }: { params: { entityId: s
   const [{ data: vendors }, { data: retenciones }] = await Promise.all([
     supabase
       .from("vendors")
-      .select("id, name, tax_id, vendor_type, retention_type, default_retention_pct, is_corporation, active, entity_id")
+      .select(
+        "id, name, tax_id, vendor_type, retention_type, default_retention_pct, is_corporation, active, entity_id, relevo_r2_key, relevo_pct, relevo_fecha_expiracion"
+      )
       .eq("owner_id", ownerId)
       .eq("entity_id", entityId)
       .order("name", { ascending: true }),
