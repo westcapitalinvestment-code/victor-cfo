@@ -308,7 +308,7 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
   const en30diasISO = en30dias.toISOString().slice(0, 10);
   const documentosPorVencer = (documentos ?? []).filter((d) => d.fecha_vencimiento && d.fecha_vencimiento <= en30diasISO);
 
-  const totalAlertas = facturasVencidas.length + documentosPorVencer.length;
+  const totalAlertas = facturasVencidas.length + documentosPorVencer.length + (riesgoCBA ? 1 : 0);
 
   // Resumen y proyección (5 sept 2026) — reemplaza el tab "Resumen" que se
   // quitó. Mismo cálculo que dashboard/page.tsx (Personal), pero SOLO con
@@ -351,6 +351,62 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
   // de sumando todas las de negocio).
   const gananciaNegocioYTD = ingresosYTDNegocio - gastosYTDNegocio;
   const reservaImpuestosNegocio = gananciaNegocioYTD > 0 ? gananciaNegocioYTD * 0.25 : 0;
+
+  // #785 (1 oct 2026, pedido de Joel: "pero Victor debe conocer esto al
+  // detalle" → aviso de riesgo de CBA) — "gananciaNegocioYTD" de arriba es
+  // el mismo proxy de ingreso neto que se le explicó a Joel: no es el
+  // número exacto de CBA (no ajusta depreciación ni otros add-backs), pero
+  // sirve para avisar cuándo el negocio entra en zona de riesgo del umbral
+  // de $25,000 (Sec. 1021.02 / tax_knowledge_base, migración 0127).
+  //
+  // El segundo ingrediente: contratistas pagados este año que NO tienen su
+  // checklist de vendor_480_validation listo (ready_for_480 = true). Sin
+  // esa validación (y, si la entidad es pass-through, sin el informe AUP
+  // del CPA — algo que VICTOR CFO no puede verificar), esos gastos podrían
+  // no ser deducibles específicamente para el cálculo de CBA/CAM, aunque sí
+  // lo sean para la contribución regular. Mismo patrón de query que ya usa
+  // app/cpa/[entityId]/page.tsx.
+  const UMBRAL_CBA = 25000;
+  const UMBRAL_480SP = 500; // mismo umbral que dispara la obligación de 480.6SP (Sec. 1063.01)
+
+  const { data: vendorsNegocio } = await supabase
+    .from("vendors")
+    .select("id, name")
+    .eq("owner_id", user.id)
+    .eq("entity_id", entidadId)
+    .eq("active", true);
+  const vendorIdsNegocio = (vendorsNegocio ?? []).map((v) => v.id);
+
+  let contratistasSinValidar480: { nombre: string; total: number }[] = [];
+  if (vendorIdsNegocio.length > 0) {
+    const [{ data: retencionesAñoNegocio }, { data: validaciones480Negocio }] = await Promise.all([
+      supabase
+        .from("vendor_retenciones")
+        .select("vendor_id, gross_amount, period_start")
+        .in("vendor_id", vendorIdsNegocio)
+        .gte("period_start", inicioAñoStr)
+        .lte("period_start", hoyStrPR),
+      supabase
+        .from("vendor_480_validation")
+        .select("vendor_id, ready_for_480")
+        .in("vendor_id", vendorIdsNegocio)
+        .eq("period_year", anioActual),
+    ]);
+
+    const pagadoPorVendorEsteAño = new Map<string, number>();
+    for (const r of retencionesAñoNegocio ?? []) {
+      pagadoPorVendorEsteAño.set(r.vendor_id, (pagadoPorVendorEsteAño.get(r.vendor_id) ?? 0) + Number(r.gross_amount));
+    }
+    const vendorListoPorId = new Map((validaciones480Negocio ?? []).map((v) => [v.vendor_id, v.ready_for_480]));
+    const nombrePorVendorId = new Map((vendorsNegocio ?? []).map((v) => [v.id, v.name]));
+
+    contratistasSinValidar480 = [...pagadoPorVendorEsteAño.entries()]
+      .filter(([vendorId, total]) => total > UMBRAL_480SP && vendorListoPorId.get(vendorId) !== true)
+      .map(([vendorId, total]) => ({ nombre: nombrePorVendorId.get(vendorId) ?? "Contratista", total }));
+  }
+
+  const totalSinValidar480 = contratistasSinValidar480.reduce((s, c) => s + c.total, 0);
+  const riesgoCBA = gananciaNegocioYTD > UMBRAL_CBA && contratistasSinValidar480.length > 0;
 
   return (
     <div className="vc-shell">
@@ -528,6 +584,27 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
                 </div>
               </div>
             ))}
+
+            {/* #785 — riesgo de Contribución Básica Alterna (CBA): ganancia
+                YTD sobre el umbral de $25,000 Y hay contratistas pagados
+                este año sin su checklist de 480 listo. Es un aviso, no un
+                cálculo del CBA real — eso lo confirma el contable. */}
+            {riesgoCBA && (
+              <div className="vc-alert">
+                <div className="vc-adot" style={{ background: "var(--amb)" }} />
+                <div className="flex-1">
+                  <p className="text-xs text-text">
+                    Posible riesgo de CBA — {formatMoney(totalSinValidar480)} pagado a {contratistasSinValidar480.length === 1 ? "un contratista" : `${contratistasSinValidar480.length} contratistas`} sin checklist 480 listo
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-muted">
+                    Tu ganancia YTD ya pasó los {formatMoney(UMBRAL_CBA)} — confírmalo con tu contable
+                  </p>
+                  <Link href="/dashboard/pagos" className="mt-0.5 inline-block text-[10px] font-medium text-teal">
+                    Ver contratistas →
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
