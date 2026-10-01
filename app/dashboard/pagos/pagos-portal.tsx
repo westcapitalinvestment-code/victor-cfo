@@ -771,10 +771,23 @@ function PagosTab({
             onChange={(e) => setFechaPago(e.target.value)}
           />
         </div>
-        <p className="mb-2 text-xs text-muted">
-          Retenido en {nombreMes(mesActualStr)}: <span className="font-medium text-text">{formatMoney(retenidoMes)}</span>
-          {" · "}Q{trimestreActual} {anioActual}: <span className="font-medium text-text">{formatMoney(retenidoTrimestre)}</span>
-        </p>
+        {/* 30 sept 2026, feedback de Joel: esto era un párrafo text-xs muted
+            — "muy peq y no llama la atención" para un número que de verdad
+            importa (lo que va a tener que depositar). Ahora son dos cajas
+            con el monto grande, mismo tratamiento visual que la tarjeta de
+            Depósito 480.9A en Reportes. */}
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <div className="rounded-lg border border-amb/30 bg-amb/5 px-2.5 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted">Retenido en {nombreMes(mesActualStr)}</p>
+            <p className="text-base font-semibold text-amb">{formatMoney(retenidoMes)}</p>
+          </div>
+          <div className="rounded-lg border border-border bg-bg px-2.5 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted">
+              Q{trimestreActual} {anioActual}
+            </p>
+            <p className="text-base font-semibold text-text">{formatMoney(retenidoTrimestre)}</p>
+          </div>
+        </div>
 
         {error && <p className="mb-2 text-xs text-red">{error}</p>}
 
@@ -1330,13 +1343,23 @@ function ContratistasTab({
       {/* Importador de pagos históricos (30 sept 2026, pedido de Joel: un
           contratista que llega a mitad de año con data de otro sistema no
           debería esperar a enero para que el acumulado de $500 y el
-          480.6SP le funcionen) — ver /api/pagos/csv/importar. */}
-      <div className="mb-2 flex justify-end gap-3 text-[11px]">
-        <Link href={`/dashboard/pagos/importaciones${entidadId ? `?entidadId=${entidadId}` : ""}`} className="font-medium text-muted hover:text-teal">
-          Importaciones anteriores
+          480.6SP le funcionen) — ver /api/pagos/csv/importar. Antes era un
+          link de texto 11px que "pasaba desapercibido" (feedback de Joel el
+          mismo día) — ahora es un botón real con icono, mismo peso visual
+          que el resto de los botones secundarios de la app. */}
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <Link
+          href={`/dashboard/pagos/importar${entidadId ? `?entidadId=${entidadId}` : ""}`}
+          className="vc-btn-secondary flex items-center gap-1.5 text-xs"
+        >
+          <i className="ti ti-file-upload" style={{ fontSize: 14 }} />
+          Importar histórico (CSV)
         </Link>
-        <Link href={`/dashboard/pagos/importar${entidadId ? `?entidadId=${entidadId}` : ""}`} className="font-medium text-teal hover:opacity-80">
-          Importar histórico (CSV) →
+        <Link
+          href={`/dashboard/pagos/importaciones${entidadId ? `?entidadId=${entidadId}` : ""}`}
+          className="text-xs font-medium text-muted hover:text-teal"
+        >
+          Importaciones anteriores
         </Link>
       </div>
 
@@ -1804,10 +1827,48 @@ function ReportesTab({
   // casilla real de cada contratista, lo que Joel le entrega a su CPA.
   const anioActual480_6SP = Number(hoyISO().slice(0, 4));
   const paramsExport480_6SP = `anio=${anioActual480_6SP}${!vistaGlobal && entidadId ? `&entityId=${entidadId}` : ""}`;
-  const export480_6SPHref = `/api/pagos/reportes/480-6sp?${paramsExport480_6SP}`;
+  // 30 sept 2026, feedback de Joel: este export solo tenía CSV plano ("se ve
+  // horrible, no está en el formato de los demás con logo y tablas... y
+  // además debe estar en PDF también") — ahora tiene Excel branded y PDF
+  // igual que el resto de los reportes de Pagos; el CSV original
+  // (/api/pagos/reportes/480-6sp) se deja intacto pero deja de ser el botón
+  // principal.
+  const export480_6SPExcelHref = `/api/pagos/reportes/480-6sp/excel?${paramsExport480_6SP}`;
+  const export480_6SPPdfHref = `/api/pagos/reportes/480-6sp/pdf?${paramsExport480_6SP}`;
 
   return (
     <>
+      {/* 30 sept 2026, feedback de Joel: este aviso vivía DEBAJO del selector
+          de período (Trimestre/Rango), pegado sin ningún separador — se veía
+          como si fuera "la caja que abre" el trimestre, cuando en realidad
+          es un dato fijo que NO cambia con el filtro de abajo (siempre es el
+          mes calendario actual). Por eso se subió a la cima del tab, antes
+          de cualquier filtro, y se le quitó cualquier relación visual con el
+          selector de período. */}
+      {deposito.totalDolares > 0 && (
+        <div className={`vc-card mb-3 ${deposito.vencido ? "border-red/40 bg-red/5" : "border-amb/30 bg-amb/5"}`}>
+          <p className="mb-1 text-xs uppercase tracking-wide text-muted">Depósito mensual — Modelo 480.9A</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm">
+                Retenido en {MESES_ES[deposito.mes]} {deposito.anio}:{" "}
+                <span className="font-medium">{formatMoney(deposito.totalDolares)}</span>
+              </p>
+              <p className={`text-xs ${deposito.vencido ? "text-red" : "text-muted"}`}>
+                {deposito.vencido
+                  ? `⚠️ Venció el ${formatFecha(deposito.vence.toISOString().slice(0, 10))} — deposítalo en SURI cuanto antes.`
+                  : `Vence el ${formatFecha(deposito.vence.toISOString().slice(0, 10))} (día 15 del mes siguiente).`}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* A partir de aquí todo cambia con el filtro de período — por eso
+          lleva su propio encabezado, para dejar clarísimo que es una
+          sección distinta del aviso fijo de arriba. */}
+      <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted">Filtrar reporte por período</p>
+
       {/* El bloque entero (botones + lo que se despliega) vive dentro de UN
           mismo contenedor con borde/fondo teal — así "Trimestre"/"Rango" se
           ven visualmente pegados al Q1-Q4 o las fechas que abren debajo, en
@@ -1874,27 +1935,6 @@ function ReportesTab({
           </div>
         )}
       </div>
-
-      {deposito.totalDolares > 0 && (
-        <div
-          className={`vc-card mb-3 ${deposito.vencido ? "border-red/40 bg-red/5" : "border-amb/30 bg-amb/5"}`}
-        >
-          <p className="mb-1 text-xs uppercase tracking-wide text-muted">Depósito mensual — Modelo 480.9A</p>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm">
-                Retenido en {MESES_ES[deposito.mes]} {deposito.anio}:{" "}
-                <span className="font-medium">{formatMoney(deposito.totalDolares)}</span>
-              </p>
-              <p className={`text-xs ${deposito.vencido ? "text-red" : "text-muted"}`}>
-                {deposito.vencido
-                  ? `⚠️ Venció el ${formatFecha(deposito.vence.toISOString().slice(0, 10))} — deposítalo en SURI cuanto antes.`
-                  : `Vence el ${formatFecha(deposito.vence.toISOString().slice(0, 10))} (día 15 del mes siguiente).`}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="vc-card mb-3">
         <p className="mb-1 text-xs uppercase tracking-wide text-muted">Contratista</p>
@@ -1969,11 +2009,16 @@ function ReportesTab({
       <div className="vc-card mt-3">
         <p className="mb-1 text-xs uppercase tracking-wide text-muted">Para el CPA — año fiscal completo</p>
         <p className="mb-2 text-xs text-muted">
-          CSV con casilla (1-4), SSN/EIN y totales de {anioActual480_6SP} — solo contratistas que cruzaron los $500.
+          Casilla (1-4), SSN/EIN y totales de {anioActual480_6SP} — solo contratistas que cruzaron los $500.
         </p>
-        <a href={export480_6SPHref} className="vc-btn-secondary block text-center">
-          Exportar 480.6SP {anioActual480_6SP}
-        </a>
+        <div className="flex gap-2">
+          <a href={export480_6SPPdfHref} target="_blank" rel="noopener noreferrer" className="vc-btn-secondary flex-1 text-center">
+            Exportar PDF
+          </a>
+          <a href={export480_6SPExcelHref} className="vc-btn-secondary flex-1 text-center">
+            Exportar Excel
+          </a>
+        </div>
       </div>
     </>
   );
