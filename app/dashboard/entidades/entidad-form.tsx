@@ -38,6 +38,11 @@ export type EntidadCompleta = {
   client_retention_situation: string | null;
   relevo_certificate_expiry: string | null;
   relevo_certificate_r2_key: string | null;
+  // Certificado de Compras Exentas (Modelo SC 2916, #783) — para presentarle
+  // a los SUPLIDORES de esta entidad y no pagar IVU al comprar inventario
+  // para reventa. Dirección inversa de clients.ivu_exempt_reseller.
+  sc2916_certificate_r2_key?: string | null;
+  sc2916_certificate_expiry?: string | null;
   invoice_prefix: string | null;
   invoice_start_number: number | null;
   default_payment_terms: string | null;
@@ -136,6 +141,15 @@ export default function EntidadForm({
   const [ivuMunicipal, setIvuMunicipal] = useState(String(entidad?.ivu_rate_municipal ?? 1));
   const [retencion, setRetencion] = useState(entidad?.client_retention_situation ?? "no");
   const [relevoVencimiento, setRelevoVencimiento] = useState(entidad?.relevo_certificate_expiry ?? "");
+  // Certificado de Compras Exentas SC 2916 (#783) — solo tiene sentido
+  // subirlo en modo editar (necesita un entityId real para la key de R2),
+  // igual que "Certificado de Registro de Comerciante" en Pagos (#788): sin
+  // el flujo dual crear/subir-después del Relevo, porque este certificado
+  // no bloquea nada al crear la entidad — se puede añadir cuando ya exista.
+  const [sc2916Vencimiento, setSc2916Vencimiento] = useState(entidad?.sc2916_certificate_expiry ?? "");
+  const sc2916InputRef = useRef<HTMLInputElement>(null);
+  const [tieneSc2916, setTieneSc2916] = useState(!!entidad?.sc2916_certificate_r2_key);
+  const [subiendoSc2916, setSubiendoSc2916] = useState(false);
 
   // Facturas
   const [invoicePrefix, setInvoicePrefix] = useState(entidad?.invoice_prefix ?? "INV");
@@ -259,6 +273,43 @@ export default function EntidadForm({
     setTieneRelevo(true);
   }
 
+  async function subirSc2916(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !entidad) return;
+    if (file.type !== "application/pdf") {
+      setError("El certificado debe ser un PDF.");
+      return;
+    }
+    setSubiendoSc2916(true);
+    setError(null);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("entityId", entidad.id);
+    const res = await fetch("/api/entidades/sc2916/upload", { method: "POST", body: formData });
+    setSubiendoSc2916(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "No se pudo subir el certificado.");
+      return;
+    }
+    setTieneSc2916(true);
+  }
+
+  async function borrarSc2916() {
+    if (!entidad) return;
+    setSubiendoSc2916(true);
+    setError(null);
+    const res = await fetch(`/api/entidades/${entidad.id}/sc2916`, { method: "DELETE" });
+    setSubiendoSc2916(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "No se pudo quitar el certificado.");
+      return;
+    }
+    setTieneSc2916(false);
+  }
+
   function camposComunes() {
     return {
       name,
@@ -277,6 +328,7 @@ export default function EntidadForm({
       ivu_rate_municipal: ivuApplies ? Number(ivuMunicipal) || 0 : 0,
       client_retention_situation: retencion,
       relevo_certificate_expiry: retencion === "6" ? relevoVencimiento || null : null,
+      sc2916_certificate_expiry: sc2916Vencimiento || null,
       invoice_prefix: invoicePrefix || "INV",
       invoice_start_number: Number(invoiceStart) || 1001,
       default_payment_terms: paymentTerms,
@@ -605,6 +657,63 @@ export default function EntidadForm({
                   <input className="vc-input" type="number" step="0.001" value={ivuMunicipal} onChange={(e) => setIvuMunicipal(e.target.value)} />
                 </Field>
               </div>
+            )}
+          </div>
+
+          {/* Certificado de Compras Exentas SC 2916 (#783, 1 oct 2026) — si el
+              negocio compra inventario/mercancía para revenderla, este
+              certificado se le presenta a SUS suplidores para no pagar IVU
+              en esa compra (el IVU se cobra una sola vez, en la venta final).
+              Solo tiene sentido subirlo con la entidad ya creada (necesita el
+              id real para la key de R2) — igual que el Certificado de
+              Relevo arriba, pero sin el flujo dual crear/editar porque este
+              no bloquea nada al crear el negocio. */}
+          <div className="vc-card">
+            <p className="text-sm font-medium">Certificado de Compras Exentas (SC 2916)</p>
+            <p className="mb-3 text-xs text-muted">
+              Si compras inventario/mercancía para revenderla, este certificado se lo presentas a tus suplidores para no
+              pagar IVU en esa compra — el IVU se cobra una sola vez, cuando tú le vendas al cliente final.
+            </p>
+            {modo === "editar" && entidad ? (
+              <>
+                <Field label="Vencimiento (opcional)">
+                  <input
+                    className="vc-input"
+                    type="date"
+                    value={sc2916Vencimiento}
+                    onChange={(e) => setSc2916Vencimiento(e.target.value)}
+                  />
+                </Field>
+                <input ref={sc2916InputRef} type="file" accept="application/pdf" className="hidden" onChange={subirSc2916} />
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={subiendoSc2916}
+                    className="vc-btn-primary flex-1"
+                    style={{ width: "auto" }}
+                    onClick={() => sc2916InputRef.current?.click()}
+                  >
+                    {subiendoSc2916 ? "Subiendo..." : tieneSc2916 ? "✓ Certificado subido — toca para reemplazar" : "Subir Certificado SC 2916 (PDF)"}
+                  </button>
+                  {tieneSc2916 && (
+                    <>
+                      <a
+                        href={`/api/entidades/${entidad.id}/sc2916`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-teal hover:opacity-80"
+                      >
+                        Ver
+                      </a>
+                      <button type="button" className="text-xs font-medium text-red hover:opacity-80" disabled={subiendoSc2916} onClick={borrarSc2916}>
+                        Quitar
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-muted">Podrás subirlo después de crear el negocio, desde esta misma pestaña.</p>
             )}
           </div>
 
