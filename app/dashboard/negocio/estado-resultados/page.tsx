@@ -122,6 +122,12 @@ export default async function EstadoResultadosPage({
         añadir aparte.
       </p>
 
+      <div className="mb-3 text-right">
+        <Link href="/dashboard/negocio/pos" className="text-xs font-medium text-muted hover:text-teal">
+          ¿Tienes restaurante/POS (Clover, Verifone)? Sube tu reporte de ventas →
+        </Link>
+      </div>
+
       <div className="vc-card mb-3 flex flex-wrap gap-4">
         <div>
           <div className="text-[11px] uppercase tracking-wide text-muted">Ingresos</div>
