@@ -137,9 +137,9 @@ export default function LandingPricing() {
             {proExpandido && (
               <>
                 <li>Tracking de facturas pagadas y pendientes, con alertas de cobros atrasados</li>
-                <li>Paga contratistas con retención 480.6 automática y reporte trimestral</li>
+                <li>Paga contratistas con retención automática (10% / 6%), control mensual del depósito en SURI y exportación directa de la 480.6SP al cierre fiscal</li>
                 <li>Bóveda, Metas y Cuentas separadas para tu negocio</li>
-                <li>VICTOR te guía en retiro de dueño, IVU y créditos ante Hacienda</li>
+                <li>VICTOR te ayuda a distinguir salario de accionista de distribución de dividendos, calcula tu IVU y da seguimiento a tus créditos ante Hacienda</li>
                 <li>Reportes listos para tu CPA</li>
                 <li>Invita a tu secretaria, administrador o técnicos de campo (add-on)</li>
                 <li>Conecta entidades de negocio adicionales (add-on)</li>

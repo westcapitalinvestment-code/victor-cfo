@@ -1224,6 +1224,31 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       required: ["tema"],
     },
   },
+  {
+    name: "consultar_base_legal",
+    description:
+      "Busca en la base de conocimiento legal/contributivo de Puerto Rico (tax_knowledge_base, verificada " +
+      "contra hacienda.pr.gov) antes de contestar CUALQUIER pregunta de impuestos de PR que un usuario " +
+      "normalmente le haría a su CPA: retención 1062.03 y su certificado de relevo, 480.6SP, 480.9A, IVU " +
+      "11.5%/4% especial B2B, SC 2916, Ley 60-2019/decretos, deducibilidad de gastos (1033.01), límite de " +
+      "comidas y entretenimiento, plan de reembolso justificado, salario de accionista vs. distribución de " +
+      "dividendos, etc. Úsala ANTES de citar un número de sección, un %, una fecha límite o un formulario — " +
+      "nunca inventes o 'recuerdes' una cifra contributiva sin confirmarla aquí primero, porque un número " +
+      "equivocado le puede costar una penalidad real al usuario con Hacienda. Si la base no tiene nada sobre " +
+      "el tema, dilo con honestidad y recomienda confirmar con un CPA o en hacienda.pr.gov/SURI, en vez de " +
+      "adivinar una sección o una tasa.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tema: {
+          type: "string",
+          description:
+            "Qué quieres buscar, en pocas palabras (ej. 'retencion contratistas', 'ivu 4 por ciento', 'deduccion comidas', 'certificado relevo', 'ley 60 decreto').",
+        },
+      },
+      required: ["tema"],
+    },
+  },
 ];
 
 type ToolResult = { ok: boolean; message: string };
@@ -4909,6 +4934,72 @@ export async function executeVictorTool(
         ok: true,
         message: articulos
           .map((a) => `### ${a.titulo}\n${a.contenido}`)
+          .join("\n\n---\n\n"),
+      };
+    }
+
+    case "consultar_base_legal": {
+      // Base de conocimiento legal/contributiva de PR (migración 0115, 30
+      // sept 2026, pedido de Joel: que VICTOR pueda responder preguntas de
+      // impuestos con respaldo real en vez de adivinar). Tabla de lectura
+      // pública (no depende de ownerId) — es contenido de referencia legal,
+      // no datos del usuario. Mismo patrón de búsqueda en dos pasadas que
+      // consultar_manual: primero el "nombre" del tema (legal_reference /
+      // topic), y solo si eso no encuentra nada se cae a texto libre
+      // (actionable_rule / accounting_impact) para preguntas que no nombran
+      // la sección exacta (ej. "cuanto le retengo a un contratista").
+      const temaLegal = String(input.tema ?? "").trim();
+      if (!temaLegal) return { ok: false, message: "Falta el tema a buscar en la base legal." };
+
+      const palabrasLegal = palabrasClave(temaLegal);
+      const terminosLegal = palabrasLegal.length > 0 ? palabrasLegal : [temaLegal.toLowerCase()];
+
+      const orFiltroTema = terminosLegal
+        .flatMap((p) => [`legal_reference.ilike.%${p}%`, `topic.ilike.%${p}%`])
+        .join(",");
+      let { data: items, error } = await supabase
+        .from("tax_knowledge_base")
+        .select("legal_reference, topic, form_or_schedule, threshold_rule, tax_rate, due_date, actionable_rule, accounting_impact, source_url")
+        .or(orFiltroTema)
+        .limit(3);
+
+      if (!error && (!items || items.length === 0)) {
+        const orFiltroTexto = terminosLegal
+          .flatMap((p) => [`actionable_rule.ilike.%${p}%`, `accounting_impact.ilike.%${p}%`])
+          .join(",");
+        ({ data: items, error } = await supabase
+          .from("tax_knowledge_base")
+          .select("legal_reference, topic, form_or_schedule, threshold_rule, tax_rate, due_date, actionable_rule, accounting_impact, source_url")
+          .or(orFiltroTexto)
+          .limit(3));
+      }
+
+      if (error) return { ok: false, message: `No se pudo buscar en la base legal: ${error.message}` };
+      if (!items || items.length === 0) {
+        return {
+          ok: true,
+          message:
+            `No hay nada en la base legal sobre "${temaLegal}" todavía — dile al usuario con honestidad que ` +
+            `no tienes esa regla confirmada y recomiéndale verificar con su CPA o en hacienda.pr.gov/SURI, ` +
+            `en vez de inventar una sección, un % o una fecha límite.`,
+        };
+      }
+      return {
+        ok: true,
+        message: items
+          .map((it) => {
+            const partes = [
+              `### ${it.topic} (${it.legal_reference})`,
+              it.form_or_schedule ? `Formulario/Anejo: ${it.form_or_schedule}` : null,
+              it.threshold_rule ? `Umbral/condición: ${it.threshold_rule}` : null,
+              it.tax_rate !== null && it.tax_rate !== undefined ? `Tasa: ${it.tax_rate}%` : null,
+              it.due_date ? `Fecha límite: ${it.due_date}` : null,
+              `Regla: ${it.actionable_rule}`,
+              `Impacto contable: ${it.accounting_impact}`,
+              it.source_url ? `Fuente: ${it.source_url}` : null,
+            ].filter(Boolean);
+            return partes.join("\n");
+          })
           .join("\n\n---\n\n"),
       };
     }

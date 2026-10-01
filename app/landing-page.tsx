@@ -317,6 +317,48 @@ export default function LandingPage() {
         </div>
       </div>
 
+      {/* Sección nueva (30 sept 2026, pedido de Joel: "añade todo lo que vamos
+          a tener") — las 3 capacidades contributivas que VICTOR acaba de
+          ganar: importar histórico de contratistas, el 480.6SP/480.9A hecho
+          correctamente (mensual, no trimestral), y respuestas de impuestos
+          con respaldo verificado en vez de adivinadas. */}
+      <div className={styles.section} id="impuestos" style={{ paddingTop: 0 }}>
+        <div className={styles.sectionLabel}>// impuestos de Puerto Rico, bien hechos</div>
+        <h2 className={styles.sectionTitle}>Nada de adivinar con Hacienda.</h2>
+        <p className={styles.sectionSub}>
+          VICTOR no improvisa cuando se trata de impuestos — cada regla que te da viene de una base verificada, no de
+          "memoria".
+        </p>
+        <div className={styles.victorGrid}>
+          <div className={styles.victorFeature}>
+            <div className={styles.victorFeatureIcon}>📥</div>
+            <div className={styles.victorFeatureTitle}>Importa tu historial de contratistas</div>
+            <div className={styles.victorFeatureDesc}>
+              ¿Ya le pagabas a tus contratistas en Excel o en otro sistema? Súbelo en un CSV y esos pagos cuentan de
+              inmediato hacia el acumulado de $500 — no empiezas de $0 por llegar a mitad de año.
+            </div>
+          </div>
+          <div className={styles.victorFeature}>
+            <div className={styles.victorFeatureIcon}>🧾</div>
+            <div className={styles.victorFeatureTitle}>480.6SP y 480.9A sin sorpresas</div>
+            <div className={styles.victorFeatureDesc}>
+              Retención automática sobre el exceso de los primeros $500 (10% o 6% con Certificado de Relevo), aviso
+              del depósito MENSUAL en SURI antes del día 15, y la exportación anual con las 4 casillas reales de la
+              480.6SP para tu CPA.
+            </div>
+          </div>
+          <div className={styles.victorFeature}>
+            <div className={styles.victorFeatureIcon}>📚</div>
+            <div className={styles.victorFeatureTitle}>Respuestas con respaldo, no adivinadas</div>
+            <div className={styles.victorFeatureDesc}>
+              IVU general y el 4% especial entre comerciantes, Ley 60-2019, deducibilidad de gastos, salario de
+              accionista vs. distribución de dividendos — VICTOR confirma la sección y la tasa antes de contestar, en
+              vez de inventar un número.
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className={styles.section} id="precios" style={{ paddingTop: 0 }}>
         <div className={styles.sectionLabel}>// precios</div>
         <h2 className={styles.sectionTitle}>Empieza simple. Crece cuando estés listo.</h2>
