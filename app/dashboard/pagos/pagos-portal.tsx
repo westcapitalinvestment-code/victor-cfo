@@ -1252,6 +1252,17 @@ function ContratistasTab({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 30 sept 2026, pedido de Joel: con varios contratistas y la pantalla
+  // scrolleada abajo, al darle editar al último el formulario se abría
+  // arriba (fuera de vista) y parecía que no pasaba nada. Ahora hace scroll
+  // automático hacia el formulario en cuanto se abre (nuevo o editar).
+  const formVendorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (formAbierto) {
+      formVendorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [formAbierto]);
+
   const [name, setName] = useState("");
   const [taxId, setTaxId] = useState("");
   // Migración 0119 (30 sept 2026, pedido de Joel): dirección postal, para
@@ -1508,7 +1519,7 @@ function ContratistasTab({
       </div>
 
       {formAbierto && (
-        <div className="vc-card mb-3 flex flex-col gap-2.5">
+        <div ref={formVendorRef} className="vc-card mb-3 flex flex-col gap-2.5">
           <p className="text-xs uppercase tracking-wide text-muted">
             {formAbierto === "nuevo" ? "Nuevo contratista" : "Editar contratista"}
           </p>
