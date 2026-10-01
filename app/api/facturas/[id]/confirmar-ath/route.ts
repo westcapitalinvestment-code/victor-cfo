@@ -77,9 +77,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const hoy = new Date().toISOString().slice(0, 10);
+  // ecommerceId guardado como referencia (Fase 1 de reconciliación bruto/
+  // neto, 1 oct 2026) — ATH Móvil Business no expone el fee real por API
+  // (a diferencia de Stripe), así que fee_fuente se queda sin tocar y el
+  // frontend sigue usando el estimado de 2.25%. El ecommerceId sí sirve
+  // para una futura Fase 2 (vincular este cobro a la transacción bancaria
+  // que llegue por Plaid).
   const { error: updateError } = await supabase
     .from("invoices")
-    .update({ estado: "pagada", metodo_pago: "ATH Móvil Business", fecha_pago: hoy })
+    .update({ estado: "pagada", metodo_pago: "ATH Móvil Business", fecha_pago: hoy, ath_ecommerce_id: ecommerceId })
     .eq("id", factura.id);
 
   if (updateError) {

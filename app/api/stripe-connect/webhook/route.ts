@@ -75,14 +75,56 @@ export async function POST(req: NextRequest) {
         const cuentaEsperada = (factura as any).business_entities?.stripe_connect_account_id;
         if (cuentaEsperada && cuentaEsperada !== event.account) break;
 
+        const paymentIntentId =
+          typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
+
+        // Fase 1 de reconciliación bruto/neto (1 oct 2026): hasta hoy nunca
+        // pedíamos el fee real de Stripe — feeProcesamiento() en
+        // facturacion-portal.tsx solo estimaba con 2.9%+$0.30. Expandimos el
+        // payment_intent hasta su balance_transaction (ahí vive el fee real
+        // que Stripe se cobró) para guardar el dato exacto. Nunca bloquea el
+        // marcar-pagada si esto falla — el pago ya ocurrió, lo único que se
+        // pierde es la precisión del fee (se queda en null y el frontend
+        // sigue usando el estimado como fallback).
+        let feeReal: number | null = null;
+        let montoNetoReal: number | null = null;
+        let stripeChargeId: string | null = null;
+        if (paymentIntentId) {
+          try {
+            const pi = await getStripe().paymentIntents.retrieve(
+              paymentIntentId,
+              { expand: ["latest_charge.balance_transaction"] },
+              { stripeAccount: event.account ?? undefined }
+            );
+            const charge = pi.latest_charge as Stripe.Charge | null;
+            const bt = charge?.balance_transaction as Stripe.BalanceTransaction | null;
+            if (bt) {
+              feeReal = bt.fee / 100;
+              montoNetoReal = bt.net / 100;
+              stripeChargeId = typeof charge === "object" ? charge?.id ?? null : null;
+            }
+          } catch (err) {
+            console.error("No se pudo obtener el fee real de Stripe (se usará el estimado):", err);
+          }
+        }
+
         await supabase
           .from("invoices")
           .update({
             estado: "pagada",
-            metodo_pago: "Tarjeta (Stripe)",
+            // Antes decía "Tarjeta (Stripe)" — no coincidía con el string
+            // "Tarjeta" que usa feeProcesamiento() en los 3 lugares que lo
+            // comparan (facturacion-portal.tsx, factura-detalle.tsx,
+            // reportes/pdf y reportes/excel), así que un pago automático vía
+            // Stripe Connect SIEMPRE mostraba $0 de fee estimado. Bug de
+            // raíz, no cosmético.
+            metodo_pago: "Tarjeta",
             fecha_pago: new Date().toISOString().slice(0, 10),
-            stripe_payment_intent:
-              typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id,
+            stripe_payment_intent: paymentIntentId,
+            stripe_charge_id: stripeChargeId,
+            fee_real: feeReal,
+            monto_neto_real: montoNetoReal,
+            fee_fuente: feeReal !== null ? "real" : null,
           })
           .eq("id", invoiceId);
 

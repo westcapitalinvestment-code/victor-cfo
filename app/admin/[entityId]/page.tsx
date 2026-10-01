@@ -51,7 +51,7 @@ export default async function AdminEntidadPage({ params }: { params: { entityId:
     supabase
       .from("invoices")
       .select(
-        "id, numero, subtotal, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, fecha_pago, metodo_pago, entity_id, client_id, clients(name)"
+        "id, numero, subtotal, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, fecha_pago, metodo_pago, fee_real, fee_fuente, entity_id, client_id, clients(name)"
       )
       .eq("owner_id", ownerId)
       .eq("entity_id", entityId)

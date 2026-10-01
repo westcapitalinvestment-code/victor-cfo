@@ -37,6 +37,12 @@ type Factura = {
   // (Stripe), para poder estimar el gasto de procesamiento de pagos real,
   // no solo hipotético.
   metodo_pago: string | null;
+  // Fase 1 de reconciliación bruto/neto (1 oct 2026) — fee_real viene de la
+  // API de Stripe (balance_transaction), nunca estimado, cuando existe.
+  // fee_fuente==='real' es la única señal confiable de que fee_real ya está
+  // poblado (puede venir null por facturas viejas o pagos no-pasarela).
+  fee_real: number | null;
+  fee_fuente: "real" | "estimado" | null;
   entity_id: string | null;
   client_id: string | null;
   clients: { name: string } | null;
@@ -79,6 +85,10 @@ function feeEstimadoPago(total: number, metodo: string): number {
 // poder pasar, pero si por error queda marcada "ATH Móvil Business" en una
 // entidad sin pATH, no se le inventa un fee).
 function feeProcesamiento(f: Factura, entidadesConAth: Set<string>): number {
+  // Fase 1 de reconciliación bruto/neto: si el webhook de Stripe ya guardó
+  // el fee real (balance_transaction), lo usamos en vez de estimar — es
+  // exacto, no una aproximación por regla fija.
+  if (f.fee_fuente === "real" && f.fee_real !== null) return Number(f.fee_real);
   if (f.metodo_pago === "ATH Móvil Business") {
     if (!f.entity_id || !entidadesConAth.has(f.entity_id)) return 0;
     return Math.max(Number(f.total) * ATH_FEE_PCT, ATH_FEE_MINIMO);
