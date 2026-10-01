@@ -25,6 +25,12 @@ type Vendor = {
   relevo_r2_key?: string | null;
   relevo_pct?: number | null;
   relevo_fecha_expiracion?: string | null;
+  // Migración 0122 (1 oct 2026, #788 — mismo origen que el Relevo): parte
+  // del expediente digital anti-reclasificación. Junto con el tax_id y el
+  // Relevo, respalda ante una auditoría del Depto. del Trabajo/Hacienda que
+  // este contratista opera un negocio independiente legítimo. No vence
+  // como el Relevo, así que no lleva fecha de expiración.
+  registro_comerciante_r2_key?: string | null;
   // Migración 0118 (30 sept 2026): cuenta bancaria del contratista para el
   // archivo NACHA — bank_account_number_enc NUNCA se trae al cliente (se
   // descifra solo en el servidor al generar el archivo), por eso no está en
@@ -1285,6 +1291,13 @@ function ContratistasTab({
   const [relevoSubiendo, setRelevoSubiendo] = useState(false);
   const [relevoError, setRelevoError] = useState<string | null>(null);
 
+  // Certificado de Registro de Comerciante por contratista (migración 0122,
+  // 1 oct 2026, #788) — mismo patrón que el Relevo justo arriba, pero sin
+  // % ni fecha de expiración (no vence).
+  const [registroArchivo, setRegistroArchivo] = useState<File | null>(null);
+  const [registroSubiendo, setRegistroSubiendo] = useState(false);
+  const [registroError, setRegistroError] = useState<string | null>(null);
+
   function abrirNuevo() {
     setFormAbierto("nuevo");
     setName("");
@@ -1294,6 +1307,8 @@ function ContratistasTab({
     setPct(String(retencionDefault));
     setIsCorporation(false);
     setRelevoVendor(null);
+    setRegistroArchivo(null);
+    setRegistroError(null);
     setError(null);
   }
 
@@ -1310,6 +1325,8 @@ function ContratistasTab({
     setRelevoPctForm(v.relevo_pct === 0 ? "0" : "6");
     setRelevoFechaExp(v.relevo_fecha_expiracion ?? "");
     setRelevoError(null);
+    setRegistroArchivo(null);
+    setRegistroError(null);
     setError(null);
   }
 
@@ -1354,6 +1371,42 @@ function ContratistasTab({
     const actualizado: Vendor = { ...relevoVendor, relevo_r2_key: null, relevo_pct: null, relevo_fecha_expiracion: null };
     setRelevoVendor(actualizado);
     setRelevoFechaExp("");
+    setLista((prev) => prev.map((x) => (x.id === actualizado.id ? actualizado : x)));
+  }
+
+  async function subirRegistroComerciante() {
+    if (!relevoVendor || !registroArchivo) return;
+    setRegistroSubiendo(true);
+    setRegistroError(null);
+    const fd = new FormData();
+    fd.append("file", registroArchivo);
+    fd.append("vendorId", relevoVendor.id);
+    const res = await fetch("/api/pagos/vendors/registro-comerciante/upload", { method: "POST", body: fd });
+    const json = await res.json().catch(() => ({}));
+    setRegistroSubiendo(false);
+    if (!res.ok) {
+      setRegistroError(json?.error ?? "No se pudo subir el Registro de Comerciante.");
+      return;
+    }
+    const actualizado: Vendor = { ...relevoVendor, registro_comerciante_r2_key: json.key };
+    setRelevoVendor(actualizado);
+    setRegistroArchivo(null);
+    setLista((prev) => prev.map((x) => (x.id === actualizado.id ? actualizado : x)));
+  }
+
+  async function borrarRegistroComerciante() {
+    if (!relevoVendor) return;
+    setRegistroSubiendo(true);
+    setRegistroError(null);
+    const res = await fetch(`/api/pagos/vendors/${relevoVendor.id}/registro-comerciante`, { method: "DELETE" });
+    setRegistroSubiendo(false);
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setRegistroError(json?.error ?? "No se pudo borrar el Registro de Comerciante.");
+      return;
+    }
+    const actualizado: Vendor = { ...relevoVendor, registro_comerciante_r2_key: null };
+    setRelevoVendor(actualizado);
     setLista((prev) => prev.map((x) => (x.id === actualizado.id ? actualizado : x)));
   }
 
@@ -1646,6 +1699,60 @@ function ContratistasTab({
                     onClick={subirRelevo}
                   >
                     {relevoSubiendo ? "Subiendo..." : "Subir Certificado de Relevo"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Certificado de Registro de Comerciante (migración 0122, 1 oct
+              2026, #788) — a diferencia del Relevo, aplica a CUALQUIER
+              contratista (no solo los sujetos a retención): es la pieza que
+              completa el expediente digital que respalda ante una auditoría
+              de reclasificación (Depto. del Trabajo/Hacienda) que este
+              contratista opera un negocio independiente legítimo. */}
+          {relevoVendor && (
+            <div className="rounded-lg border border-border bg-bg p-2.5">
+              <p className="mb-1.5 text-xs font-medium">Certificado de Registro de Comerciante</p>
+              {relevoVendor.registro_comerciante_r2_key ? (
+                <>
+                  <p className="mb-1.5 text-[11px] text-muted">Archivado — parte del expediente anti-reclasificación.</p>
+                  <div className="flex gap-2">
+                    <a
+                      href={`/api/pagos/vendors/${relevoVendor.id}/registro-comerciante`}
+                      target="_blank"
+                      className="text-[11px] font-medium text-teal hover:opacity-80"
+                    >
+                      Ver PDF
+                    </a>
+                    <button
+                      className="text-[11px] font-medium text-red hover:opacity-80"
+                      disabled={registroSubiendo}
+                      onClick={borrarRegistroComerciante}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="mb-1.5 text-[11px] text-muted">
+                    Sin archivar — junto con el tax_id y el Relevo, respalda ante Hacienda/Depto. del Trabajo que este
+                    contratista opera un negocio independiente, no un empleado disfrazado.
+                  </p>
+                  <input
+                    className="vc-input mb-1.5 w-full text-xs"
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(e) => setRegistroArchivo(e.target.files?.[0] ?? null)}
+                  />
+                  {registroError && <p className="mb-1.5 text-[11px] text-red">{registroError}</p>}
+                  <button
+                    className="vc-btn-primary w-full text-xs"
+                    disabled={!registroArchivo || registroSubiendo}
+                    onClick={subirRegistroComerciante}
+                  >
+                    {registroSubiendo ? "Subiendo..." : "Subir Registro de Comerciante"}
                   </button>
                 </>
               )}
