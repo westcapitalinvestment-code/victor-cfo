@@ -136,11 +136,18 @@ export default function NuevoClienteForm({
           <textarea className="vc-input" rows={2} value={direccion} onChange={(e) => setDireccion(e.target.value)} />
         </Field>
 
-        {/* El toggle central de Feature 1 */}
+        {/* El toggle central de Feature 1 — 30 sept 2026, Joel preguntó "para
+            qué es esto, en crear factura no hay retención": sí se usa, pero
+            el texto no lo explicaba. Esto precarga el toggle "Cliente te
+            retiene" (Sección 1062.03) cada vez que le hagas una factura a
+            este cliente — por eso el cambio de texto. */}
         <div className="flex items-center justify-between rounded-lg border border-border bg-bg p-3">
           <div>
             <p className="text-sm font-medium">¿Es un negocio?</p>
-            <p className="text-xs text-muted">Aplica retención automática al facturar</p>
+            <p className="text-xs text-muted">
+              Si es negocio, cada factura que le hagas sale con "Cliente te retiene" ya activado (Sección 1062.03) — no tienes
+              que marcarlo cada vez.
+            </p>
           </div>
           <button
             type="button"

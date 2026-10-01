@@ -229,7 +229,10 @@ export default function EditarClienteForm({
         <div className="flex items-center justify-between rounded-lg border border-border bg-bg p-3">
           <div>
             <p className="text-sm font-medium">¿Es un negocio?</p>
-            <p className="text-xs text-muted">Aplica retención automática al facturar</p>
+            <p className="text-xs text-muted">
+              Si es negocio, cada factura que le hagas sale con "Cliente te retiene" ya activado (Sección 1062.03) — no tienes
+              que marcarlo cada vez.
+            </p>
           </div>
           <button
             type="button"

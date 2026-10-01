@@ -526,7 +526,7 @@ function FacturasTab({
               lo creado DENTRO de la app. No aplica en modo admin (mismo
               criterio que Importar CSV de Clientes). */}
           {!modoAdmin && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Link
                 href={`/dashboard/facturacion/importaciones${entidadId ? `?entidadId=${entidadId}` : ""}`}
                 className="text-xs font-medium text-muted hover:text-teal"
@@ -535,8 +535,10 @@ function FacturasTab({
               </Link>
               <Link
                 href={`/dashboard/facturacion/importar${entidadId ? `?entidadId=${entidadId}` : ""}`}
-                className="text-xs font-medium text-muted hover:text-teal"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium"
+                style={{ background: "transparent", color: "#1D9E75", border: "1.5px solid #1D9E75" }}
               >
+                <i className="ti ti-file-upload" style={{ fontSize: 14 }} />
                 Importar CSV
               </Link>
             </div>
@@ -855,13 +857,22 @@ function ClientesTab({
               · {filtro === "archivados" ? filtrados.length : totalActivos} cliente{(filtro === "archivados" ? filtrados.length : totalActivos) === 1 ? "" : "s"}
             </span>
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {!modoAdmin && (
-              <Link href={`/dashboard/clientes/importar?returnTo=${returnTo}`} className="text-xs font-medium text-muted hover:text-teal">
+              <Link
+                href={`/dashboard/clientes/importar?returnTo=${returnTo}`}
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium"
+                style={{ background: "transparent", color: "#1D9E75", border: "1.5px solid #1D9E75" }}
+              >
+                <i className="ti ti-file-upload" style={{ fontSize: 14 }} />
                 Importar CSV
               </Link>
             )}
-            <Link href={`${basePath}/nuevo?returnTo=${returnTo}`} className="text-xs font-medium text-teal hover:opacity-80">
+            <Link
+              href={`${basePath}/nuevo?returnTo=${returnTo}`}
+              className="flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium text-white hover:opacity-90"
+              style={{ background: "#1D9E75" }}
+            >
               + Nuevo cliente
             </Link>
           </div>
