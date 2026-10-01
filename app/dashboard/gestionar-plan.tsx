@@ -9,6 +9,8 @@ import { useState } from "react";
 export default function GestionarPlan() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [descargandoCertificado, setDescargandoCertificado] = useState(false);
+  const [errorCertificado, setErrorCertificado] = useState<string | null>(null);
 
   async function abrirPortal() {
     setLoading(true);
@@ -26,6 +28,34 @@ export default function GestionarPlan() {
     setError(json?.error || "No se pudo abrir el portal de pago. Intenta de nuevo en un momento.");
   }
 
+  // Certificado Anual de Gastos (#791, 1 oct 2026) — a diferencia del
+  // portal de Stripe (recibos sueltos, uno por uno), esto es 1 PDF con
+  // TODO lo pagado en el año consolidado, para que el cliente se lo mande
+  // directo a su CPA en enero sin tener que juntar 12 recibos. Default: el
+  // año contributivo que acaba de cerrar (la API decide eso mismo del lado
+  // del servidor si no se manda ?anio=).
+  async function descargarCertificado() {
+    setDescargandoCertificado(true);
+    setErrorCertificado(null);
+
+    const res = await fetch("/api/suscripcion/certificado-anual/pdf");
+    if (!res.ok) {
+      const json = await res.json().catch(() => null);
+      setErrorCertificado(json?.error || "No se pudo generar el certificado. Intenta de nuevo en un momento.");
+      setDescargandoCertificado(false);
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "certificado-gastos-victorcfo.pdf";
+    a.click();
+    window.URL.revokeObjectURL(url);
+    setDescargandoCertificado(false);
+  }
+
   return (
     <div className="vc-card mb-4">
       <p className="mb-2 text-sm font-medium">Facturación</p>
@@ -36,10 +66,19 @@ export default function GestionarPlan() {
       <button
         onClick={abrirPortal}
         disabled={loading}
-        className="w-full rounded-lg border border-teal p-3 text-sm font-medium text-teal"
+        className="mb-2 w-full rounded-lg border border-teal p-3 text-sm font-medium text-teal"
         style={{ background: "rgba(29,158,117,.1)" }}
       >
         {loading ? "Abriendo..." : "Gestionar mi plan"}
+      </button>
+
+      {errorCertificado && <p className="mb-2 text-xs text-red">{errorCertificado}</p>}
+      <button
+        onClick={descargarCertificado}
+        disabled={descargandoCertificado}
+        className="w-full rounded-lg border border-border p-3 text-sm font-medium text-muted"
+      >
+        {descargandoCertificado ? "Generando..." : "Certificado Anual de Gastos (para tu CPA)"}
       </button>
     </div>
   );
