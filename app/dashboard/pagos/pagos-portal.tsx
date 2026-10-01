@@ -1468,14 +1468,16 @@ function ContratistasTab({
       {/* Importador de pagos históricos (30 sept 2026, pedido de Joel: un
           contratista que llega a mitad de año con data de otro sistema no
           debería esperar a enero para que el acumulado de $500 y el
-          480.6SP le funcionen) — ver /api/pagos/csv/importar. Antes era un
-          link de texto 11px que "pasaba desapercibido" (feedback de Joel el
-          mismo día) — ahora es un botón real con icono, mismo peso visual
-          que el resto de los botones secundarios de la app. */}
+          480.6SP le funcionen) — ver /api/pagos/csv/importar. Primero era
+          un link de texto 11px que "pasaba desapercibido", luego se pasó a
+          vc-btn-secondary (gris apagado) pero Joel dijo que "casi ni se
+          ve" — ahora es un botón teal sólido, mismo peso visual que
+          "Registrar corrida" y el resto de las acciones primarias. */}
       <div className="mb-3 flex items-center justify-between gap-2">
         <Link
           href={`/dashboard/pagos/importar${entidadId ? `?entidadId=${entidadId}` : ""}`}
-          className="vc-btn-secondary flex items-center gap-1.5 text-xs"
+          className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white hover:opacity-90"
+          style={{ background: "#1D9E75" }}
         >
           <i className="ti ti-file-upload" style={{ fontSize: 14 }} />
           Importar histórico (CSV)
