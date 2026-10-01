@@ -31,7 +31,7 @@ export default async function FacturacionPage({
 
   const { data: entities } = await supabase
     .from("business_entities")
-    .select("id, name, ath_movil_business_path")
+    .select("id, name, ath_movil_business_path, municipio")
     .eq("owner_id", user.id)
     .eq("active", true);
 
@@ -66,7 +66,9 @@ export default async function FacturacionPage({
     .order("name", { ascending: true });
   let facturasQuery = supabase
     .from("invoices")
-    .select("id, numero, subtotal, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, fecha_pago, metodo_pago, fee_real, fee_fuente, entity_id, client_id, clients(name)")
+    .select(
+      "id, numero, subtotal, ivu_monto, ivu_estatal_monto, ivu_municipal_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, fecha_pago, metodo_pago, fee_real, fee_fuente, entity_id, client_id, clients(name)"
+    )
     .eq("owner_id", user.id)
     .order("fecha_emision", { ascending: false });
   let serviciosQuery = supabase
@@ -117,7 +119,7 @@ export default async function FacturacionPage({
       cotizaciones={(cotizaciones ?? []) as any}
       entidadId={entidadActivaId ?? entities[0]?.id ?? null}
       entidadesConAth={entidadesConAth}
-      entidades={entities.map((e) => ({ id: e.id, name: e.name }))}
+      entidades={entities.map((e) => ({ id: e.id, name: e.name, municipio: e.municipio ?? null }))}
       tabInicial={searchParams?.tab}
       tecnicos={tecnicos ?? []}
       addonTecnicosActivo={addonTecnicosActivo}

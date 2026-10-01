@@ -289,11 +289,15 @@ export default function EditarFacturaForm({
 
   const subtotal = lineas.reduce((sum, l) => sum + sumaLinea(l), 0);
   const subtotalGravable = lineas.reduce((sum, l) => sum + (lineaEsIvuExenta(l) ? 0 : sumaLinea(l)), 0);
-  const ivuPct =
-    entidad?.ivu_applies && !cliente?.ivu_exempt_reseller
-      ? Number(entidad.ivu_rate_estatal || 0) + Number(entidad.ivu_rate_municipal || 0)
-      : 0;
+  const ivuAplicaEstaFactura = entidad?.ivu_applies && !cliente?.ivu_exempt_reseller;
+  const ivuPct = ivuAplicaEstaFactura
+    ? Number(entidad.ivu_rate_estatal || 0) + Number(entidad.ivu_rate_municipal || 0)
+    : 0;
   const ivuMonto = subtotalGravable * (ivuPct / 100);
+  // Desglose estatal/municipal (migración 0124, #782) — ver comentario en
+  // nueva-factura-form.tsx.
+  const ivuEstatalMonto = ivuAplicaEstaFactura ? subtotalGravable * (Number(entidad.ivu_rate_estatal || 0) / 100) : 0;
+  const ivuMunicipalMonto = ivuAplicaEstaFactura ? subtotalGravable * (Number(entidad.ivu_rate_municipal || 0) / 100) : 0;
   const retencionPct = retencionActiva ? Number(retencionPctInput) || 0 : 0;
   const retencionMonto = subtotal * (retencionPct / 100);
   const total = subtotal + ivuMonto - retencionMonto;
@@ -348,6 +352,8 @@ export default function EditarFacturaForm({
         subtotal,
         ivu_pct: ivuPct,
         ivu_monto: ivuMonto,
+        ivu_estatal_monto: ivuEstatalMonto,
+        ivu_municipal_monto: ivuMunicipalMonto,
         retencion_pct: retencionPct,
         retencion_monto: retencionMonto,
         total,

@@ -43,6 +43,13 @@ type Factura = {
   // poblado (puede venir null por facturas viejas o pagos no-pasarela).
   fee_real: number | null;
   fee_fuente: "real" | "estimado" | null;
+  // Desglose estatal/municipal del IVU (migración 0124, 1 oct 2026, #782) —
+  // son dos pasivos a dos entidades distintas (SURI vs. el municipio). La
+  // suma de los dos sigue siendo ivu_monto; se guardan aparte solo para
+  // poder reportar cada uno por separado en Reportes.
+  ivu_monto: number | null;
+  ivu_estatal_monto: number | null;
+  ivu_municipal_monto: number | null;
   entity_id: string | null;
   client_id: string | null;
   clients: { name: string } | null;
@@ -234,7 +241,9 @@ export default function FacturacionPortal({
   // para el aviso de "bajo qué entidad" al registrar un pago (4 sept 2026,
   // pedido de Joel, calcado del mockup) porque en "vista global" la lista de
   // facturas mezcla varias entidades a la vez, no solo la seleccionada.
-  entidades?: { id: string; name: string }[];
+  // municipio (1 oct 2026, #782) — para rotular la tarjeta de pasivo de IVU
+  // municipal en ReportesTab con el municipio real de la entidad.
+  entidades?: { id: string; name: string; municipio?: string | null }[];
   tabInicial?: string;
   // Portal real de Admin/Secretaria (2 sept 2026) — este componente ya lo
   // usaba solo el dueño desde /dashboard/facturacion, con TODOS sus links
@@ -369,6 +378,7 @@ export default function FacturacionPortal({
           entidadId={entidadId}
           entidadesConAth={entidadesConAthSet}
           basePath={basePath}
+          municipio={entidadId ? entidades.find((e) => e.id === entidadId)?.municipio ?? null : null}
         />
       )}
     </div>
@@ -2174,6 +2184,7 @@ function ReportesTab({
   entidadId,
   entidadesConAth,
   basePath = "/dashboard/facturacion",
+  municipio,
 }: {
   facturas: Factura[];
   clients: Cliente[];
@@ -2181,6 +2192,10 @@ function ReportesTab({
   entidadId: string | null;
   entidadesConAth: Set<string>;
   basePath?: string;
+  // Municipio de la entidad activa (1 oct 2026, #782) — para rotular a
+  // quién se le debe el 1% municipal. Null en "vista global" (varias
+  // entidades mezcladas, posiblemente de distintos municipios).
+  municipio?: string | null;
 }) {
   const supabase = createClient();
   const [periodo, setPeriodo] = useState<(typeof PERIODOS)[number]["value"]>("mes");
@@ -2390,6 +2405,16 @@ function ReportesTab({
   // resta el fee de procesamiento real.
   const brutoCobrado = facturasPagadas.reduce((s, f) => s + Number(f.subtotal), 0);
   const depositoNetoBanco = totalCobrado - gastoProcesamientoPeriodo;
+
+  // Desglose de IVU estatal/municipal (migración 0124, 1 oct 2026, #782) —
+  // son dos pasivos a dos entidades distintas (SURI vs. el municipio). Se
+  // suman sobre facturas YA PAGADAS, mismo criterio de "cash real" que el
+  // resto de este cuadre — no tiene sentido remesar IVU de una factura que
+  // el cliente todavía no ha pagado. ivu_estatal_monto/ivu_municipal_monto
+  // vienen null en facturas creadas antes de esta migración; se tratan como
+  // 0 (no se puede reconstruir el desglose histórico sin el dato guardado).
+  const ivuEstatalPeriodo = facturasPagadas.reduce((s, f) => s + Number(f.ivu_estatal_monto ?? 0), 0);
+  const ivuMunicipalPeriodo = facturasPagadas.reduce((s, f) => s + Number(f.ivu_municipal_monto ?? 0), 0);
 
   const porServicio = useMemo(() => {
     const mapa = new Map<string, { descripcion: string; total: number; count: number; unidades: number }>();
@@ -2860,6 +2885,26 @@ function ReportesTab({
             <FilaResumen label="Comisiones de pasarela (ATH/Stripe)" valor={`-${formatMoney(gastoProcesamientoPeriodo)}`} tono="a" />
           )}
           <FilaResumen label="Depósito neto en banco" valor={formatMoney(depositoNetoBanco)} tono="g" fuerte />
+        </div>
+      )}
+
+      {/* Pasivo de IVU estatal/municipal (migración 0124, 1 oct 2026, #782)
+          — son dos remesas distintas, a dos destinatarios distintos, cada
+          una con su propio proceso. Antes el IVU de las facturas se perdía
+          en el total combinado de la factura, sin mostrarse como pasivo
+          separado en ningún reporte. */}
+      {(ivuEstatalPeriodo > 0 || ivuMunicipalPeriodo > 0) && (
+        <div className="mb-3 rounded-2xl border border-border bg-card p-4">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">IVU cobrado — pendiente de remesar</p>
+          <FilaResumen label="Estatal (10.5%, a Hacienda vía SURI)" valor={formatMoney(ivuEstatalPeriodo)} tono="a" />
+          <FilaResumen
+            label={`Municipal (1%, a ${municipio ? municipio : "tu municipio"})`}
+            valor={formatMoney(ivuMunicipalPeriodo)}
+            tono="a"
+          />
+          <p className="mt-1.5 text-[11px] text-muted">
+            Son dos remesas distintas, a dos sitios distintos — no se pagan juntas.
+          </p>
         </div>
       )}
 
