@@ -1221,6 +1221,94 @@ export async function sendNurtureTrialOfertaEmail(params: {
   }
 }
 
+// #792 (1 oct 2026, pedido de Joel: "la fiscalización ya es algorítmica")
+// — 3er correo de la secuencia de nurture para plan='gratis', día 8 desde
+// el registro (después de día 2 features / día 5 trial). Ángulo distinto
+// a los otros dos: no es "mira lo que puedes hacer", es la urgencia real
+// de organizarse — Hacienda cruza datos del IRS (incluida la 1099-K que
+// reportan Stripe/ATH/procesadores de pago) contra lo que el contribuyente
+// radicó, y lo ha hecho públicamente miles de veces. Mismos 3 datos/fuente
+// que la sección #fiscalizacion-algoritmica de landing-page.tsx
+// (comunicados de prensa reales de hacienda.pr.gov, verificados por web
+// search el 1 oct 2026 — la pieza original pedía citar "SC 2915" pero ese
+// formulario es la Planilla Mensual de IVU, no tiene nada que ver con esto).
+export async function sendNurtureFiscalizacionEmail(params: {
+  toEmail: string;
+  toName: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { toEmail, toName } = params;
+  const saludoNombre = toName || "";
+  const upgradeUrl = `${SITE_URL}/dashboard/config?upgrade=core`;
+
+  const datos: [string, string][] = [
+    ["7,500 notificaciones (2022)", "a comerciantes e individuos no registrados, o con ingresos que Hacienda ya tenía registrados y no se reportaron."],
+    ["1,600 notificaciones (2022)", "por correo, a personas con ingresos de Formulario 1099 del IRS que nunca radicaron planilla ese año."],
+    ["$191 millones (2020)", "en ingresos no reportados por 4,440 contribuyentes — que Hacienda sí tenía, vía el intercambio de información con el IRS."],
+  ];
+
+  const textoPlano =
+    (saludoNombre ? `Hola ${saludoNombre},\n\n` : `Hola,\n\n`) +
+    `Cada vez que te pagan con Stripe, ATH Móvil Business o cualquier procesador de tarjetas, ese ingreso se reporta ` +
+    `al IRS — y Hacienda de Puerto Rico ya tiene acceso a esa información. No hace falta que nadie te audite a mano: ` +
+    `el sistema compara lo que recibiste contra lo que radicaste, automáticamente. Esto no es una amenaza genérica — son ` +
+    `comunicados de prensa reales del Departamento de Hacienda:\n\n` +
+    datos.map(([titulo, texto]) => `• ${titulo} — ${texto}`).join("\n\n") +
+    `\n\nEl momento de organizarte es ahora, antes de la notificación — no después. Con VICTOR CFO tu banco está ` +
+    `conectado de verdad, cada transacción categorizada, y tus reportes listos para tu CPA en cualquier momento. ` +
+    `Prueba 7 días gratis de Core:\n${upgradeUrl}\n\n` +
+    `Cualquier duda o pregunta, escríbenos a soporte@victorcfo.com y te respondemos en la brevedad posible.\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlSeguro = saludoNombre ? escapeHtml(saludoNombre) : "";
+
+  const datosHtml = datos
+    .map(
+      ([titulo, texto]) => `
+  <div style="margin-bottom: 18px; padding: 14px 16px; background: #fafafa; border-left: 3px solid #1D9E75; border-radius: 4px;">
+    <p style="margin: 0 0 4px 0; font-weight: 700; color: #14543d;">${escapeHtml(titulo)}</p>
+    <p style="margin: 0; color: #555; font-size: 13.5px;">${escapeHtml(texto)}</p>
+  </div>`
+    )
+    .join("");
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${htmlSeguro ? `Hola, <strong>${htmlSeguro}</strong>,` : `Hola,`}</p>
+  <p>Cada vez que te pagan con Stripe, ATH Móvil Business o cualquier procesador de tarjetas, ese ingreso se reporta al IRS — y Hacienda de Puerto Rico ya tiene acceso a esa información. El sistema compara lo que recibiste contra lo que radicaste, <strong>automáticamente</strong>. No es una amenaza genérica — son comunicados de prensa reales:</p>
+  <div style="margin: 24px 0;">${datosHtml}</div>
+  <p>El momento de organizarte es ahora, antes de la notificación — no después. Con VICTOR CFO tu banco está conectado de verdad, cada transacción categorizada, y tus reportes listos para tu CPA en cualquier momento.</p>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${upgradeUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Probar 7 días gratis</a>
+  </div>
+  <p style="font-size: 14px;">Cualquier duda o pregunta, escríbenos a <a href="mailto:soporte@victorcfo.com" style="color: #1D9E75;">soporte@victorcfo.com</a> y te responderemos en la brevedad posible.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: "Hacienda ya cruza tus datos — ¿tus números están listos?",
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
 // Correo automático al CANCELAR (27 sept 2026, pedido de Joel: "que de
 // manera automatica como el email de bienvenida se le envia uno si
 // cancelan haciendo unas preguntas para saber la razon y ofrecerle alguna

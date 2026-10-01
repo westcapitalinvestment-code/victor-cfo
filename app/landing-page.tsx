@@ -430,6 +430,61 @@ export default function LandingPage() {
         </p>
       </div>
 
+      {/* #792 (1 oct 2026, pedido de Joel: "la fiscalización ya es
+          algorítmica") — el argumento no es una amenaza genérica de "te
+          van a fiscalizar", son comunicados de prensa REALES de Hacienda
+          (hacienda.pr.gov) confirmando que cruzan datos del IRS (incluida
+          la 1099-K que reportan Stripe/ATH/procesadores de pago) contra lo
+          que el contribuyente radicó, y han mandado miles de notificaciones
+          así. La pieza original pedía citar "SC 2915" como el formulario de
+          cruce — se verificó por separado (web search, 1 oct 2026) y SC
+          2915 es la Planilla MENSUAL de IVU, no tiene nada que ver con esto;
+          se usó la fuente real y más fuerte en su lugar. Mismo patrón visual
+          trustGrid/trustStats que #confianza — no se tocó landing.module.css.
+          Numeros y fuente: hacienda.pr.gov, comunicados de prensa 2022-2023. */}
+      <div className={styles.section} id="fiscalizacion-algoritmica" style={{ paddingTop: 0 }}>
+        <div className={styles.sectionLabel}>// la fiscalización ya es algorítmica</div>
+        <h2 className={styles.sectionTitle}>Hacienda ya no espera a auditarte. Te cruza los datos solo.</h2>
+        <p className={styles.sectionSub}>
+          Cada vez que Stripe, ATH Móvil Business o cualquier procesador de pagos te paga, le reporta ese ingreso al
+          IRS — y Hacienda de Puerto Rico ya tiene acceso a esa información por acuerdo con el IRS. No hace falta que
+          nadie te audite a mano: el sistema compara automáticamente lo que recibiste contra lo que radicaste.
+        </p>
+        <div className={styles.trustGrid}>
+          <div className={styles.trustCard}>
+            <div className={styles.trustHead}>
+              <span className={styles.trustLogo}>2022</span>
+            </div>
+            <p className={styles.trustDesc}>
+              Hacienda envió 7,500 notificaciones a comerciantes e individuos no registrados o con ingresos no
+              reportados que ya tenían en sus sistemas.
+            </p>
+          </div>
+          <div className={styles.trustCard}>
+            <div className={styles.trustHead}>
+              <span className={styles.trustLogo}>2022</span>
+            </div>
+            <p className={styles.trustDesc}>
+              1,600 notificaciones por correo a personas con ingresos de Formulario 1099 del IRS que nunca radicaron
+              planilla ese año.
+            </p>
+          </div>
+          <div className={styles.trustCard}>
+            <div className={styles.trustHead}>
+              <span className={styles.trustLogo}>$191M</span>
+            </div>
+            <p className={styles.trustDesc}>
+              en ingresos del 2020 que 4,440 contribuyentes no reportaron — y Hacienda sí tenía registrados, vía el
+              intercambio de información con el IRS.
+            </p>
+          </div>
+        </div>
+        <p className="mt-4" style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
+          Fuente: comunicados de prensa oficiales del Departamento de Hacienda de Puerto Rico (hacienda.pr.gov). El
+          momento de organizarte es ahora, antes de la notificación — no después.
+        </p>
+      </div>
+
       <div className={styles.section} id="precios" style={{ paddingTop: 0 }}>
         <div className={styles.sectionLabel}>// precios</div>
         <h2 className={styles.sectionTitle}>Empieza simple. Crece cuando estés listo.</h2>

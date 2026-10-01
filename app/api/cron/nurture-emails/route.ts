@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendNurtureFeaturesGratisEmail, sendNurtureTrialOfertaEmail } from "@/lib/email";
+import { sendNurtureFeaturesGratisEmail, sendNurtureTrialOfertaEmail, sendNurtureFiscalizacionEmail } from "@/lib/email";
 
 // Cron diario (25 sept 2026, pedido de Joel) — secuencia de nurture para
 // cuentas plan='gratis', pensada para convertir a Core/Pro usando el email
 // que ya capturamos en el registro de 1 clic (ver app/registro/page.tsx):
 //   día 2 desde created_at — sendNurtureFeaturesGratisEmail
 //   día 5 desde created_at — sendNurtureTrialOfertaEmail
+//   día 8 desde created_at — sendNurtureFiscalizacionEmail (#792, 1 oct 2026)
 //
 // Mismo patrón que /api/cron/recordatorio-onboarding: header Authorization
 // con CRON_SECRET, cliente admin, una columna de idempotencia por correo
@@ -88,7 +89,36 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log("[nurture-emails]", JSON.stringify({ enviadosDia2, enviadosDia5, resultados }));
+  // --- Día 8: fiscalización algorítmica (#792) ---------------------------
+  const { data: candidatosDia8, error: errorDia8 } = await supabase
+    .from("users")
+    .select("id, email, full_name, created_at")
+    .eq("plan", "gratis")
+    .is("nurture_fiscalizacion_enviado_at", null)
+    .lte("created_at", new Date(ahora - diasMs(8)).toISOString())
+    .gte("created_at", new Date(ahora - diasMs(11)).toISOString());
 
-  return NextResponse.json({ ok: true, enviadosDia2, enviadosDia5, resultados });
+  if (errorDia8) return NextResponse.json({ error: errorDia8.message, resultados }, { status: 500 });
+
+  let enviadosDia8 = 0;
+  for (const usuario of candidatosDia8 || []) {
+    try {
+      if (!usuario.email) {
+        resultados[`dia8:${usuario.id}`] = { enviado: false, razon: "sin email" };
+        continue;
+      }
+      const resultado = await sendNurtureFiscalizacionEmail({ toEmail: usuario.email, toName: usuario.full_name ?? null });
+      if (resultado.sent || resultado.reason === "RESEND_API_KEY no está configurada en el servidor.") {
+        await supabase.from("users").update({ nurture_fiscalizacion_enviado_at: new Date().toISOString() }).eq("id", usuario.id);
+      }
+      if (resultado.sent) enviadosDia8++;
+      resultados[`dia8:${usuario.id}`] = { enviado: resultado.sent, razon: resultado.reason };
+    } catch (err) {
+      resultados[`dia8:${usuario.id}`] = { enviado: false, error: err instanceof Error ? err.message : "Error desconocido" };
+    }
+  }
+
+  console.log("[nurture-emails]", JSON.stringify({ enviadosDia2, enviadosDia5, enviadosDia8, resultados }));
+
+  return NextResponse.json({ ok: true, enviadosDia2, enviadosDia5, enviadosDia8, resultados });
 }
