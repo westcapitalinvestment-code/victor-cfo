@@ -359,6 +359,77 @@ export default function LandingPage() {
         </div>
       </div>
 
+      {/* #789 (1 oct 2026, pedido de Joel: "quién hace qué") — tabla de
+          responsabilidades entre Nómina externa / VICTOR CFO / tu CPA. Pedido
+          de onboarding original, resuelto aquí en la landing (lo primero que
+          ve un dueño antes de registrarse) en vez de dentro del dashboard,
+          para cortar de raíz las dos preguntas que más confunden a un
+          usuario nuevo: "¿VICTOR me corre la nómina?" y "¿si tengo VICTOR
+          todavía necesito contable?". Mismo patrón visual que #confianza
+          (trustGrid/trustCard) — no se tocó landing.module.css. */}
+      <div className={styles.section} id="quien-hace-que" style={{ paddingTop: 0 }}>
+        <div className={styles.sectionLabel}>// quién hace qué</div>
+        <h2 className={styles.sectionTitle}>Tres roles. Cero confusión.</h2>
+        <p className={styles.sectionSub}>
+          VICTOR CFO no reemplaza a tu procesador de nómina ni a tu contable — se encarga de la parte que hoy nadie
+          hace bien: organizar y categorizar todo correctamente en el medio, para que los otros dos trabajen más
+          rápido con menos papeleo.
+        </p>
+        <div className={styles.trustGrid}>
+          <div className={styles.trustCard}>
+            <div className={styles.trustHead}>
+              <span className={styles.trustLogo}>Nómina externa</span>
+            </div>
+            <p className={styles.trustDesc}>ADP, Paychex, o tu contable corriendo la nómina a mano.</p>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+              {["Paga a tus empleados cada período", "Radica W-2/941-PR y los depósitos de nómina", "Calcula FICA, desempleo y beneficios"].map(
+                (t) => (
+                  <li key={t} style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: "0.35rem" }}>
+                    ✓ {t}
+                  </li>
+                )
+              )}
+            </ul>
+          </div>
+          <div className={styles.trustCard} style={{ borderColor: "var(--teal)" }}>
+            <div className={styles.trustHead}>
+              <span className={styles.trustLogo}>VICTOR CFO</span>
+            </div>
+            <p className={styles.trustDesc}>Lo que pasa todos los días, entre nómina y planilla.</p>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+              {[
+                "Categoriza cada transacción (incluido el débito de nómina)",
+                "Rastrea retención, IVU y certificados vigentes",
+                "Avisa riesgos (480 faltantes, CBA, límites) antes de que sean sorpresa",
+                "Entrega reportes listos para tu CPA — no una caja de recibos",
+              ].map((t) => (
+                <li key={t} style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: "0.35rem" }}>
+                  ✓ {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className={styles.trustCard}>
+            <div className={styles.trustHead}>
+              <span className={styles.trustLogo}>Tu CPA</span>
+            </div>
+            <p className={styles.trustDesc}>El profesional con licencia que firma al final.</p>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+              {["Radica la planilla real ante Hacienda/IRS", "Toma las decisiones de juicio profesional", "Confirma los cálculos finales con los números que VICTOR ya le organizó"].map(
+                (t) => (
+                  <li key={t} style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: "0.35rem" }}>
+                    ✓ {t}
+                  </li>
+                )
+              )}
+            </ul>
+          </div>
+        </div>
+        <p className="mt-4" style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
+          VICTOR CFO nunca radica tu planilla ni corre tu nómina — y nunca reemplaza el juicio profesional de tu CPA.
+        </p>
+      </div>
+
       <div className={styles.section} id="precios" style={{ paddingTop: 0 }}>
         <div className={styles.sectionLabel}>// precios</div>
         <h2 className={styles.sectionTitle}>Empieza simple. Crece cuando estés listo.</h2>
