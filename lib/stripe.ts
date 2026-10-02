@@ -45,8 +45,12 @@ const PRICE_ENV_VARS: Record<PlanId, Record<Ciclo, string | undefined>> = {
     anual: process.env.STRIPE_PRICE_PRO_ANUAL,
   },
   proplus: {
-    mensual: process.env.STRIPE_PRICE_PROPLUS_MENSUAL,
-    anual: process.env.STRIPE_PRICE_PROPLUS_ANUAL,
+    // Nombre de producto/plan visible es "VICTOR Business" (2 oct 2026) —
+    // las env vars se renombraron a BUSINESS para que no confundan a Joel
+    // al configurarlas en Vercel. El valor interno de PlanId sigue siendo
+    // "proplus" (no se tocó — ver lib/plan-label.ts para esa decisión).
+    mensual: process.env.STRIPE_PRICE_BUSINESS_MENSUAL,
+    anual: process.env.STRIPE_PRICE_BUSINESS_ANUAL,
   },
 };
 
