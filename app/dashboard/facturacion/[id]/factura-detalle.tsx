@@ -59,6 +59,15 @@ type Factura = {
   // fecha_emision. Nula en facturas marcadas pagadas antes de este campo
   // existir.
   fecha_pago: string | null;
+  // Fase 1 reconciliación bruto/neto (1 oct 2026) — fee_real viene del
+  // webhook de Stripe Connect (balance_transaction real, no estimado) en
+  // cuanto el cliente paga el link de cobro. fee_fuente==='real' es la
+  // única señal confiable de que ya llegó (si es null, el pago se marcó
+  // pagada por otra vía — manual, ATH, etc. — y no hay fee de Stripe que
+  // mostrar aquí).
+  fee_real: number | null;
+  monto_neto_real: number | null;
+  fee_fuente: "real" | "estimado" | null;
   notas: string | null;
   metodos_cobro_aceptados: string[] | null;
   late_fee_habilitado: boolean;
@@ -587,6 +596,24 @@ export default function FacturaDetalle({
                 <span className="text-muted">Monto pagado</span>
                 <span className="text-teal">{formatMoney(factura.total)}</span>
               </div>
+              {/* Fase 1 reconciliación bruto/neto (1 oct 2026) — si el pago
+                  llegó por el link de cobro de Stripe, el webhook ya trajo
+                  el fee REAL (no el estimado de 2.9%+$0.30). Se muestra
+                  aquí para que Joel vea de un vistazo lo mismo que ve en el
+                  Dashboard de Stripe (Payment breakdown → Stripe processing
+                  fees / Net amount), sin tener que ir a buscarlo allá. */}
+              {factura.fee_fuente === "real" && factura.fee_real !== null && (
+                <>
+                  <div className="flex justify-between py-0.5">
+                    <span className="text-muted">Fee de Stripe</span>
+                    <span className="text-red">-{formatMoney(factura.fee_real)}</span>
+                  </div>
+                  <div className="flex justify-between py-0.5">
+                    <span className="text-muted">Neto recibido</span>
+                    <span>{formatMoney(factura.monto_neto_real ?? factura.total - factura.fee_real)}</span>
+                  </div>
+                </>
+              )}
               <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-medium">
                 <span>Balance</span>
                 <span className="text-teal">{formatMoney(0)}</span>
