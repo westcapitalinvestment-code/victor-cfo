@@ -20,9 +20,11 @@ import styles from "./landing.module.css";
 // en realidad ya viven en Pro (ver app/dashboard/facturacion/page.tsx y
 // app/dashboard/pagos/page.tsx: gating es plan==='pro'||'proplus'), así que
 // mantener la tarjeta Enterprise era engañoso — se quitó del landing.
+// Business (2 oct 2026, antes "Pro+"/Enterprise bloqueado): $99.99/mes,
+// $1,099/año — mismo redondeo de siempre (99.99*11 = 1099.89 → 1099).
 const PRECIOS = {
-  mensual: { core: "14", coreSuf: ".99/mes", pro: "49", proSuf: ".99/mes" },
-  anual: { core: "164", coreSuf: "/año", pro: "549", proSuf: "/año" },
+  mensual: { core: "14", coreSuf: ".99/mes", pro: "49", proSuf: ".99/mes", business: "99", businessSuf: ".99/mes" },
+  anual: { core: "164", coreSuf: "/año", pro: "549", proSuf: "/año", business: "1,099", businessSuf: "/año" },
 };
 
 export default function LandingPricing() {
@@ -159,8 +161,8 @@ export default function LandingPricing() {
           <p className={styles.priceDesc}>Para el negocio que no quiere pensar en add-ons — todo activado desde el día uno.</p>
           <div className={styles.priceAmount}>
             <sup>$</sup>
-            <span>99</span>
-            <span className={styles.mo}>.99/mes</span>
+            <span>{p.business}</span>
+            <span className={styles.mo}>{p.businessSuf}</span>
           </div>
           <hr className={styles.priceDivider} />
           <ul className={styles.priceFeatures}>
