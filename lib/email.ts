@@ -166,6 +166,79 @@ export async function sendCpaInvitationEmail(params: {
   }
 }
 
+// Invitación de un CPA líder (ej. Héctor) a un colega de su propio equipo
+// (ej. Josué) — 2 oct 2026. Distinto de sendCpaInvitationEmail: aquí quien
+// invita NO es el dueño del negocio, es el CPA mismo desde su portal. El
+// colega, al aceptar, hereda automáticamente todos los clientes activos
+// del líder (ver migración 0137 — sync_equipo_cpa), así que el correo deja
+// claro que no es "un cliente nuevo", es "entrar al equipo de Fulano".
+export async function sendCpaEquipoInvitationEmail(params: {
+  staffEmail: string;
+  staffName: string | null;
+  leadName: string | null;
+  leadEmail: string;
+  invitationToken: string;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { staffEmail, staffName, leadName, leadEmail, invitationToken } = params;
+  const saludoNombre = staffName ? staffName : "";
+  const quien = leadName || leadEmail;
+  const acceptUrl = `${SITE_URL}/cpa/equipo/aceptar/${invitationToken}`;
+
+  const textoPlano =
+    `Hola${saludoNombre ? ` ${saludoNombre}` : ""},\n\n` +
+    `${quien} te invitó a entrar a su equipo en VICTOR CFO, la plataforma de contabilidad que usa ` +
+    `con sus clientes.\n\n` +
+    `En cuanto aceptes, vas a ver automáticamente los mismos clientes que ${quien} ya tiene en VICTOR ` +
+    `(acceso de solo lectura, igual que el de ${quien}) — y cualquier cliente nuevo que ${quien} agregue ` +
+    `después también lo vas a ver sin que nadie tenga que invitarte otra vez.\n\n` +
+    `Para activar tu acceso, entra aquí:\n${acceptUrl}\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}\n\n` +
+    `Este correo fue enviado porque ${quien} te agregó a su equipo en VICTOR CFO. Si no reconoces esta ` +
+    `invitación, puedes ignorar este mensaje con confianza.`;
+
+  const htmlSeguro = {
+    saludo: saludoNombre ? escapeHtml(saludoNombre) : "",
+    quien: escapeHtml(quien),
+  };
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>Hola${htmlSeguro.saludo ? ` ${htmlSeguro.saludo}` : ""},</p>
+  <p>${htmlSeguro.quien} te invitó a entrar a su <strong>equipo en VICTOR CFO</strong>, la plataforma de contabilidad que usa con sus clientes.</p>
+  <p>En cuanto aceptes, vas a ver automáticamente los mismos clientes que ${htmlSeguro.quien} ya tiene (acceso de <strong>solo lectura</strong>, igual que el de ${htmlSeguro.quien}) — y cualquier cliente nuevo que agregue después también lo vas a ver sin que nadie tenga que invitarte otra vez.</p>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${acceptUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Activar mi acceso</a>
+  </div>
+  <p style="font-size: 12px; color: #666;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br/><a href="${acceptUrl}" style="color: #1D9E75; word-break: break-all;">${acceptUrl}</a></p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+  <p style="font-size: 11px; color: #bbb;">Este correo fue enviado porque ${htmlSeguro.quien} te agregó a su equipo en VICTOR CFO. Si no reconoces esta invitación, puedes ignorar este mensaje con confianza.</p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: staffEmail,
+      subject: `${quien} te invitó a su equipo en VICTOR CFO`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
 // Invitación de Admin/Secretaria (2 sept 2026) — a diferencia del CPA
 // (solo lectura de TODO), este acceso es de TRABAJO (crea facturas,
 // registra cobros) pero deliberadamente angosto: nunca ve finanzas

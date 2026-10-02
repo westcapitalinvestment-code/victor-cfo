@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { formatMoney } from "@/lib/format";
 import { saludoPorHora, fechaHoyPR } from "@/lib/hora-pr";
 import CpaClientList, { type ClienteCpa } from "./cpa-client-list";
@@ -206,9 +207,17 @@ export default async function CpaPortalPage() {
             Portal CPA
           </span>
         </div>
-        <span className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[10px] text-muted">
-          <i className="ti ti-lock" /> Solo lectura
-        </span>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/cpa/equipo"
+            className="flex items-center gap-1 rounded-full border border-teal px-2.5 py-1 text-[10px] font-medium text-teal hover:opacity-80"
+          >
+            <i className="ti ti-users" /> Mi equipo
+          </Link>
+          <span className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[10px] text-muted">
+            <i className="ti ti-lock" /> Solo lectura
+          </span>
+        </div>
       </div>
 
       <p className="mb-4 text-lg font-medium">
