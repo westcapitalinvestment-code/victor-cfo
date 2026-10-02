@@ -323,8 +323,8 @@ export default function LandingPage() {
           correctamente (mensual, no trimestral), y respuestas de impuestos
           con respaldo verificado en vez de adivinadas. */}
       <div className={styles.section} id="impuestos" style={{ paddingTop: 0 }}>
-        <div className={styles.sectionLabel}>// impuestos de Puerto Rico, bien hechos</div>
-        <h2 className={styles.sectionTitle}>Nada de adivinar con Hacienda.</h2>
+        <div className={styles.sectionLabel}>// tus contribuciones, bien hechas</div>
+        <h2 className={styles.sectionTitle}>Nada de adivinar con tus números.</h2>
         <p className={styles.sectionSub}>
           VICTOR no improvisa cuando se trata de impuestos — cada regla que te da viene de una base verificada, no de
           "memoria".
@@ -343,8 +343,8 @@ export default function LandingPage() {
             <div className={styles.victorFeatureTitle}>480.6SP y 480.9A sin sorpresas</div>
             <div className={styles.victorFeatureDesc}>
               Retención automática sobre el exceso de los primeros $500 (10% o 6% con Certificado de Relevo), aviso
-              del depósito MENSUAL en SURI antes del día 15, y la exportación anual con las 4 casillas reales de la
-              480.6SP para tu CPA.
+              del depósito MENSUAL antes del día 15 para que nunca se te pase la fecha, y la exportación anual con
+              las 4 casillas reales de la 480.6SP para tu CPA.
             </div>
           </div>
           <div className={styles.victorFeature}>
@@ -415,7 +415,7 @@ export default function LandingPage() {
             </div>
             <p className={styles.trustDesc}>El profesional con licencia que firma al final.</p>
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-              {["Radica la planilla real ante Hacienda/IRS", "Toma las decisiones de juicio profesional", "Confirma los cálculos finales con los números que VICTOR ya le organizó"].map(
+              {["Radica tu planilla formalmente, a tiempo", "Toma las decisiones de juicio profesional", "Confirma los cálculos finales con los números que VICTOR ya le organizó"].map(
                 (t) => (
                   <li key={t} style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: "0.35rem" }}>
                     ✓ {t}
@@ -431,57 +431,57 @@ export default function LandingPage() {
       </div>
 
       {/* #792 (1 oct 2026, pedido de Joel: "la fiscalización ya es
-          algorítmica") — el argumento no es una amenaza genérica de "te
-          van a fiscalizar", son comunicados de prensa REALES de Hacienda
-          (hacienda.pr.gov) confirmando que cruzan datos del IRS (incluida
-          la 1099-K que reportan Stripe/ATH/procesadores de pago) contra lo
-          que el contribuyente radicó, y han mandado miles de notificaciones
-          así. La pieza original pedía citar "SC 2915" como el formulario de
-          cruce — se verificó por separado (web search, 1 oct 2026) y SC
-          2915 es la Planilla MENSUAL de IVU, no tiene nada que ver con esto;
-          se usó la fuente real y más fuerte en su lugar. Mismo patrón visual
-          trustGrid/trustStats que #confianza — no se tocó landing.module.css.
-          Numeros y fuente: hacienda.pr.gov, comunicados de prensa 2022-2023. */}
+          algorítmica") — reescrito el 2 oct 2026 (pedido de Joel: "no
+          debemos poner nada con Hacienda, gobierno, SURI, IRS... da la
+          impresión de que es algo inventado o específico — tiene que apelar
+          a lo que vive la gente día a día"). El argumento original citaba
+          comunicados de prensa reales con cifras de notificaciones y cruces
+          de datos; se cambia el ángulo por completo: en vez de nombrar
+          agencias y citar estadísticas de fiscalización, apela a la
+          experiencia cotidiana real de un dueño de negocio — el recargo que
+          crece por un depósito que se atrasó, el formulario que nadie llenó
+          porque nadie sabía que hacía falta, las horas perdidas
+          reconstruyendo meses de recibos. Mismo patrón visual
+          trustGrid/trustStats que #confianza — no se tocó landing.module.css. */}
       <div className={styles.section} id="fiscalizacion-algoritmica" style={{ paddingTop: 0 }}>
-        <div className={styles.sectionLabel}>// la fiscalización ya es algorítmica</div>
-        <h2 className={styles.sectionTitle}>Hacienda ya no espera a auditarte. Te cruza los datos solo.</h2>
+        <div className={styles.sectionLabel}>// el verdadero costo del desorden</div>
+        <h2 className={styles.sectionTitle}>No es que quieras evadir — es que se te escapa.</h2>
         <p className={styles.sectionSub}>
-          Cada vez que Stripe, ATH Móvil Business o cualquier procesador de pagos te paga, le reporta ese ingreso al
-          IRS — y Hacienda de Puerto Rico ya tiene acceso a esa información por acuerdo con el IRS. No hace falta que
-          nadie te audite a mano: el sistema compara automáticamente lo que recibiste contra lo que radicaste.
+          La mayoría de los problemas no vienen de alguien que quiso hacer trampa. Vienen de un depósito que se pasó
+          de fecha, un formulario que nadie llenó porque nadie sabía que hacía falta, o un fin de año entero
+          reconstruyendo recibos que debieron quedar organizados desde el primer mes.
         </p>
         <div className={styles.trustGrid}>
           <div className={styles.trustCard}>
             <div className={styles.trustHead}>
-              <span className={styles.trustLogo}>2022</span>
+              <span className={styles.trustLogo}>Atraso</span>
             </div>
             <p className={styles.trustDesc}>
-              Hacienda envió 7,500 notificaciones a comerciantes e individuos no registrados o con ingresos no
-              reportados que ya tenían en sus sistemas.
+              Cada mes que un depósito o una planilla se atrasa, el recargo sigue creciendo — y casi nunca es porque
+              alguien decidió no pagar. Es porque nadie se dio cuenta a tiempo.
             </p>
           </div>
           <div className={styles.trustCard}>
             <div className={styles.trustHead}>
-              <span className={styles.trustLogo}>2022</span>
+              <span className={styles.trustLogo}>Desconocimiento</span>
             </div>
             <p className={styles.trustDesc}>
-              1,600 notificaciones por correo a personas con ingresos de Formulario 1099 del IRS que nunca radicaron
-              planilla ese año.
+              No reportar algo no es lo mismo que esconderlo — pero el resultado se siente igual si nadie te explicó
+              qué formulario te tocaba o cuándo vencía.
             </p>
           </div>
           <div className={styles.trustCard}>
             <div className={styles.trustHead}>
-              <span className={styles.trustLogo}>$191M</span>
+              <span className={styles.trustLogo}>Tiempo perdido</span>
             </div>
             <p className={styles.trustDesc}>
-              en ingresos del 2020 que 4,440 contribuyentes no reportaron — y Hacienda sí tenía registrados, vía el
-              intercambio de información con el IRS.
+              Las horas que se van buscando recibos, reconstruyendo meses atrasados o explicándole a tu contable qué
+              fue cada transacción — ese tiempo también cuesta, aunque no salga en ninguna factura.
             </p>
           </div>
         </div>
         <p className="mt-4" style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
-          Fuente: comunicados de prensa oficiales del Departamento de Hacienda de Puerto Rico (hacienda.pr.gov). El
-          momento de organizarte es ahora, antes de la notificación — no después.
+          El momento de organizarte es ahora, antes de que un descuido se vuelva un problema grande.
         </p>
       </div>
 
