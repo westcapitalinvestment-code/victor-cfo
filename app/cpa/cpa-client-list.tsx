@@ -15,6 +15,7 @@ export type ClienteCpa = {
   name: string;
   entityType: string | null;
   ein: string | null;
+  ownerName: string | null;
   alertCount: number;
   ivu: { status: "depositado" | "overdue" | "pendiente"; monto: number } | null;
 };
@@ -29,7 +30,12 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
     const base = tab === "alertas" ? conAlertas : clientes;
     const q = busqueda.trim().toLowerCase();
     if (!q) return base;
-    return base.filter((c) => c.name.toLowerCase().includes(q) || (c.ein ?? "").toLowerCase().includes(q));
+    return base.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.ein ?? "").toLowerCase().includes(q) ||
+        (c.ownerName ?? "").toLowerCase().includes(q),
+    );
   }, [clientes, conAlertas, tab, busqueda]);
 
   return (
@@ -45,7 +51,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
             type="text"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar cliente por nombre o EIN..."
+            placeholder="Buscar por entidad, dueño o EIN..."
             className="w-full rounded-lg border border-border bg-transparent py-2 pl-9 pr-3 text-sm outline-none focus:border-teal"
           />
         </div>
@@ -85,6 +91,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
                 <p className="text-sm font-medium">{c.name}</p>
                 <p className="text-xs text-muted">
                   {c.entityType} {c.ein ? `· EIN ${c.ein}` : ""}
+                  {c.ownerName ? ` · de ${c.ownerName}` : ""}
                 </p>
               </div>
               <div className="flex items-center gap-2">

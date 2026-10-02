@@ -41,10 +41,26 @@ export default async function CpaPortalPage() {
 
   const { data: entidades, error } = await supabase
     .from("business_entities")
-    .select("id, name, entity_type, ein")
+    .select("id, name, entity_type, ein, owner_id")
     .order("name", { ascending: true });
 
   const entityIds = (entidades ?? []).map((e) => e.id);
+
+  // Nombre del dueño de cada entidad (2 oct 2026, pedido de Joel: "si alguien
+  // puede tener 2 o más entidades, el contable quizás no recuerde el nombre
+  // de la entidad pero sí de quién es") — requiere la política RLS
+  // users_cpa_read (migración 0136); antes un CPA no podía leer NINGUNA fila
+  // de `users` que no fuera la suya propia.
+  const ownerIds = Array.from(new Set((entidades ?? []).map((e) => e.owner_id).filter((id): id is string => !!id)));
+  const { data: duenos } = ownerIds.length
+    ? await supabase.from("users").select("id, full_name, email").in("id", ownerIds)
+    : { data: [] as never[] };
+  const duenoPorId = new Map((duenos ?? []).map((d) => [d.id, d]));
+  const nombreDueno = (ownerId: string | null) => {
+    if (!ownerId) return null;
+    const d = duenoPorId.get(ownerId);
+    return d?.full_name || d?.email || null;
+  };
 
   const hoy = new Date();
   const mes = hoy.getMonth() + 1;
@@ -214,6 +230,7 @@ export default async function CpaPortalPage() {
             name: ent.name,
             entityType: ent.entity_type,
             ein: ent.ein,
+            ownerName: nombreDueno(ent.owner_id),
             alertCount,
             ivu: ivu
               ? { status: ivu.deposit_status, monto: Number(ivu.ivu_net_due ?? 0) }
