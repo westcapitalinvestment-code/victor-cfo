@@ -58,10 +58,24 @@ export default async function EstadoResultadosPage({
   const qs = (a: number) => `?anio=${a}`;
   const qsExport = new URLSearchParams({ entityId: entidadId, anio: String(anio) }).toString();
 
-  function filaLinea(l: { nombre: string; lineaScheduleC: string | null; porMes: number[]; total: number }, color?: string) {
+  const TEAL = "#0f6b4e";
+  const ROJO = "#d44c3d";
+  // Tintes de fondo muy suaves (10 oct 2026, pedido de Joel: "se ve todo
+  // junto y no se distingue... la idea es que no cause fatiga visual") —
+  // cada bloque (Ingresos/Gastos) lleva su propio tinte de fondo de principio
+  // a fin, no solo el encabezado, para que el ojo detecte la sección sin
+  // tener que leer la etiqueta cada vez.
+  const TINTE_INGRESOS = "rgba(15, 107, 78, 0.06)";
+  const TINTE_GASTOS = "rgba(212, 76, 61, 0.06)";
+
+  function filaLinea(
+    l: { nombre: string; lineaScheduleC: string | null; porMes: number[]; total: number },
+    color: string,
+    tinte: string,
+  ) {
     return (
-      <tr key={l.nombre} className="border-b" style={{ borderColor: "var(--border)" }}>
-        <td className="sticky left-0 whitespace-nowrap px-3 py-2 text-xs" style={{ background: "var(--card)" }}>
+      <tr key={l.nombre} className="border-b" style={{ borderColor: "var(--border)", background: tinte }}>
+        <td className="sticky left-0 whitespace-nowrap px-3 py-2 text-xs" style={{ background: tinte }}>
           <div>{l.nombre}</div>
           {l.lineaScheduleC && <div className="text-[10px] text-muted">{l.lineaScheduleC}</div>}
         </td>
@@ -77,26 +91,37 @@ export default async function EstadoResultadosPage({
     );
   }
 
-  function filaTotal(label: string, porMes: number[], total: number, color: string) {
+  function filaTotal(label: string, porMes: number[], total: number, color: string, tinte: string) {
     return (
-      <tr className="border-t-2" style={{ borderColor: "var(--teal, #1d9e75)" }}>
-        <td className="sticky left-0 whitespace-nowrap px-3 py-2 text-xs font-semibold" style={{ background: "var(--card)", color }}>
+      <tr className="border-t-2 border-b-2" style={{ borderColor: color }}>
+        <td className="sticky left-0 whitespace-nowrap px-3 py-2 text-xs font-semibold" style={{ background: tinte, color }}>
           {label}
         </td>
         {porMes.map((v, i) => (
-          <td key={i} className="whitespace-nowrap px-3 py-2 text-right text-xs font-semibold" style={{ color }}>
+          <td key={i} className="whitespace-nowrap px-3 py-2 text-right text-xs font-semibold" style={{ background: tinte, color }}>
             {formatMoney(v, 0)}
           </td>
         ))}
-        <td className="whitespace-nowrap px-3 py-2 text-right text-xs font-bold" style={{ color }}>
+        <td className="whitespace-nowrap px-3 py-2 text-right text-xs font-bold" style={{ background: tinte, color }}>
           {formatMoney(total, 0)}
         </td>
       </tr>
     );
   }
 
-  const TEAL = "#0f6b4e";
-  const ROJO = "#d44c3d";
+  function filaSeccion(label: string, color: string, tinte: string) {
+    return (
+      <tr>
+        <td
+          colSpan={14}
+          className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide"
+          style={{ background: color, color: "white" }}
+        >
+          {label}
+        </td>
+      </tr>
+    );
+  }
 
   return (
     <div className="vc-shell">
@@ -173,37 +198,44 @@ export default async function EstadoResultadosPage({
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td colSpan={14} className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                Ingresos
-              </td>
-            </tr>
+            {filaSeccion("Ingresos", TEAL, TINTE_INGRESOS)}
             {er.ingresos.length === 0 && (
-              <tr>
+              <tr style={{ background: TINTE_INGRESOS }}>
                 <td colSpan={14} className="px-3 py-2 text-xs text-muted">
                   Sin ingresos categorizados en {anio}.
                 </td>
               </tr>
             )}
-            {er.ingresos.map((l) => filaLinea(l, TEAL))}
-            {filaTotal("Total ingresos", er.totalIngresosPorMes, er.totalIngresos, TEAL)}
+            {er.ingresos.map((l) => filaLinea(l, TEAL, TINTE_INGRESOS))}
+            {filaTotal("Total ingresos", er.totalIngresosPorMes, er.totalIngresos, TEAL, TINTE_INGRESOS)}
 
-            <tr>
-              <td colSpan={14} className="px-3 pt-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                Gastos
-              </td>
+            {/* separador en blanco entre bloques — refuerza que son dos secciones distintas, no una tabla continua */}
+            <tr style={{ height: "10px" }}>
+              <td colSpan={14} />
             </tr>
+
+            {filaSeccion("Gastos", ROJO, TINTE_GASTOS)}
             {er.gastos.length === 0 && (
-              <tr>
+              <tr style={{ background: TINTE_GASTOS }}>
                 <td colSpan={14} className="px-3 py-2 text-xs text-muted">
                   Sin gastos categorizados en {anio}.
                 </td>
               </tr>
             )}
-            {er.gastos.map((l) => filaLinea(l, ROJO))}
-            {filaTotal("Total gastos", er.totalGastosPorMes, er.totalGastos, ROJO)}
+            {er.gastos.map((l) => filaLinea(l, ROJO, TINTE_GASTOS))}
+            {filaTotal("Total gastos", er.totalGastosPorMes, er.totalGastos, ROJO, TINTE_GASTOS)}
 
-            {filaTotal("Utilidad neta", er.utilidadPorMes, er.utilidadNeta, er.utilidadNeta >= 0 ? TEAL : ROJO)}
+            <tr style={{ height: "10px" }}>
+              <td colSpan={14} />
+            </tr>
+
+            {filaTotal(
+              "Utilidad neta",
+              er.utilidadPorMes,
+              er.utilidadNeta,
+              er.utilidadNeta >= 0 ? TEAL : ROJO,
+              "transparent",
+            )}
           </tbody>
         </table>
       </div>

@@ -66,7 +66,7 @@ export default async function CpaClientePage({
   const { data: vendors } = await supabase
     .from("vendors")
     .select(
-      "id, name, tax_id, vendor_type, retention_type, default_retention_pct, is_corporation, relevo_fecha_expiracion, registro_comerciante_r2_key"
+      "id, name, tax_id, vendor_type, retention_type, default_retention_pct, is_corporation, address, relevo_fecha_expiracion, relevo_r2_key, registro_comerciante_r2_key"
     )
     .eq("entity_id", entityId)
     .eq("active", true)

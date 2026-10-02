@@ -45,7 +45,9 @@ type Vendor = {
   retention_type: string | null;
   default_retention_pct: number;
   is_corporation: boolean;
+  address: string | null;
   relevo_fecha_expiracion: string | null;
+  relevo_r2_key: string | null;
   registro_comerciante_r2_key: string | null;
 };
 
@@ -259,13 +261,17 @@ export default function CpaTabs({
                   </tr>
                 </thead>
                 <tbody>
+                  {/* Tintes de fondo por sección (10 oct 2026, mismo fix que
+                      dashboard/negocio/estado-resultados: "se ve todo junto y
+                      no se distingue... fatiga visual") — cada bloque lleva
+                      su color de principio a fin, no solo el encabezado. */}
                   <tr>
-                    <td colSpan={14} className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                    <td colSpan={14} className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: "#0f6b4e" }}>
                       Ingresos
                     </td>
                   </tr>
                   {estadoResultados.ingresos.map((l) => (
-                    <tr key={`ing-${l.categoriaId ?? "sc"}`} className="border-b border-border/50">
+                    <tr key={`ing-${l.categoriaId ?? "sc"}`} className="border-b border-border/50" style={{ background: "rgba(15,107,78,0.06)" }}>
                       <td className="whitespace-nowrap px-2 py-1">{l.nombre}</td>
                       {l.porMes.map((v, i) => (
                         <td key={i} className="whitespace-nowrap px-2 py-1 text-right">
@@ -275,13 +281,27 @@ export default function CpaTabs({
                       <td className="whitespace-nowrap px-2 py-1 text-right font-medium">{formatMoney(l.total, 0)}</td>
                     </tr>
                   ))}
+                  <tr className="border-t-2 border-b-2" style={{ borderColor: "#0f6b4e", background: "rgba(15,107,78,0.06)" }}>
+                    <td className="whitespace-nowrap px-2 py-1 font-semibold text-teal">Total ingresos</td>
+                    {estadoResultados.totalIngresosPorMes.map((v, i) => (
+                      <td key={i} className="whitespace-nowrap px-2 py-1 text-right font-semibold text-teal">
+                        {formatMoney(v, 0)}
+                      </td>
+                    ))}
+                    <td className="whitespace-nowrap px-2 py-1 text-right font-bold text-teal">{formatMoney(estadoResultados.totalIngresos, 0)}</td>
+                  </tr>
+
+                  <tr style={{ height: "8px" }}>
+                    <td colSpan={14} />
+                  </tr>
+
                   <tr>
-                    <td colSpan={14} className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                    <td colSpan={14} className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: "#d44c3d" }}>
                       Gastos
                     </td>
                   </tr>
                   {estadoResultados.gastos.map((l) => (
-                    <tr key={`gas-${l.categoriaId ?? "sc"}`} className="border-b border-border/50">
+                    <tr key={`gas-${l.categoriaId ?? "sc"}`} className="border-b border-border/50" style={{ background: "rgba(212,76,61,0.06)" }}>
                       <td className="whitespace-nowrap px-2 py-1">{l.nombre}</td>
                       {l.porMes.map((v, i) => (
                         <td key={i} className="whitespace-nowrap px-2 py-1 text-right">
@@ -291,6 +311,20 @@ export default function CpaTabs({
                       <td className="whitespace-nowrap px-2 py-1 text-right font-medium">{formatMoney(l.total, 0)}</td>
                     </tr>
                   ))}
+                  <tr className="border-t-2 border-b-2" style={{ borderColor: "#d44c3d", background: "rgba(212,76,61,0.06)" }}>
+                    <td className="whitespace-nowrap px-2 py-1 font-semibold text-red">Total gastos</td>
+                    {estadoResultados.totalGastosPorMes.map((v, i) => (
+                      <td key={i} className="whitespace-nowrap px-2 py-1 text-right font-semibold text-red">
+                        {formatMoney(v, 0)}
+                      </td>
+                    ))}
+                    <td className="whitespace-nowrap px-2 py-1 text-right font-bold text-red">{formatMoney(estadoResultados.totalGastos, 0)}</td>
+                  </tr>
+
+                  <tr style={{ height: "8px" }}>
+                    <td colSpan={14} />
+                  </tr>
+
                   <tr className="border-t-2 border-teal">
                     <td className="whitespace-nowrap px-2 py-1 font-semibold text-teal">Utilidad neta</td>
                     {estadoResultados.utilidadPorMes.map((v, i) => (
@@ -580,7 +614,8 @@ export default function CpaTabs({
                           {val?.ready_for_480 ? "Listo para 480" : "Faltan datos"}
                         </Badge>
                       </div>
-                      <div className="mb-1 flex flex-wrap gap-3 text-[11px] text-muted">
+                      {v.address && <p className="mb-1 text-[11px] text-muted">{v.address}</p>}
+                      <div className="mb-1 flex flex-wrap items-center gap-3 text-[11px] text-muted">
                         <span>
                           <i className={`ti ${val?.name_confirmed ? "ti-circle-check text-grn" : "ti-circle-x text-red"}`} /> Nombre
                         </span>
@@ -590,19 +625,35 @@ export default function CpaTabs({
                         <span>
                           <i className={`ti ${val?.tax_id_confirmed ? "ti-circle-check text-grn" : "ti-circle-x text-red"}`} /> Tax ID
                         </span>
-                        <span>
+                        <span className="flex items-center gap-1">
                           <i className={`ti ${v.registro_comerciante_r2_key ? "ti-circle-check text-grn" : "ti-circle-x text-red"}`} />{" "}
                           Registro Comerciante
+                          {v.registro_comerciante_r2_key && (
+                            <a
+                              href={`/api/cpa/vendors/${v.id}/registro-comerciante`}
+                              target="_blank"
+                              className="font-medium text-teal hover:underline"
+                            >
+                              Ver
+                            </a>
+                          )}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-3 text-[11px]">
-                        <Badge tone={tieneRelevo ? (relevoVigente ? "grn" : "red") : "muted"}>
-                          {tieneRelevo
-                            ? relevoVigente
-                              ? `Relevo vigente hasta ${v.relevo_fecha_expiracion}`
-                              : `Relevo vencido (${v.relevo_fecha_expiracion})`
-                            : "Sin Relevo"}
-                        </Badge>
+                        <span className="flex items-center gap-1">
+                          <Badge tone={tieneRelevo ? (relevoVigente ? "grn" : "red") : "muted"}>
+                            {tieneRelevo
+                              ? relevoVigente
+                                ? `Relevo vigente hasta ${v.relevo_fecha_expiracion}`
+                                : `Relevo vencido (${v.relevo_fecha_expiracion})`
+                              : "Sin Relevo"}
+                          </Badge>
+                          {v.relevo_r2_key && (
+                            <a href={`/api/cpa/vendors/${v.id}/relevo`} target="_blank" className="font-medium text-teal hover:underline">
+                              Ver
+                            </a>
+                          )}
+                        </span>
                         <span className="text-muted">
                           Retenido YTD: <span className="font-medium text-text">{formatMoney(retenidoTotal)}</span>
                         </span>
