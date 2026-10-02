@@ -33,12 +33,22 @@ export async function GET(req: NextRequest) {
   const desde = `${anio}-01-01`;
   const hasta = `${anio}-12-31`;
 
+  // Resolver owner_id efectivo (2 oct 2026, fix CPA) — si viene entityId, el
+  // owner real es el dueño de la entidad (no quien llama), para que un CPA
+  // con acceso vía account_members también pueda generar este reporte.
+  let ownerIdEfectivo = user.id;
+  if (entityId) {
+    const { data: entidadCheck } = await supabase.from("business_entities").select("owner_id").eq("id", entityId).maybeSingle();
+    if (!entidadCheck) return NextResponse.json({ error: "Entidad inválida." }, { status: 400 });
+    ownerIdEfectivo = entidadCheck.owner_id;
+  }
+
   let query = supabase
     .from("vendor_retenciones")
     .select(
       "vendor_id, gross_amount, retention_amount, period_end, vendors(name, tax_id, address, retention_type, is_corporation)"
     )
-    .eq("owner_id", user.id)
+    .eq("owner_id", ownerIdEfectivo)
     .gte("period_end", desde)
     .lte("period_end", hasta);
   if (entityId) query = query.eq("entity_id", entityId);
@@ -82,7 +92,7 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
   const { data: entidad } = entityId
-    ? await supabase.from("business_entities").select("name, logo_r2_key").eq("id", entityId).eq("owner_id", user.id).maybeSingle()
+    ? await supabase.from("business_entities").select("name, logo_r2_key").eq("id", entityId).maybeSingle()
     : { data: null };
   const { data: owner } = entityId ? { data: null } : await supabase.from("users").select("full_name").eq("id", user.id).maybeSingle();
   const nombreTitular = entidad?.name || owner?.full_name || "VICTOR CFO";

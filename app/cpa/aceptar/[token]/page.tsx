@@ -102,7 +102,14 @@ export default function AceptarInvitacionCpaPage() {
     const { data, error } = await supabase.auth.signUp({
       email: invite.cpaEmail,
       password,
-      options: { emailRedirectTo: typeof window !== "undefined" ? window.location.href : undefined },
+      options: {
+        emailRedirectTo: typeof window !== "undefined" ? window.location.href : undefined,
+        // 2 oct 2026 (hallazgo de Joel: el saludo del Portal CPA no tenía
+        // nombre porque handle_new_user() lee raw_user_meta_data.full_name
+        // y este signUp nunca lo mandaba) — invite.cpaName es el nombre que
+        // el dueño escribió al invitar (cpa_invitations.cpa_name).
+        data: invite.cpaName ? { full_name: invite.cpaName } : undefined,
+      },
     });
 
     setEnviando(false);

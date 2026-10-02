@@ -25,15 +25,20 @@ export async function GET(req: NextRequest) {
   if (!entityId) {
     return NextResponse.json({ error: "Falta entityId — el Estado de Resultados es exclusivo de negocio." }, { status: 400 });
   }
+  // Sin filtro .eq("owner_id", user.id) a propósito (2 oct 2026, fix CPA) —
+  // RLS (business_entities_owner / business_entities_cpa_read, migración
+  // 0003) ya resuelve esto solo: si el caller es el dueño O un CPA con
+  // acceso vía account_members, esta fila existe; si no, no existe. Así
+  // este mismo endpoint sirve tanto al dueño como a su CPA sin duplicar
+  // lógica, usando entidad.owner_id (NO user.id) para el resto del reporte.
   const { data: entidad } = await supabase
     .from("business_entities")
-    .select("id, name, logo_r2_key")
+    .select("id, name, logo_r2_key, owner_id")
     .eq("id", entityId)
-    .eq("owner_id", user.id)
     .maybeSingle();
   if (!entidad) return NextResponse.json({ error: "Entidad inválida." }, { status: 400 });
 
-  const er = await calcularEstadoResultados(supabase, { ownerId: user.id, entityId, anio });
+  const er = await calcularEstadoResultados(supabase, { ownerId: entidad.owner_id, entityId, anio });
 
   const pdf = await PDFDocument.create();
   const width = 792;

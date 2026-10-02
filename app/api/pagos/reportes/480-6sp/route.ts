@@ -37,10 +37,19 @@ export async function GET(req: NextRequest) {
   const desde = `${anio}-01-01`;
   const hasta = `${anio}-12-31`;
 
+  // Resolver owner_id efectivo (2 oct 2026, fix CPA) — ver misma nota en
+  // excel/route.ts y pdf/route.ts de esta carpeta.
+  let ownerIdEfectivo = user.id;
+  if (entityId) {
+    const { data: entidadCheck } = await supabase.from("business_entities").select("owner_id").eq("id", entityId).maybeSingle();
+    if (!entidadCheck) return NextResponse.json({ error: "Entidad inválida." }, { status: 400 });
+    ownerIdEfectivo = entidadCheck.owner_id;
+  }
+
   let query = supabase
     .from("vendor_retenciones")
     .select("vendor_id, gross_amount, retention_amount, period_end, vendors(name, tax_id, retention_type, is_corporation)")
-    .eq("owner_id", user.id)
+    .eq("owner_id", ownerIdEfectivo)
     .gte("period_end", desde)
     .lte("period_end", hasta);
   if (entityId) query = query.eq("entity_id", entityId);

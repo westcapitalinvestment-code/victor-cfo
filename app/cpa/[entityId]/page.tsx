@@ -3,6 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import CpaTabs from "./cpa-tabs";
 import { calcularEstadoResultados } from "@/lib/estado-resultados";
+import { saludoPorHora } from "@/lib/hora-pr";
+import { formatMoney as formatMoneyAlerta } from "@/lib/format";
 
 // Portal CPA — dashboard de un cliente (pantalla "Dashboard" del mockup
 // "VICTOR — Portal CPA.html"). Todo lo que se lee aquí pasa por RLS
@@ -22,6 +24,22 @@ export default async function CpaClientePage({
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+
+  // Saludo real (2 oct 2026, mismo fix que app/cpa/page.tsx).
+  const { data: perfilCpa } = await supabase.from("users").select("full_name").eq("id", user.id).maybeSingle();
+  let nombreCpa = perfilCpa?.full_name || null;
+  if (!nombreCpa) {
+    const { data: inviteAceptada } = await supabase
+      .from("cpa_invitations")
+      .select("cpa_name")
+      .ilike("cpa_email", user.email ?? "")
+      .eq("status", "accepted")
+      .order("accepted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    nombreCpa = inviteAceptada?.cpa_name || null;
+  }
+  const primerNombreCpa = (nombreCpa || user.email || "").split(" ")[0];
 
   const entityId = params.entityId;
 
@@ -189,6 +207,79 @@ export default async function CpaClientePage({
     .filter((r) => r.remittance_status === "pendiente")
     .reduce((acc, r) => acc + Number(r.retention_amount ?? 0), 0);
 
+  // Alertas Inteligentes de esta entidad (2 oct 2026, pedido de Joel) —
+  // mismas reglas que app/cpa/page.tsx pero acotadas a esta entidad,
+  // reusando los datos que ya se trajeron arriba en el Promise.all (no
+  // dispara queries nuevas).
+  type AlertaCpa = { tono: "red" | "amb"; icono: string; texto: string };
+  const alertasEntidad: AlertaCpa[] = [];
+
+  if (ivuTracker && ivuTracker.deposit_status !== "depositado" && ivuTracker.due_date && ivuTracker.due_date < hoyISO) {
+    alertasEntidad.push({
+      tono: "red",
+      icono: "ti-alert-triangle",
+      texto: `IVU vencido — ${formatMoneyAlerta(Number(ivuTracker.ivu_net_due ?? 0))} sin depositar (venció ${ivuTracker.due_date}).`,
+    });
+  }
+
+  const facturasVencidasEntidad = (facturas ?? []).filter(
+    (f) => f.estado !== "pagada" && f.fecha_vencimiento && f.fecha_vencimiento < hoyISO
+  );
+  if (facturasVencidasEntidad.length > 0) {
+    alertasEntidad.push({
+      tono: "amb",
+      icono: "ti-file-invoice",
+      texto: `${facturasVencidasEntidad.length} factura${facturasVencidasEntidad.length === 1 ? "" : "s"} vencida${facturasVencidasEntidad.length === 1 ? "" : "s"} sin cobrar.`,
+    });
+  }
+
+  const diaDelMesEntidad = Number(hoyISO.slice(8, 10));
+  if (diaDelMesEntidad > 15 && totalRetencionesPendientes > 0) {
+    alertasEntidad.push({
+      tono: "red",
+      icono: "ti-cash",
+      texto: `${formatMoneyAlerta(totalRetencionesPendientes)} en retenciones pendientes de remesar (480.9A vence día 15).`,
+    });
+  }
+
+  for (const v of vendors ?? []) {
+    if (v.relevo_fecha_expiracion && v.relevo_fecha_expiracion < hoyISO) {
+      alertasEntidad.push({
+        tono: "amb",
+        icono: "ti-certificate",
+        texto: `Certificado de Relevo de ${v.name} vencido (${v.relevo_fecha_expiracion}).`,
+      });
+    }
+  }
+
+  const faltan480 = (validaciones480 ?? []).filter((v) => !v.ready_for_480).length;
+  if (faltan480 > 0) {
+    alertasEntidad.push({
+      tono: "amb",
+      icono: "ti-file-percent",
+      texto: `${faltan480} contratista${faltan480 === 1 ? "" : "s"} sin datos completos para la 480.6SP.`,
+    });
+  }
+
+  const estimadasVencidasEntidad = (estimados ?? []).filter((e) => e.status === "pendiente" && e.due_date < hoyISO);
+  for (const e of estimadasVencidasEntidad) {
+    alertasEntidad.push({
+      tono: "red",
+      icono: "ti-calendar-dollar",
+      texto: `Contribución estimada vencida — ${formatMoneyAlerta(Number(e.amount_due ?? 0))} (venció ${e.due_date}).`,
+    });
+  }
+
+  if (er.utilidadNeta < 0) {
+    alertasEntidad.push({
+      tono: "amb",
+      icono: "ti-trending-down",
+      texto: `Utilidad neta negativa en ${anioResultados}: ${formatMoneyAlerta(er.utilidadNeta)}.`,
+    });
+  }
+
+  alertasEntidad.sort((a, b) => (a.tono === b.tono ? 0 : a.tono === "red" ? -1 : 1));
+
   return (
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
@@ -200,11 +291,34 @@ export default async function CpaClientePage({
         </span>
       </div>
 
+      <p className="mb-3 text-base font-medium">
+        {saludoPorHora(hoy)}, {primerNombreCpa} — viendo {entidad.name}
+      </p>
+
       <div className="vc-card mb-4">
         <p className="text-base font-medium">{entidad.name}</p>
         <p className="text-xs text-muted">
           {entidad.entity_type} {entidad.ein ? `· EIN ${entidad.ein}` : ""}
         </p>
+      </div>
+
+      <div className="vc-card mb-4">
+        <div className="mb-3 flex items-center gap-2">
+          <i className="ti ti-bulb text-muted" />
+          <p className="text-xs uppercase tracking-wide text-muted">Alertas inteligentes</p>
+        </div>
+        {alertasEntidad.length === 0 ? (
+          <p className="text-sm text-muted">Todo se ve normal con {entidad.name} — sin pendientes urgentes.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {alertasEntidad.map((a, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm">
+                <i className={`ti ${a.icono} mt-0.5 flex-shrink-0 ${a.tono === "red" ? "text-red" : "text-amb"}`} />
+                <span>{a.texto}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <CpaTabs
@@ -225,6 +339,7 @@ export default async function CpaClientePage({
         resumenPos={resumenPos}
         tienePos={tienePos}
         retenciones={retenciones ?? []}
+        entityId={entityId}
       />
     </div>
   );

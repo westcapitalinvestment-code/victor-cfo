@@ -137,6 +137,7 @@ export default function CpaTabs({
   resumenPos,
   tienePos,
   retenciones,
+  entityId,
 }: {
   ivuApplies: boolean;
   ivuTracker: IvuTracker;
@@ -155,6 +156,7 @@ export default function CpaTabs({
   resumenPos: ResumenPos;
   tienePos: boolean;
   retenciones: Retencion[];
+  entityId: string;
 }) {
   const [tab, setTab] = useState<TabId>("resultados");
   const hoyISO = new Date().toISOString().slice(0, 10);
@@ -180,12 +182,26 @@ export default function CpaTabs({
           <div className="vc-card">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-xs uppercase tracking-wide text-muted">Estado de Resultados — {anioResultados}</p>
-              <div className="flex gap-3 text-xs">
+              <div className="flex items-center gap-3 text-xs">
                 <a href={`?anio=${anioResultados - 1}`} className="text-muted hover:text-teal">
                   ← {anioResultados - 1}
                 </a>
                 <a href={`?anio=${anioResultados + 1}`} className="text-muted hover:text-teal">
                   {anioResultados + 1} →
+                </a>
+                <span className="text-border">|</span>
+                <a
+                  href={`/api/reportes/estado-resultados/pdf?entityId=${entityId}&anio=${anioResultados}`}
+                  target="_blank"
+                  className="flex items-center gap-1 text-muted hover:text-teal"
+                >
+                  <i className="ti ti-file-type-pdf" /> PDF
+                </a>
+                <a
+                  href={`/api/reportes/estado-resultados/excel?entityId=${entityId}&anio=${anioResultados}`}
+                  className="flex items-center gap-1 text-muted hover:text-teal"
+                >
+                  <i className="ti ti-file-type-xls" /> Excel
                 </a>
               </div>
             </div>
@@ -467,11 +483,36 @@ export default function CpaTabs({
       {tab === "retenciones" && (
         <div className="flex flex-col gap-3">
           <div className="vc-card">
-            <p className="text-xs uppercase tracking-wide text-muted">Retenciones a contratistas (480.6SP)</p>
-            <p className="mt-1 text-2xl font-semibold text-amb">{formatMoney(totalRetencionesPendientes)}</p>
-            <p className="mt-1 text-[11px] text-muted">
-              Pendiente de remesar a Hacienda — el depósito mensual (480.9A) vence el día 15 del mes siguiente.
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted">Retenciones a contratistas (480.6SP)</p>
+                <p className="mt-1 text-2xl font-semibold text-amb">{formatMoney(totalRetencionesPendientes)}</p>
+                <p className="mt-1 text-[11px] text-muted">
+                  Pendiente de remesar a Hacienda — el depósito mensual (480.9A) vence el día 15 del mes siguiente.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-3 text-xs">
+                <a
+                  href={`/api/pagos/reportes/480-6sp/pdf?entityId=${entityId}&anio=${anioResultados}`}
+                  target="_blank"
+                  className="flex items-center gap-1 text-muted hover:text-teal"
+                >
+                  <i className="ti ti-file-type-pdf" /> PDF
+                </a>
+                <a
+                  href={`/api/pagos/reportes/480-6sp/excel?entityId=${entityId}&anio=${anioResultados}`}
+                  className="flex items-center gap-1 text-muted hover:text-teal"
+                >
+                  <i className="ti ti-file-type-xls" /> Excel
+                </a>
+                <a
+                  href={`/api/pagos/reportes/480-6sp?entityId=${entityId}&anio=${anioResultados}`}
+                  className="flex items-center gap-1 text-muted hover:text-teal"
+                >
+                  <i className="ti ti-file-type-csv" /> CSV
+                </a>
+              </div>
+            </div>
           </div>
           <div className="vc-card">
             <p className="mb-3 text-xs uppercase tracking-wide text-muted">Contratistas — estado 480.6SP</p>
