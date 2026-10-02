@@ -44,6 +44,17 @@ type Vendor = {
   vendor_type: string;
   retention_type: string | null;
   default_retention_pct: number;
+  is_corporation: boolean;
+  relevo_fecha_expiracion: string | null;
+  registro_comerciante_r2_key: string | null;
+};
+
+type Retencion = {
+  vendor_id: string;
+  retention_amount: number;
+  remittance_status: "pendiente" | "remesado";
+  period_start: string;
+  period_end: string;
 };
 
 type Validacion480 = {
@@ -125,6 +136,7 @@ export default function CpaTabs({
   desgloseIvuPropinas,
   resumenPos,
   tienePos,
+  retenciones,
 }: {
   ivuApplies: boolean;
   ivuTracker: IvuTracker;
@@ -142,8 +154,10 @@ export default function CpaTabs({
   desgloseIvuPropinas: DesgloseIvuPropinas;
   resumenPos: ResumenPos;
   tienePos: boolean;
+  retenciones: Retencion[];
 }) {
   const [tab, setTab] = useState<TabId>("resultados");
+  const hoyISO = new Date().toISOString().slice(0, 10);
 
   return (
     <div>
@@ -453,43 +467,66 @@ export default function CpaTabs({
       {tab === "retenciones" && (
         <div className="flex flex-col gap-3">
           <div className="vc-card">
-            <p className="text-xs uppercase tracking-wide text-muted">Retenciones a contratistas (480.6)</p>
+            <p className="text-xs uppercase tracking-wide text-muted">Retenciones a contratistas (480.6SP)</p>
             <p className="mt-1 text-2xl font-semibold text-amb">{formatMoney(totalRetencionesPendientes)}</p>
-            <p className="mt-1 text-[11px] text-muted">Pendiente de remesar a Hacienda</p>
+            <p className="mt-1 text-[11px] text-muted">
+              Pendiente de remesar a Hacienda — el depósito mensual (480.9A) vence el día 15 del mes siguiente.
+            </p>
           </div>
           <div className="vc-card">
-            <p className="mb-3 text-xs uppercase tracking-wide text-muted">Checklist 480 por contratista</p>
+            <p className="mb-3 text-xs uppercase tracking-wide text-muted">Contratistas — estado 480.6SP</p>
             {vendors.length === 0 ? (
               <p className="text-sm text-muted">No hay contratistas registrados.</p>
             ) : (
               <ul className="flex flex-col divide-y divide-border">
                 {vendors.map((v) => {
                   const val = validaciones480.find((x) => x.vendor_id === v.id);
+                  const retencionesVendor = retenciones.filter((r) => r.vendor_id === v.id);
+                  const retenidoTotal = retencionesVendor.reduce((s, r) => s + Number(r.retention_amount ?? 0), 0);
+                  const retenidoPendiente = retencionesVendor
+                    .filter((r) => r.remittance_status === "pendiente")
+                    .reduce((s, r) => s + Number(r.retention_amount ?? 0), 0);
+                  const relevoVigente = v.relevo_fecha_expiracion ? v.relevo_fecha_expiracion >= hoyISO : false;
+                  const tieneRelevo = !!v.relevo_fecha_expiracion;
                   return (
                     <li key={v.id} className="py-2 text-sm">
                       <div className="mb-1 flex items-center justify-between">
-                        <p className="font-medium">{v.name}</p>
+                        <p className="font-medium">
+                          {v.name} <span className="text-[10px] text-muted">({v.is_corporation ? "Corporación" : "Individuo"})</span>
+                        </p>
                         <Badge tone={val?.ready_for_480 ? "grn" : "amb"}>
                           {val?.ready_for_480 ? "Listo para 480" : "Faltan datos"}
                         </Badge>
                       </div>
-                      <div className="flex gap-3 text-[11px] text-muted">
+                      <div className="mb-1 flex flex-wrap gap-3 text-[11px] text-muted">
                         <span>
-                          <i className={`ti ${val?.name_confirmed ? "ti-circle-check text-grn" : "ti-circle-x text-red"}`} />{" "}
-                          Nombre
+                          <i className={`ti ${val?.name_confirmed ? "ti-circle-check text-grn" : "ti-circle-x text-red"}`} /> Nombre
                         </span>
                         <span>
-                          <i
-                            className={`ti ${val?.address_confirmed ? "ti-circle-check text-grn" : "ti-circle-x text-red"}`}
-                          />{" "}
-                          Dirección
+                          <i className={`ti ${val?.address_confirmed ? "ti-circle-check text-grn" : "ti-circle-x text-red"}`} /> Dirección
                         </span>
                         <span>
-                          <i
-                            className={`ti ${val?.tax_id_confirmed ? "ti-circle-check text-grn" : "ti-circle-x text-red"}`}
-                          />{" "}
-                          Tax ID
+                          <i className={`ti ${val?.tax_id_confirmed ? "ti-circle-check text-grn" : "ti-circle-x text-red"}`} /> Tax ID
                         </span>
+                        <span>
+                          <i className={`ti ${v.registro_comerciante_r2_key ? "ti-circle-check text-grn" : "ti-circle-x text-red"}`} />{" "}
+                          Registro Comerciante
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-[11px]">
+                        <Badge tone={tieneRelevo ? (relevoVigente ? "grn" : "red") : "muted"}>
+                          {tieneRelevo
+                            ? relevoVigente
+                              ? `Relevo vigente hasta ${v.relevo_fecha_expiracion}`
+                              : `Relevo vencido (${v.relevo_fecha_expiracion})`
+                            : "Sin Relevo"}
+                        </Badge>
+                        <span className="text-muted">
+                          Retenido YTD: <span className="font-medium text-text">{formatMoney(retenidoTotal)}</span>
+                        </span>
+                        {retenidoPendiente > 0 && (
+                          <span className="text-amb">Pendiente de remesar: {formatMoney(retenidoPendiente)}</span>
+                        )}
                       </div>
                     </li>
                   );

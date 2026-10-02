@@ -47,7 +47,9 @@ export default async function CpaClientePage({
   // dependen de la lista de vendor_id de esta entidad.
   const { data: vendors } = await supabase
     .from("vendors")
-    .select("id, name, tax_id, vendor_type, retention_type, default_retention_pct")
+    .select(
+      "id, name, tax_id, vendor_type, retention_type, default_retention_pct, is_corporation, relevo_fecha_expiracion, registro_comerciante_r2_key"
+    )
     .eq("entity_id", entityId)
     .eq("active", true)
     .order("name", { ascending: true });
@@ -222,6 +224,7 @@ export default async function CpaClientePage({
         desgloseIvuPropinas={desgloseIvuPropinas}
         resumenPos={resumenPos}
         tienePos={tienePos}
+        retenciones={retenciones ?? []}
       />
     </div>
   );
