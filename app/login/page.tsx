@@ -39,8 +39,8 @@ function LoginForm() {
       // de CPA/Admin-Secretaria en vez de mandarlo siempre a /dashboard.
       if (user.email) {
         const [{ data: membresiaAdmin }, { data: membresiaCpa }] = await Promise.all([
-          supabase.from("account_members").select("id").eq("member_email", user.email).eq("role", "admin").eq("active", true).limit(1).maybeSingle(),
-          supabase.from("account_members").select("id").eq("member_email", user.email).eq("role", "cpa").eq("active", true).limit(1).maybeSingle(),
+          supabase.from("account_members").select("id").ilike("member_email", user.email).eq("role", "admin").eq("active", true).limit(1).maybeSingle(),
+          supabase.from("account_members").select("id").ilike("member_email", user.email).eq("role", "cpa").eq("active", true).limit(1).maybeSingle(),
         ]);
         router.replace(membresiaAdmin ? "/admin" : membresiaCpa ? "/cpa" : "/dashboard");
         return;
@@ -117,11 +117,18 @@ function LoginForm() {
     // alguien es dueño Y invitado de otros a la vez (caso raro), esto lo
     // manda al portal de invitado primero — Admin/Secretaria antes que CPA
     // porque es el rol más común de los dos.
+    // ilike() en vez de eq() (2 oct 2026, hallazgo de Joel: entró con el
+    // correo en mayúsculas y lo mandó a /dashboard en vez de /cpa) — Postgres
+    // compara member_email con distinción de mayúsculas, así que un correo
+    // tecleado distinto a como quedó guardado (CAPS, mezcla, etc.) hacía que
+    // esta consulta no encontrara nada y cayera siempre al /dashboard por
+    // defecto, aunque el rol sí existiera. ilike() sin comodines es un match
+    // exacto insensible a mayúsculas — mismo resultado, sin ese hueco.
     const [{ data: membresiaAdmin }, { data: membresiaCpa }] = await Promise.all([
       supabase
         .from("account_members")
         .select("id")
-        .eq("member_email", email)
+        .ilike("member_email", email)
         .eq("role", "admin")
         .eq("active", true)
         .limit(1)
@@ -129,7 +136,7 @@ function LoginForm() {
       supabase
         .from("account_members")
         .select("id")
-        .eq("member_email", email)
+        .ilike("member_email", email)
         .eq("role", "cpa")
         .eq("active", true)
         .limit(1)

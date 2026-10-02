@@ -108,8 +108,8 @@ export async function GET(req: NextRequest) {
   if (!plan && !gratis && next === "/dashboard" && sesionData.user?.email) {
     const correo = sesionData.user.email;
     const [{ data: membresiaAdmin }, { data: membresiaCpa }] = await Promise.all([
-      supabase.from("account_members").select("id").eq("member_email", correo).eq("role", "admin").eq("active", true).limit(1).maybeSingle(),
-      supabase.from("account_members").select("id").eq("member_email", correo).eq("role", "cpa").eq("active", true).limit(1).maybeSingle(),
+      supabase.from("account_members").select("id").ilike("member_email", correo).eq("role", "admin").eq("active", true).limit(1).maybeSingle(),
+      supabase.from("account_members").select("id").ilike("member_email", correo).eq("role", "cpa").eq("active", true).limit(1).maybeSingle(),
     ]);
     destino = membresiaAdmin ? "/admin" : membresiaCpa ? "/cpa" : destino;
   }
