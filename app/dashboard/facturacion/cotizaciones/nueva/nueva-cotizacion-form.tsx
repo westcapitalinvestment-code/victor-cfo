@@ -50,8 +50,10 @@ export default function NuevaCotizacionForm({
   const [entityId, setEntityId] = useState(entidadPreseleccionada ?? entities[0]?.id ?? "");
   const entidad = entities.find((e) => e.id === entityId) ?? entities[0];
 
+  // 2 oct 2026, mismo fix que Nueva Factura: match estricto por entidad, sin
+  // colar clientes huérfanos (entity_id null) en todas las entidades.
   const clientesDeEntidad = useMemo(
-    () => clients.filter((c) => !c.entity_id || c.entity_id === entityId),
+    () => clients.filter((c) => c.entity_id === entityId),
     [clients, entityId]
   );
   // Sin cliente ni fecha por defecto (pedido de Joel, 1 sept 2026) — que

@@ -40,7 +40,9 @@ export default function CobroRapidoForm({
 
   const entidad = entities.find((e) => e.id === entidadId);
   const numeroPreview = entidad ? `${entidad.invoice_prefix}-${entidad.invoice_start_number + (conteosPorEntidad[entidad.id] ?? 0)}` : "";
-  const clientesDeEntidad = clients.filter((c) => !c.entity_id || c.entity_id === entidadId);
+  // 2 oct 2026, mismo fix que Nueva Factura: match estricto por entidad, sin
+  // colar clientes huérfanos (entity_id null) en todas las entidades.
+  const clientesDeEntidad = clients.filter((c) => c.entity_id === entidadId);
   const montoNum = Number(monto) || 0;
 
   async function crear() {

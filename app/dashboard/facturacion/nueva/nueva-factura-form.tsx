@@ -133,8 +133,15 @@ export default function NuevaFacturaForm({
   const [entityId, setEntityId] = useState(entidadPreseleccionada ?? entities[0]?.id ?? "");
   const entidad = entities.find((e) => e.id === entityId) ?? entities[0];
 
+  // 2 oct 2026, bug reportado por Joel: clientes sin entity_id (huérfanos,
+  // ej. creados por la integración de Zapier sin especificar entidad)
+  // aparecían mezclados en TODAS las entidades — así se colaban clientes de
+  // VIP dentro del formulario de West Capital. Ahora el match es estricto:
+  // solo clientes de ESTA entidad. Un cliente huérfano simplemente no
+  // aparece aquí (hay que asignarle entidad desde Editar, o verlo en
+  // Vista global → Clientes para archivarlo/eliminarlo).
   const clientesDeEntidad = useMemo(
-    () => clients.filter((c) => !c.entity_id || c.entity_id === entityId),
+    () => clients.filter((c) => c.entity_id === entityId),
     [clients, entityId]
   );
   // Sin cliente por defecto (pedido de Joel, 1 sept 2026) — que arranque
