@@ -40,15 +40,17 @@ export type ComisionFila = {
 // por vendedor: cuántos clientes, en qué estado, y cuánto ingreso mensual
 // bruto le generan a WCV, para comparar contra la comisión pagada.
 //
-// Dos modelos conviven aquí (migración 0135, 2 oct 2026):
-//   - 'setenta_treinta' (modelo viejo, 0107): setentaCentavos+treintaCentavos
-//     = el monto base mensual equivalente del plan de ese cliente — ahí SÍ
-//     es también la comisión total que se le paga al vendedor.
-//   - 'unico' (modelo nuevo): setentaCentavos = la comisión REAL pagada
-//     (100% de un mes si mensual, 20% del año si anual) — ya NO equivale al
-//     ingreso real de WCV en el caso anual, así que para el ingreso bruto
-//     hay que usar montoBaseCentavos (el monto completo que pagó el
-//     cliente) en vez de la comisión.
+// Dos modelos conviven aquí según el CICLO del cliente (migración 0135, 2
+// oct 2026 — "se mantiene el 70/30 pq me deja cashflow para operar"):
+//   - 'setenta_treinta' (ciclo mensual, igual que la 0107 original):
+//     setentaCentavos+treintaCentavos = el precio mensual completo del
+//     cliente — ahí SÍ es también la comisión total que se le paga al
+//     vendedor (70% ahora + 30% al 3er pago real).
+//   - 'unico' (ciclo anual): setentaCentavos = la comisión REAL pagada
+//     (20% del año, una sola vez) — ya NO equivale al ingreso real de WCV
+//     (que es el 100% del año), así que para el ingreso bruto hay que usar
+//     montoBaseCentavos (el monto completo que pagó el cliente) en vez de
+//     la comisión.
 export type VendedorClienteFila = {
   id: string;
   socioId: string;
