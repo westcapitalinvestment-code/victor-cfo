@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { resolverOwnerEfectivo } from "@/lib/owner-efectivo";
 import PagosPortal from "@/app/dashboard/pagos/pagos-portal";
+import AddonPagosGate from "@/app/dashboard/pagos/addon-pagos-gate";
 import AdminNav from "@/app/admin/admin-nav";
 
 // Pagos — exclusivo del nivel Administrador ($20/mes, migración 0056).
@@ -25,6 +26,19 @@ export default async function AdminPagosPage({ params }: { params: { entityId: s
 
   const ownerId = efectivo.ownerId;
   const entityId = efectivo.entityIdForzado;
+
+  // Addon Pagos (2 oct 2026, migración 0134) — la suscripción es del DUEÑO,
+  // no del Administrador, así que se chequea el addon_pagos_status del
+  // ownerId efectivo, no el del usuario que inició sesión.
+  const { data: ownerPerfil } = await supabase.from("users").select("addon_pagos_status").eq("id", ownerId).maybeSingle();
+  if (ownerPerfil?.addon_pagos_status !== "activo") {
+    return (
+      <>
+        <AdminNav entityId={entityId} activo="pagos" />
+        <AddonPagosGate puedeActivar={false} volverHref={`/admin/${entityId}`} />
+      </>
+    );
+  }
 
   const { data: entidad } = await supabase
     .from("business_entities")

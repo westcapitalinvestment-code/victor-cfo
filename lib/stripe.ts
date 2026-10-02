@@ -128,6 +128,14 @@ export function priceIdAddonEntidadAdicional(): string | null {
   return process.env.STRIPE_PRICE_ADDON_ENTIDAD || null;
 }
 
+// Addon "Pagos" — 2 oct 2026, migración 0134, pedido de Joel: sacar Pagos de
+// lo incluido en Pro y venderlo como add-on aparte ($24.99/mes). Mismo
+// patrón plano (no por seat) que priceIdAddonTecnicos() — un SEGUNDO
+// subscription item sobre la suscripción Pro, se activa/desactiva entero.
+export function priceIdAddonPagos(): string | null {
+  return process.env.STRIPE_PRICE_ADDON_PAGOS || null;
+}
+
 export function esCicloValido(valor: unknown): valor is Ciclo {
   return valor === "mensual" || valor === "anual";
 }

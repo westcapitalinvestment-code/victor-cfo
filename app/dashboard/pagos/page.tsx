@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import ProPaywall from "../pro-paywall";
 import PagosPortal from "./pagos-portal";
+import AddonPagosGate from "./addon-pagos-gate";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 
 // Portal de Pagos a contratistas (2 sept 2026) — el reverso de Facturación:
@@ -20,9 +21,14 @@ export default async function PagosPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase.from("users").select("plan").eq("id", user.id).maybeSingle();
+  const { data: profile } = await supabase.from("users").select("plan, addon_pagos_status").eq("id", user.id).maybeSingle();
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   if (!esPro) return <ProPaywall />;
+  // Addon Pagos (2 oct 2026, migración 0134) — sacado de lo incluido en Pro,
+  // ahora se activa aparte por $24.99/mes. Bloquea el módulo entero (no solo
+  // "crear nuevo" como Técnicos) porque antes vivía incluido en Pro y ahora
+  // es un módulo completo separado.
+  if (profile?.addon_pagos_status !== "activo") return <AddonPagosGate puedeActivar volverHref="/dashboard" />;
 
   const { data: entities } = await supabase
     .from("business_entities")

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import Stripe from "stripe";
-import { getStripe, esPlanValido, priceIdAddonTecnicos, todosLosPriceIdsDePlanes } from "@/lib/stripe";
+import { getStripe, esPlanValido, priceIdAddonTecnicos, priceIdAddonPagos, todosLosPriceIdsDePlanes } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
 import { sendReferralCreditEmail, sendReferralCreditoPendienteEmail, sendWelcomeEmail, sendCancellationWinbackEmail, sendPaymentFailedEmail } from "@/lib/email";
@@ -364,6 +364,17 @@ export async function POST(req: NextRequest) {
           datosActualizar.addon_tecnicos_item_id = itemAddon ? itemAddon.id : null;
         }
 
+        // Addon Pagos (2 oct 2026, migración 0134): mismo patrón plano que
+        // Equipo/Técnicos arriba — reconciliamos con lo que REALMENTE tiene
+        // la suscripción en Stripe en cada evento, no solo con lo que hizo
+        // /api/stripe/addon-pagos/activar.
+        const addonPagosPriceId = priceIdAddonPagos();
+        if (addonPagosPriceId) {
+          const itemAddonPagos = subscription.items.data.find((it) => it.price.id === addonPagosPriceId);
+          datosActualizar.addon_pagos_status = itemAddonPagos ? "activo" : "inactivo";
+          datosActualizar.addon_pagos_item_id = itemAddonPagos ? itemAddonPagos.id : null;
+        }
+
         await supabase.from("users").update(datosActualizar).eq("id", userId);
         break;
       }
@@ -436,6 +447,9 @@ export async function POST(req: NextRequest) {
             // con ella — no queda un item huérfano cobrando por su cuenta.
             addon_tecnicos_status: "inactivo",
             addon_tecnicos_item_id: null,
+            // Mismo razonamiento para Pagos (2 oct 2026, migración 0134).
+            addon_pagos_status: "inactivo",
+            addon_pagos_item_id: null,
           })
           .eq("id", userId);
 
