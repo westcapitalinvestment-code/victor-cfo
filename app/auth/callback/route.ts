@@ -94,7 +94,25 @@ export async function GET(req: NextRequest) {
   // ahí el botón "Continuar al pago" crea el Checkout Session (con el
   // trial de 7 días, ver checkout/route.ts) a un solo tap más. Si no venía
   // plan (ej. login normal de un usuario ya pagando), sigue a `next`.
-  const destino = plan ? `/registro/completar-pago?plan=${plan}&ciclo=${ciclo}` : next;
+  let destino = plan ? `/registro/completar-pago?plan=${plan}&ciclo=${ciclo}` : next;
+
+  // Fix (2 oct 2026, hallazgo de Joel: entró con Google como CPA invitado y
+  // le salió su propio /dashboard) — /login manda next=/dashboard explícito
+  // para un login normal, pero este camino de OAuth nunca chequeaba
+  // account_members como sí hace handleLogin() en app/login/page.tsx con el
+  // login por contraseña. Resultado: un CPA/Admin-Secretaria invitado que
+  // entra con "Continuar con Google" siempre caía en /dashboard (su propia
+  // cuenta, si tiene una) en vez de /cpa o /admin. Mismo chequeo, mismo
+  // orden de prioridad (Admin antes que CPA), solo quando es un login
+  // normal (no signup/plan/gratis) para no interferir con el flujo de pago.
+  if (!plan && !gratis && next === "/dashboard" && sesionData.user?.email) {
+    const correo = sesionData.user.email;
+    const [{ data: membresiaAdmin }, { data: membresiaCpa }] = await Promise.all([
+      supabase.from("account_members").select("id").eq("member_email", correo).eq("role", "admin").eq("active", true).limit(1).maybeSingle(),
+      supabase.from("account_members").select("id").eq("member_email", correo).eq("role", "cpa").eq("active", true).limit(1).maybeSingle(),
+    ]);
+    destino = membresiaAdmin ? "/admin" : membresiaCpa ? "/cpa" : destino;
+  }
 
   return NextResponse.redirect(`${origin}${destino}`);
 }

@@ -31,8 +31,21 @@ function LoginForm() {
   // la web: si alguien llega a /login ya con sesión, lo manda directo).
   useEffect(() => {
     if (cerradaPorInactividad) return; // no interrumpir el mensaje de "te sacamos por inactividad"
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) router.replace("/dashboard");
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return;
+      // Mismo fix de account_members que en handleLogin/callback (2 oct
+      // 2026) — si alguien ya tiene sesión y entra a /login (ej. abre la
+      // app nativa), este auto-redirect también tiene que respetar el rol
+      // de CPA/Admin-Secretaria en vez de mandarlo siempre a /dashboard.
+      if (user.email) {
+        const [{ data: membresiaAdmin }, { data: membresiaCpa }] = await Promise.all([
+          supabase.from("account_members").select("id").eq("member_email", user.email).eq("role", "admin").eq("active", true).limit(1).maybeSingle(),
+          supabase.from("account_members").select("id").eq("member_email", user.email).eq("role", "cpa").eq("active", true).limit(1).maybeSingle(),
+        ]);
+        router.replace(membresiaAdmin ? "/admin" : membresiaCpa ? "/cpa" : "/dashboard");
+        return;
+      }
+      router.replace("/dashboard");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
