@@ -17,6 +17,7 @@
   --card:    #F7F9FB;
   --teal:    #0D9E75;
   --teal-mid:#0B8A61;
+  --teal-dark:#076B4A;
   --teal-dim:#0D9E7514;
   --white:   #0B1220;
   --muted:   #5B6B7C;
@@ -165,7 +166,7 @@
 .section { padding: 4.5rem 6%; max-width: 1240px; margin: 0 auto; scroll-margin-top: 120px; }
 .sectionLabel {
   font-family: 'Courier New', monospace;
-  font-size: 0.7rem; color: var(--teal);
+  font-size: 0.7rem; color: var(--teal-dark); font-weight: 600;
   letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.6rem;
 }
 .sectionTitle {
@@ -181,7 +182,7 @@
   border-radius: 10px; padding: 1.5rem; transition: border-color 0.2s;
 }
 .stepCard:hover { border-color: var(--teal); }
-.stepNum { font-family:'Courier New',monospace; font-size:0.65rem; color:var(--teal); margin-bottom:0.9rem; }
+.stepNum { font-family:'Courier New',monospace; font-size:0.65rem; color:var(--teal-dark); font-weight:600; margin-bottom:0.9rem; }
 .stepIcon { font-size: 1.3rem; margin-bottom: 0.6rem; }
 .stepTitle { font-size: 1rem; font-weight: 600; margin-bottom: 0.4rem; }
 .stepDesc { font-size: 0.9rem; color: var(--muted); line-height: 1.65; }
@@ -247,7 +248,7 @@
   font-size: 0.65rem; font-weight: 700; letter-spacing: 0.07em;
   padding: 0.2rem 0.75rem; border-radius: 100px; white-space: nowrap;
 }
-.priceTier { font-family:'Courier New',monospace; font-size:0.65rem; color:var(--teal); letter-spacing:0.08em; margin-bottom:0.4rem; }
+.priceTier { font-family:'Courier New',monospace; font-size:0.65rem; color:var(--teal-dark); font-weight:600; letter-spacing:0.08em; margin-bottom:0.4rem; }
 .priceName { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.2rem; }
 .priceDesc { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.25rem; line-height: 1.5; }
 .priceAmount { font-size: 2.4rem; font-weight: 700; line-height: 1; }
