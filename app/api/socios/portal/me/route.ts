@@ -31,9 +31,12 @@ export async function GET(req: NextRequest) {
       .eq("socio_id", socioId),
     admin
       .from("socios_comisiones")
+      // "unica" = modelo nuevo de pago único (migración 0135, 2 oct 2026);
+      // "setenta"/"treinta" = modelo viejo 70/30 (0107), sigue vivo solo
+      // para clientes que ya estaban a mitad de camino antes del cambio.
       .select("referred_id, tipo_comision, comision_centavos, estado, created_at")
       .eq("socio_id", socioId)
-      .in("tipo_comision", ["setenta", "treinta"]),
+      .in("tipo_comision", ["setenta", "treinta", "unica"]),
   ]);
 
   const estadoPorCliente = new Map((estadosVendedor ?? []).map((e) => [e.referred_id, e]));

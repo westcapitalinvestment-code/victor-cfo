@@ -2,14 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 
-// Libera (o pierde) el 30% de un cliente ANUAL de vendedor (modelo 70/30,
-// migración 0107, 29 sept 2026) — el caso mensual lo resuelve el webhook
-// mismo (3er invoice.paid real), pero un cliente anual solo factura UNA
-// vez al año, así que no hay un "3er pago" que dispare nada. Joel decidió
-// que el hito equivalente para anual es: pasaron 3 meses calendario desde
-// el primer pago real Y la suscripción sigue activa en ese momento — este
-// cron corre diario y es quien lo verifica, porque nada más lo va a
-// disparar solo.
+// Libera (o pierde) el 30% de un cliente ANUAL de vendedor bajo el modelo
+// VIEJO 70/30 (migración 0107, 29 sept 2026) — el caso mensual lo resuelve
+// el webhook mismo (3er invoice.paid real), pero un cliente anual solo
+// factura UNA vez al año, así que no hay un "3er pago" que dispare nada.
+// Joel decidió que el hito equivalente para anual es: pasaron 3 meses
+// calendario desde el primer pago real Y la suscripción sigue activa en ese
+// momento — este cron corre diario y es quien lo verifica.
+//
+// Desde la migración 0135 (2 oct 2026) el modelo 70/30 SOLO sigue vivo para
+// clientes que ya estaban a mitad de camino antes del cambio — todo cliente
+// NUEVO usa el modelo de pago único (100% mensual / 20% anual, sin nada
+// pendiente) y nace con treinta_estado='liberada' desde el primer pago, así
+// que el filtro treinta_estado='pendiente' de abajo los excluye
+// automáticamente: este cron sigue existiendo pero solo para terminar de
+// resolver los clientes viejos, nunca toca uno nuevo. Cuando ya no quede
+// ningún candidato viejo, este cron puede borrarse.
 //
 // Mismo patrón que los demás crons: header Authorization con CRON_SECRET,
 // cliente admin porque recorre TODOS los vendedores sin sesión.

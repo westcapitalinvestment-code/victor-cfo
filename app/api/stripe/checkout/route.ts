@@ -33,25 +33,41 @@ export async function POST(req: NextRequest) {
     .eq("id", user.id)
     .maybeSingle();
 
+  // Si lo trajo un socio, hay que saber de qué TIPO es antes de decidir el
+  // trial — ver el bloque de abajo (2 oct 2026, migración 0135). Se lee con
+  // el cliente admin porque socios no tiene políticas de RLS (a propósito,
+  // mismo patrón que referral_rewards).
+  const supabaseAdmin = createAdminClient();
+  let socioTipo: string | null = null;
+  if (perfil?.referido_por_socio_id) {
+    const { data: socio } = await supabaseAdmin
+      .from("socios")
+      .select("tipo")
+      .eq("id", perfil.referido_por_socio_id)
+      .maybeSingle();
+    socioTipo = socio?.tipo ?? null;
+  }
+
   // Referido (30 agosto 2026, ajustado 4 sept 2026 — pedido de Joel: "que
   // los 2 sean iguales"; extendido 5 sept 2026 al Programa de Socios —
   // pedido de Joel: "que reciba su mes gratis... para que vea que es
   // real"). Si a este usuario lo trajo el link de OTRO usuario
-  // (referred_by, migración 0031) O el código de un socio aprobado
-  // (referido_por_socio_id, migración 0070), paga el precio NORMAL de Core
-  // o Pro, pero con 30 días de trial — mismo mecanismo para los dos
-  // planes y los dos programas, sin Price ID aparte ni env vars nuevas.
-  // Simétrico a propósito: un CPA/influencer que trae un cliente real le da
-  // el mismo empujón que un usuario refiriendo a otro — y de paso, si el
-  // socio se refiere a SÍ MISMO como su primer cliente, siente el programa
-  // completo (mes gratis + su propia comisión cuando empiece a pagar de
-  // verdad) antes de salir a referir gente de verdad. El socio sigue
-  // ganando su $7/$25 normal recién en la PRIMERA factura real (Stripe no
-  // manda invoice.paid durante el trial), así que sigue siendo
-  // autofinanciado igual que antes — nada cambia en esa garantía. Nunca se
-  // confía en nada que mande el cliente para esto — los dos campos se leen
-  // de la base de datos, no del body de este POST.
-  const esReferido = !!perfil?.referred_by || !!perfil?.referido_por_socio_id;
+  // (referred_by, migración 0031) O el código de un Embajador aprobado
+  // (referido_por_socio_id con tipo cpa/influencer/otro, migración 0070),
+  // paga el precio NORMAL de Core o Pro, pero con 30 días de trial — mismo
+  // mecanismo para los dos planes y los dos programas, sin Price ID aparte
+  // ni env vars nuevas.
+  //
+  // EXCEPCIÓN (2 oct 2026, migración 0135, pedido explícito de Joel: "no
+  // quiero ya mes gratis... que entren al link del vendedor y compren como
+  // cualquiera con 7 días de prueba"): un referido de un socio tipo
+  // 'vendedor' específicamente YA NO recibe el mes gratis — paga como
+  // cualquier cliente nuevo, con el trial estándar de 7 días de abajo. El
+  // Embajador (cpa/influencer/otro) y el referido peer-to-peer SIGUEN
+  // recibiendo los 30 días exactamente igual que siempre; esto solo afecta
+  // al tipo 'vendedor'.
+  const esReferidoPeerOEmbajador =
+    !!perfil?.referred_by || (!!perfil?.referido_por_socio_id && socioTipo !== "vendedor");
   const priceId = priceIdPara(plan, ciclo);
   if (!priceId) {
     return NextResponse.json(
@@ -65,7 +81,7 @@ export async function POST(req: NextRequest) {
   // así que el usuario referido queda con acceso completo desde que termina
   // el checkout, sin pagar nada el primer mes. Pro+ queda fuera a propósito
   // (ya no es autoservicio).
-  const esReferidoConTrial = esReferido && (plan === "core" || plan === "pro");
+  const esReferidoConTrial = esReferidoPeerOEmbajador && (plan === "core" || plan === "pro");
 
   // Trial de 7 días para CUALQUIER primera suscripción (10 sept 2026,
   // pedido de Joel tras comparar con la competencia — Luna Money muestra
@@ -74,7 +90,8 @@ export async function POST(req: NextRequest) {
   // (sin stripe_customer_id todavía), NO por si el usuario ya pagó antes —
   // así un usuario Core existente que sube a Pro desde el paywall NO recibe
   // otro trial (ya es cliente, cobrarle de una vez es lo correcto). Un
-  // referido sigue recibiendo el trial más largo (30 días) en vez de este.
+  // referido de vendedor (ver arriba) cae aquí igual que cualquier cliente
+  // nuevo — 7 días, nunca 30.
   const esPrimeraSuscripcion = !perfil?.stripe_customer_id;
   let trialDias = esReferidoConTrial ? 30 : esPrimeraSuscripcion ? 7 : 0;
 
@@ -88,7 +105,7 @@ export async function POST(req: NextRequest) {
   // gente en su época gratis se lleva los dos beneficios. Usa el cliente
   // admin porque referral_rewards no tiene políticas de RLS (a propósito,
   // ver migración 0062) — mismo patrón que app/dashboard/config/page.tsx.
-  const supabaseAdmin = createAdminClient();
+  // (supabaseAdmin ya se creó arriba para leer el tipo de socio.)
   const { data: creditosPendientes } = await supabaseAdmin
     .from("referral_rewards")
     .select("id, credit_cents")

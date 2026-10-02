@@ -36,20 +36,44 @@ export type ComisionFila = {
   createdAt: string | null;
 };
 
-// Estado por cliente de un vendedor (modelo 70/30, migración 0107, 29 sept
-// 2026) — el founder lo usa para el desglose por vendedor: cuántos
-// clientes, en qué estado, y cuánto ingreso mensual bruto le generan a
-// WCV (setentaCentavos+treintaCentavos = el monto base mensual equivalente
-// del plan de ese cliente) para comparar contra la comisión pagada.
+// Estado por cliente de un vendedor — el founder lo usa para el desglose
+// por vendedor: cuántos clientes, en qué estado, y cuánto ingreso mensual
+// bruto le generan a WCV, para comparar contra la comisión pagada.
+//
+// Dos modelos conviven aquí (migración 0135, 2 oct 2026):
+//   - 'setenta_treinta' (modelo viejo, 0107): setentaCentavos+treintaCentavos
+//     = el monto base mensual equivalente del plan de ese cliente — ahí SÍ
+//     es también la comisión total que se le paga al vendedor.
+//   - 'unico' (modelo nuevo): setentaCentavos = la comisión REAL pagada
+//     (100% de un mes si mensual, 20% del año si anual) — ya NO equivale al
+//     ingreso real de WCV en el caso anual, así que para el ingreso bruto
+//     hay que usar montoBaseCentavos (el monto completo que pagó el
+//     cliente) en vez de la comisión.
 export type VendedorClienteFila = {
   id: string;
   socioId: string;
   ciclo: "mensual" | "anual";
+  modelo: "setenta_treinta" | "unico";
   primerPagoAt: string | null;
   setentaCentavos: number;
   treintaCentavos: number;
   treintaEstado: "pendiente" | "liberada" | "perdida";
+  montoBaseCentavos: number | null;
 };
+
+// Ingreso mensual bruto REAL que un cliente de vendedor le genera a WCV —
+// no la comisión que se le paga al vendedor por él. Ver el comentario del
+// tipo VendedorClienteFila arriba para por qué los dos modelos se calculan
+// distinto.
+function ingresoMensualDeCliente(v: VendedorClienteFila): number {
+  if (v.modelo === "unico") {
+    const montoReal = v.montoBaseCentavos ?? v.setentaCentavos;
+    return v.ciclo === "anual" ? Math.round(montoReal / 12) : montoReal;
+  }
+  // Modelo viejo: setenta+treinta siempre suma el monto base mensual
+  // equivalente completo, sea mensual o anual.
+  return v.setentaCentavos + v.treintaCentavos;
+}
 
 const TIPO_LABEL: Record<string, string> = {
   cpa: "CPA/Contador",
@@ -331,7 +355,7 @@ export default function SociosPanel({
                         const clientesDeEsteVendedor = vendedorClientesPorSocio.get(s.id) ?? [];
                         if (clientesDeEsteVendedor.length === 0) return null;
                         const ingresoMensualBruto = clientesDeEsteVendedor.reduce(
-                          (sum, v) => sum + v.setentaCentavos + v.treintaCentavos,
+                          (sum, v) => sum + ingresoMensualDeCliente(v),
                           0
                         );
                         const enGeneracion = clientesDeEsteVendedor.filter((v) => v.treintaEstado === "pendiente").length;

@@ -814,19 +814,27 @@ async function procesarCreditoReferido(
 //     entró a Pro/Pro+ (aprox. mitad de cada plan, decisión de Joel, 5 sept
 //     2026 — no se calcula del precio real de Stripe a propósito, para que
 //     el monto no se mueva solo si cambian los precios de los planes).
-//   - Vendedor (modelo 70/30, migración 0107, 29 sept 2026 — reemplaza el
-//     $50+10%x3 de la 0106, que nunca llegó a pagar comisiones reales):
-//     70% del precio MENSUAL EQUIVALENTE del plan Pro del cliente al
-//     primer pago real (monto FIJO desde ese momento), + el 30% restante
-//     de ese mismo monto base SOLO si el cliente llega vivo a su 3er mes
-//     pagando (3er invoice.paid real si es mensual; a los 3 meses
-//     calendario con suscripción activa si es anual — eso lo resuelve un
-//     cron nuevo, no esta función). Ver procesarComisionVendedor abajo y
-//     migración 0107 para el detalle completo. Solo aplica a Pro/Pro+ — un
-//     vendedor únicamente refiere negocios a Pro.
+//   - Vendedor (migración 0135, 2 oct 2026 — reemplaza el 70/30 de la 0107,
+//     que a su vez reemplazó el $50+10%x3 de la 0106; ninguno de esos dos
+//     modelos viejos llegó a pagar comisiones bajo la fórmula actual):
+//     pago ÚNICO al primer pago real del cliente — 100% de un mes si pagó
+//     mensual, 20% del año si pagó anual. Nada queda pendiente después
+//     (sin split, sin hito de 3 pagos, sin cron de 3 meses — ese cron
+//     sigue vivo solo para resolver clientes que ya estaban a mitad del
+//     70/30 viejo antes de este cambio). Ver procesarComisionVendedor
+//     abajo y migración 0135 para el detalle completo. Solo aplica a
+//     Pro/Business — un vendedor únicamente refiere negocios a esos dos
+//     planes, nunca a Core.
 const COMISION_SOCIO_CORE_CENTAVOS = 700; // $7.00
 const COMISION_SOCIO_PRO_CENTAVOS = 2_500; // $25.00
-const PORCENTAJE_SETENTA_VENDEDOR = 0.7;
+// Modelo de vendedor VIGENTE desde el 2 oct 2026 (migración 0135, reemplaza
+// el 70/30 de la 0107 para clientes NUEVOS — ver procesarComisionVendedor):
+// pago único al primer cobro real, 100% si el cliente pagó mensual, 20% si
+// pagó anual. Los clientes que ya estaban a mitad del viejo modelo 70% al
+// primer pago + 30% al 3er pago/mes 3 (filas con modelo='setenta_treinta')
+// siguen resolviéndose con los montos que ya quedaron fijos en su fila
+// desde que se crearon — nunca se recalculan con la fórmula nueva.
+const PORCENTAJE_ANUAL_VENDEDOR = 0.2;
 
 async function procesarComisionSocio(
   referido: {
@@ -882,10 +890,16 @@ async function procesarComisionSocio(
   }
 }
 
-// Modelo 70/30 (migración 0107, 29 sept 2026). Solo Pro/Pro+ — un vendedor
-// únicamente refiere negocios al plan Pro; si por lo que sea el referido
+// Comisión de vendedor — solo Pro/Business; si por lo que sea el referido
 // terminó en Core no hay nada que pagar (guardarraíl, no debería pasar en
 // la práctica).
+//
+// Dos mecánicas conviven en esta función según cuándo nació el cliente:
+//   - Clientes NUEVOS (sin fila en socios_vendedor_clientes todavía): modelo
+//     ÚNICO de la migración 0135 — ver el bloque "Primer pago real" abajo.
+//   - Clientes VIEJOS (ya tenían fila con modelo='setenta_treinta' antes de
+//     la 0135): sigue corriendo el 70/30 original de la 0107 tal cual — el
+//     bloque "Pagos siguientes (modelo viejo)" al final de la función.
 async function procesarComisionVendedor(
   admin: ReturnType<typeof createAdminClient>,
   socioId: string,
@@ -896,11 +910,12 @@ async function procesarComisionVendedor(
 
   const { data: estadoCliente } = await admin
     .from("socios_vendedor_clientes")
-    .select("id, ciclo, treinta_centavos, pagos_reales_contados, treinta_estado")
+    .select("id, ciclo, modelo, treinta_centavos, pagos_reales_contados, treinta_estado")
     .eq("referred_id", referido.id)
     .maybeSingle();
 
-  // --- Primer pago real: crea la fila + paga el 70% ---
+  // --- Primer pago real: crea la fila + paga la comisión única (modelo
+  // 0135, 2 oct 2026: 100% si mensual, 20% si anual — reemplaza el 70/30) ---
   if (!estadoCliente) {
     if (!referido.stripe_subscription_id) return;
 
@@ -921,26 +936,32 @@ async function procesarComisionVendedor(
     }
     if (!montoBase || !intervalo) return;
 
-    const mensualEquivalenteCentavos = intervalo === "year" ? Math.round(montoBase / 12) : montoBase;
-    const setentaCentavos = Math.round(mensualEquivalenteCentavos * PORCENTAJE_SETENTA_VENDEDOR);
-    // Resta, no round(30%) — así setenta+treinta siempre suma EXACTO el
-    // monto base mensual equivalente, sin perder ni ganar un centavo por
-    // redondeo doble.
-    const treintaCentavos = mensualEquivalenteCentavos - setentaCentavos;
+    // Mensual: 100% de un mes. Anual: 20% del pago anual completo (no se
+    // divide por 12 — es 20% del monto que el cliente pagó de una vez).
+    const comisionCentavos =
+      intervalo === "year" ? Math.round(montoBase * PORCENTAJE_ANUAL_VENDEDOR) : montoBase;
 
     const { error: errorFila } = await admin.from("socios_vendedor_clientes").insert({
       socio_id: socioId,
       referred_id: referido.id,
       ciclo: intervalo === "year" ? "anual" : "mensual",
-      setenta_centavos: setentaCentavos,
-      treinta_centavos: treintaCentavos,
+      modelo: "unico",
+      monto_base_centavos: montoBase,
+      // Reutiliza las columnas del modelo viejo: setenta_centavos pasa a
+      // significar "monto pagado" bajo 'unico', treinta_centavos queda en 0
+      // y treinta_estado se marca 'liberada' de una vez porque no queda
+      // nada pendiente — el cliente queda resuelto en un solo pago.
+      setenta_centavos: comisionCentavos,
+      treinta_centavos: 0,
       pagos_reales_contados: 1,
+      treinta_estado: "liberada",
+      treinta_liberada_at: new Date().toISOString(),
     });
     if (errorFila) {
       // UNIQUE en referred_id — si esto falla porque Stripe reintentó el
       // mismo evento y otra ejecución ya insertó la fila primero, no
-      // relanzamos: simplemente no se paga el 70% dos veces.
-      console.error("No se pudo registrar el cliente de vendedor (70/30):", errorFila);
+      // relanzamos: simplemente no se paga la comisión dos veces.
+      console.error("No se pudo registrar el cliente de vendedor:", errorFila);
       return;
     }
 
@@ -948,16 +969,20 @@ async function procesarComisionVendedor(
       socio_id: socioId,
       referred_id: referido.id,
       plan: referido.plan ?? "pro",
-      comision_centavos: setentaCentavos,
-      tipo_comision: "setenta",
+      comision_centavos: comisionCentavos,
+      tipo_comision: "unica",
       ciclo_numero: 0,
     });
-    if (errorComision) console.error("No se pudo registrar el 70% del vendedor:", errorComision);
+    if (errorComision) console.error("No se pudo registrar la comisión única del vendedor:", errorComision);
     return;
   }
 
-  // --- Pagos siguientes: solo importa para el caso mensual (el anual lo
-  // resuelve el cron de 3 meses, no este webhook) ---
+  // --- Pagos siguientes (SOLO modelo viejo, 0107) — un cliente 'unico' ya
+  // quedó resuelto arriba (treinta_estado='liberada' desde el primer pago),
+  // así que esta rama nunca se ejecuta para él. Solo importa para el caso
+  // mensual del modelo viejo (el anual lo resuelve el cron de 3 meses, no
+  // este webhook). ---
+  if (estadoCliente.modelo !== "setenta_treinta") return;
   if (estadoCliente.ciclo !== "mensual" || estadoCliente.treinta_estado !== "pendiente") return;
 
   const pagosContados = (estadoCliente.pagos_reales_contados ?? 1) + 1;

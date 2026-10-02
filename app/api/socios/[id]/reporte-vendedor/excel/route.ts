@@ -5,13 +5,19 @@ import { esFounder } from "@/lib/founder";
 import { generarReporteExcel, ColumnaReporte, FilaTotal } from "@/lib/reporte-excel";
 import { slugificar } from "@/lib/format";
 
-// Desglose por vendedor descargable (modelo 70/30, migración 0107, 29 sept
-// 2026) — solo el founder (ver socios-panel.tsx, botón "Descargar Excel"
-// dentro del desglose de un socio tipo='vendedor'). A diferencia del
-// portal del propio vendedor (/socios/portal), este SÍ incluye el ingreso
-// mensual bruto que cada cliente le genera a WCV — es el reporte interno
-// de Joel para comparar comisión pagada vs. ingreso, nunca se expone al
-// vendedor.
+// Desglose por vendedor descargable — solo el founder (ver socios-panel.tsx,
+// botón "Descargar Excel" dentro del desglose de un socio tipo='vendedor').
+// A diferencia del portal del propio vendedor (/socios/portal), este SÍ
+// incluye el ingreso mensual bruto que cada cliente le genera a WCV — es el
+// reporte interno de Joel para comparar comisión pagada vs. ingreso, nunca
+// se expone al vendedor.
+//
+// Mezcla filas del modelo viejo 70/30 (migración 0107, columna "comisión"
+// = setenta+treinta) y del modelo nuevo de pago único (migración 0135, 2
+// oct 2026, columna "comisión" = setenta_centavos solo, treinta siempre 0)
+// — la columna "Comisión pagada" sirve para los dos; "Ingreso mensual WCV"
+// usa monto_base_centavos para los 'unico' anuales porque ahí la comisión
+// (20%) ya no es el ingreso real.
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient();
   const {
@@ -29,7 +35,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data: clientesEstado } = await admin
     .from("socios_vendedor_clientes")
-    .select("referred_id, ciclo, primer_pago_at, setenta_centavos, treinta_centavos, treinta_estado")
+    .select("referred_id, ciclo, modelo, primer_pago_at, setenta_centavos, treinta_centavos, treinta_estado, monto_base_centavos")
     .eq("socio_id", params.id);
 
   const referredIds = (clientesEstado ?? []).map((c) => c.referred_id);
@@ -44,29 +50,41 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     perdida: "Cliente canceló — perdido",
   };
 
-  const filas = (clientesEstado ?? []).map((c) => ({
-    cliente: nombrePorId.get(c.referred_id) ?? "Cliente",
-    ciclo: c.ciclo,
-    primerPago: c.primer_pago_at ? new Date(c.primer_pago_at).toLocaleDateString("es-PR") : "—",
-    estado: ESTADO_LABEL[c.treinta_estado] ?? c.treinta_estado,
-    setenta: Number(c.setenta_centavos) / 100,
-    treinta: Number(c.treinta_centavos) / 100,
-    ingresoWCV: (Number(c.setenta_centavos) + Number(c.treinta_centavos)) / 100,
-  }));
+  const filas = (clientesEstado ?? []).map((c) => {
+    const modelo = c.modelo ?? "setenta_treinta";
+    const comision = (Number(c.setenta_centavos) + Number(c.treinta_centavos)) / 100;
+    const montoReal = c.monto_base_centavos != null ? Number(c.monto_base_centavos) / 100 : null;
+    // 'unico': ingreso real de WCV es el monto completo que pagó el
+    // cliente (mensual equivalente si es anual) — NO la comisión, que bajo
+    // este modelo es solo 20% en el caso anual. 'setenta_treinta': la
+    // comisión total SIEMPRE fue igual al ingreso mensual equivalente.
+    const ingresoWCV =
+      modelo === "unico"
+        ? c.ciclo === "anual"
+          ? Math.round(((montoReal ?? comision) / 12) * 100) / 100
+          : montoReal ?? comision
+        : comision;
+    return {
+      cliente: nombrePorId.get(c.referred_id) ?? "Cliente",
+      ciclo: c.ciclo,
+      primerPago: c.primer_pago_at ? new Date(c.primer_pago_at).toLocaleDateString("es-PR") : "—",
+      estado: ESTADO_LABEL[c.treinta_estado] ?? c.treinta_estado,
+      comision,
+      ingresoWCV,
+    };
+  });
 
   const columnas: ColumnaReporte[] = [
     { header: "Cliente", key: "cliente", width: 28 },
     { header: "Ciclo", key: "ciclo", width: 12 },
     { header: "1er pago real", key: "primerPago", width: 14 },
     { header: "Estado", key: "estado", width: 24 },
-    { header: "70% (setenta)", key: "setenta", width: 14, moneda: true },
-    { header: "30% (treinta)", key: "treinta", width: 14, moneda: true },
+    { header: "Comisión pagada", key: "comision", width: 16, moneda: true },
     { header: "Ingreso mensual WCV", key: "ingresoWCV", width: 18, moneda: true },
   ];
 
   const totales: FilaTotal[] = [
-    { key: "setenta", valor: filas.reduce((s, f) => s + f.setenta, 0) },
-    { key: "treinta", valor: filas.reduce((s, f) => s + f.treinta, 0) },
+    { key: "comision", valor: filas.reduce((s, f) => s + f.comision, 0) },
     { key: "ingresoWCV", valor: filas.reduce((s, f) => s + f.ingresoWCV, 0) },
   ];
 
