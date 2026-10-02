@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { formatMoney } from "@/lib/format";
 import { saludoPorHora, fechaHoyPR } from "@/lib/hora-pr";
+import CpaClientList, { type ClienteCpa } from "./cpa-client-list";
 
 // Portal CPA — lista de clientes (pantalla "Clientes" del mockup
 // "VICTOR — Portal CPA.html"). RLS (business_entities_cpa_read,
@@ -64,23 +64,6 @@ export default async function CpaPortalPage() {
     : { data: [] as never[] };
 
   const ivuPorEntidad = new Map((ivuDelMes ?? []).map((r) => [r.entity_id, r]));
-
-  const totalPendiente = (ivuDelMes ?? [])
-    .filter((r) => r.deposit_status !== "depositado")
-    .reduce((acc, r) => acc + Number(r.ivu_net_due ?? 0), 0);
-
-  // Próximo vencimiento de contribución estimada trimestral, across todos
-  // los clientes — el resumen de arriba del mockup.
-  const { data: proximoEstimado } = entityIds.length
-    ? await supabase
-        .from("estimated_tax_payments")
-        .select("entity_id, amount_due, due_date")
-        .in("entity_id", entityIds)
-        .eq("status", "pendiente")
-        .order("due_date", { ascending: true })
-        .limit(1)
-        .maybeSingle()
-    : { data: null };
 
   const nombreEntidad = (id: string) => entidades?.find((e) => e.id === id)?.name ?? "";
 
@@ -216,107 +199,28 @@ export default async function CpaPortalPage() {
         {saludoPorHora(hoy)}, {primerNombre}
       </p>
 
-      {entidades && entidades.length > 0 && (
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="vc-card">
-            <p className="text-xs uppercase tracking-wide text-muted">IVU pendiente de depositar</p>
-            <p className="mt-1 text-2xl font-semibold text-amb">{formatMoney(totalPendiente)}</p>
-            <p className="mt-1 text-[11px] text-muted">Suma de todos tus clientes, periodo actual</p>
-          </div>
-          <div className="vc-card">
-            <p className="text-xs uppercase tracking-wide text-muted">Contribución estimada — próximo vencimiento</p>
-            {proximoEstimado ? (
-              <>
-                <p className="mt-1 text-2xl font-semibold">{formatMoney(Number(proximoEstimado.amount_due ?? 0))}</p>
-                <p className="mt-1 text-[11px] text-muted">
-                  {nombreEntidad(proximoEstimado.entity_id)} · vence {proximoEstimado.due_date}
-                </p>
-              </>
-            ) : (
-              <p className="mt-1 text-sm text-muted">Nada pendiente por ahora.</p>
-            )}
-          </div>
-        </div>
-      )}
+      {error && <p className="mb-3 text-xs text-red">No se pudieron cargar tus clientes: {error.message}</p>}
 
-      <div className="vc-card mb-4">
-        <div className="mb-3 flex items-center gap-2">
-          <i className="ti ti-bulb text-muted" />
-          <p className="text-xs uppercase tracking-wide text-muted">Alertas inteligentes</p>
-        </div>
-        {alertas.length === 0 ? (
-          <p className="text-sm text-muted">Todo se ve normal — sin IVU atrasado, facturas vencidas ni retenciones pendientes.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {alertas.map((a, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <i className={`ti ${a.icono} mt-0.5 flex-shrink-0 ${a.tono === "red" ? "text-red" : "text-amb"}`} />
-                <span>{a.texto}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="vc-card">
-        <p className="mb-3 text-xs uppercase tracking-wide text-muted">
-          Tus clientes {entidades ? `(${entidades.length})` : ""}
-        </p>
-
-        {error && <p className="text-xs text-red">No se pudieron cargar tus clientes: {error.message}</p>}
-
-        {!error && (!entidades || entidades.length === 0) && (
-          <p className="text-xs text-muted">
-            Todavía no tienes clientes conectados. En cuanto un dueño te invite y aceptes, aparecerán aquí.
-          </p>
-        )}
-
-        {entidades && entidades.length > 0 && (
-          <div className="flex flex-col divide-y divide-border">
-            {entidades.map((ent) => {
-              const ivu = ivuPorEntidad.get(ent.id);
-              const alertasDeEsta = alertas.filter((a) => a.texto.startsWith(nombreEntidad(ent.id) + ":"));
-              return (
-                <Link
-                  key={ent.id}
-                  href={`/cpa/${ent.id}`}
-                  className="flex items-center justify-between py-3 hover:opacity-80"
-                >
-                  <div>
-                    <p className="text-sm font-medium">{ent.name}</p>
-                    <p className="text-xs text-muted">
-                      {ent.entity_type} {ent.ein ? `· EIN ${ent.ein}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {alertasDeEsta.length > 0 && (
-                      <span className="rounded-full bg-red/10 px-2 py-1 text-[10px] font-medium text-red">
-                        {alertasDeEsta.length} alerta{alertasDeEsta.length === 1 ? "" : "s"}
-                      </span>
-                    )}
-                    {ivu ? (
-                      <span
-                        className={
-                          "rounded-full px-2 py-1 text-[10px] font-medium " +
-                          (ivu.deposit_status === "depositado"
-                            ? "bg-grn/10 text-grn"
-                            : ivu.deposit_status === "overdue"
-                              ? "bg-red/10 text-red"
-                              : "bg-amb/10 text-amb")
-                        }
-                      >
-                        IVU {formatMoney(Number(ivu.ivu_net_due ?? 0))}
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-muted/10 px-2 py-1 text-[10px] text-muted">Sin datos IVU</span>
-                    )}
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {/* Lista de clientes (2 oct 2026, pedido de Joel) — sin $ sumados de
+          todo el portafolio arriba: eso crea ansiedad innecesaria en un CPA
+          con muchos clientes. Primero ve nombres, con buscador y un tab
+          "Con alertas"; el detalle de cada cliente vive en /cpa/[entityId]. */}
+      <CpaClientList
+        clientes={(entidades ?? []).map((ent): ClienteCpa => {
+          const ivu = ivuPorEntidad.get(ent.id);
+          const alertCount = alertas.filter((a) => a.texto.startsWith(nombreEntidad(ent.id) + ":")).length;
+          return {
+            id: ent.id,
+            name: ent.name,
+            entityType: ent.entity_type,
+            ein: ent.ein,
+            alertCount,
+            ivu: ivu
+              ? { status: ivu.deposit_status, monto: Number(ivu.ivu_net_due ?? 0) }
+              : null,
+          };
+        })}
+      />
     </div>
   );
 }

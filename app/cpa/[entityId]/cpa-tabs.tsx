@@ -95,12 +95,18 @@ type Auditoria = {
   created_at: string;
 };
 
+// Orden de tabs (2 oct 2026, pedido de Joel: "algo organizado como Victor
+// ... me imagino que lo que le interesará es lo que tiene que entregar el 15
+// y el 20 de cada mes") — Facturación y Pagos van primero porque son el
+// trabajo del día a día del CPA (vencimientos 480.9A día 15, facturación
+// del cliente); Resultados/IVU/Recibos/Estimados/Auditoría quedan como
+// contexto adicional, no lo primero que se ve al entrar.
 const TABS = [
+  { id: "facturas", label: "Facturación", icon: "ti-file-invoice" },
+  { id: "retenciones", label: "Pagos", icon: "ti-file-percent" },
   { id: "resultados", label: "Resultados", icon: "ti-chart-bar" },
   { id: "ivu", label: "IVU", icon: "ti-receipt-tax" },
   { id: "recibos", label: "Recibos", icon: "ti-camera" },
-  { id: "retenciones", label: "Retenciones", icon: "ti-file-percent" },
-  { id: "facturas", label: "Facturas", icon: "ti-file-invoice" },
   { id: "estimados", label: "Estimados", icon: "ti-calendar-dollar" },
   { id: "auditoria", label: "Auditoría", icon: "ti-history" },
 ] as const;
@@ -128,6 +134,8 @@ export default function CpaTabs({
   validaciones480,
   totalRetencionesPendientes,
   metricasFacturas,
+  resumenFacturacion,
+  depositoMensual,
   clientesExentos,
   estimados,
   auditoria,
@@ -147,6 +155,17 @@ export default function CpaTabs({
   validaciones480: Validacion480[];
   totalRetencionesPendientes: number;
   metricasFacturas: MetricasFacturas;
+  resumenFacturacion: {
+    facturado: number;
+    cantidadFacturas: number;
+    cobrado: number;
+    pctCobrado: number;
+    pendiente: number;
+    cantidadPendiente: number;
+    vencido: number;
+    cantidadVencida: number;
+  };
+  depositoMensual: { anio: number; mes: number; totalDolares: number; venceISO: string; vencido: boolean };
   clientesExentos: ClienteExento[];
   estimados: Estimado[];
   auditoria: Auditoria[];
@@ -158,8 +177,12 @@ export default function CpaTabs({
   retenciones: Retencion[];
   entityId: string;
 }) {
-  const [tab, setTab] = useState<TabId>("resultados");
+  const [tab, setTab] = useState<TabId>("facturas");
   const hoyISO = new Date().toISOString().slice(0, 10);
+  const MESES_ES_LARGO = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+  ];
 
   return (
     <div>
@@ -482,6 +505,24 @@ export default function CpaTabs({
 
       {tab === "retenciones" && (
         <div className="flex flex-col gap-3">
+          {/* Depósito mensual 480.9A primero, igual que en el portal de
+              Pagos del dueño (2 oct 2026, pedido de Joel) — es lo que de
+              verdad urge al CPA cada mes, independiente de cualquier otro
+              filtro: cuánto hay que remesar a SURI y si ya venció. */}
+          {depositoMensual.totalDolares > 0 && (
+            <div className={`vc-card ${depositoMensual.vencido ? "border-red/40 bg-red/5" : "border-amb/30 bg-amb/5"}`}>
+              <p className="mb-1 text-xs uppercase tracking-wide text-muted">Depósito mensual — Modelo 480.9A</p>
+              <p className="text-sm">
+                Retenido en {MESES_ES_LARGO[depositoMensual.mes]} {depositoMensual.anio}:{" "}
+                <span className="font-medium">{formatMoney(depositoMensual.totalDolares)}</span>
+              </p>
+              <p className={`text-xs ${depositoMensual.vencido ? "text-red" : "text-muted"}`}>
+                {depositoMensual.vencido
+                  ? `⚠️ Venció el ${depositoMensual.venceISO} — hay que remesarlo a SURI cuanto antes.`
+                  : `Vence el ${depositoMensual.venceISO} (día 15 del mes siguiente).`}
+              </p>
+            </div>
+          )}
           <div className="vc-card">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -580,8 +621,48 @@ export default function CpaTabs({
 
       {tab === "facturas" && (
         <div className="flex flex-col gap-3">
+          {/* 4 cards estilo el portal de Facturación del dueño (2 oct 2026,
+              pedido de Joel: "que tenga un dashboard bonito como el de
+              Victor... con lo de las facturas") — Facturado/Cobrado/
+              Pendiente/Vencida del año que se esté mirando (mismo selector
+              de año que el tab Resultados). */}
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-wide text-muted">Facturación — {anioResultados}</p>
+            <div className="flex items-center gap-3 text-xs">
+              <a href={`?anio=${anioResultados - 1}`} className="text-muted hover:text-teal">
+                ← {anioResultados - 1}
+              </a>
+              <a href={`?anio=${anioResultados + 1}`} className="text-muted hover:text-teal">
+                {anioResultados + 1} →
+              </a>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="vc-card">
+              <p className="text-[11px] uppercase tracking-wide text-muted">Facturado</p>
+              <p className="mt-1 text-lg font-semibold">{formatMoney(resumenFacturacion.facturado)}</p>
+              <p className="mt-0.5 text-[11px] text-muted">{resumenFacturacion.cantidadFacturas} facturas</p>
+            </div>
+            <div className="vc-card">
+              <p className="text-[11px] uppercase tracking-wide text-muted">Cobrado</p>
+              <p className="mt-1 text-lg font-semibold text-grn">{formatMoney(resumenFacturacion.cobrado)}</p>
+              <p className="mt-0.5 text-[11px] text-muted">{resumenFacturacion.pctCobrado}%</p>
+            </div>
+            <div className="vc-card">
+              <p className="text-[11px] uppercase tracking-wide text-muted">Pendiente</p>
+              <p className="mt-1 text-lg font-semibold text-amb">{formatMoney(resumenFacturacion.pendiente)}</p>
+              <p className="mt-0.5 text-[11px] text-muted">{resumenFacturacion.cantidadPendiente} fact.</p>
+            </div>
+            <div className="vc-card">
+              <p className="text-[11px] uppercase tracking-wide text-muted">Vencida</p>
+              <p className={`mt-1 text-lg font-semibold ${resumenFacturacion.vencido > 0 ? "text-red" : ""}`}>
+                {formatMoney(resumenFacturacion.vencido)}
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted">{resumenFacturacion.cantidadVencida} fact.</p>
+            </div>
+          </div>
           <div className="vc-card">
-            <p className="mb-3 text-xs uppercase tracking-wide text-muted">Facturación del mes</p>
+            <p className="mb-3 text-xs uppercase tracking-wide text-muted">Facturación del mes en curso</p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div>
                 <p className="text-[11px] text-muted">Emitidas</p>

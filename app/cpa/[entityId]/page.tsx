@@ -203,9 +203,57 @@ export default async function CpaClientePage({
     total: facturasDelMes.reduce((acc, f) => acc + Number(f.total ?? 0), 0),
   };
 
+  // Resumen de Facturación del año (2 oct 2026, pedido de Joel: "que tenga un
+  // dashboard bonito como el de Victor... con lo de las facturas") — mismas
+  // 4 cifras que ve el dueño en su propio portal de Facturación (Facturado /
+  // Cobrado / Pendiente / Vencida), para el año que esté mirando en el tab
+  // Resultados (anioResultados), no solo el mes en curso.
+  const facturasAnio = (facturas ?? []).filter(
+    (f) => f.fecha_emision >= inicioAnioResultados && f.fecha_emision <= finAnioResultados
+  );
+  const facturasVencidasAnio = facturasAnio.filter((f) => f.estado !== "pagada" && f.fecha_vencimiento && f.fecha_vencimiento < hoyISO);
+  const montoFacturado = facturasAnio.reduce((acc, f) => acc + Number(f.total ?? 0), 0);
+  const montoCobrado = facturasAnio.filter((f) => f.estado === "pagada").reduce((acc, f) => acc + Number(f.total ?? 0), 0);
+  const resumenFacturacion = {
+    facturado: montoFacturado,
+    cantidadFacturas: facturasAnio.length,
+    cobrado: montoCobrado,
+    pctCobrado: montoFacturado > 0 ? Math.round((montoCobrado / montoFacturado) * 100) : 0,
+    pendiente: facturasAnio.filter((f) => f.estado !== "pagada").reduce((acc, f) => acc + Number(f.total ?? 0), 0),
+    cantidadPendiente: facturasAnio.filter((f) => f.estado !== "pagada").length,
+    vencido: facturasVencidasAnio.reduce((acc, f) => acc + Number(f.total ?? 0), 0),
+    cantidadVencida: facturasVencidasAnio.length,
+  };
+
   const totalRetencionesPendientes = (retenciones ?? [])
     .filter((r) => r.remittance_status === "pendiente")
     .reduce((acc, r) => acc + Number(r.retention_amount ?? 0), 0);
+
+  // Depósito mensual — Modelo 480.9A (2 oct 2026) — mismo cálculo que
+  // app/dashboard/pagos/pagos-portal.tsx (estadoDeposito480_9A): si hoy es
+  // día 1-15, el depósito pendiente es el del mes PASADO (vence hoy, día
+  // 15); si es día 16+, es el del mes en curso (todavía no vence). Esto es
+  // lo primero que un CPA quiere ver en el tab Pagos — es lo que hay que
+  // remesar a SURI ahora mismo.
+  const diaHoyDeposito = hoy.getDate();
+  const refFechaDeposito = new Date(hoy.getFullYear(), hoy.getMonth() - (diaHoyDeposito <= 15 ? 1 : 0), 1);
+  const anioDeposito = refFechaDeposito.getFullYear();
+  const mesDeposito = refFechaDeposito.getMonth(); // 0-11
+  const venceDeposito = new Date(anioDeposito, mesDeposito + 1, 15);
+  let totalDeposito = 0;
+  for (const r of retenciones ?? []) {
+    const fecha = r.period_end ?? r.period_start;
+    if (!fecha) continue;
+    const f = new Date(fecha);
+    if (f.getFullYear() === anioDeposito && f.getMonth() === mesDeposito) totalDeposito += Number(r.retention_amount ?? 0);
+  }
+  const depositoMensual = {
+    anio: anioDeposito,
+    mes: mesDeposito,
+    totalDolares: totalDeposito,
+    venceISO: venceDeposito.toISOString().slice(0, 10),
+    vencido: hoy > venceDeposito && totalDeposito > 0,
+  };
 
   // Alertas Inteligentes de esta entidad (2 oct 2026, pedido de Joel) —
   // mismas reglas que app/cpa/page.tsx pero acotadas a esta entidad,
@@ -330,6 +378,8 @@ export default async function CpaClientePage({
         validaciones480={validaciones480 ?? []}
         totalRetencionesPendientes={totalRetencionesPendientes}
         metricasFacturas={metricasFacturas}
+        resumenFacturacion={resumenFacturacion}
+        depositoMensual={depositoMensual}
         clientesExentos={clientesExentos ?? []}
         estimados={estimados ?? []}
         auditoria={auditoria ?? []}
