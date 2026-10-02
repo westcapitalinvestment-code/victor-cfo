@@ -168,7 +168,6 @@ export default function LandingPricing() {
             <li>Pagos a contratistas incluido — retención automática (10% / 6%), control del depósito mensual y exportación directa de la 480.6SP</li>
             <li>Secretaria o Administrador incluido (1 acceso)</li>
             <li>Hasta 3 técnicos de tu equipo incluidos</li>
-            <li>Una entidad de negocio adicional incluida</li>
           </ul>
           <Link href={`/registro?plan=business&ciclo=${anual ? "anual" : "mensual"}`} className={`${styles.priceCta} ${styles.ctaFilled}`}>
             Comienza ahora

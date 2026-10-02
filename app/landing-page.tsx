@@ -573,6 +573,18 @@ export default function LandingPage() {
                 <div className={styles.addonDesc}>$20/mes · añade hasta 3 de tu equipo</div>
               </div>
             </div>
+            <div className={styles.addonCard}>
+              <div className={styles.addonIcon}>🏢</div>
+              <div>
+                <div className={styles.addonName}>
+                  Entidad Adicional
+                  <div style={{ fontSize: "0.7rem", color: "var(--teal-mid)", fontWeight: 600, marginTop: "0.2rem" }}>
+                    Plan Pro
+                  </div>
+                </div>
+                <div className={styles.addonDesc}>$24.99/mes · conecta y administra otra entidad de negocio separada</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
