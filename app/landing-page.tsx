@@ -190,6 +190,27 @@ export default function LandingPage() {
         <LandingProductTour />
       </div>
 
+      {/* Banner conciliación automática — pedido de Joel (2 oct 2026): el
+          cheque/ACH/transferencia llega al banco y VICTOR cierra la
+          factura sola, sin que nadie la marque pagada a mano. Diferencial
+          real frente a FreshBooks/QuickBooks en PR — merece su propio
+          banner, no enterrado en una lista de features. */}
+      <div className={styles.section} style={{ paddingTop: 0 }}>
+        <div className={styles.reconBanner}>
+          <div className={styles.reconBannerIcon}>🔄</div>
+          <div className={styles.reconBannerBody}>
+            <div className={styles.reconBannerTag}>// tus facturas se reconcilian solas</div>
+            <div className={styles.reconBannerTitle}>El cliente deposita. VICTOR cierra la factura. Tú no tocas nada.</div>
+            <p className={styles.reconBannerDesc}>
+              Le depositaron un cheque, una transferencia o un ACH en el banco por el monto exacto de una factura
+              pendiente — VICTOR lo detecta solo, marca la factura como pagada, y le pone el método correcto. Sin
+              abrir la factura, sin "Registrar pago" a mano, sin esperar a fin de mes para cuadrar. Esto no es común
+              — y mucho menos en Puerto Rico.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className={styles.section} id="victor" style={{ paddingTop: 0 }}>
         <div className={styles.victorBox}>
           <div className={styles.victorAvatar}>

@@ -213,6 +213,34 @@
 .victorFeatureTitle { font-size:0.9rem; font-weight:600; margin-bottom:0.3rem; }
 .victorFeatureDesc { font-size:0.82rem; color:var(--muted); line-height:1.5; }
 
+/* BANNER CONCILIACIÓN AUTOMÁTICA — pedido de Joel (2 oct 2026): resaltar
+   que las facturas se cierran solas cuando llega el depósito al banco,
+   porque "eso no muchos sistemas lo hacen y menos en PR". Franja ancha
+   con acento teal arriba (mismo truco que victorBox::before) para que
+   se note sin verse como otra tarjeta más de features. */
+.reconBanner {
+  display: flex; align-items: center; gap: 1.5rem;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 1.75rem 2rem; position: relative; overflow: hidden;
+  flex-wrap: wrap;
+}
+.reconBanner::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--teal), var(--teal-mid), var(--teal));
+}
+.reconBannerIcon {
+  width: 52px; height: 52px; flex-shrink: 0; border-radius: 50%;
+  background: var(--teal-dim); border: 1.5px solid var(--teal);
+  display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
+}
+.reconBannerBody { flex: 1; min-width: 260px; }
+.reconBannerTag {
+  font-family: 'Courier New', monospace; font-size: 0.68rem; font-weight: 600;
+  color: var(--teal-dark); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem;
+}
+.reconBannerTitle { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.4rem; line-height: 1.3; }
+.reconBannerDesc { font-size: 0.9rem; color: var(--muted); line-height: 1.6; max-width: 620px; }
+
 /* TRUST BAR — Plaid/Stripe, para generar confianza a quien no los conoce
    (pedido de Joel, 9 sept 2026). Mismo lenguaje visual que victorFeature/
    stat, para no introducir un patrón nuevo. */
