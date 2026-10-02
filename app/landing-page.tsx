@@ -535,24 +535,30 @@ export default function LandingPage() {
               <div className={styles.addonIcon}>🧑‍💼</div>
               <div>
                 <div className={styles.addonName}>
-                  Secretaria
+                  Secretaria / Administrador
                   <div style={{ fontSize: "0.7rem", color: "var(--teal-mid)", fontWeight: 600, marginTop: "0.2rem" }}>
                     Plan Pro
                   </div>
                 </div>
-                <div className={styles.addonDesc}>$10/mes · dale acceso a tu asistente para llevar los números</div>
+                <div className={styles.addonDesc}>
+                  $10/mes Secretaria — acceso para llevar los números · $20/mes Administrador — acceso ampliado a
+                  Pagos, Metas, Bóveda y Cuentas (solo lectura)
+                </div>
               </div>
             </div>
             <div className={styles.addonCard}>
-              <div className={styles.addonIcon}>👔</div>
+              <div className={styles.addonIcon}>💳</div>
               <div>
                 <div className={styles.addonName}>
-                  Administrador
+                  Pagos
                   <div style={{ fontSize: "0.7rem", color: "var(--teal-mid)", fontWeight: 600, marginTop: "0.2rem" }}>
                     Plan Pro
                   </div>
                 </div>
-                <div className={styles.addonDesc}>$20/mes · acceso ampliado — Pagos, Metas, Bóveda y Cuentas (solo lectura)</div>
+                <div className={styles.addonDesc}>
+                  $24.99/mes · paga contratistas con retención automática (10% / 6%), control mensual del depósito
+                  para que nunca se te pase la fecha, y exportación directa de la 480.6SP al cierre fiscal
+                </div>
               </div>
             </div>
             <div className={styles.addonCard}>
@@ -564,7 +570,7 @@ export default function LandingPage() {
                     Plan Pro
                   </div>
                 </div>
-                <div className={styles.addonDesc}>$20/mes · añade a tu equipo con acceso completo</div>
+                <div className={styles.addonDesc}>$20/mes · añade hasta 3 de tu equipo</div>
               </div>
             </div>
           </div>

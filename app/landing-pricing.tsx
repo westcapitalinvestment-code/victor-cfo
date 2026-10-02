@@ -137,7 +137,6 @@ export default function LandingPricing() {
             {proExpandido && (
               <>
                 <li>Tracking de facturas pagadas y pendientes, con alertas de cobros atrasados</li>
-                <li>Paga contratistas con retención automática (10% / 6%), control mensual del depósito para que nunca se te pase la fecha, y exportación directa de la 480.6SP al cierre fiscal</li>
                 <li>Bóveda, Metas y Cuentas separadas para tu negocio</li>
                 <li>VICTOR te ayuda a distinguir salario de accionista de distribución de dividendos, calcula tu IVU y da seguimiento a tus créditos pendientes</li>
                 <li>Reportes listos para tu CPA</li>
@@ -155,17 +154,25 @@ export default function LandingPricing() {
         </div>
 
         <div className={styles.priceCard}>
-          <div className={styles.priceTier}>A LA MEDIDA</div>
-          <div className={styles.priceName}>VICTOR Custom</div>
-          <p className={styles.priceDesc}>Para el negocio con necesidades particulares — lo armamos contigo.</p>
+          <div className={styles.priceTier}>TODO INCLUIDO</div>
+          <div className={styles.priceName}>VICTOR Business</div>
+          <p className={styles.priceDesc}>Para el negocio que no quiere pensar en add-ons — todo activado desde el día uno.</p>
+          <div className={styles.priceAmount}>
+            <sup>$</sup>
+            <span>99</span>
+            <span className={styles.mo}>.99/mes</span>
+          </div>
           <hr className={styles.priceDivider} />
-          <p style={{ fontSize: "0.85rem", color: "var(--muted)" }}>Próximamente.</p>
-          <span
-            className={styles.priceCta}
-            style={{ background: "var(--border)", color: "var(--muted)", cursor: "default" }}
-          >
-            Próximamente
-          </span>
+          <ul className={styles.priceFeatures}>
+            <li>Todo lo del Pro</li>
+            <li>Pagos a contratistas incluido — retención automática (10% / 6%), control del depósito mensual y exportación directa de la 480.6SP</li>
+            <li>Secretaria o Administrador incluido (1 acceso)</li>
+            <li>Hasta 3 técnicos de tu equipo incluidos</li>
+            <li>Una entidad de negocio adicional incluida</li>
+          </ul>
+          <Link href={`/registro?plan=business&ciclo=${anual ? "anual" : "mensual"}`} className={`${styles.priceCta} ${styles.ctaFilled}`}>
+            Comienza ahora
+          </Link>
         </div>
       </div>
 
