@@ -68,6 +68,10 @@ type Factura = {
   fee_real: number | null;
   monto_neto_real: number | null;
   fee_fuente: "real" | "estimado" | null;
+  // Conciliación automática de depósitos (migración 0131, 2 oct 2026) —
+  // true cuando VICTOR encontró solo el match de monto+fecha+entidad entre
+  // un depósito bancario y esta factura, sin que Joel tocara nada.
+  pago_auto_conciliado: boolean;
   notas: string | null;
   metodos_cobro_aceptados: string[] | null;
   late_fee_habilitado: boolean;
@@ -642,6 +646,14 @@ export default function FacturaDetalle({
               <span>
                 Pagada vía <strong>{factura.metodo_pago}</strong>
                 {factura.fecha_pago && ` el ${formatFecha(factura.fecha_pago)}`}
+                {factura.pago_auto_conciliado && (
+                  <>
+                    {" · "}
+                    <span title="VICTOR encontró el depósito en el banco y cerró la factura sola, sin que nadie la marcara pagada a mano.">
+                      conciliado automáticamente
+                    </span>
+                  </>
+                )}
                 {Number(factura.propina_monto) > 0 && (
                   <>
                     {" · "}

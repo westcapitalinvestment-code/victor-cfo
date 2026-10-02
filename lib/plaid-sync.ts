@@ -3,6 +3,7 @@ import { plaidClient } from "@/lib/plaid";
 import { decryptSecret } from "@/lib/crypto";
 import { fechaHoyPR } from "@/lib/hora-pr";
 import type { Transaction } from "plaid";
+import { conciliarDepositoConFactura } from "@/lib/conciliar-depositos";
 
 export type ResultadoSincronizacion = {
   ok: boolean;
@@ -179,9 +180,14 @@ export async function sincronizarPlaidDeUsuario(
 
       const { data: cuentasDelItem } = await supabase
         .from("plaid_accounts")
-        .select("plaid_account_id, es_negocio, entity_id, name, nickname")
+        .select("plaid_account_id, es_negocio, entity_id, name, nickname, type")
         .eq("plaid_item_id", item.id);
       const negocioPorCuenta = new Map((cuentasDelItem ?? []).map((c) => [c.plaid_account_id, c.es_negocio]));
+      // Conciliación automática de depósitos (migración 0131): solo aplica
+      // a cuentas de depósito reales (checking/savings) — en una cuenta de
+      // crédito/préstamo un monto negativo es un reembolso o pago, nunca
+      // el cobro de una factura.
+      const tipoPorCuenta = new Map((cuentasDelItem ?? []).map((c) => [c.plaid_account_id, c.type]));
       // BUG REAL (1 sept 2026, reportado por Joel): su login de BPPR trae
       // cuentas personales y de negocio juntas bajo un mismo Item. Antes,
       // entity_id se guardaba NULL sin importar nada — eso equivale a
@@ -267,13 +273,50 @@ export async function sincronizarPlaidDeUsuario(
         }));
 
       if (filasNuevas.length > 0) {
-        const { error: upsertError } = await supabase
+        // .select() de vuelta (2 oct 2026, conciliación automática de
+        // depósitos, migración 0131): con ignoreDuplicates:true, Supabase
+        // solo devuelve las filas que de verdad se insertaron ahora — es
+        // justo lo que hace falta para no reintentar conciliar
+        // transacciones que ya existían de un sync anterior.
+        const { data: insertadas, error: upsertError } = await supabase
           .from("transactions")
-          .upsert(filasNuevas, { onConflict: "plaid_transaction_id", ignoreDuplicates: true });
+          .upsert(filasNuevas, { onConflict: "plaid_transaction_id", ignoreDuplicates: true })
+          .select("id, entity_id, amount, fecha, description_raw, plaid_account_id, pending");
         if (upsertError) {
           errores.push(`${item.id}: ${upsertError.message}`);
           huboErrorEnEsteItem = true;
-        } else totalNuevas += filasNuevas.length;
+        } else {
+          totalNuevas += filasNuevas.length;
+
+          // Conciliación automática (pedido de Joel, 2 oct 2026): "si hago
+          // una factura de $1,500 con 6% de retención y al banco llega
+          // $1,410 se supone que Victor cierre esa factura sola". Solo
+          // mira depósitos (amount < 0 en checking/savings = dinero que
+          // ENTRÓ) de cuentas ya asignadas a una entidad de negocio, y
+          // solo una vez que el banco confirmó el monto final (pending
+          // false — un pendiente todavía puede cambiar de monto). Nunca
+          // bloquea el sync si falla: el pago real ya está en Transacciones
+          // de todas formas, Joel lo puede cerrar a mano si esto no pudo.
+          for (const t of insertadas ?? []) {
+            try {
+              if (!t.entity_id || t.pending) continue;
+              const tipoCuenta = tipoPorCuenta.get(t.plaid_account_id as string);
+              if (tipoCuenta === "credit" || tipoCuenta === "loan") continue;
+              const monto = Number(t.amount);
+              if (monto >= 0) continue; // positivo = salió dinero, no es un cobro
+              await conciliarDepositoConFactura(supabase, {
+                transactionId: t.id,
+                ownerId,
+                entityId: t.entity_id,
+                montoRecibido: Math.abs(monto),
+                fecha: t.fecha,
+                descripcionRaw: t.description_raw ?? "",
+              });
+            } catch (err) {
+              console.warn(`Conciliación automática falló para transacción ${t.id}:`, err);
+            }
+          }
+        }
       }
 
       const modificadasFiltradas = modified
