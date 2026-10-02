@@ -106,6 +106,7 @@ export default function NuevaFacturaForm({
   addonTecnicosActivo,
   basePath = "/dashboard/facturacion",
   ownerIdEfectivo,
+  entidadPreseleccionada,
 }: {
   entities: Entity[];
   clients: Client[];
@@ -120,11 +121,16 @@ export default function NuevaFacturaForm({
   // está logueado es un admin, no el dueño.
   basePath?: string;
   ownerIdEfectivo?: string;
+  // 2 oct 2026, fix bug de mezcla de entidades: la entidad que quedó activa
+  // en el selector "Negocio" del topbar (ver lib/entidad-activa.ts), para
+  // que este formulario abra con la misma entidad que el usuario ya estaba
+  // viendo, en vez de la primera del arreglo.
+  entidadPreseleccionada?: string;
 }) {
   const router = useRouter();
   const supabase = createClient();
 
-  const [entityId, setEntityId] = useState(entities[0]?.id ?? "");
+  const [entityId, setEntityId] = useState(entidadPreseleccionada ?? entities[0]?.id ?? "");
   const entidad = entities.find((e) => e.id === entityId) ?? entities[0];
 
   const clientesDeEntidad = useMemo(

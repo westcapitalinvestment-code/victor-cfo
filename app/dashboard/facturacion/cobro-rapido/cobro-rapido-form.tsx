@@ -19,15 +19,19 @@ export default function CobroRapidoForm({
   entities,
   clients,
   conteosPorEntidad,
+  entidadPreseleccionada,
 }: {
   entities: Entidad[];
   clients: Cliente[];
   conteosPorEntidad: Record<string, number>;
+  // 2 oct 2026, fix bug de mezcla de entidades: entidad activa del selector
+  // "Negocio" del topbar (ver lib/entidad-activa.ts).
+  entidadPreseleccionada?: string;
 }) {
   const router = useRouter();
   const supabase = createClient();
 
-  const [entidadId, setEntidadId] = useState(entities[0]?.id ?? "");
+  const [entidadId, setEntidadId] = useState(entidadPreseleccionada ?? entities[0]?.id ?? "");
   const [monto, setMonto] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [descripcion, setDescripcion] = useState("Cobro rápido");

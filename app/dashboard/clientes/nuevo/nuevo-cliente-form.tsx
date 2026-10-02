@@ -15,6 +15,7 @@ export default function NuevoClienteForm({
   entities,
   returnTo,
   ownerIdEfectivo,
+  entidadPreseleccionada,
 }: {
   entities: Entity[];
   returnTo?: string;
@@ -22,6 +23,9 @@ export default function NuevoClienteForm({
   // facturacion-portal.tsx. Sin esto, un admin creando un cliente lo
   // guardaría bajo su PROPIO user.id en vez del owner_id del dueño.
   ownerIdEfectivo?: string;
+  // 2 oct 2026, fix bug de mezcla de entidades: entidad activa del selector
+  // "Negocio" del topbar (ver lib/entidad-activa.ts).
+  entidadPreseleccionada?: string;
 }) {
   const destino = returnTo || "/dashboard/clientes";
   const router = useRouter();
@@ -30,7 +34,7 @@ export default function NuevoClienteForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [entityId, setEntityId] = useState(entities[0]?.id ?? "");
+  const [entityId, setEntityId] = useState(entidadPreseleccionada ?? entities[0]?.id ?? "");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [telefono, setTelefono] = useState("");

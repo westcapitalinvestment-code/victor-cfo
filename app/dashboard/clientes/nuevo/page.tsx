@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import NuevoClienteForm from "./nuevo-cliente-form";
+import { resolverEntidadActiva, leerEntidadActivaCookie } from "@/lib/entidad-activa";
 
 export default async function NuevoClientePage({
   searchParams,
@@ -44,5 +45,11 @@ export default async function NuevoClientePage({
     );
   }
 
-  return <NuevoClienteForm entities={entities} returnTo={returnTo} />;
+  // 2 oct 2026 — mismo fix que Nueva Factura: leer la entidad activa del
+  // topbar en vez de defaultear a entities[0].
+  const { entidadId: entidadActivaId } = resolverEntidadActiva(entities, leerEntidadActivaCookie());
+
+  return (
+    <NuevoClienteForm entities={entities} returnTo={returnTo} entidadPreseleccionada={entidadActivaId ?? undefined} />
+  );
 }

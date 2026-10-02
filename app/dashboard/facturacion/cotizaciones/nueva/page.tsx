@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import ProPaywall from "../../../pro-paywall";
 import NuevaCotizacionForm from "./nueva-cotizacion-form";
+import { resolverEntidadActiva, leerEntidadActivaCookie } from "@/lib/entidad-activa";
 
 export default async function NuevaCotizacionPage() {
   const supabase = createClient();
@@ -84,6 +85,10 @@ export default async function NuevaCotizacionPage() {
     .eq("active", true)
     .order("name", { ascending: true });
 
+  // 2 oct 2026 — mismo fix que Nueva Factura: leer la entidad activa del
+  // topbar en vez de defaultear a entities[0].
+  const { entidadId: entidadActivaId } = resolverEntidadActiva(entities, leerEntidadActivaCookie());
+
   return (
     <NuevaCotizacionForm
       entities={entities}
@@ -92,6 +97,7 @@ export default async function NuevaCotizacionPage() {
       numeroInicial={`COT-${1000 + (count ?? 0) + 1}`}
       tecnicos={tecnicos ?? []}
       addonTecnicosActivo={addonTecnicosActivo}
+      entidadPreseleccionada={entidadActivaId ?? undefined}
     />
   );
 }

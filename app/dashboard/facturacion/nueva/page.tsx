@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import ProPaywall from "../../pro-paywall";
 import NuevaFacturaForm from "./nueva-factura-form";
+import { resolverEntidadActiva, leerEntidadActivaCookie } from "@/lib/entidad-activa";
 
 export default async function NuevaFacturaPage() {
   const supabase = createClient();
@@ -97,6 +98,17 @@ export default async function NuevaFacturaPage() {
     .eq("active", true)
     .order("name", { ascending: true });
 
+  // 2 oct 2026, bug reportado por Joel: este formulario defaulteaba a
+  // entities[0] sin mirar cuál entidad quedó activa en el selector
+  // "Negocio" del topbar — si Joel cambiaba a West Capital pero entities[0]
+  // seguía siendo VIP (orden de la query), Nueva Factura abría mostrando
+  // VIP y sus clientes, con riesgo real de facturar bajo la entidad
+  // equivocada. Mismo patrón que ya usan facturacion/page.tsx y
+  // pagos/page.tsx: leer la cookie y resolver cuál es la entidad activa de
+  // verdad (cae a entities[0] solo si no hay cookie o apunta a algo que ya
+  // no existe).
+  const { entidadId: entidadActivaId } = resolverEntidadActiva(entities, leerEntidadActivaCookie());
+
   return (
     <NuevaFacturaForm
       entities={entities}
@@ -105,6 +117,7 @@ export default async function NuevaFacturaPage() {
       conteosPorEntidad={conteosPorEntidad}
       tecnicos={tecnicos ?? []}
       addonTecnicosActivo={addonTecnicosActivo}
+      entidadPreseleccionada={entidadActivaId ?? undefined}
     />
   );
 }

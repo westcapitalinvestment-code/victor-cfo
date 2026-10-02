@@ -32,6 +32,7 @@ export default function NuevaCotizacionForm({
   numeroInicial,
   tecnicos,
   addonTecnicosActivo,
+  entidadPreseleccionada,
 }: {
   entities: Entity[];
   clients: Client[];
@@ -39,11 +40,14 @@ export default function NuevaCotizacionForm({
   numeroInicial: string;
   tecnicos: TecnicoOpcion[];
   addonTecnicosActivo: boolean;
+  // 2 oct 2026, fix bug de mezcla de entidades: entidad activa del selector
+  // "Negocio" del topbar (ver lib/entidad-activa.ts).
+  entidadPreseleccionada?: string;
 }) {
   const router = useRouter();
   const supabase = createClient();
 
-  const [entityId, setEntityId] = useState(entities[0]?.id ?? "");
+  const [entityId, setEntityId] = useState(entidadPreseleccionada ?? entities[0]?.id ?? "");
   const entidad = entities.find((e) => e.id === entityId) ?? entities[0];
 
   const clientesDeEntidad = useMemo(

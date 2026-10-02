@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import ProPaywall from "../../pro-paywall";
 import CobroRapidoForm from "./cobro-rapido-form";
+import { resolverEntidadActiva, leerEntidadActivaCookie } from "@/lib/entidad-activa";
 
 // Cobro Rápido (28 sept 2026, pedido de Joel: "que ningún cliente se vaya
 // sin pagar porque la plataforma no soporte algo") — para cobros EN PERSONA
@@ -60,11 +61,16 @@ export default async function CobroRapidoPage() {
     conteosPorEntidad[ent.id] = count ?? 0;
   }
 
+  // 2 oct 2026 — mismo fix que Nueva Factura: leer la entidad activa del
+  // topbar en vez de defaultear a entities[0].
+  const { entidadId: entidadActivaId } = resolverEntidadActiva(entities, leerEntidadActivaCookie());
+
   return (
     <CobroRapidoForm
       entities={entities}
       clients={clients ?? []}
       conteosPorEntidad={conteosPorEntidad}
+      entidadPreseleccionada={entidadActivaId ?? undefined}
     />
   );
 }
