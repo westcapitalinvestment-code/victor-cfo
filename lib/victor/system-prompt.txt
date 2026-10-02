@@ -171,7 +171,7 @@ PERFIL DEL USUARIO:
 - Meta principal: {{salir_deudas | ahorrar | organizar | crecer}}
 - Prioridad declarada: {{qué está dispuesto a mejorar para llegar ahí}}
 - Tiene nómina/empleados: {{si | no}}
-- Plan activo: {{Core | Pro | Pro+}}
+- Plan activo: {{Core | Pro | Business}}
 - Fecha de cumpleaños: {{fecha}}
 - Cuentas conectadas: {{lista_bancos_plaid}}
 - Intereses y pasatiempos: {{intereses}}
@@ -531,7 +531,7 @@ ACTIVA SOLO CUANDO SE CUMPLE AL MENOS UNO:
 ✓ El usuario eliminó todas sus deudas de tarjetas.
 ✓ Lleva 3+ meses consecutivos con balance positivo.
 ✓ Pregunta sobre inversiones, negocios, o ingresos adicionales.
-✓ Sube de plan (Core→Pro, Pro→Pro+).
+✓ Sube de plan (Core→Pro, Pro→Business).
 ✓ Expresa deseo de "más" sin saber exactamente qué.
 ✓ Menciona querer dejar un legado, retirarse antes, o independencia.
 ✓ Ya tiene fondo de emergencia establecido.
@@ -876,7 +876,7 @@ con el tema para traer los principios exactos y ejemplos de cómo aplicarlos:
   Robert Kiyosaki. Nivel Core, para quien empieza desde cero.
 - "La Psicología del Dinero" — Morgan Housel. Nivel Pro, comportamiento vs
   inteligencia financiera.
-- "El Inversor Inteligente" — Benjamin Graham. Nivel Pro+, para quien ya
+- "El Inversor Inteligente" — Benjamin Graham. Nivel Business, para quien ya
   invierte o quiere hacerlo en serio.
 
 Resto de la biblioteca (referencia general, sin principios detallados):
@@ -1366,7 +1366,7 @@ GUÍAS PRO — MÓDULOS ADICIONALES DE NEGOCIO
     - Plan Core: hasta 2 bancos DIFERENTES (instituciones
       distintas — ej. Banco Popular + FirstBank cuentan como 2)
       y hasta 3 tarjetas de crédito en total.
-    - Plan Pro / Pro+: bancos y tarjetas ILIMITADOS.
+    - Plan Pro / Business: bancos y tarjetas ILIMITADOS.
     Si un usuario Core pregunta por qué no puede añadir más, o
     quiere conectar un tercer banco o una cuarta tarjeta, VICTOR
     se lo explica con calidez y lo invita a hacer upgrade a Pro
@@ -2229,7 +2229,7 @@ Carencia principal: tiempo y organización. Ya tiene ingreso pero está caótico
 operacionalmente. VICTOR es más ejecutivo — menos terapia, más herramientas
 concretas. Facturación, cobros, equipo, reportes.
 
-**Pro+ — El que tiene dinero pero le falta dirección**
+**Business — El que tiene dinero pero le falta dirección**
 Carencia principal: claridad estratégica y tiempo. Quiere que las cosas pasen
 solas. VICTOR es proactivo, automatiza, alerta y sugiere sin que el usuario tenga
 que preguntar. Menos conversación, más acción en segundo plano.

@@ -51,7 +51,7 @@ export default function TerminosServicioPage() {
 
       <h2 className="mb-2 mt-6 text-base font-semibold">5. Planes y pagos</h2>
       <p className="mb-4">
-        Ofrecemos varios planes (Core, Pro, Pro+, y próximamente Enterprise), con precio mensual o anual
+        Ofrecemos varios planes (Core, Pro, Business, y próximamente Enterprise), con precio mensual o anual
         según elijas. Los nuevos usuarios reciben un período de prueba según se indique al momento del
         registro. Puedes cancelar tu suscripción en cualquier momento desde Configuración — la
         cancelación aplica al final del período ya pagado, sin reembolsos parciales salvo que la ley

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fechaHoraLegiblePR, saludoPorHora } from "@/lib/hora-pr";
+import { PLAN_LABEL } from "@/lib/plan-label";
 
 // El system prompt completo de VICTOR (las 12+ capas de personalidad,
 // más el módulo Estratega v4) vive en system-prompt.txt — es texto plano,
@@ -111,7 +112,13 @@ export function buildUserContextBlock(params: {
     "contra la fecha de arriba, nunca le preguntes al usuario qué día es hoy.",
     "",
     `Nombre: ${fullName ?? "(no capturado todavía — pregúntale su nombre si no lo sabes)"}`,
-    `Plan activo: ${plan ?? "core"} (${planStatus ?? "trialing"})`,
+    // FIX (2 oct 2026, pedido de Joel: "a veces Victor me habla de pro+") —
+    // esto inyectaba el valor crudo de la columna users.plan ("proplus")
+    // directo al contexto de VICTOR, así que VICTOR lo repetía tal cual o
+    // lo traducía a "Pro+" por su cuenta. Ahora pasa por PLAN_LABEL, la
+    // misma tabla que ya usa el Dashboard de Operaciones — hoy dice
+    // "Business" para ese nivel.
+    `Plan activo: ${PLAN_LABEL[plan ?? "core"] ?? plan ?? "Core"} (${planStatus ?? "trialing"})`,
     "",
     isFounder
       ? [

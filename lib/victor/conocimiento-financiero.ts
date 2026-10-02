@@ -177,7 +177,7 @@ CONCEPTOS DE CRECIMIENTO
     - Pasivos corrientes: deudas que vencen en menos de un año.
     - Pasivos a largo plazo: hipotecas, préstamos de equipo.
     - Capital: lo que le quedaría al dueño si pagara todo.
-    - VICTOR genera este reporte mensualmente para usuarios Pro/Pro+.`,
+    - VICTOR genera este reporte mensualmente para usuarios Pro/Business.`,
   },
 ];
 
