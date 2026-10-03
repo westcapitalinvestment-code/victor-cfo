@@ -21,6 +21,7 @@ type ClienteFila = {
   ciclo: "mensual" | "anual" | null;
   cobradoCentavos: number;
   pendienteCentavos: number;
+  retenidoCentavos: number;
 };
 
 const ESTADO_LABEL: Record<ClienteFila["estado"], { texto: string; color: string }> = {
@@ -49,6 +50,7 @@ export default function SocioPortalPage() {
   const [datos, setDatos] = useState<{
     totalCobradoCentavos: number;
     totalPendienteCentavos: number;
+    totalRetenidoCentavos: number;
     clientes: ClienteFila[];
   } | null>(null);
 
@@ -149,7 +151,7 @@ export default function SocioPortalPage() {
         <p className="py-8 text-center text-sm text-muted">Cargando...</p>
       ) : (
         <>
-          <div className="mb-4 flex gap-2">
+          <div className="mb-2 flex gap-2">
             <div className="vc-card flex-1 text-center">
               <p className="text-[11px] text-muted">Ya cobrado</p>
               <p className="text-lg font-semibold text-teal">{fmt(datos.totalCobradoCentavos)}</p>
@@ -159,6 +161,13 @@ export default function SocioPortalPage() {
               <p className="text-lg font-semibold text-amb">{fmt(datos.totalPendienteCentavos)}</p>
             </div>
           </div>
+
+          {datos.totalRetenidoCentavos > 0 && (
+            <div className="vc-card mb-4 text-[11px] text-muted">
+              Se te retuvo <span className="font-medium text-muted">{fmt(datos.totalRetenidoCentavos)}</span> en total
+              (Sección 1062.03 de Hacienda) — los montos de arriba ya son netos, después de esa retención.
+            </div>
+          )}
 
           <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">
             Tus clientes ({datos.clientes.length})

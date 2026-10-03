@@ -60,6 +60,7 @@ export default async function CfoPage() {
     { data: comisionesSocios },
     { data: vendedorClientes },
     { data: creditosReferidos },
+    { data: retencionesVendedor },
   ] = await Promise.all([
     admin
       .from("users")
@@ -112,6 +113,10 @@ export default async function CfoPage() {
     // — a diferencia del Programa de Socios (comisiones en efectivo, sí
     // sale plata real, ver socios_comisiones arriba).
     admin.from("referral_rewards").select("credit_cents, created_at"),
+    // Retención Sección 1062.03 sobre comisiones de vendedor (migración
+    // 0138, 3 oct 2026) — una fila por comisión, ver socios-panel.tsx para
+    // cómo se amarra a cada ComisionFila por comision_id.
+    admin.from("socios_vendedor_retenciones").select("comision_id, retention_centavos"),
   ]);
 
   const todos = usuarios ?? [];
@@ -412,14 +417,18 @@ export default async function CfoPage() {
           bankName: s.bank_name,
           accountLast4: s.account_last4,
         }))}
-        comisiones={(comisionesSocios ?? []).map((c) => ({
-          id: c.id,
-          socioId: c.socio_id,
-          plan: c.plan,
-          comisionCentavos: Number(c.comision_centavos),
-          estado: c.estado as "pendiente" | "pagada",
-          createdAt: c.created_at,
-        }))}
+        comisiones={(comisionesSocios ?? []).map((c) => {
+          const retencion = (retencionesVendedor ?? []).find((r) => r.comision_id === c.id);
+          return {
+            id: c.id,
+            socioId: c.socio_id,
+            plan: c.plan,
+            comisionCentavos: Number(c.comision_centavos),
+            estado: c.estado as "pendiente" | "pagada",
+            createdAt: c.created_at,
+            retenidoCentavos: retencion ? Number(retencion.retention_centavos) : 0,
+          };
+        })}
         vendedorClientes={(vendedorClientes ?? []).map((v) => ({
           id: v.id,
           socioId: v.socio_id,

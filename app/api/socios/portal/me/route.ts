@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Portal no disponible." }, { status: 403 });
   }
 
-  const [{ data: clientes }, { data: estadosVendedor }, { data: comisiones }] = await Promise.all([
+  const [{ data: clientes }, { data: estadosVendedor }, { data: comisiones }, { data: retenciones }] = await Promise.all([
     admin
       .from("users")
       .select("id, full_name, email, plan, plan_status, created_at")
@@ -34,9 +34,13 @@ export async function GET(req: NextRequest) {
       // "unica" = modelo nuevo de pago único (migración 0135, 2 oct 2026);
       // "setenta"/"treinta" = modelo viejo 70/30 (0107), sigue vivo solo
       // para clientes que ya estaban a mitad de camino antes del cambio.
-      .select("referred_id, tipo_comision, comision_centavos, estado, created_at")
+      .select("id, referred_id, tipo_comision, comision_centavos, estado, created_at")
       .eq("socio_id", socioId)
       .in("tipo_comision", ["setenta", "treinta", "unica"]),
+    // Retención Sección 1062.03 (migración 0138, 3 oct 2026) — una fila por
+    // cada comisión de arriba, para mostrarle al vendedor cuánto le
+    // retuvimos y cuánto es lo neto real que va a recibir.
+    admin.from("socios_vendedor_retenciones").select("comision_id, retention_centavos").eq("socio_id", socioId),
   ]);
 
   const estadoPorCliente = new Map((estadosVendedor ?? []).map((e) => [e.referred_id, e]));
@@ -46,9 +50,11 @@ export async function GET(req: NextRequest) {
     lista.push(c);
     comisionesPorCliente.set(c.referred_id, lista as any);
   }
+  const retencionPorComision = new Map((retenciones ?? []).map((r) => [r.comision_id, Number(r.retention_centavos)]));
 
   let totalCobradoCentavos = 0;
   let totalPendienteCentavos = 0;
+  let totalRetenidoCentavos = 0;
 
   const filas = (clientes ?? []).map((cliente) => {
     const estadoVendedor = estadoPorCliente.get(cliente.id);
@@ -65,14 +71,23 @@ export async function GET(req: NextRequest) {
       estado = "generando_comision";
     }
 
-    const cobrado = propiasComisiones
-      .filter((c) => c!.estado === "pagada")
-      .reduce((sum, c) => sum + Number(c!.comision_centavos), 0);
+    // Neto real que recibe el vendedor — bruto de la comisión menos lo que
+    // le retuvimos por 1062.03 (migración 0138), para no enseñarle un
+    // número que después no cuadra con lo que de verdad le transferimos.
+    const netoDe = (c: NonNullable<typeof comisiones>[number]) =>
+      Number(c.comision_centavos) - (retencionPorComision.get(c.id as string) ?? 0);
+
+    const cobrado = propiasComisiones.filter((c) => c!.estado === "pagada").reduce((sum, c) => sum + netoDe(c!), 0);
     const pendiente = propiasComisiones
       .filter((c) => c!.estado === "pendiente")
-      .reduce((sum, c) => sum + Number(c!.comision_centavos), 0);
+      .reduce((sum, c) => sum + netoDe(c!), 0);
+    const retenido = propiasComisiones.reduce(
+      (sum, c) => sum + (retencionPorComision.get(c!.id as string) ?? 0),
+      0
+    );
     totalCobradoCentavos += cobrado;
     totalPendienteCentavos += pendiente;
+    totalRetenidoCentavos += retenido;
 
     return {
       id: cliente.id,
@@ -83,6 +98,7 @@ export async function GET(req: NextRequest) {
       ciclo: estadoVendedor?.ciclo ?? null,
       cobradoCentavos: cobrado,
       pendienteCentavos: pendiente,
+      retenidoCentavos: retenido,
     };
   });
 
@@ -91,6 +107,7 @@ export async function GET(req: NextRequest) {
     socio: { nombre: socio.nombre },
     totalCobradoCentavos,
     totalPendienteCentavos,
+    totalRetenidoCentavos,
     clientes: filas,
   });
 }

@@ -34,6 +34,10 @@ export type ComisionFila = {
   comisionCentavos: number;
   estado: "pendiente" | "pagada" | "reversada";
   createdAt: string | null;
+  // Retención Sección 1062.03 (migración 0138, 3 oct 2026) — ya calculada y
+  // guardada en socios_vendedor_retenciones al momento de crear la comisión,
+  // solo aplica a tipo='vendedor' (embajador/CPA/influencer nunca retiene).
+  retenidoCentavos?: number;
 };
 
 // Estado por cliente de un vendedor — el founder lo usa para el desglose
@@ -279,6 +283,11 @@ export default function SociosPanel({
                       .filter((c) => c.estado === "pendiente" && c.createdAt && new Date(c.createdAt) >= inicioAño)
                       .reduce((sum, c) => sum + c.comisionCentavos, 0);
                   const pasoDeclarar = acumuladoEsteAño >= UMBRAL_DECLARAR_CENTAVOS;
+                  // Retención real 1062.03 (migración 0138, 3 oct 2026) — solo
+                  // existe para tipo='vendedor', un embajador/CPA/influencer
+                  // sigue sin retención real (modelo de comisión fija, ver
+                  // comentario arriba de UMBRAL_DECLARAR_CENTAVOS).
+                  const totalRetenido = propias.reduce((sum, c) => sum + (c.retenidoCentavos ?? 0), 0);
                   const linkPago = s.paymentToken ? `${origin}/socios/pago/${s.paymentToken}` : null;
                   const revelado = datosRevelados[s.id];
 
@@ -294,8 +303,11 @@ export default function SociosPanel({
                           </p>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="text-[11px] text-muted">Pendiente</p>
-                          <p className="font-medium">{fmt(totalPendiente)}</p>
+                          <p className="text-[11px] text-muted">Pendiente (neto)</p>
+                          <p className="font-medium">{fmt(totalPendiente - pendiente.reduce((sum, c) => sum + (c.retenidoCentavos ?? 0), 0))}</p>
+                          {totalRetenido > 0 && (
+                            <p className="text-[10px] text-muted">Retenido este año: {fmt(totalRetenido)}</p>
+                          )}
                         </div>
                       </div>
 
@@ -339,7 +351,14 @@ export default function SociosPanel({
                         </div>
                       )}
 
-                      {pasoDeclarar && (
+                      {pasoDeclarar && s.tipo === "vendedor" && (
+                        <p className="mt-1.5 rounded-md bg-amb/10 px-2 py-1 text-[11px] text-amb">
+                          ⚠️ Lleva {fmt(acumuladoEsteAño)} este año — pasó los $500 de la Sección 1062.03. Ya se le
+                          está reteniendo el exceso automáticamente (10%, o menos con relevo vigente) y hay que
+                          declararlo en el Modelo 480.6SP a fin de año. Si no tienes su SSN/EIN todavía, pídeselo.
+                        </p>
+                      )}
+                      {pasoDeclarar && s.tipo !== "vendedor" && (
                         <p className="mt-1.5 rounded-md bg-amb/10 px-2 py-1 text-[11px] text-amb">
                           ⚠️ Lleva {fmt(acumuladoEsteAño)} este año — pasó los $500 de la Sección 1062.03. Hay que
                           declararlo en el Modelo 480.6SP; el exceso sobre $500 queda sujeto a retención. Pide datos

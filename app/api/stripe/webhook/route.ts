@@ -839,6 +839,58 @@ const COMISION_SOCIO_PRO_CENTAVOS = 2_500; // $25.00
 const PORCENTAJE_SETENTA_VENDEDOR = 0.7;
 const PORCENTAJE_ANUAL_VENDEDOR = 0.2;
 
+// Retención Sección 1062.03 sobre las comisiones del vendedor (migración
+// 0138, 3 oct 2026, pedido de Joel al armar el equipo de ventas) — mismo
+// umbral y misma mecánica MARGINAL que ya usa Pagos para contratistas
+// (retencionMarginal() en pagos-portal.tsx): los primeros $500 acumulados
+// en el año calendario no retienen nada; de ahí en adelante, 10% completo
+// salvo que el vendedor tenga un Certificado de Relevo de SURI vigente
+// archivado (relevo_pct de socios, igual que vendors.relevo_pct).
+const UMBRAL_DECLARAR_CENTAVOS_VENDEDOR = 50_000; // $500
+
+async function registrarRetencionVendedor(
+  admin: ReturnType<typeof createAdminClient>,
+  socio: { id: string; relevo_r2_key?: string | null; relevo_pct?: number | null; relevo_fecha_expiracion?: string | null },
+  comisionId: string | null,
+  grossCentavos: number
+) {
+  if (grossCentavos <= 0) return;
+
+  const anio = new Date().getFullYear();
+
+  const { data: previas } = await admin
+    .from("socios_vendedor_retenciones")
+    .select("gross_centavos")
+    .eq("socio_id", socio.id)
+    .eq("anio", anio);
+  const acumuladoPrevio = (previas ?? []).reduce((sum, r) => sum + Number(r.gross_centavos), 0);
+
+  const hoyISO = new Date().toISOString().slice(0, 10);
+  const relevoVigente =
+    !!socio.relevo_r2_key && (!socio.relevo_fecha_expiracion || socio.relevo_fecha_expiracion >= hoyISO);
+  const pct = relevoVigente ? Number(socio.relevo_pct ?? 0) : 10;
+
+  const excesoPrevio = Math.max(0, acumuladoPrevio - UMBRAL_DECLARAR_CENTAVOS_VENDEDOR);
+  const excesoNuevo = Math.max(0, acumuladoPrevio + grossCentavos - UMBRAL_DECLARAR_CENTAVOS_VENDEDOR);
+  const baseTributableCentavos = excesoNuevo - excesoPrevio;
+  const retentionCentavos = pct > 0 ? Math.round(baseTributableCentavos * (pct / 100)) : 0;
+
+  const { error } = await admin.from("socios_vendedor_retenciones").insert({
+    socio_id: socio.id,
+    comision_id: comisionId,
+    anio,
+    gross_centavos: grossCentavos,
+    retention_pct: pct,
+    retention_centavos: retentionCentavos,
+  });
+  if (error) {
+    // No relanzamos — perder el registro de retención no debe tumbar el
+    // webhook ni la comisión ya insertada; Joel puede corregirlo a mano si
+    // hace falta, pero el pago del vendedor no se bloquea por esto.
+    console.error("No se pudo registrar la retención del vendedor:", error);
+  }
+}
+
 async function procesarComisionSocio(
   referido: {
     id: string;
@@ -854,13 +906,13 @@ async function procesarComisionSocio(
 
   const { data: socio } = await admin
     .from("socios")
-    .select("id, tipo")
+    .select("id, tipo, relevo_r2_key, relevo_pct, relevo_fecha_expiracion")
     .eq("id", referido.referido_por_socio_id)
     .maybeSingle();
   if (!socio) return;
 
   if (socio.tipo === "vendedor") {
-    await procesarComisionVendedor(admin, socio.id, referido, invoice);
+    await procesarComisionVendedor(admin, socio, referido, invoice);
     return;
   }
 
@@ -907,10 +959,11 @@ async function procesarComisionSocio(
 //     pago real".
 async function procesarComisionVendedor(
   admin: ReturnType<typeof createAdminClient>,
-  socioId: string,
+  socio: { id: string; relevo_r2_key?: string | null; relevo_pct?: number | null; relevo_fecha_expiracion?: string | null },
   referido: { id: string; plan: string | null; stripe_subscription_id: string | null },
   invoice: Stripe.Invoice
 ) {
+  const socioId = socio.id;
   if (referido.plan !== "pro" && referido.plan !== "proplus") return;
 
   const { data: estadoCliente } = await admin
@@ -964,15 +1017,23 @@ async function procesarComisionVendedor(
         return;
       }
 
-      const { error: errorComision } = await admin.from("socios_comisiones").insert({
-        socio_id: socioId,
-        referred_id: referido.id,
-        plan: referido.plan ?? "pro",
-        comision_centavos: comisionCentavos,
-        tipo_comision: "unica",
-        ciclo_numero: 0,
-      });
-      if (errorComision) console.error("No se pudo registrar la comisión única del vendedor:", errorComision);
+      const { data: filaComision, error: errorComision } = await admin
+        .from("socios_comisiones")
+        .insert({
+          socio_id: socioId,
+          referred_id: referido.id,
+          plan: referido.plan ?? "pro",
+          comision_centavos: comisionCentavos,
+          tipo_comision: "unica",
+          ciclo_numero: 0,
+        })
+        .select("id")
+        .single();
+      if (errorComision) {
+        console.error("No se pudo registrar la comisión única del vendedor:", errorComision);
+      } else {
+        await registrarRetencionVendedor(admin, socio, filaComision?.id ?? null, comisionCentavos);
+      }
       return;
     }
 
@@ -997,15 +1058,23 @@ async function procesarComisionVendedor(
       return;
     }
 
-    const { error: errorComision } = await admin.from("socios_comisiones").insert({
-      socio_id: socioId,
-      referred_id: referido.id,
-      plan: referido.plan ?? "pro",
-      comision_centavos: setentaCentavos,
-      tipo_comision: "setenta",
-      ciclo_numero: 0,
-    });
-    if (errorComision) console.error("No se pudo registrar el 70% del vendedor:", errorComision);
+    const { data: filaComision70, error: errorComision } = await admin
+      .from("socios_comisiones")
+      .insert({
+        socio_id: socioId,
+        referred_id: referido.id,
+        plan: referido.plan ?? "pro",
+        comision_centavos: setentaCentavos,
+        tipo_comision: "setenta",
+        ciclo_numero: 0,
+      })
+      .select("id")
+      .single();
+    if (errorComision) {
+      console.error("No se pudo registrar el 70% del vendedor:", errorComision);
+    } else {
+      await registrarRetencionVendedor(admin, socio, filaComision70?.id ?? null, setentaCentavos);
+    }
     return;
   }
 
@@ -1034,13 +1103,21 @@ async function procesarComisionVendedor(
     return;
   }
 
-  const { error: errorComisionTreinta } = await admin.from("socios_comisiones").insert({
-    socio_id: socioId,
-    referred_id: referido.id,
-    plan: referido.plan ?? "pro",
-    comision_centavos: estadoCliente.treinta_centavos,
-    tipo_comision: "treinta",
-    ciclo_numero: 0,
-  });
-  if (errorComisionTreinta) console.error("No se pudo registrar el 30% del vendedor:", errorComisionTreinta);
+  const { data: filaComisionTreinta, error: errorComisionTreinta } = await admin
+    .from("socios_comisiones")
+    .insert({
+      socio_id: socioId,
+      referred_id: referido.id,
+      plan: referido.plan ?? "pro",
+      comision_centavos: estadoCliente.treinta_centavos,
+      tipo_comision: "treinta",
+      ciclo_numero: 0,
+    })
+    .select("id")
+    .single();
+  if (errorComisionTreinta) {
+    console.error("No se pudo registrar el 30% del vendedor:", errorComisionTreinta);
+  } else {
+    await registrarRetencionVendedor(admin, socio, filaComisionTreinta?.id ?? null, estadoCliente.treinta_centavos);
+  }
 }
