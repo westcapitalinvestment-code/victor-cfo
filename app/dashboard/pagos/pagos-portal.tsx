@@ -2115,8 +2115,10 @@ function ReportesTab({
   // vendors o por x vendor").
   const [vendorFiltro, setVendorFiltro] = useState("");
   // Calculadora de deducción en riesgo (ver import arriba) — estado propio,
-  // independiente del filtro de período de los reportes de arriba.
-  const [calcGastoTexto, setCalcGastoTexto] = useState("5000");
+  // independiente del filtro de período de los reportes de arriba. Empieza
+  // vacío a propósito (3 oct 2026, mismo fix que la landing: un valor
+  // precargado confunde — parece que la app "inventó" un número).
+  const [calcGastoTexto, setCalcGastoTexto] = useState("");
   const [calcTipoNegocio, setCalcTipoNegocio] = useState<TasaContributivaId>("individuo");
   const calcGasto = parseFloat(calcGastoTexto.replace(/,/g, "")) || 0;
   const calcResultado = calcularImpuestoEnRiesgo(calcGasto, calcTipoNegocio);
@@ -2396,7 +2398,7 @@ function ReportesTab({
           landing (lib/calculadora-deduccion.ts) — nunca debe decir algo
           distinto. */}
       <div className="vc-card mt-3">
-        <p className="mb-1 text-xs uppercase tracking-wide text-muted">Calculadora — deducción en riesgo</p>
+        <p className="mb-1 text-xs uppercase tracking-wide text-muted">Calculadora — ahorro en impuestos</p>
         <p className="mb-3 text-xs text-muted">{CALCULADORA_EXPLICACION}</p>
 
         <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -2409,7 +2411,7 @@ function ReportesTab({
                 inputMode="decimal"
                 value={calcGastoTexto}
                 onChange={(e) => setCalcGastoTexto(e.target.value.replace(/[^0-9.]/g, ""))}
-                placeholder="5000"
+                placeholder="5,500"
                 className="w-full border-0 bg-transparent text-sm text-dark outline-none"
               />
             </div>
@@ -2432,7 +2434,7 @@ function ReportesTab({
         </div>
 
         <div className="mb-2 flex items-baseline justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2">
-          <span className="text-xs text-muted">Impuesto estimado en riesgo</span>
+          <span className="text-xs text-muted">Ahorro estimado en impuestos</span>
           <strong className="text-xl font-semibold text-teal">
             {calcResultado.impuestoEnRiesgo.toLocaleString("en-US", { style: "currency", currency: "USD" })}
           </strong>

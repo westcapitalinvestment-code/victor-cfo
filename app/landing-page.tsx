@@ -29,6 +29,10 @@ export default function LandingPage() {
               3 oct 2026): ver comentario junto a la sección #vendedores más
               abajo para el porqué completo del swap. */}
           <a href="#vendedores">Vendedores</a>
+          {/* Calculadora después de Vendedores en el nav (3 oct 2026, pedido
+              de Joel) — mismo orden que en el body: Vendedores primero,
+              Calculadora después. */}
+          <a href="#calculadora">Calculadora</a>
           <Link href="/registro" className={styles.navCta}>
             Comienza Gratis
           </Link>
@@ -625,11 +629,12 @@ export default function LandingPage() {
           lo llena ese CTA en vez de quedar vacío. El bloque original de
           embajadores (comentado arriba) sigue disponible en el historial
           de git si Joel quiere reactivarlo más adelante en vez de este.
-          La calculadora de deducción en riesgo (ver
-          LandingCalculadoraDeduccion justo arriba de este bloque) se puso
-          antes de Vendedores a propósito — es el gancho de producto real
-          para el visitante genérico; Vendedores es para alguien que ya
-          decidió vender el producto, audiencia más chica.
+          Orden con la calculadora (ver LandingCalculadoraDeduccion justo
+          debajo de este bloque): originalmente la calculadora iba ANTES de
+          Vendedores; Joel pidió invertirlo el mismo día ("me gustaria que
+          tuviera si tab arriba luego de Vendedores y asi mismo abajo
+          primero Vendedores y luego Calculadora") — ahora Vendedores va
+          primero y la Calculadora después, igual que en el nav de arriba.
           CTA cambiado de mailto a Link a /socios (mismo día, Joel: "se
           puede hacer para que el participante aplique en victorcfo.com")
           — usa el formulario público ya existente (app/socios/page.tsx →
@@ -639,8 +644,6 @@ export default function LandingPage() {
           de comisión, Joel la aprueba y reclasifica a mano desde el
           Dashboard de Operaciones, igual que con embajadores — ver
           app/api/socios/[id]/route.ts). No se tocó ese guardrail. */}
-      <LandingCalculadoraDeduccion />
-
       <div id="vendedores" className={styles.sociosBanner}>
         <div className={styles.sociosBadge}>// vendedores</div>
         <h3>¿Quieres vender VICTOR CFO y ganar comisión real?</h3>
@@ -652,6 +655,8 @@ export default function LandingPage() {
           Quiero ser Vendedor →
         </Link>
       </div>
+
+      <LandingCalculadoraDeduccion />
 
       <div className={styles.ctaFinal}>
         <div className={styles.sectionLabel} style={{ textAlign: "center" }}>

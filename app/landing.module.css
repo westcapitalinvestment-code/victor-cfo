@@ -366,14 +366,28 @@
 }
 @media (max-width: 640px) { .calcGrid { grid-template-columns: 1fr; } }
 .calcField { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem; color: var(--muted); }
-.calcField select,
-.calcInputMoney {
+/* 3 oct 2026, fix reportado por Joel (screenshot): el input de "$" y el
+   <select> se veían vacíos/rotos en producción — el color del texto no se
+   estaba aplicando DENTRO del <input>/<select> (solo al contenedor), así
+   que probablemente heredaba blanco-sobre-blanco de algún reset global.
+   Ahora cada control fija su propio color explícitamente, sin depender de
+   herencia, para que esto no pueda volver a pasar por una cascada ajena. */
+.calcField select {
+  display: block;
+  width: 100%;
   border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.75rem;
-  font-size: 0.95rem; color: var(--dark); background: #fff;
+  font-size: 0.95rem; color: var(--dark) !important; background: #fff !important;
 }
-.calcInputMoney { display: flex; align-items: center; gap: 0.3rem; }
+.calcInputMoney {
+  display: flex; align-items: center; gap: 0.3rem;
+  border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.75rem;
+  background: #fff;
+}
 .calcInputMoney span { color: var(--muted); }
-.calcInputMoney input { border: none; outline: none; width: 100%; font-size: 0.95rem; }
+.calcInputMoney input {
+  border: none; outline: none; width: 100%; font-size: 0.95rem;
+  color: var(--dark) !important; background: transparent !important;
+}
 .calcResultado {
   display: flex; align-items: baseline; justify-content: center; gap: 0.6rem;
   padding: 1rem; border-radius: 10px; background: var(--teal-dim); margin-bottom: 1rem;

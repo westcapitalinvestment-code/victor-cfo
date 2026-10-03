@@ -64,8 +64,12 @@ export function calcularImpuestoEnRiesgo(
 }
 
 // Copy compartido — mismo texto en landing y demo, para que no diverjan.
+// Reenfocado a "ahorro" (3 oct 2026, pedido de Joel: "lo que quiero es
+// dejar saber... cuanto se ahorraría en impuestos" — no "cuánto arriesgas",
+// sino "cuánto te ahorras si lo reportas bien"). El número es el mismo en
+// los dos framings; solo cambia cómo se presenta.
 export const CALCULADORA_EXPLICACION =
-  "Si en el año le pagas más de $500 a una persona o compañía por servicios (contratista, suplidor, profesional) y no presentas el Modelo 480.6SP correspondiente, Hacienda puede rechazarte esa deducción por completo en tu planilla (Sección 1033.01(a) del Código de Rentas Internas). El umbral de $500/año es el mismo que activa la retención de la Sección 1062.03.";
+  "Si en el año le pagas más de $500 a una persona o compañía por servicios (contratista, suplidor, profesional) y presentas el Modelo 480.6SP correspondiente, te aseguras esa deducción completa en tu planilla. Si no lo reportas, Hacienda puede rechazártela por completo (Sección 1033.01(a) del Código de Rentas Internas) — ese es el ahorro que te estás jugando. El umbral de $500/año es el mismo que activa la retención de la Sección 1062.03.";
 
 export const CALCULADORA_DISCLAIMER =
   "Esto es un estimado general con una tasa contributiva aproximada — tu situación específica puede variar. Para tu caso exacto, consulta con tu contable.";
