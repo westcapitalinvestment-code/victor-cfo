@@ -604,14 +604,18 @@ export default function LandingPage() {
           abre la puerta a cualquiera, mencionando CPA/contador/influencer
           como ejemplos en vez de como filtro. El programa interno
           (Dashboard, Términos, nombres de tabla/código) sigue llamándose
-          "Programa de Socios" — este es solo el gancho público. */}
+          "Programa de Socios" — este es solo el gancho público.
+          Copy sin promesa de comisión en dólares (pedido de Joel, 3 oct
+          2026) — el programa de comisión para embajador/CPA/influencer
+          está pausado mientras lanza el equipo de ventas (ver
+          app/socios/page.tsx y app/api/stripe/webhook/route.ts para el
+          mismo cambio). */}
       <div id="embajadores" className={styles.sociosBanner}>
         <div className={styles.sociosBadge}>// embajadores</div>
         <h3>¿Quieres formar parte de la familia VICTOR CFO?</h3>
         <p>
-          Como Embajador o Afiliado, ganas una comisión real por cada cliente que traigas —
-          seas CPA, contador, influencer, o simplemente alguien con la red y las ganas de promocionarlo
-          activamente. Sin límite: mientras más traigas, más ganas. Escríbenos.
+          Seas CPA, contador, influencer, o simplemente alguien con la red y las ganas de promocionar
+          VICTOR CFO activamente: escríbenos y te explicamos cómo puedes colaborar con nosotros.
         </p>
         <a
           href="mailto:info@westcapitalventuresllc.com?subject=Quiero%20ser%20Embajador%2FAfiliado%20de%20VICTOR%20CFO"
