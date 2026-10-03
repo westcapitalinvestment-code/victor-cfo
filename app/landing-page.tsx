@@ -24,11 +24,10 @@ export default function LandingPage() {
           <a href="#victor">VICTOR</a>
           <a href="#confianza">Confianza</a>
           <a href="#precios">Precios</a>
-          {/* Link "Embajadores" quitado del nav (pedido de Joel, 3 oct 2026):
-              estrategia es vendedores ahora para convertir rápido; embajadores
-              se reactiva más adelante, con producto maduro, para crecimiento
-              orgánico — ver sección #embajadores más abajo, desactivada pero
-              no borrada. */}
+          {/* Nav cambiado de "Embajadores" a "Vendedores" (pedido de Joel,
+              3 oct 2026): ver comentario junto a la sección #vendedores más
+              abajo para el porqué completo del swap. */}
+          <a href="#vendedores">Vendedores</a>
           <Link href="/registro" className={styles.navCta}>
             Comienza Gratis
           </Link>
@@ -614,30 +613,31 @@ export default function LandingPage() {
           está pausado mientras lanza el equipo de ventas (ver
           app/socios/page.tsx y app/api/stripe/webhook/route.ts para el
           mismo cambio).
-          Sección completa DESACTIVADA de la landing pública (mismo día,
-          misma conversación) — Joel: "no tiene sentido tenerlo ahí si no
-          le vamos a pagar comisión". Estrategia actual: vendedores por
-          comisión para convertir rápido ahora; embajadores se reactiva
-          más adelante, con producto maduro y varios clientes pagando,
-          para crecimiento orgánico. Se envuelve en `{false && (...)}` en
-          vez de borrarse — reactivar cambiando a `{true && (...)}` (o
-          quitando el condicional) cuando llegue ese momento. */}
-      {false && (
-      <div id="embajadores" className={styles.sociosBanner}>
-        <div className={styles.sociosBadge}>// embajadores</div>
-        <h3>¿Quieres formar parte de la familia VICTOR CFO?</h3>
+          Sección DESACTIVADA primero (mismo día, misma conversación) —
+          Joel: "no tiene sentido tenerlo ahí si no le vamos a pagar
+          comisión" — y luego, un mensaje después, pidió cambiarla por
+          Vendedores en vez de dejarla apagada ("coño lo hubiesemos
+          cambiado por vendedores en lugar de embajadores"): tiene sentido
+          porque a los vendedores SÍ se les paga comisión real y activa
+          (70/30 mensual, 20% único anual — ver webhook
+          procesarComisionVendedor), así que el hueco en la landing ahora
+          lo llena ese CTA en vez de quedar vacío. El bloque original de
+          embajadores (comentado arriba) sigue disponible en el historial
+          de git si Joel quiere reactivarlo más adelante en vez de este. */}
+      <div id="vendedores" className={styles.sociosBanner}>
+        <div className={styles.sociosBadge}>// vendedores</div>
+        <h3>¿Quieres vender VICTOR CFO y ganar comisión real?</h3>
         <p>
-          Seas CPA, contador, influencer, o simplemente alguien con la red y las ganas de promocionar
-          VICTOR CFO activamente: escríbenos y te explicamos cómo puedes colaborar con nosotros.
+          Buscamos vendedores en Puerto Rico para llevar VICTOR CFO directo a dueños de negocio.
+          Ganas comisión real por cada cliente que cierres — sin límite, mientras más cierres, más ganas. Escríbenos.
         </p>
         <a
-          href="mailto:info@westcapitalventuresllc.com?subject=Quiero%20ser%20Embajador%2FAfiliado%20de%20VICTOR%20CFO"
+          href="mailto:info@westcapitalventuresllc.com?subject=Quiero%20ser%20Vendedor%20de%20VICTOR%20CFO"
           className={styles.sociosBtn}
         >
-          Quiero ser Embajador →
+          Quiero ser Vendedor →
         </a>
       </div>
-      )}
 
       <div className={styles.ctaFinal}>
         <div className={styles.sectionLabel} style={{ textAlign: "center" }}>
