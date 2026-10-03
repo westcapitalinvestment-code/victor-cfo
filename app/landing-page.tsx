@@ -24,7 +24,11 @@ export default function LandingPage() {
           <a href="#victor">VICTOR</a>
           <a href="#confianza">Confianza</a>
           <a href="#precios">Precios</a>
-          <a href="#embajadores">Embajadores</a>
+          {/* Link "Embajadores" quitado del nav (pedido de Joel, 3 oct 2026):
+              estrategia es vendedores ahora para convertir rápido; embajadores
+              se reactiva más adelante, con producto maduro, para crecimiento
+              orgánico — ver sección #embajadores más abajo, desactivada pero
+              no borrada. */}
           <Link href="/registro" className={styles.navCta}>
             Comienza Gratis
           </Link>
@@ -609,7 +613,16 @@ export default function LandingPage() {
           2026) — el programa de comisión para embajador/CPA/influencer
           está pausado mientras lanza el equipo de ventas (ver
           app/socios/page.tsx y app/api/stripe/webhook/route.ts para el
-          mismo cambio). */}
+          mismo cambio).
+          Sección completa DESACTIVADA de la landing pública (mismo día,
+          misma conversación) — Joel: "no tiene sentido tenerlo ahí si no
+          le vamos a pagar comisión". Estrategia actual: vendedores por
+          comisión para convertir rápido ahora; embajadores se reactiva
+          más adelante, con producto maduro y varios clientes pagando,
+          para crecimiento orgánico. Se envuelve en `{false && (...)}` en
+          vez de borrarse — reactivar cambiando a `{true && (...)}` (o
+          quitando el condicional) cuando llegue ese momento. */}
+      {false && (
       <div id="embajadores" className={styles.sociosBanner}>
         <div className={styles.sociosBadge}>// embajadores</div>
         <h3>¿Quieres formar parte de la familia VICTOR CFO?</h3>
@@ -624,6 +637,7 @@ export default function LandingPage() {
           Quiero ser Embajador →
         </a>
       </div>
+      )}
 
       <div className={styles.ctaFinal}>
         <div className={styles.sectionLabel} style={{ textAlign: "center" }}>
