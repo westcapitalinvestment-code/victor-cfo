@@ -623,20 +623,26 @@ export default function LandingPage() {
           procesarComisionVendedor), así que el hueco en la landing ahora
           lo llena ese CTA en vez de quedar vacío. El bloque original de
           embajadores (comentado arriba) sigue disponible en el historial
-          de git si Joel quiere reactivarlo más adelante en vez de este. */}
+          de git si Joel quiere reactivarlo más adelante en vez de este.
+          CTA cambiado de mailto a Link a /socios (mismo día, Joel: "se
+          puede hacer para que el participante aplique en victorcfo.com")
+          — usa el formulario público ya existente (app/socios/page.tsx →
+          POST /api/socios), que entra siempre en estado='pendiente'.
+          /api/socios/route.ts solo acepta tipo cpa/influencer/otro —
+          "vendedor" NO es auto-seleccionable a propósito (es una relación
+          de comisión, Joel la aprueba y reclasifica a mano desde el
+          Dashboard de Operaciones, igual que con embajadores — ver
+          app/api/socios/[id]/route.ts). No se tocó ese guardrail. */}
       <div id="vendedores" className={styles.sociosBanner}>
         <div className={styles.sociosBadge}>// vendedores</div>
         <h3>¿Quieres vender VICTOR CFO y ganar comisión real?</h3>
         <p>
           Buscamos vendedores en Puerto Rico para llevar VICTOR CFO directo a dueños de negocio.
-          Ganas comisión real por cada cliente que cierres — sin límite, mientras más cierres, más ganas. Escríbenos.
+          Ganas comisión real por cada cliente que cierres — sin límite, mientras más cierres, más ganas.
         </p>
-        <a
-          href="mailto:info@westcapitalventuresllc.com?subject=Quiero%20ser%20Vendedor%20de%20VICTOR%20CFO"
-          className={styles.sociosBtn}
-        >
+        <Link href="/socios" className={styles.sociosBtn}>
           Quiero ser Vendedor →
-        </a>
+        </Link>
       </div>
 
       <div className={styles.ctaFinal}>

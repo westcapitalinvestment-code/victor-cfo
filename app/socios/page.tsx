@@ -85,14 +85,19 @@ export default function SociosPage() {
         </div>
 
         <form onSubmit={enviar} className="vc-card flex flex-col gap-3">
-          <h1 className="mb-1 text-base font-medium">Sé Embajador o Afiliado de VICTOR CFO</h1>
+          <h1 className="mb-1 text-base font-medium">Únete al equipo de VICTOR CFO</h1>
           <p className="mb-1 text-xs text-muted">
-            {/* Copy sin promesa de comisión en dólares (pedido de Joel, 3 oct
-                2026) — el programa de comisión para embajador/CPA/influencer
-                está pausado mientras lanza el equipo de ventas. Este
-                formulario sigue siendo la puerta de entrada tanto para
-                embajadores como para el equipo de ventas (Joel reclasifica
-                a "vendedor" al aprobar). */}
+            {/* h1 cambiado de "Sé Embajador o Afiliado" a algo neutral (3 oct
+                2026) — ahora el tráfico principal a este form llega desde el
+                CTA "Quiero ser Vendedor" de la landing (ver
+                app/landing-page.tsx, sección #vendedores), no desde
+                Embajadores (desactivado el mismo día). Copy sin promesa de
+                comisión en dólares — el programa de comisión para
+                embajador/CPA/influencer está pausado mientras lanza el
+                equipo de ventas. Este formulario sigue siendo la puerta de
+                entrada tanto para embajadores como para el equipo de ventas
+                (Joel reclasifica a "vendedor" al aprobar — tipo no es
+                auto-seleccionable, ver app/api/socios/route.ts). */}
             Seas CPA, contador, influencer, o simplemente alguien con la red y las ganas de promocionar
             VICTOR CFO activamente en Puerto Rico: completa el formulario y te contactamos directamente
             para explicarte cómo puedes colaborar con nosotros.
