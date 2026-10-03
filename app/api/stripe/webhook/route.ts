@@ -916,33 +916,21 @@ async function procesarComisionSocio(
     return;
   }
 
-  // --- Embajador (cpa/influencer/otro): comportamiento original ---
-  const { data: yaPremiado } = await admin
-    .from("socios_comisiones")
-    .select("id")
-    .eq("referred_id", referido.id)
-    .eq("tipo_comision", "entrada")
-    .maybeSingle();
-  if (yaPremiado) return;
-
-  const comisionCentavos =
-    referido.plan === "pro" || referido.plan === "proplus"
-      ? COMISION_SOCIO_PRO_CENTAVOS
-      : COMISION_SOCIO_CORE_CENTAVOS;
-
-  const { error } = await admin.from("socios_comisiones").insert({
-    socio_id: socio.id,
-    referred_id: referido.id,
-    plan: referido.plan ?? "core",
-    comision_centavos: comisionCentavos,
-    tipo_comision: "entrada",
-    ciclo_numero: 0,
-  });
-  if (error) {
-    // No relanzamos — perder una comisión de socio no debe tumbar el
-    // webhook ni afectar la activación de la cuenta del referido.
-    console.error("No se pudo registrar la comisión de socio:", error);
-  }
+  // --- Embajador (cpa/influencer/otro): PAUSADO (pedido de Joel, 3 oct
+  // 2026) ------------------------------------------------------------
+  // Joel decidió apagar la comisión de este track por completo —
+  // incluyendo a embajadores/CPAs ya aprobados — mientras lanza el
+  // equipo de ventas (vendedor). Razón: si al contador se le paga
+  // comisión directa, tiene incentivo a "quedarse" con el cliente en vez
+  // de referirlo de verdad (no da lista de clientes, no refiere a nadie,
+  // prefiere manejarlo él). El contador ahora solo recibe el Portal CPA
+  // gratis (ver app/dashboard/invitar-contable) cuando un cliente lo
+  // invita — sin comisión de por medio. El vendedor sigue cobrando su
+  // comisión normal (bloque de arriba) por cualquier negocio que él
+  // mismo cierre, sea o no cliente de ese contador.
+  //
+  // El código original que calculaba y guardaba la comisión ($7 Core /
+  // $25 Pro) vive en el historial de git si Joel quiere reactivarlo.
 }
 
 // Comisión de vendedor — solo Pro/Business; si por lo que sea el referido
