@@ -7,6 +7,19 @@ import { createClient } from "@/lib/supabase/client";
 import { formatMoney, formatFecha } from "@/lib/format";
 import { fechaHoyPR } from "@/lib/hora-pr";
 import ConfirmarPagoModal, { type LineaConfirmacion } from "../confirmar-pago-modal";
+// Calculadora de deducción en riesgo (3 oct 2026, pedido de Joel: quería la
+// misma calculadora de la landing disponible DENTRO de la cuenta demo, en
+// Pagos/Reportes, para que el que esté presentando el producto la use en
+// vivo frente a un prospecto). lib/calculadora-deduccion.ts es la única
+// fuente de verdad del cálculo — landing, VICTOR (chat) y esta tarjeta dicen
+// exactamente lo mismo.
+import {
+  calcularImpuestoEnRiesgo,
+  CALCULADORA_DISCLAIMER,
+  CALCULADORA_EXPLICACION,
+  TASA_CONTRIBUTIVA_LABEL,
+  type TasaContributivaId,
+} from "@/lib/calculadora-deduccion";
 
 type Vendor = {
   id: string;
@@ -2101,6 +2114,12 @@ function ReportesTab({
   // cuanto pagué y retuve la bisemana o el mes de agosto por todos los
   // vendors o por x vendor").
   const [vendorFiltro, setVendorFiltro] = useState("");
+  // Calculadora de deducción en riesgo (ver import arriba) — estado propio,
+  // independiente del filtro de período de los reportes de arriba.
+  const [calcGastoTexto, setCalcGastoTexto] = useState("5000");
+  const [calcTipoNegocio, setCalcTipoNegocio] = useState<TasaContributivaId>("individuo");
+  const calcGasto = parseFloat(calcGastoTexto.replace(/,/g, "")) || 0;
+  const calcResultado = calcularImpuestoEnRiesgo(calcGasto, calcTipoNegocio);
 
   const { desde, hasta } =
     periodo === "trimestre"
@@ -2367,6 +2386,59 @@ function ReportesTab({
             Exportar Excel
           </a>
         </div>
+      </div>
+
+      {/* Calculadora de deducción en riesgo (tarea #848, 3 oct 2026) — para
+          que quien esté presentando VICTOR CFO le muestre al prospecto, en
+          vivo y con sus propios números, cuánto impuesto arriesga por no
+          reportar un pago a contratista/suplidor/servicio profesional.
+          Misma función y mismo texto que la calculadora pública de la
+          landing (lib/calculadora-deduccion.ts) — nunca debe decir algo
+          distinto. */}
+      <div className="vc-card mt-3">
+        <p className="mb-1 text-xs uppercase tracking-wide text-muted">Calculadora — deducción en riesgo</p>
+        <p className="mb-3 text-xs text-muted">{CALCULADORA_EXPLICACION}</p>
+
+        <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-xs text-muted">
+            <span>Monto pagado en el año (si pasa de $500)</span>
+            <div className="flex items-center gap-1 rounded-md border border-border px-2 py-1.5">
+              <span className="text-muted">$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={calcGastoTexto}
+                onChange={(e) => setCalcGastoTexto(e.target.value.replace(/[^0-9.]/g, ""))}
+                placeholder="5000"
+                className="w-full border-0 bg-transparent text-sm text-dark outline-none"
+              />
+            </div>
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs text-muted">
+            <span>Tipo de negocio</span>
+            <select
+              value={calcTipoNegocio}
+              onChange={(e) => setCalcTipoNegocio(e.target.value as TasaContributivaId)}
+              className="rounded-md border border-border px-2 py-1.5 text-sm text-dark"
+            >
+              {(Object.keys(TASA_CONTRIBUTIVA_LABEL) as TasaContributivaId[]).map((id) => (
+                <option key={id} value={id}>
+                  {TASA_CONTRIBUTIVA_LABEL[id]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mb-2 flex items-baseline justify-between rounded-lg border border-teal bg-teal/[.06] px-3 py-2">
+          <span className="text-xs text-muted">Impuesto estimado en riesgo</span>
+          <strong className="text-xl font-semibold text-teal">
+            {calcResultado.impuestoEnRiesgo.toLocaleString("en-US", { style: "currency", currency: "USD" })}
+          </strong>
+        </div>
+
+        <p className="text-[11px] italic text-muted">{CALCULADORA_DISCLAIMER}</p>
       </div>
     </>
   );
