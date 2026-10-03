@@ -55,6 +55,16 @@ const PRECIOS_REGISTRO = {
     mensual: { normal: "49.99", sufijo: "/mes" },
     anual: { normal: "549", sufijo: "/año" },
   },
+  // Business (3 oct 2026, pedido de Joel: "encontre un hueco en la
+  // Landing, no tiene Business" — faltaba la 4ta tarjeta aquí en /registro,
+  // aunque el plan ya existe en Stripe (lib/stripe.ts, PlanId "proplus") y
+  // en la landing (app/landing-pricing.tsx). "1,099" lleva coma a
+  // propósito — datosPrecio() le quita la coma antes de parseFloat, así
+  // que el cálculo de ahorro% no se rompe.
+  proplus: {
+    mensual: { normal: "99.99", sufijo: "/mes" },
+    anual: { normal: "1,099", sufijo: "/año" },
+  },
 } as const;
 
 // Validación básica de forma de UUID — solo para decidir qué precio
@@ -75,7 +85,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // 'aprobado') vive en el trigger de Postgres.
 const SOCIO_CODIGO_RE = /^[A-Z0-9]{4,20}$/i;
 
-type PlanPago = "core" | "pro";
+type PlanPago = "core" | "pro" | "proplus";
 
 // Checkbox de términos repetido dentro de CADA tarjeta (26 sept 2026, pedido
 // de Joel) — antes vivía una sola vez arriba de las 3 tarjetas y "casi no se
@@ -120,9 +130,16 @@ function RegistroForm() {
   const cicloQuery = searchParams.get("ciclo");
   const refQuery = searchParams.get("ref");
   const socioQuery = searchParams.get("socio");
-  // Si alguien llega con ?plan=pro, esa es la tarjeta que se destaca — pero
-  // las 3 siempre están visibles y activas, nunca se esconde ninguna.
-  const planDestacado: PlanPago = planQuery === "pro" ? "pro" : "core";
+  // Si alguien llega con ?plan=pro o ?plan=proplus, esa es la tarjeta que se
+  // destaca — pero las 4 siempre están visibles y activas, nunca se esconde
+  // ninguna. "business" se acepta como alias de "proplus" (3 oct 2026): el
+  // CTA de Business en la landing, app/landing-pricing.tsx línea ~203, manda
+  // ?plan=business — "business" no es un PlanId real en lib/stripe.ts (ahí
+  // el identificador interno sigue siendo "proplus"), así que antes ese link
+  // no resaltaba nada; con el alias aquí, si el checkout real algún día
+  // también acepta "business" no hay que tocar esto de nuevo.
+  const planDestacado: PlanPago =
+    planQuery === "pro" ? "pro" : planQuery === "proplus" || planQuery === "business" ? "proplus" : "core";
   const cicloInicial: Ciclo = esCicloValido(cicloQuery) ? cicloQuery : "mensual";
   const refId = refQuery && UUID_RE.test(refQuery) ? refQuery : null;
   const socioCodigo = socioQuery && SOCIO_CODIGO_RE.test(socioQuery) ? socioQuery.toUpperCase() : null;
@@ -140,8 +157,11 @@ function RegistroForm() {
     const precios = PRECIOS_REGISTRO[planId];
     const precioMostrar = precios[ciclo].normal;
     const sufijo = precios[ciclo].sufijo;
-    const mensualNum = parseFloat(precios.mensual.normal);
-    const anualNum = parseFloat(precios.anual.normal);
+    // .replace(/,/g, "") — el anual de Business se guarda como "1,099" (con
+    // coma, para mostrarlo así) pero parseFloat("1,099") da 1, no 1099. Sin
+    // el replace, el % de ahorro y el "/mes" del anual salían mal.
+    const mensualNum = parseFloat(precios.mensual.normal.replace(/,/g, ""));
+    const anualNum = parseFloat(precios.anual.normal.replace(/,/g, ""));
     const anualPorMes = (anualNum / 12).toFixed(2);
     const ahorroPct = Math.round((1 - anualNum / (mensualNum * 12)) * 100);
     return { precioMostrar, sufijo, anualPorMes, ahorroPct };
@@ -149,7 +169,7 @@ function RegistroForm() {
 
   function finePrint(planId: PlanPago) {
     const { precioMostrar, sufijo } = datosPrecio(planId);
-    const nombre = planId === "pro" ? "Pro" : "Core";
+    const nombre = planId === "pro" ? "Pro" : planId === "proplus" ? "Business" : "Core";
     return esReferido
       ? `Tu primer mes de ${nombre} es gratis, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
       : `Gratis por 7 días, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`;
@@ -317,6 +337,12 @@ function RegistroForm() {
     datosPrecio("core");
   const { precioMostrar: precioPro, sufijo: sufijoPro, anualPorMes: anualPorMesPro, ahorroPct: ahorroPro } =
     datosPrecio("pro");
+  const {
+    precioMostrar: precioBusiness,
+    sufijo: sufijoBusiness,
+    anualPorMes: anualPorMesBusiness,
+    ahorroPct: ahorroBusiness,
+  } = datosPrecio("proplus");
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -354,8 +380,20 @@ function RegistroForm() {
           <div>
             <p className="font-semibold text-text">Pro — negocio</p>
             <p className="text-muted">
-              Todo lo de Core, más Facturación, cotizaciones, cobros con tarjeta, pagos a contratistas y reportes
-              listos para Hacienda.
+              Todo lo de Core, más Facturación, cotizaciones, cobros con tarjeta y reportes listos para Hacienda.
+            </p>
+          </div>
+          {/* Business (3 oct 2026) — "Pagos a contratistas" se movió aquí
+              desde Pro, Joel: "tambien dice Pagos hay q quitarlo pq eso es
+              de Business". Coincide con la copia real de la landing
+              (app/landing-pricing.tsx / lib/victor/landing-system-prompt.ts):
+              retención 480.6SP automática, depósito 480.9A y 1 acceso de
+              secretaria/administrador + hasta 3 técnicos incluidos. */}
+          <div>
+            <p className="font-semibold text-text">Business — todo incluido</p>
+            <p className="text-muted">
+              Todo lo de Pro, más pagos a contratistas con retención 480.6SP automática, 1 acceso de secretaria o
+              administrador y hasta 3 técnicos de campo incluidos.
             </p>
           </div>
         </div>
@@ -363,7 +401,7 @@ function RegistroForm() {
 
       {/* Panel de las 3 tarjetas */}
       <div className="flex flex-1 items-center justify-center px-6 py-10">
-        <div className={mostrarEmailForm ? "w-full max-w-md" : "w-full max-w-4xl"}>
+        <div className={mostrarEmailForm ? "w-full max-w-md" : "w-full max-w-5xl"}>
           {!mostrarEmailForm ? (
             <>
               {error && <p className="mb-3 text-center text-xs text-red">{error}</p>}
@@ -390,7 +428,7 @@ function RegistroForm() {
                 </button>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 {/* Tarjeta Gratis */}
                 <div className="vc-card flex flex-col gap-3 p-6 text-center">
                   <p className="text-lg font-semibold text-text">Gratis</p>
@@ -486,7 +524,6 @@ function RegistroForm() {
                     <li className="text-text">✓ Todo lo de Core</li>
                     <li className="text-text">✓ Facturación y cotizaciones</li>
                     <li className="text-text">✓ Cobros con tarjeta</li>
-                    <li className="text-text">✓ Pagos a contratistas</li>
                     <li className="text-text">✓ Reportes multi-entidad</li>
                   </ul>
                   <p className="text-xs text-muted">{finePrint("pro")}</p>
@@ -508,6 +545,56 @@ function RegistroForm() {
                     o con email
                   </button>
                 </div>
+
+                {/* Tarjeta Business (3 oct 2026) — faltaba en /registro, Joel:
+                    "encontre un hueco en la Landing, no tiene Business".
+                    "Pagos a contratistas" se movió aquí desde Pro (ver arriba,
+                    "y tambien dice Pagos hay q quitarlo pq eso es de Business"). */}
+                <div
+                  className={`vc-card flex flex-col gap-3 p-6 text-center ${
+                    planDestacado === "proplus" ? "border-2 border-teal" : ""
+                  }`}
+                >
+                  <p className="text-lg font-semibold text-text">Business</p>
+                  <p className="text-xs text-muted">Todo incluido</p>
+                  <p className="text-3xl font-bold text-teal">
+                    ${precioBusiness}
+                    <span className="text-sm font-normal">{sufijoBusiness}</span>
+                  </p>
+                  {ciclo === "anual" && (
+                    <p className="-mt-2 text-[0.7rem] text-muted">
+                      ${anualPorMesBusiness}/mes · ahorra {ahorroBusiness}%
+                    </p>
+                  )}
+                  <ul className="flex flex-1 flex-col gap-1.5 text-left text-xs">
+                    <li className="text-text">✓ Todo lo de Pro</li>
+                    <li className="text-text">✓ Pagos a contratistas (480.6SP automático)</li>
+                    <li className="text-text">✓ 1 acceso de secretaria o administrador</li>
+                    <li className="text-text">✓ Hasta 3 técnicos de campo</li>
+                  </ul>
+                  <p className="text-xs text-muted">{finePrint("proplus")}</p>
+                  <TerminosCheckbox aceptaTerminos={aceptaTerminos} setAceptaTerminos={setAceptaTerminos} />
+                  <button
+                    type="button"
+                    className="vc-btn-primary flex items-center justify-center gap-2"
+                    disabled={loading || !!oauthEnCurso || !aceptaTerminos}
+                    onClick={() => continuarConOAuth("google", false, "proplus")}
+                  >
+                    {oauthEnCurso === "google"
+                      ? "..."
+                      : esReferido
+                        ? "Activar Business — primer mes gratis"
+                        : "Activar Business"}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs text-muted underline"
+                    disabled={loading || !!oauthEnCurso}
+                    onClick={() => abrirEmailForm(false, "proplus")}
+                  >
+                    o con email
+                  </button>
+                </div>
               </div>
 
               <p className="mt-5 text-center text-xs text-muted">
@@ -522,7 +609,9 @@ function RegistroForm() {
               <p className="text-center text-sm font-medium text-text">
                 {emailFlujo.gratis
                   ? "Creando tu cuenta gratis"
-                  : `Creando tu cuenta ${emailFlujo.plan === "pro" ? "Pro" : "Core"}`}
+                  : `Creando tu cuenta ${
+                      emailFlujo.plan === "proplus" ? "Business" : emailFlujo.plan === "pro" ? "Pro" : "Core"
+                    }`}
               </p>
 
               {error && <p className="text-center text-xs text-red">{error}</p>}
