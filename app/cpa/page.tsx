@@ -210,9 +210,9 @@ export default async function CpaPortalPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/cpa/equipo"
-            className="flex items-center gap-1 rounded-full border border-teal px-2.5 py-1 text-[10px] font-medium text-teal hover:opacity-80"
+            className="flex items-center gap-1.5 rounded-full bg-teal px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
           >
-            <i className="ti ti-users" /> Mi equipo
+            <i className="ti ti-users text-sm" /> Mi equipo
           </Link>
           <span className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[10px] text-muted">
             <i className="ti ti-lock" /> Solo lectura
