@@ -2412,7 +2412,7 @@ function ReportesTab({
                 value={calcGastoTexto}
                 onChange={(e) => setCalcGastoTexto(e.target.value.replace(/[^0-9.]/g, ""))}
                 placeholder="5,500"
-                className="w-full border-0 bg-transparent text-sm text-dark outline-none"
+                className="w-full border-0 bg-transparent text-sm text-text outline-none"
               />
             </div>
           </label>
@@ -2422,7 +2422,7 @@ function ReportesTab({
             <select
               value={calcTipoNegocio}
               onChange={(e) => setCalcTipoNegocio(e.target.value as TasaContributivaId)}
-              className="rounded-md border border-border px-2 py-1.5 text-sm text-dark"
+              className="rounded-md border border-border px-2 py-1.5 text-sm text-text"
             >
               {(Object.keys(TASA_CONTRIBUTIVA_LABEL) as TasaContributivaId[]).map((id) => (
                 <option key={id} value={id}>

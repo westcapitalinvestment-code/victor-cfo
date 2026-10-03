@@ -366,17 +366,21 @@
 }
 @media (max-width: 640px) { .calcGrid { grid-template-columns: 1fr; } }
 .calcField { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem; color: var(--muted); }
-/* 3 oct 2026, fix reportado por Joel (screenshot): el input de "$" y el
-   <select> se veían vacíos/rotos en producción — el color del texto no se
-   estaba aplicando DENTRO del <input>/<select> (solo al contenedor), así
-   que probablemente heredaba blanco-sobre-blanco de algún reset global.
-   Ahora cada control fija su propio color explícitamente, sin depender de
-   herencia, para que esto no pueda volver a pasar por una cascada ajena. */
+/* 3 oct 2026, fix reportado por Joel (screenshot: "no se ve nada cuando
+   uno escoge ni cuando uno esta poniendo la cantidad") — el primer intento
+   de arreglo usó var(--dark) para el texto, pero en ESTE archivo --dark es
+   el BLANCO de fondo (ver comentario en .root línea ~14: el 27 sept Joel
+   pasó el landing a fondo blanco y se volteó la paleta ahí — --dark pasó a
+   ser blanco y --white pasó a ser el texto oscuro, sin renombrar las
+   variables). O sea, "color: var(--dark)" era literalmente texto blanco
+   sobre fondo blanco — de ahí que no se viera nada al escribir o
+   seleccionar. El token correcto para texto oscuro/legible aquí es
+   var(--white). */
 .calcField select {
   display: block;
   width: 100%;
   border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.75rem;
-  font-size: 0.95rem; color: var(--dark) !important; background: #fff !important;
+  font-size: 0.95rem; color: var(--white) !important; background: #fff !important;
 }
 .calcInputMoney {
   display: flex; align-items: center; gap: 0.3rem;
@@ -386,7 +390,7 @@
 .calcInputMoney span { color: var(--muted); }
 .calcInputMoney input {
   border: none; outline: none; width: 100%; font-size: 0.95rem;
-  color: var(--dark) !important; background: transparent !important;
+  color: var(--white) !important; background: transparent !important;
 }
 .calcResultado {
   display: flex; align-items: baseline; justify-content: center; gap: 0.6rem;
@@ -395,7 +399,7 @@
 .calcResultado span { font-size: 0.85rem; color: var(--muted); }
 .calcResultado strong { font-size: 2rem; font-weight: 700; color: var(--teal-dark); }
 .calcDisclaimer { font-size: 0.75rem; color: var(--muted); font-style: italic; margin-bottom: 1.25rem; }
-.calcPitch { font-size: 0.88rem; color: var(--dark); line-height: 1.6; max-width: 560px; margin: 0 auto; }
+.calcPitch { font-size: 0.88rem; color: var(--white); line-height: 1.6; max-width: 560px; margin: 0 auto; }
 
 /* PRODUCT TOUR — sección interactiva "haz click y explora" (27 sept 2026,
    pedido de Joel tras ver holded.com). Reconstruida el mismo día a partir
