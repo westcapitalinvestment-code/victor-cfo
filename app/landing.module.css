@@ -343,6 +343,46 @@
 }
 .sociosBtn:hover { opacity: 0.85; }
 
+/* CALCULADORA DE DEDUCCIÓN EN RIESGO (3 oct 2026) — teal, no ámbar, a
+   propósito: esto es un producto/herramienta de VICTOR, no una oferta de
+   reclutamiento como el banner de Vendedores. Mismo molde de card que
+   .sociosBanner para consistencia visual, colores distintos para que no
+   se confundan entre sí al hacer scroll. */
+.calcBanner {
+  margin: 3rem 6% 0; padding: 2rem 2.25rem; max-width: 720px; margin-left: auto; margin-right: auto;
+  border: 1.5px solid var(--teal); border-radius: 14px;
+  background: linear-gradient(135deg, var(--teal-dim), transparent 60%);
+  text-align: center;
+  scroll-margin-top: 120px;
+}
+.calcBadge {
+  display: inline-block; font-family: 'Courier New', monospace; font-size: 1rem;
+  font-weight: 700; color: var(--teal-dark); letter-spacing: 0.04em; margin-bottom: 0.75rem;
+}
+.calcBanner h3 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.6rem; }
+.calcExplicacion { color: var(--muted); font-size: 0.9rem; line-height: 1.6; max-width: 560px; margin: 0 auto 1.5rem; }
+.calcGrid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; text-align: left; margin-bottom: 1.25rem;
+}
+@media (max-width: 640px) { .calcGrid { grid-template-columns: 1fr; } }
+.calcField { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem; color: var(--muted); }
+.calcField select,
+.calcInputMoney {
+  border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.75rem;
+  font-size: 0.95rem; color: var(--dark); background: #fff;
+}
+.calcInputMoney { display: flex; align-items: center; gap: 0.3rem; }
+.calcInputMoney span { color: var(--muted); }
+.calcInputMoney input { border: none; outline: none; width: 100%; font-size: 0.95rem; }
+.calcResultado {
+  display: flex; align-items: baseline; justify-content: center; gap: 0.6rem;
+  padding: 1rem; border-radius: 10px; background: var(--teal-dim); margin-bottom: 1rem;
+}
+.calcResultado span { font-size: 0.85rem; color: var(--muted); }
+.calcResultado strong { font-size: 2rem; font-weight: 700; color: var(--teal-dark); }
+.calcDisclaimer { font-size: 0.75rem; color: var(--muted); font-style: italic; margin-bottom: 1.25rem; }
+.calcPitch { font-size: 0.88rem; color: var(--dark); line-height: 1.6; max-width: 560px; margin: 0 auto; }
+
 /* PRODUCT TOUR — sección interactiva "haz click y explora" (27 sept 2026,
    pedido de Joel tras ver holded.com). Reconstruida el mismo día a partir
    del mockup real "victor_pro_master" (el HTML que Joel ya usa como

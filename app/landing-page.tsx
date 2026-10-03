@@ -3,6 +3,7 @@ import styles from "./landing.module.css";
 import LandingPricing from "./landing-pricing";
 import LandingProductTour from "./landing-product-tour";
 import LandingVictorBubble from "./landing-victor-bubble";
+import LandingCalculadoraDeduccion from "./landing-calculadora-deduccion";
 
 // Landing page público de VICTOR (victorcfo.com) — calcado de
 // "VICTOR — Tu CFO Virtual.html". Vive dentro de la misma app Next.js
@@ -624,6 +625,11 @@ export default function LandingPage() {
           lo llena ese CTA en vez de quedar vacío. El bloque original de
           embajadores (comentado arriba) sigue disponible en el historial
           de git si Joel quiere reactivarlo más adelante en vez de este.
+          La calculadora de deducción en riesgo (ver
+          LandingCalculadoraDeduccion justo arriba de este bloque) se puso
+          antes de Vendedores a propósito — es el gancho de producto real
+          para el visitante genérico; Vendedores es para alguien que ya
+          decidió vender el producto, audiencia más chica.
           CTA cambiado de mailto a Link a /socios (mismo día, Joel: "se
           puede hacer para que el participante aplique en victorcfo.com")
           — usa el formulario público ya existente (app/socios/page.tsx →
@@ -633,6 +639,8 @@ export default function LandingPage() {
           de comisión, Joel la aprueba y reclasifica a mano desde el
           Dashboard de Operaciones, igual que con embajadores — ver
           app/api/socios/[id]/route.ts). No se tocó ese guardrail. */}
+      <LandingCalculadoraDeduccion />
+
       <div id="vendedores" className={styles.sociosBanner}>
         <div className={styles.sociosBadge}>// vendedores</div>
         <h3>¿Quieres vender VICTOR CFO y ganar comisión real?</h3>
