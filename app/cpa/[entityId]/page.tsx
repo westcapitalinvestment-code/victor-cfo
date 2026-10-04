@@ -6,6 +6,7 @@ import { calcularEstadoResultados } from "@/lib/estado-resultados";
 import { saludoPorHora } from "@/lib/hora-pr";
 import { formatMoney as formatMoneyAlerta } from "@/lib/format";
 import AlertasAgrupadas, { type AlertaCpa } from "../alertas-agrupadas";
+import CpaAccountMenu from "../cpa-account-menu";
 
 // Portal CPA — dashboard de un cliente (pantalla "Dashboard" del mockup
 // "VICTOR — Portal CPA.html"). Todo lo que se lee aquí pasa por RLS
@@ -348,9 +349,12 @@ export default async function CpaClientePage({
         <Link href="/cpa" className="text-sm text-muted hover:opacity-80">
           ← Tus clientes
         </Link>
-        <span className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[10px] text-muted">
-          <i className="ti ti-lock" /> Solo lectura
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[10px] text-muted">
+            <i className="ti ti-lock" /> Solo lectura
+          </span>
+          <CpaAccountMenu email={user.email ?? null} />
+        </div>
       </div>
 
       <p className="mb-3 text-base font-medium">

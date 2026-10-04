@@ -6,6 +6,7 @@ import { saludoPorHora, fechaHoyPR } from "@/lib/hora-pr";
 import CpaClientList, { type ClienteCpa } from "./cpa-client-list";
 import FirmaAccountantPanel from "./firma-accountant-panel";
 import AlertasAgrupadas, { type AlertaCpa } from "./alertas-agrupadas";
+import CpaAccountMenu from "./cpa-account-menu";
 
 // Portal CPA — lista de clientes (pantalla "Clientes" del mockup
 // "VICTOR — Portal CPA.html"). RLS (business_entities_cpa_read,
@@ -238,6 +239,7 @@ export default async function CpaPortalPage() {
           <span className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[10px] text-muted">
             <i className="ti ti-lock" /> Solo lectura
           </span>
+          <CpaAccountMenu email={user.email ?? null} />
         </div>
       </div>
 

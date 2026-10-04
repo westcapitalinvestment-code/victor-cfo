@@ -10,6 +10,16 @@ import { createClient } from "@/lib/supabase/client";
 // recuperación — createBrowserClient la detecta sola al cargar esta
 // página (detectSessionInUrl, default en @supabase/ssr). Aquí solo se pide
 // la contraseña nueva y se guarda con updateUser().
+//
+// Desde el 4 oct 2026 esta MISMA pantalla también se usa con una sesión ya
+// activa y normal (no de recuperación) — el engranaje del Portal CPA
+// (app/cpa/cpa-account-menu.tsx, pedido de Joel) enlaza aquí directo para
+// "Cambiar contraseña" sin pasar por el correo, porque getSession() de
+// abajo ya acepta cualquier sesión válida, no solo PASSWORD_RECOVERY. El
+// botón "Cancelar" de abajo es justo para ese caso: alguien que entra desde
+// ya logueado y solo quiere ver la pantalla, no uno que llegó de un link de
+// correo de un solo uso (ahí no hay a dónde "cancelar" — por eso solo se
+// muestra si hay historial al que volver).
 export default function RestablecerContrasenaPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -130,6 +140,13 @@ export default function RestablecerContrasenaPage() {
 
           <button type="submit" className="vc-btn-primary mt-2" disabled={enviando}>
             {enviando ? "Guardando..." : "Guardar contraseña"}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="text-center text-xs text-muted hover:opacity-80"
+          >
+            Cancelar
           </button>
         </form>
       </div>
