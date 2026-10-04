@@ -200,7 +200,22 @@ export default function AdminPortal({
   }
 
   async function sincronizarStripe() {
-    await fetch("/api/stripe/addon-admin/sincronizar", { method: "POST" }).catch(() => null);
+    // Antes esto descartaba la respuesta entero (fire-and-forget puro) —
+    // ahora sí se lee, porque un cliente de Firma Accountant sin
+    // suscripción propia (4 oct 2026) puede devolver requierePago+
+    // checkoutUrl en vez de sincronizar directo, y hay que mandarlo a
+    // Stripe a poner su tarjeta. Se sigue llamando sin bloquear al usuario
+    // en los 3 sitios que la usan (no cambia esa parte).
+    try {
+      const res = await fetch("/api/stripe/addon-admin/sincronizar", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (data?.requierePago && data?.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      }
+    } catch {
+      // mismo comportamiento de antes: un fallo de red aquí no bloquea al
+      // usuario, el cron de reconciliación diaria cierra la brecha.
+    }
   }
 
   async function guardarConfiguracion() {

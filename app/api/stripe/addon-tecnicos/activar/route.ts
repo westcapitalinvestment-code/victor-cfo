@@ -1,17 +1,23 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, priceIdAddonTecnicos } from "@/lib/stripe";
+import { iniciarCheckoutAddonCliente } from "@/lib/addon-checkout-cliente";
 
 // Activa el addon Equipo ($20/mes, hasta 3 técnicos) añadiendo un SEGUNDO
 // subscription item a la suscripción Pro que el usuario ya tiene en
 // Stripe — no crea una suscripción nueva ni manda a un checkout aparte,
 // así que se activa al instante con un solo click. Stripe prorratea el
 // cargo automáticamente (proration_behavior por default) y lo suma a la
-// próxima factura. Requiere que el usuario ya sea Pro/Pro+ con una
-// suscripción activa — Equipo en sí mismo ya está gateado a esPro
-// (app/dashboard/equipo/page.tsx), así que si llegó hasta aquí ya
-// debería tener stripe_subscription_id.
-export async function POST() {
+// próxima factura. Requiere que el usuario ya sea Pro/Pro+ con plan
+// activo — Equipo en sí mismo ya está gateado a esPro
+// (app/dashboard/equipo/page.tsx).
+//
+// Excepción (4 oct 2026, pedido de Joel): un cliente de Firma Accountant
+// (migración 0139) es Pro+/activo pero nunca tiene stripe_subscription_id
+// propio — su plan base lo paga la firma. En ese caso, en vez de
+// bloquearlo, se le manda a un Checkout de Stripe para que ponga su
+// tarjeta solo para este addon — ver lib/addon-checkout-cliente.ts.
+export async function POST(req: NextRequest) {
   const supabase = createClient();
   const {
     data: { user },
@@ -20,15 +26,40 @@ export async function POST() {
 
   const { data: perfil } = await supabase
     .from("users")
-    .select("plan, plan_status, stripe_subscription_id, addon_tecnicos_status")
+    .select("plan, plan_status, stripe_customer_id, stripe_subscription_id, addon_tecnicos_status")
     .eq("id", user.id)
     .maybeSingle();
 
   if (!perfil || (perfil.plan !== "pro" && perfil.plan !== "proplus")) {
     return NextResponse.json({ error: "El addon Equipo requiere el plan Pro." }, { status: 400 });
   }
-  if (perfil.plan_status !== "active" || !perfil.stripe_subscription_id) {
-    return NextResponse.json({ error: "Necesitas una suscripción de pago activa para activar addons." }, { status: 400 });
+  if (perfil.plan_status !== "active") {
+    return NextResponse.json({ error: "Necesitas un plan activo para activar addons." }, { status: 400 });
+  }
+  if (!perfil.stripe_subscription_id) {
+    const priceId = priceIdAddonTecnicos();
+    if (!priceId) {
+      return NextResponse.json(
+        { error: "Falta configurar el Price ID del addon Técnicos en las variables de entorno." },
+        { status: 500 }
+      );
+    }
+    try {
+      const checkoutUrl = await iniciarCheckoutAddonCliente({
+        userId: user.id,
+        userEmail: user.email!,
+        stripeCustomerId: perfil.stripe_customer_id ?? null,
+        items: [{ priceId, quantity: 1 }],
+        origin: req.headers.get("origin") || "https://www.victorcfo.com",
+        returnTo: "/dashboard/equipo",
+      });
+      return NextResponse.json({ ok: true, requierePago: true, checkoutUrl });
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "No se pudo iniciar el pago con Stripe." },
+        { status: 500 }
+      );
+    }
   }
   if (perfil.addon_tecnicos_status === "activo") {
     return NextResponse.json({ ok: true, yaActivo: true });

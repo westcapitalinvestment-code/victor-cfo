@@ -388,7 +388,18 @@ export default function EntidadForm({
     // seguir trabajando y que esto se reconcilie en el próximo intento
     // (ej. al crear otra entidad) que dejarlo atascado en este formulario.
     if (!esPrimeraEntidad) {
-      fetch("/api/stripe/addon-entidades/sincronizar", { method: "POST" }).catch(() => {});
+      // No se espera (misma lógica de no bloquear de arriba), pero sí se lee
+      // la respuesta: un cliente de Firma Accountant sin suscripción propia
+      // (4 oct 2026) puede devolver requierePago+checkoutUrl en vez de
+      // sincronizar directo — en ese caso lo mandamos a Stripe a poner su
+      // tarjeta, aunque la navegación de abajo ya haya arrancado (el
+      // redirect gana, no hay conflicto real).
+      fetch("/api/stripe/addon-entidades/sincronizar", { method: "POST" })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.requierePago && data?.checkoutUrl) window.location.href = data.checkoutUrl;
+        })
+        .catch(() => {});
     }
     // Si escogieron el certificado de relevo durante la creación (arriba,
     // solo se podía ESCOGER, no subir — hacía falta el id real de la

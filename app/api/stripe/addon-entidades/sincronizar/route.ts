@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, priceIdAddonEntidadAdicional } from "@/lib/stripe";
+import { iniciarCheckoutAddonCliente } from "@/lib/addon-checkout-cliente";
 
 // Sincroniza el subscription item de "Entidad adicional" ($24.99/mes c/u,
 // migración 0063) con la cantidad real de entidades de negocio ACTIVAS que
@@ -8,7 +9,7 @@ import { getStripe, priceIdAddonEntidadAdicional } from "@/lib/stripe";
 // que addon-admin/sincronizar: por seat, sin botón activar/desactivar
 // aparte, se llama esta ruta después de crear (o en el futuro, archivar)
 // una entidad y Stripe se ajusta solo.
-export async function POST() {
+export async function POST(req: NextRequest) {
   const supabase = createClient();
   const {
     data: { user },
@@ -17,7 +18,7 @@ export async function POST() {
 
   const { data: perfil } = await supabase
     .from("users")
-    .select("plan, plan_status, stripe_subscription_id, addon_entidades_status, addon_entidades_item_id")
+    .select("plan, plan_status, stripe_customer_id, stripe_subscription_id, addon_entidades_status, addon_entidades_item_id")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -33,8 +34,39 @@ export async function POST() {
 
   const seats = Math.max((count ?? 0) - 1, 0);
 
-  if (seats > 0 && (perfil.plan_status !== "active" || !perfil.stripe_subscription_id)) {
-    return NextResponse.json({ error: "Necesitas una suscripción de pago activa para activar este addon." }, { status: 400 });
+  if (seats > 0 && perfil.plan_status !== "active") {
+    return NextResponse.json({ error: "Necesitas un plan activo para activar este addon." }, { status: 400 });
+  }
+
+  // Excepción (4 oct 2026, pedido de Joel): un cliente de Firma Accountant
+  // (migración 0139) es Pro+/activo pero nunca tiene stripe_subscription_id
+  // propio — su plan base lo paga la firma. En ese caso, en vez de
+  // bloquearlo, se le manda a un Checkout de Stripe para que ponga su
+  // tarjeta solo para este addon — ver lib/addon-checkout-cliente.ts.
+  if (seats > 0 && !perfil.stripe_subscription_id) {
+    const priceId = priceIdAddonEntidadAdicional();
+    if (!priceId) {
+      return NextResponse.json(
+        { error: "Falta configurar el Price ID del addon de entidades adicionales en las variables de entorno." },
+        { status: 500 }
+      );
+    }
+    try {
+      const checkoutUrl = await iniciarCheckoutAddonCliente({
+        userId: user.id,
+        userEmail: user.email!,
+        stripeCustomerId: perfil.stripe_customer_id ?? null,
+        items: [{ priceId, quantity: seats }],
+        origin: req.headers.get("origin") || "https://www.victorcfo.com",
+        returnTo: "/dashboard/negocio",
+      });
+      return NextResponse.json({ ok: true, requierePago: true, checkoutUrl });
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "No se pudo iniciar el pago con Stripe." },
+        { status: 500 }
+      );
+    }
   }
 
   const statusActual = perfil.addon_entidades_status;

@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, priceIdAddonSecretaria, priceIdAddonAdministrador } from "@/lib/stripe";
+import { iniciarCheckoutAddonCliente } from "@/lib/addon-checkout-cliente";
 
 // Sincroniza los subscription items de Admin/Secretaria en Stripe con la
 // cantidad real de "seats" en uso — a diferencia del addon Técnicos (precio
@@ -72,7 +73,7 @@ async function sincronizarNivel(
   return { seats };
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   const supabase = createClient();
   const {
     data: { user },
@@ -82,7 +83,7 @@ export async function POST() {
   const { data: perfil } = await supabase
     .from("users")
     .select(
-      "plan, plan_status, stripe_subscription_id, addon_admin_status, addon_admin_item_id, addon_administrador_status, addon_administrador_item_id"
+      "plan, plan_status, stripe_customer_id, stripe_subscription_id, addon_admin_status, addon_admin_item_id, addon_administrador_status, addon_administrador_item_id"
     )
     .eq("id", user.id)
     .maybeSingle();
@@ -124,8 +125,57 @@ export async function POST() {
   const seatsSecretaria = (secretariaActivos ?? 0) + (secretariaPendientes ?? 0);
   const seatsAdministrador = (administradorActivos ?? 0) + (administradorPendientes ?? 0);
 
-  if ((seatsSecretaria > 0 || seatsAdministrador > 0) && (perfil.plan_status !== "active" || !perfil.stripe_subscription_id)) {
-    return NextResponse.json({ error: "Necesitas una suscripción de pago activa para activar addons." }, { status: 400 });
+  if ((seatsSecretaria > 0 || seatsAdministrador > 0) && perfil.plan_status !== "active") {
+    return NextResponse.json({ error: "Necesitas un plan activo para activar addons." }, { status: 400 });
+  }
+
+  // Excepción (4 oct 2026, pedido de Joel): un cliente de Firma Accountant
+  // (migración 0139) es Pro+/activo pero nunca tiene stripe_subscription_id
+  // propio — su plan base lo paga la firma. En ese caso, en vez de
+  // bloquearlo, se le manda a un Checkout de Stripe para que ponga su
+  // tarjeta — con ambos tiers en el mismo checkout si tiene seats de los
+  // dos a la vez. Ver lib/addon-checkout-cliente.ts.
+  if ((seatsSecretaria > 0 || seatsAdministrador > 0) && !perfil.stripe_subscription_id) {
+    const items: { priceId: string; quantity: number }[] = [];
+
+    if (seatsSecretaria > 0) {
+      const priceId = priceIdAddonSecretaria();
+      if (!priceId) {
+        return NextResponse.json(
+          { error: "Falta configurar el Price ID del addon Secretaria en las variables de entorno." },
+          { status: 500 }
+        );
+      }
+      items.push({ priceId, quantity: seatsSecretaria });
+    }
+
+    if (seatsAdministrador > 0) {
+      const priceId = priceIdAddonAdministrador();
+      if (!priceId) {
+        return NextResponse.json(
+          { error: "Falta configurar el Price ID del addon Administrador en las variables de entorno." },
+          { status: 500 }
+        );
+      }
+      items.push({ priceId, quantity: seatsAdministrador });
+    }
+
+    try {
+      const checkoutUrl = await iniciarCheckoutAddonCliente({
+        userId: user.id,
+        userEmail: user.email!,
+        stripeCustomerId: perfil.stripe_customer_id ?? null,
+        items,
+        origin: req.headers.get("origin") || "https://www.victorcfo.com",
+        returnTo: "/dashboard/admin",
+      });
+      return NextResponse.json({ ok: true, requierePago: true, checkoutUrl });
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "No se pudo iniciar el pago con Stripe." },
+        { status: 500 }
+      );
+    }
   }
 
   try {

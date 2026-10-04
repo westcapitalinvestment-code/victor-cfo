@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import Stripe from "stripe";
-import { getStripe, esPlanValido, priceIdAddonTecnicos, priceIdAddonPagos, todosLosPriceIdsDePlanes } from "@/lib/stripe";
+import {
+  getStripe,
+  esPlanValido,
+  priceIdAddonTecnicos,
+  priceIdAddonPagos,
+  priceIdAddonSecretaria,
+  priceIdAddonAdministrador,
+  priceIdAddonEntidadAdicional,
+  todosLosPriceIdsDePlanes,
+} from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
 import { sendReferralCreditEmail, sendReferralCreditoPendienteEmail, sendWelcomeEmail, sendCancellationWinbackEmail, sendPaymentFailedEmail, sendFirmaInvitationEmail } from "@/lib/email";
@@ -226,6 +235,67 @@ export async function POST(req: NextRequest) {
                 });
               }
             }
+          }
+          break;
+        }
+
+        // Addon de un cliente SIN suscripción propia (4 oct 2026, típico de
+        // un cliente de Firma Accountant) — ver lib/addon-checkout-cliente.ts
+        // para el porqué completo. A diferencia de firma_wholesale (que
+        // siempre es un solo line item), aquí puede venir más de un addon a
+        // la vez (ej. Secretaria + Administrador juntos), así que en vez de
+        // asumir "el primer item" se recorren TODOS los items de la
+        // suscripción y se identifica cada uno por su Price ID — más
+        // robusto que depender de metadata para saber cuál addon es cuál.
+        if (session.metadata?.tipo === "addon_cliente_sin_plan") {
+          const clienteId = session.metadata?.supabase_user_id;
+          const subscriptionIdCliente =
+            typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+
+          if (clienteId && subscriptionIdCliente) {
+            const subscriptionCliente = await getStripe().subscriptions.retrieve(subscriptionIdCliente);
+
+            const priceAAddon: Record<string, { statusCol: string; itemIdCol: string; seatsCol?: string }> = {
+              [priceIdAddonTecnicos() || "__none_tecnicos__"]: {
+                statusCol: "addon_tecnicos_status",
+                itemIdCol: "addon_tecnicos_item_id",
+              },
+              [priceIdAddonPagos() || "__none_pagos__"]: {
+                statusCol: "addon_pagos_status",
+                itemIdCol: "addon_pagos_item_id",
+              },
+              [priceIdAddonSecretaria() || "__none_secretaria__"]: {
+                statusCol: "addon_admin_status",
+                itemIdCol: "addon_admin_item_id",
+                seatsCol: "addon_admin_seats",
+              },
+              [priceIdAddonAdministrador() || "__none_administrador__"]: {
+                statusCol: "addon_administrador_status",
+                itemIdCol: "addon_administrador_item_id",
+                seatsCol: "addon_administrador_seats",
+              },
+              [priceIdAddonEntidadAdicional() || "__none_entidades__"]: {
+                statusCol: "addon_entidades_status",
+                itemIdCol: "addon_entidades_item_id",
+                seatsCol: "addon_entidades_seats",
+              },
+            };
+
+            const datosActualizar: Record<string, unknown> = {
+              stripe_customer_id: typeof session.customer === "string" ? session.customer : session.customer?.id,
+              stripe_subscription_id: subscriptionIdCliente,
+            };
+
+            for (const item of subscriptionCliente.items.data) {
+              const priceId = typeof item.price === "string" ? item.price : item.price?.id;
+              const cfg = priceId ? priceAAddon[priceId] : undefined;
+              if (!cfg) continue;
+              datosActualizar[cfg.statusCol] = "activo";
+              datosActualizar[cfg.itemIdCol] = item.id;
+              if (cfg.seatsCol) datosActualizar[cfg.seatsCol] = item.quantity ?? 1;
+            }
+
+            await supabase.from("users").update(datosActualizar).eq("id", clienteId);
           }
           break;
         }

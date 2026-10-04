@@ -532,6 +532,12 @@ function TecnicosTab({
       setErrorAddon(data?.error ?? "No se pudo activar el addon.");
       return;
     }
+    // Cliente de Firma Accountant sin suscripción propia (4 oct 2026) — lo
+    // manda a Stripe a poner su tarjeta, solo para este addon.
+    if (data.requierePago && data.checkoutUrl) {
+      window.location.href = data.checkoutUrl;
+      return;
+    }
     router.refresh();
   }
   async function desactivarAddon() {
