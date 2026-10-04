@@ -34,6 +34,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
     () => new Set(clientes.filter((c) => c.esFavorito).map((c) => c.id)),
   );
   const [guardandoFavorito, setGuardandoFavorito] = useState<string | null>(null);
+  const [errorFavorito, setErrorFavorito] = useState<string | null>(null);
 
   async function toggleFavorito(e: MouseEvent, entityId: string) {
     e.preventDefault();
@@ -49,21 +50,36 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
       return next;
     });
     setGuardandoFavorito(entityId);
+    setErrorFavorito(null);
     try {
-      await fetch("/api/cpa/favoritos", {
+      const res = await fetch("/api/cpa/favoritos", {
         method: yaEsFavorito ? "DELETE" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entityId }),
       });
-    } catch {
-      // Si falla la red, se revierte — mejor eso que dejar una estrellita
-      // mintiendo sobre lo que de verdad quedó guardado.
+      // Bug (4 oct 2026, reportado por Joel: "una vez los selecciono y
+      // entro a una entidad se deseleccionan y vuelve a 0") — fetch() NO
+      // lanza excepción con un status 4xx/5xx, solo si falla la red. Antes
+      // este bloque solo revertía en el catch, así que un error real del
+      // servidor (ej. la migración 0140 todavía no corrida en Supabase, o
+      // la tabla cpa_client_favoritos sin crear) quedaba invisible: la
+      // estrellita se veía marcada en pantalla pero NUNCA se guardó en la
+      // base — al navegar a /cpa/[entityId] y volver, el server vuelve a
+      // consultar la tabla, no encuentra nada, y todo se ve en 0 de nuevo.
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || `No se pudo guardar (status ${res.status}).`);
+      }
+    } catch (err) {
+      // Se revierte — mejor eso que dejar una estrellita mintiendo sobre lo
+      // que de verdad quedó guardado.
       setFavoritos((prev) => {
         const next = new Set(prev);
         if (yaEsFavorito) next.add(entityId);
         else next.delete(entityId);
         return next;
       });
+      setErrorFavorito(err instanceof Error ? err.message : "No se pudo guardar el favorito.");
     } finally {
       setGuardandoFavorito(null);
     }
@@ -89,6 +105,12 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
       <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-xs uppercase tracking-wide text-muted">Tus clientes ({clientes.length})</p>
       </div>
+
+      {errorFavorito && (
+        <p className="mb-2 rounded-lg bg-red/10 px-2.5 py-1.5 text-xs text-red">
+          No se pudo guardar la estrella: {errorFavorito}
+        </p>
+      )}
 
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
