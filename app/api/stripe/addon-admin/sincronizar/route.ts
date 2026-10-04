@@ -125,6 +125,35 @@ export async function POST(req: NextRequest) {
   const seatsSecretaria = (secretariaActivos ?? 0) + (secretariaPendientes ?? 0);
   const seatsAdministrador = (administradorActivos ?? 0) + (administradorPendientes ?? 0);
 
+  // Corrección (4 oct 2026, aclarado por Joel: "el plan Business ya viene
+  // con secretaria/adm, tecnicos incluidos"): proplus NUNCA factura
+  // Secretaria/Administrador aparte, sin importar cuántos seats reales
+  // tenga — se fuerza seats=0 en sincronizarNivel para que, si quedó un
+  // subscription item viejo de antes de este fix (o de una prueba),
+  // también se borre solo. Solo Pro sigue pagando por seat.
+  if (perfil.plan === "proplus") {
+    if (perfil.plan_status !== "active") {
+      return NextResponse.json({ error: "Necesitas un plan activo." }, { status: 400 });
+    }
+    await Promise.all([
+      sincronizarNivel(supabase, user.id, perfil, 0, {
+        nivel: "secretaria",
+        statusCol: "addon_admin_status",
+        itemIdCol: "addon_admin_item_id",
+        seatsCol: "addon_admin_seats",
+        priceId: priceIdAddonSecretaria(),
+      }),
+      sincronizarNivel(supabase, user.id, perfil, 0, {
+        nivel: "administrador",
+        statusCol: "addon_administrador_status",
+        itemIdCol: "addon_administrador_item_id",
+        seatsCol: "addon_administrador_seats",
+        priceId: priceIdAddonAdministrador(),
+      }),
+    ]);
+    return NextResponse.json({ ok: true, incluido: true });
+  }
+
   if ((seatsSecretaria > 0 || seatsAdministrador > 0) && perfil.plan_status !== "active") {
     return NextResponse.json({ error: "Necesitas un plan activo para activar addons." }, { status: 400 });
   }

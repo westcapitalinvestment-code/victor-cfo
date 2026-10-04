@@ -26,7 +26,13 @@ export default async function AdminPage() {
     .maybeSingle();
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   if (!esPro) return <ProPaywall />;
-  const addonActivo = profile?.addon_admin_status === "activo";
+  // Business (proplus) ya incluye Secretaria/Administrador sin cobrarlo
+  // aparte (4 oct 2026, aclarado por Joel) — ver
+  // app/api/stripe/addon-admin/sincronizar/route.ts, que es donde en
+  // realidad se decide si se factura o no (esta pantalla nunca bloqueaba
+  // el acceso por addon_admin_status, solo lo mostraba informativo).
+  const esBusiness = profile?.plan === "proplus";
+  const addonActivo = esBusiness || profile?.addon_admin_status === "activo";
 
   const { data: entities } = await supabase
     .from("business_entities")

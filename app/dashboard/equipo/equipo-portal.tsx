@@ -116,6 +116,7 @@ export default function EquipoPortal({
   vistaGlobalActiva,
   cantidadEntidades,
   addonTecnicosActivo,
+  tecnicosIncluidoPorPlan,
 }: {
   tecnicos: Tecnico[];
   vendors: Vendor[];
@@ -127,6 +128,10 @@ export default function EquipoPortal({
   vistaGlobalActiva: boolean;
   cantidadEntidades: number;
   addonTecnicosActivo: boolean;
+  // Business (proplus) incluye Técnicos sin cobrar aparte (4 oct 2026,
+  // aclarado por Joel) — con esto true, TecnicosTab muestra "incluido en
+  // tu plan Business" en vez del botón Activar/Desactivar addon.
+  tecnicosIncluidoPorPlan: boolean;
 }) {
   const [tab, setTab] = useState<TabId>("panel");
 
@@ -191,7 +196,13 @@ export default function EquipoPortal({
         />
       )}
       {tab === "tecnicos" && (
-        <TecnicosTab tecnicos={tecnicos} vendors={vendors} entidad={entidad} addonTecnicosActivo={addonTecnicosActivo} />
+        <TecnicosTab
+          tecnicos={tecnicos}
+          vendors={vendors}
+          entidad={entidad}
+          addonTecnicosActivo={addonTecnicosActivo}
+          tecnicosIncluidoPorPlan={tecnicosIncluidoPorPlan}
+        />
       )}
       {tab === "gastos" && <GastosEvidenciaTab entityId={entidad.id} />}
       {tab === "peajes" && <PeajesTab entityId={entidad.id} />}
@@ -506,11 +517,13 @@ function TecnicosTab({
   vendors,
   entidad,
   addonTecnicosActivo,
+  tecnicosIncluidoPorPlan,
 }: {
   tecnicos: Tecnico[];
   vendors: Vendor[];
   entidad: Entidad;
   addonTecnicosActivo: boolean;
+  tecnicosIncluidoPorPlan: boolean;
 }) {
   const supabase = createClient();
   const router = useRouter();
@@ -837,13 +850,21 @@ function TecnicosTab({
       <div
         className="mb-3 rounded-2xl border p-3.5"
         style={
-          addonTecnicosActivo
+          addonTecnicosActivo || tecnicosIncluidoPorPlan
             ? { borderColor: "var(--border)", background: "var(--card)" }
             : { borderColor: "#1D9E75", background: "rgba(29,158,117,.06)" }
         }
       >
         {errorAddon && <p className="mb-2 text-xs text-red">{errorAddon}</p>}
-        {!addonTecnicosActivo ? (
+        {tecnicosIncluidoPorPlan ? (
+          <div>
+            <p className="text-sm font-medium">
+              <i className="ti ti-circle-check text-teal" style={{ marginRight: 4 }} />
+              Técnicos incluido en tu plan Business
+            </p>
+            <p className="text-xs text-muted">{tecnicosActivosCount} técnico(s) — sin límite ni cargo aparte.</p>
+          </div>
+        ) : !addonTecnicosActivo ? (
           <>
             <p className="text-sm font-medium">Add-on Equipo — $20.00/mes</p>
             <p className="mb-2.5 text-xs text-muted">

@@ -126,8 +126,15 @@ export async function GET(req: NextRequest) {
         ]);
 
       const seatsEntidades = Math.max((entidadesActivas ?? 0) - 1, 0);
-      const seatsSecretaria = (secretariaActivos ?? 0) + (secretariaPendientes ?? 0);
-      const seatsAdministrador = (administradorActivos ?? 0) + (administradorPendientes ?? 0);
+      // Corrección (4 oct 2026, aclarado por Joel: "el plan Business ya
+      // viene con secretaria/adm, tecnicos incluidos"): Business (proplus)
+      // nunca paga por seats de Secretaria/Administrador — se fuerza a 0
+      // sin importar cuántos admins reales tenga, así reconciliarSeat borra
+      // solo cualquier item viejo que haya quedado de antes de este fix.
+      // Entidades adicionales SÍ sigue siendo addon pagado para Business,
+      // así que seatsEntidades no se toca aquí.
+      const seatsSecretaria = u.plan === "proplus" ? 0 : (secretariaActivos ?? 0) + (secretariaPendientes ?? 0);
+      const seatsAdministrador = u.plan === "proplus" ? 0 : (administradorActivos ?? 0) + (administradorPendientes ?? 0);
 
       const [rEntidades, rSecretaria, rAdministrador] = await Promise.all([
         reconciliarSeat(supabase, u.id, u.stripe_subscription_id!, seatsEntidades, {

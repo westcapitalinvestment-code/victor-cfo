@@ -25,10 +25,18 @@ export default async function PagosPage() {
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   if (!esPro) return <ProPaywall />;
   // Addon Pagos (2 oct 2026, migración 0134) — sacado de lo incluido en Pro,
-  // ahora se activa aparte por $24.99/mes. Bloquea el módulo entero (no solo
-  // "crear nuevo" como Técnicos) porque antes vivía incluido en Pro y ahora
-  // es un módulo completo separado.
-  if (profile?.addon_pagos_status !== "activo") return <AddonPagosGate puedeActivar volverHref="/dashboard" />;
+  // ahora se activa aparte por $24.99/mes para plan Pro. Bloquea el módulo
+  // entero (no solo "crear nuevo" como Técnicos) porque antes vivía
+  // incluido en Pro y ahora es un módulo completo separado.
+  //
+  // Business (proplus) SÍ lo incluye sin cobrarlo aparte (4 oct 2026,
+  // aclarado por Joel: "el plan Business ya viene con secretaria/adm,
+  // tecnicos incluidos") — ver también
+  // app/api/stripe/addon-pagos/activar/route.ts.
+  const esBusiness = profile?.plan === "proplus";
+  if (!esBusiness && profile?.addon_pagos_status !== "activo") {
+    return <AddonPagosGate puedeActivar volverHref="/dashboard" />;
+  }
 
   const { data: entities } = await supabase
     .from("business_entities")

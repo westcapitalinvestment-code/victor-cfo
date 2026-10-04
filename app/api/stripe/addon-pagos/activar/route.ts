@@ -16,6 +16,13 @@ import { iniciarCheckoutAddonCliente } from "@/lib/addon-checkout-cliente";
 // propio — su plan base lo paga la firma. En ese caso, en vez de
 // bloquearlo, se le manda a un Checkout de Stripe para que ponga su
 // tarjeta solo para este addon — ver lib/addon-checkout-cliente.ts.
+//
+// Corrección (4 oct 2026, aclarado por Joel: "el plan Business ya viene
+// con secretaria/adm, tecnicos incluidos"): el plan Business (proplus) YA
+// incluye Pagos — no se cobra aparte. En la práctica esta ruta ya no
+// debería llamarse para proplus (el gate de app/dashboard/pagos/page.tsx
+// trata el addon como activo sin pasar por aquí), pero se deja esta
+// respuesta defensiva por si se llama directo.
 export async function POST(req: NextRequest) {
   const supabase = createClient();
   const {
@@ -34,6 +41,9 @@ export async function POST(req: NextRequest) {
   }
   if (perfil.plan_status !== "active") {
     return NextResponse.json({ error: "Necesitas un plan activo para activar addons." }, { status: 400 });
+  }
+  if (perfil.plan === "proplus") {
+    return NextResponse.json({ ok: true, incluido: true });
   }
   if (!perfil.stripe_subscription_id) {
     const priceId = priceIdAddonPagos();

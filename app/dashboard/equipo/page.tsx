@@ -26,7 +26,12 @@ export default async function EquipoPage() {
     .maybeSingle();
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   if (!esPro) return <ProPaywall />;
-  const addonTecnicosActivo = profile?.addon_tecnicos_status === "activo";
+  // Business (proplus) ya incluye Técnicos sin cobrarlo aparte (4 oct
+  // 2026, aclarado por Joel: "el plan Business ya viene con secretaria/
+  // adm, tecnicos incluidos") — solo Pro sigue pagando el addon de
+  // $20/mes. Ver también app/api/stripe/addon-tecnicos/activar/route.ts.
+  const esBusiness = profile?.plan === "proplus";
+  const addonTecnicosActivo = esBusiness || profile?.addon_tecnicos_status === "activo";
 
   const { data: entities } = await supabase
     .from("business_entities")
@@ -128,6 +133,7 @@ export default async function EquipoPage() {
       vistaGlobalActiva={vistaGlobal}
       cantidadEntidades={entities.length}
       addonTecnicosActivo={addonTecnicosActivo}
+      tecnicosIncluidoPorPlan={esBusiness}
     />
   );
 }
