@@ -6,7 +6,13 @@ import { useState } from "react";
 // donde el usuario puede cancelar su suscripción, cambiar su tarjeta o ver
 // sus recibos. No mostramos nada de esto dentro de VICTOR mismo (evita
 // duplicar UI que Stripe ya hace bien y de forma segura).
-export default function GestionarPlan() {
+//
+// pagadoPorFirma (migración 0139, 4 oct 2026, programa Firma Accountant):
+// si viene con un nombre, este usuario no tiene suscripción propia que
+// gestionar — su plan Business lo paga la firma de su contador. En ese
+// caso se oculta "Gestionar mi plan" (no hay portal de Stripe al que
+// mandarlo) y se muestra de qué se trata en su lugar.
+export default function GestionarPlan({ pagadoPorFirma = null }: { pagadoPorFirma?: string | null }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [descargandoCertificado, setDescargandoCertificado] = useState(false);
@@ -59,18 +65,29 @@ export default function GestionarPlan() {
   return (
     <div className="vc-card mb-4">
       <p className="mb-2 text-sm font-medium">Facturación</p>
-      <p className="mb-3 text-xs text-muted">
-        Cambia tu tarjeta, revisa tus recibos o cancela tu suscripción cuando quieras.
-      </p>
-      {error && <p className="mb-2 text-xs text-red">{error}</p>}
-      <button
-        onClick={abrirPortal}
-        disabled={loading}
-        className="mb-2 w-full rounded-lg border border-teal p-3 text-sm font-medium text-teal"
-        style={{ background: "rgba(29,158,117,.1)" }}
-      >
-        {loading ? "Abriendo..." : "Gestionar mi plan"}
-      </button>
+
+      {pagadoPorFirma ? (
+        <p className="mb-3 rounded-lg border border-teal bg-teal/[.06] px-3 py-2 text-xs text-text">
+          Tu plan Business está incluido por tu contador <strong>{pagadoPorFirma}</strong> — no tienes que pagar
+          nada ni poner tarjeta. Si activas un addon (Técnicos, Administrador, Entidades adicionales o Pagos), eso
+          sí se te factura a ti aparte, a precio normal.
+        </p>
+      ) : (
+        <>
+          <p className="mb-3 text-xs text-muted">
+            Cambia tu tarjeta, revisa tus recibos o cancela tu suscripción cuando quieras.
+          </p>
+          {error && <p className="mb-2 text-xs text-red">{error}</p>}
+          <button
+            onClick={abrirPortal}
+            disabled={loading}
+            className="mb-2 w-full rounded-lg border border-teal p-3 text-sm font-medium text-teal"
+            style={{ background: "rgba(29,158,117,.1)" }}
+          >
+            {loading ? "Abriendo..." : "Gestionar mi plan"}
+          </button>
+        </>
+      )}
 
       {errorCertificado && <p className="mb-2 text-xs text-red">{errorCertificado}</p>}
       <button

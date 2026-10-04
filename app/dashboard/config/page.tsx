@@ -23,15 +23,35 @@ export default async function ConfigPage() {
 
   if (!user) redirect("/login");
 
+  const admin = createAdminClient();
+
   // .maybeSingle() en vez de .single() (30 agosto 2026, mismo fix que en
   // onboarding/page.tsx y dashboard/page.tsx): .single() truena si por lo
   // que sea la fila no vuelve, y eso tumbaba la página entera en vez de
   // mostrar el fallback "core"/"trialing" de abajo.
   const { data: profile } = await supabase
     .from("users")
-    .select("full_name, plan, plan_status, deletion_scheduled_for, is_demo")
+    .select("full_name, plan, plan_status, deletion_scheduled_for, is_demo, billed_by_firma_id")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Programa Firma Accountant (migración 0139, 4 oct 2026) — si este
+  // usuario fue invitado por un contador bajo wholesale, su plan Business
+  // lo paga la firma, no él: GestionarPlan no debe mandarlo al Customer
+  // Portal de Stripe (no tiene suscripción propia que gestionar ahí).
+  // Se usa el cliente admin para esta lectura puntual porque las políticas
+  // de RLS de `users` solo dejan a cada usuario leer su propia fila — este
+  // cliente nunca podría leer el full_name de la firma con su propia
+  // sesión, aunque sea un dato inofensivo (nombre, nada financiero).
+  let nombreFirmaQuePaga: string | null = null;
+  if (profile?.billed_by_firma_id) {
+    const { data: firma } = await admin
+      .from("users")
+      .select("full_name")
+      .eq("id", profile.billed_by_firma_id)
+      .maybeSingle();
+    nombreFirmaQuePaga = firma?.full_name ?? "tu contador";
+  }
 
   const { data: entities } = await supabase
     .from("business_entities")
@@ -54,8 +74,7 @@ export default async function ConfigPage() {
   // el tool verificar_programa_referidos (lib/victor/tools.ts), filtrado
   // explícitamente por el id de ESTE usuario, nunca por datos sueltos.
   // Mismos topes que allá y que el webhook — si cambian en uno, cambian en
-  // los tres lugares.
-  const admin = createAdminClient();
+  // los tres lugares. (admin ya se creó arriba, cerca del fetch de profile.)
   const TOPE_ANUAL_CORE_CENTAVOS = 17_500; // $175/año
   const TOPE_ANUAL_PRO_CENTAVOS = 50_000; // $500/año
   const inicioAñoISO = `${new Date().getUTCFullYear()}-01-01T00:00:00.000Z`;
@@ -147,7 +166,7 @@ export default async function ConfigPage() {
 
       <SessionTimeoutConfig />
 
-      <GestionarPlan />
+      <GestionarPlan pagadoPorFirma={nombreFirmaQuePaga} />
 
       <CreditosIA />
 

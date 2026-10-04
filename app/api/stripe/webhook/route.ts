@@ -4,7 +4,7 @@ import Stripe from "stripe";
 import { getStripe, esPlanValido, priceIdAddonTecnicos, priceIdAddonPagos, todosLosPriceIdsDePlanes } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
-import { sendReferralCreditEmail, sendReferralCreditoPendienteEmail, sendWelcomeEmail, sendCancellationWinbackEmail, sendPaymentFailedEmail } from "@/lib/email";
+import { sendReferralCreditEmail, sendReferralCreditoPendienteEmail, sendWelcomeEmail, sendCancellationWinbackEmail, sendPaymentFailedEmail, sendFirmaInvitationEmail } from "@/lib/email";
 import { enviarEventoCAPI } from "@/lib/meta-capi";
 
 // Rollover de créditos de IA (migración 0064, 3 sept 2026, pedido de Joel:
@@ -172,6 +172,59 @@ export async function POST(req: NextRequest) {
                 credito_centavos: Number(saldoActual?.credito_centavos ?? 0) + creditoCentavos,
                 actualizado_en: new Date().toISOString(),
               });
+            }
+          }
+          break;
+        }
+
+        // Programa "Firma Accountant" (migración 0139, 4 oct 2026) — la
+        // PRIMERA invitación de una Firma dispara este Checkout (ver
+        // app/api/firma/invitar/route.ts). Aquí es donde de verdad se activa
+        // la suscripción wholesale Y se manda el correo de invitación al
+        // cliente — antes de este momento, nunca existió ni suscripción de
+        // Stripe ni correo mandado, a propósito (nunca invitar a nadie sin
+        // que ya haya un medio de pago real cobrándose).
+        if (session.metadata?.tipo === "firma_wholesale") {
+          const firmaId = session.metadata?.firma_id;
+          const invitacionId = session.metadata?.invitacion_id;
+          const subscriptionIdFirma =
+            typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+
+          if (firmaId && subscriptionIdFirma) {
+            const subscriptionFirma = await getStripe().subscriptions.retrieve(subscriptionIdFirma);
+            const itemFirma = subscriptionFirma.items.data[0]; // un solo line item, quantity=1 en la primera invitación
+
+            await supabase
+              .from("users")
+              .update({
+                firma_stripe_customer_id:
+                  typeof session.customer === "string" ? session.customer : session.customer?.id,
+                firma_stripe_subscription_id: subscriptionIdFirma,
+                firma_subscription_item_id: itemFirma?.id ?? null,
+                firma_seats_activos: itemFirma?.quantity ?? 1,
+              })
+              .eq("id", firmaId);
+
+            if (invitacionId) {
+              const { data: invitacion } = await supabase
+                .from("firma_invitaciones")
+                .select("id, nombre_negocio, email, invitation_token, status")
+                .eq("id", invitacionId)
+                .maybeSingle();
+
+              const { data: firma } = await supabase.from("users").select("full_name").eq("id", firmaId).maybeSingle();
+
+              // Idempotencia: si Stripe reintenta este evento, status ya no
+              // es 'pending' la segunda vez — no se manda el correo dos veces.
+              if (invitacion && invitacion.status === "pending") {
+                await sendFirmaInvitationEmail({
+                  clienteEmail: invitacion.email,
+                  nombreNegocio: invitacion.nombre_negocio,
+                  firmaName: firma?.full_name ?? null,
+                  firmaEmail: session.customer_details?.email || "",
+                  invitationToken: String(invitacion.invitation_token),
+                });
+              }
             }
           }
           break;

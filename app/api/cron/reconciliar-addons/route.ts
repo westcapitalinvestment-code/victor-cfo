@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getStripe, priceIdAddonEntidadAdicional, priceIdAddonSecretaria, priceIdAddonAdministrador } from "@/lib/stripe";
+import { getStripe, priceIdAddonEntidadAdicional, priceIdAddonSecretaria, priceIdAddonAdministrador, priceIdWholesaleBusiness } from "@/lib/stripe";
 
 // Cron diario — red de seguridad para los 3 addons "por seat" (Entidades
 // adicionales, Secretaria, Administrador). Cada uno ya se sincroniza con
@@ -171,5 +171,81 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, revisados: usuarios.length, corregidos, resultados });
+  // Programa Firma Accountant (migración 0139, 4 oct 2026) — mismo problema
+  // de fondo que los addons de arriba: /api/firma/invitar sube la cantidad
+  // "fire and forget" desde el navegador del contador, así que si algo
+  // falla a medio camino, firma_seats_activos puede quedar desalineado del
+  // conteo real de clientes con billed_by_firma_id. Nota: a diferencia de
+  // los addons (que son un SEGUNDO item sobre la suscripción Pro del
+  // usuario), el item wholesale es el ÚNICO item de la suscripción propia
+  // de la firma — si algún día un contador pierde TODOS sus clientes,
+  // reconciliarSeat intentaría borrar ese único item; Stripe puede rechazar
+  // o cancelar la suscripción entera en ese caso límite, que por ahora se
+  // deja así (es un caso raro, no el camino común).
+  const { data: firmas, error: firmasError } = await supabase
+    .from("users")
+    .select("id, firma_stripe_subscription_id, firma_subscription_item_id, firma_seats_activos")
+    .eq("es_firma_accountant", true)
+    .not("firma_stripe_subscription_id", "is", null);
+
+  if (firmasError) {
+    return NextResponse.json({ ok: true, revisados: usuarios.length, corregidos, resultados, firmasError: firmasError.message });
+  }
+
+  let corregidosFirmas = 0;
+  const resultadosFirmas: Record<string, unknown> = {};
+
+  // No se reusa reconciliarSeat() tal cual porque esa función asume una
+  // columna de STATUS separada de la columna del item id (ej.
+  // addon_admin_status vs. addon_admin_item_id) — Firma Accountant no
+  // tiene una columna de status propia, solo firma_subscription_item_id
+  // (presente o null) funciona como el status. Lógica equivalente, escrita
+  // a mano para esta forma distinta de los datos.
+  for (const f of firmas ?? []) {
+    try {
+      const { count: clientesActivos } = await supabase
+        .from("users")
+        .select("id", { count: "exact", head: true })
+        .eq("billed_by_firma_id", f.id)
+        .eq("plan", "proplus")
+        .eq("plan_status", "active");
+
+      const seatsReales = clientesActivos ?? 0;
+
+      if ((f.firma_seats_activos ?? 0) === seatsReales) continue;
+
+      const priceId = priceIdWholesaleBusiness();
+      if (!priceId) {
+        resultadosFirmas[f.id] = { error: "Falta el Price ID wholesale de Business en las variables de entorno." };
+        continue;
+      }
+
+      if (f.firma_subscription_item_id) {
+        await getStripe().subscriptionItems.update(f.firma_subscription_item_id, { quantity: Math.max(seatsReales, 1) });
+      } else if (seatsReales > 0) {
+        const item = await getStripe().subscriptionItems.create({
+          subscription: f.firma_stripe_subscription_id!,
+          price: priceId,
+          quantity: seatsReales,
+        });
+        await supabase.from("users").update({ firma_subscription_item_id: item.id }).eq("id", f.id);
+      }
+
+      await supabase.from("users").update({ firma_seats_activos: seatsReales }).eq("id", f.id);
+      corregidosFirmas++;
+      resultadosFirmas[f.id] = { seatsAntes: f.firma_seats_activos ?? 0, seatsAhora: seatsReales };
+    } catch (err) {
+      resultadosFirmas[f.id] = { error: err instanceof Error ? err.message : "Error desconocido" };
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    revisados: usuarios.length,
+    corregidos,
+    resultados,
+    firmasRevisadas: (firmas ?? []).length,
+    firmasCorregidas: corregidosFirmas,
+    resultadosFirmas,
+  });
 }

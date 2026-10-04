@@ -239,6 +239,79 @@ export async function sendCpaEquipoInvitationEmail(params: {
   }
 }
 
+// Invitación del programa "Firma Accountant" (4 oct 2026, migración 0139)
+// — a diferencia de sendCpaEquipoInvitationEmail (acceso de solo lectura
+// a clientes ajenos), esta invitación crea una cuenta COMPLETA de VICTOR
+// CFO plan Business para el cliente nuevo, pagada por la firma del
+// contador. El correo lo deja explícito: el cliente usa su propia cuenta
+// todos los días, solo que no la paga él.
+export async function sendFirmaInvitationEmail(params: {
+  clienteEmail: string;
+  nombreNegocio: string | null;
+  firmaName: string | null;
+  firmaEmail: string;
+  invitationToken: string;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { clienteEmail, nombreNegocio, firmaName, firmaEmail, invitationToken } = params;
+  const quien = firmaName || firmaEmail;
+  const saludoNegocio = nombreNegocio ? ` para ${nombreNegocio}` : "";
+  const acceptUrl = `${SITE_URL}/firma/aceptar/${invitationToken}`;
+
+  const textoPlano =
+    `Hola,\n\n` +
+    `${quien} te está regalando una cuenta completa de VICTOR CFO (plan Business)${saludoNegocio} — ` +
+    `incluida en el servicio de contabilidad que ya tienes con ${quien}, sin costo adicional para ti.\n\n` +
+    `Vas a poder conectar tu banco, facturar, pagar a tus contratistas y hablar con VICTOR todos los ` +
+    `días — exactamente igual que cualquier cliente que paga el plan completo. La diferencia es que la ` +
+    `mensualidad la cubre ${quien}, no tú.\n\n` +
+    `Para activar tu cuenta y poner tu contraseña, entra aquí:\n${acceptUrl}\n\n` +
+    `— VICTOR CFO\n` +
+    `Un producto de West Capital Ventures LLC · ${SITE_URL}\n\n` +
+    `Este correo fue enviado porque ${quien} te invitó a VICTOR CFO. Si no reconoces esta invitación, ` +
+    `puedes ignorar este mensaje con confianza.`;
+
+  const htmlSeguro = {
+    quien: escapeHtml(quien),
+    saludoNegocio: nombreNegocio ? ` para ${escapeHtml(nombreNegocio)}` : "",
+  };
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>Hola,</p>
+  <p>${htmlSeguro.quien} te está regalando una cuenta completa de VICTOR CFO (<strong>plan Business</strong>)${htmlSeguro.saludoNegocio} — incluida en el servicio de contabilidad que ya tienes con ${htmlSeguro.quien}, sin costo adicional para ti.</p>
+  <p>Vas a poder conectar tu banco, facturar, pagar a tus contratistas y hablar con VICTOR todos los días — exactamente igual que cualquier cliente que paga el plan completo. La diferencia es que la mensualidad la cubre ${htmlSeguro.quien}, no tú.</p>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${acceptUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Activar mi cuenta</a>
+  </div>
+  <p style="font-size: 12px; color: #666;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br/><a href="${acceptUrl}" style="color: #1D9E75; word-break: break-all;">${acceptUrl}</a></p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+  <p style="font-size: 11px; color: #bbb;">Este correo fue enviado porque ${htmlSeguro.quien} te invitó a VICTOR CFO. Si no reconoces esta invitación, puedes ignorar este mensaje con confianza.</p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: clienteEmail,
+      subject: `${quien} te regaló una cuenta de VICTOR CFO`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
 // Invitación de Admin/Secretaria (2 sept 2026) — a diferencia del CPA
 // (solo lectura de TODO), este acceso es de TRABAJO (crea facturas,
 // registra cobros) pero deliberadamente angosto: nunca ve finanzas

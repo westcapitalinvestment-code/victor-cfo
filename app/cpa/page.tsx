@@ -4,6 +4,7 @@ import Link from "next/link";
 import { formatMoney } from "@/lib/format";
 import { saludoPorHora, fechaHoyPR } from "@/lib/hora-pr";
 import CpaClientList, { type ClienteCpa } from "./cpa-client-list";
+import FirmaAccountantPanel from "./firma-accountant-panel";
 
 // Portal CPA — lista de clientes (pantalla "Clientes" del mockup
 // "VICTOR — Portal CPA.html"). RLS (business_entities_cpa_read,
@@ -225,6 +226,15 @@ export default async function CpaPortalPage() {
       </p>
 
       {error && <p className="mb-3 text-xs text-red">No se pudieron cargar tus clientes: {error.message}</p>}
+
+      {/* Programa Firma Accountant (migración 0139, 4 oct 2026) — wholesale
+          del plan Business, separado y excluyente del Programa de Socios.
+          OJO: un cliente invitado por aquí NO aparece automáticamente en
+          CpaClientList de abajo — esa lista depende de account_members
+          (role='cpa'), que es un acceso de VISIBILIDAD que el cliente
+          otorga aparte (su propio "Invita a tu contable"). Son dos cosas
+          independientes: quién paga (esto) y quién puede ver (account_members). */}
+      <FirmaAccountantPanel />
 
       {/* Lista de clientes (2 oct 2026, pedido de Joel) — sin $ sumados de
           todo el portafolio arriba: eso crea ansiedad innecesaria en un CPA

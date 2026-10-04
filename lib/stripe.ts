@@ -140,6 +140,20 @@ export function priceIdAddonPagos(): string | null {
   return process.env.STRIPE_PRICE_ADDON_PAGOS || null;
 }
 
+// Programa "Firma Accountant" — 4 oct 2026, migración 0139. Wholesale del
+// plan Business para contadores/billers que absorben la mensualidad en su
+// iguala (mismo mecanismo que "bill my firm" de QuickBooks Online
+// Accountant, pero con un solo plan y un solo % fijo en vez de una tabla de
+// tramos — más simple de operar). $79.99/mes = 20% off el precio normal de
+// Business ($99.99/mes) — Price fijo configurado en Stripe, por SEAT
+// (quantity = # de clientes activos bajo la firma), nunca un descuento
+// calculado en código. Solo cubre el plan BASE; los addons (Técnicos,
+// Administrador, Entidades, Pagos) siguen facturándose aparte al cliente a
+// precio normal (decisión explícita de Joel).
+export function priceIdWholesaleBusiness(): string | null {
+  return process.env.STRIPE_PRICE_WHOLESALE_BUSINESS || null;
+}
+
 export function esCicloValido(valor: unknown): valor is Ciclo {
   return valor === "mensual" || valor === "anual";
 }
