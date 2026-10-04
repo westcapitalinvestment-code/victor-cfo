@@ -529,17 +529,6 @@ export default function LandingPage() {
           </p>
           <div className={styles.addonsGrid}>
             <div className={styles.addonCard}>
-              <div className={styles.addonIcon}>🙋</div>
-              <div>
-                <div className={styles.addonName}>Usuario Referido</div>
-                <div className={styles.addonDesc}>
-                  Gratis · comparte tu link — cada quien tiene su propia cuenta. Tu referido arranca con su primer
-                  mes completamente gratis, sea Core o Pro. Y cuando empiece a pagar de verdad, tú te ganas un mes
-                  gratis de tu propio plan — sin límite, acumulable con cada persona que refieras.
-                </div>
-              </div>
-            </div>
-            <div className={styles.addonCard}>
               <div className={styles.addonIcon}>🧑‍💼</div>
               <div>
                 <div className={styles.addonName}>
