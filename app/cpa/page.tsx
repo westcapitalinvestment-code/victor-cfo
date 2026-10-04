@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format";
 import { saludoPorHora, fechaHoyPR } from "@/lib/hora-pr";
 import CpaClientList, { type ClienteCpa } from "./cpa-client-list";
 import FirmaAccountantPanel from "./firma-accountant-panel";
+import AlertasAgrupadas, { type AlertaCpa } from "./alertas-agrupadas";
 
 // Portal CPA — lista de clientes (pantalla "Clientes" del mockup
 // "VICTOR — Portal CPA.html"). RLS (business_entities_cpa_read,
@@ -89,7 +90,6 @@ export default async function CpaPortalPage() {
   // quizás tenga algunas alertas inteligentes") — cruza TODOS los clientes
   // del CPA en consultas batched (.in()), no una por entidad, para no
   // multiplicar queries por cada cliente que tenga.
-  type AlertaCpa = { tono: "red" | "amb"; icono: string; texto: string };
   const alertas: AlertaCpa[] = [];
 
   // IVU vencido (no depositado y ya pasó la fecha).
@@ -98,6 +98,8 @@ export default async function CpaPortalPage() {
       alertas.push({
         tono: "red",
         icono: "ti-alert-triangle",
+        tipo: "ivu_vencido",
+        tipoLabel: "IVU vencido",
         texto: `${nombreEntidad(r.entity_id)}: IVU vencido — ${formatMoney(Number(r.ivu_net_due ?? 0))} sin depositar (venció ${r.due_date}).`,
       });
     }
@@ -131,6 +133,8 @@ export default async function CpaPortalPage() {
     alertas.push({
       tono: "amb",
       icono: "ti-file-invoice",
+      tipo: "facturas_vencidas",
+      tipoLabel: "Facturas vencidas sin cobrar",
       texto: `${nombreEntidad(entityId)}: ${n} factura${n === 1 ? "" : "s"} vencida${n === 1 ? "" : "s"} sin cobrar.`,
     });
   }
@@ -161,6 +165,8 @@ export default async function CpaPortalPage() {
         alertas.push({
           tono: "red",
           icono: "ti-cash",
+          tipo: "retencion_480",
+          tipoLabel: "480.9A — vence día 15",
           texto: `${nombreEntidad(entityId)}: ${formatMoney(monto)} en retenciones pendientes de remesar (480.9A vence día 15).`,
         });
       }
@@ -174,6 +180,8 @@ export default async function CpaPortalPage() {
       alertas.push({
         tono: "amb",
         icono: "ti-certificate",
+        tipo: "relevo_vencido",
+        tipoLabel: "Certificado de Relevo vencido",
         texto: `${nombreEntidad(v.entity_id)}: Certificado de Relevo de ${v.name} vencido (${v.relevo_fecha_expiracion}).`,
       });
     }
@@ -192,11 +200,23 @@ export default async function CpaPortalPage() {
     alertas.push({
       tono: "red",
       icono: "ti-calendar-dollar",
+      tipo: "estimada_vencida",
+      tipoLabel: "Contribución estimada vencida",
       texto: `${nombreEntidad(e.entity_id)}: contribución estimada vencida — ${formatMoney(Number(e.amount_due ?? 0))} (venció ${e.due_date}).`,
     });
   }
 
   alertas.sort((a, b) => (a.tono === b.tono ? 0 : a.tono === "red" ? -1 : 1));
+
+  // Favoritos del contable logueado (migración 0140, 4 oct 2026, pedido de
+  // Joel a nombre de su esposa) — "Mis clientes" en CpaClientList. Son
+  // POR CONTABLE (member_email = su propio email), nunca compartidos entre
+  // el equipo — ver comentario de la migración.
+  const { data: favoritos } = await supabase
+    .from("cpa_client_favoritos")
+    .select("entity_id")
+    .eq("member_email", user.email ?? "");
+  const favoritosSet = new Set((favoritos ?? []).map((f) => f.entity_id));
 
   return (
     <div className="vc-shell">
@@ -236,6 +256,17 @@ export default async function CpaPortalPage() {
           independientes: quién paga (esto) y quién puede ver (account_members). */}
       <FirmaAccountantPanel />
 
+      {/* Alertas Inteligentes de portafolio, agrupadas por tipo real de
+          vencimiento (4 oct 2026, pedido de Joel a nombre de su esposa) —
+          antes esta lista se calculaba pero NUNCA se mostraba aquí, solo
+          alimentaba el contador por cliente de CpaClientList de abajo. */}
+      {alertas.length > 0 && (
+        <div className="vc-card mb-4">
+          <p className="mb-3 text-xs uppercase tracking-wide text-muted">Alertas Inteligentes</p>
+          <AlertasAgrupadas alertas={alertas} emptyText="Todo se ve normal con tu cartera — sin pendientes urgentes." />
+        </div>
+      )}
+
       {/* Lista de clientes (2 oct 2026, pedido de Joel) — sin $ sumados de
           todo el portafolio arriba: eso crea ansiedad innecesaria en un CPA
           con muchos clientes. Primero ve nombres, con buscador y un tab
@@ -251,6 +282,7 @@ export default async function CpaPortalPage() {
             ein: ent.ein,
             ownerName: nombreDueno(ent.owner_id),
             alertCount,
+            esFavorito: favoritosSet.has(ent.id),
             ivu: ivu
               ? { status: ivu.deposit_status, monto: Number(ivu.ivu_net_due ?? 0) }
               : null,

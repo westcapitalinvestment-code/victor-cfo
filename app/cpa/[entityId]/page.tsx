@@ -5,6 +5,7 @@ import CpaTabs from "./cpa-tabs";
 import { calcularEstadoResultados } from "@/lib/estado-resultados";
 import { saludoPorHora } from "@/lib/hora-pr";
 import { formatMoney as formatMoneyAlerta } from "@/lib/format";
+import AlertasAgrupadas, { type AlertaCpa } from "../alertas-agrupadas";
 
 // Portal CPA — dashboard de un cliente (pantalla "Dashboard" del mockup
 // "VICTOR — Portal CPA.html"). Todo lo que se lee aquí pasa por RLS
@@ -259,13 +260,14 @@ export default async function CpaClientePage({
   // mismas reglas que app/cpa/page.tsx pero acotadas a esta entidad,
   // reusando los datos que ya se trajeron arriba en el Promise.all (no
   // dispara queries nuevas).
-  type AlertaCpa = { tono: "red" | "amb"; icono: string; texto: string };
   const alertasEntidad: AlertaCpa[] = [];
 
   if (ivuTracker && ivuTracker.deposit_status !== "depositado" && ivuTracker.due_date && ivuTracker.due_date < hoyISO) {
     alertasEntidad.push({
       tono: "red",
       icono: "ti-alert-triangle",
+      tipo: "ivu_vencido",
+      tipoLabel: "IVU vencido",
       texto: `IVU vencido — ${formatMoneyAlerta(Number(ivuTracker.ivu_net_due ?? 0))} sin depositar (venció ${ivuTracker.due_date}).`,
     });
   }
@@ -277,6 +279,8 @@ export default async function CpaClientePage({
     alertasEntidad.push({
       tono: "amb",
       icono: "ti-file-invoice",
+      tipo: "facturas_vencidas",
+      tipoLabel: "Facturas vencidas sin cobrar",
       texto: `${facturasVencidasEntidad.length} factura${facturasVencidasEntidad.length === 1 ? "" : "s"} vencida${facturasVencidasEntidad.length === 1 ? "" : "s"} sin cobrar.`,
     });
   }
@@ -286,6 +290,8 @@ export default async function CpaClientePage({
     alertasEntidad.push({
       tono: "red",
       icono: "ti-cash",
+      tipo: "retencion_480",
+      tipoLabel: "480.9A — vence día 15",
       texto: `${formatMoneyAlerta(totalRetencionesPendientes)} en retenciones pendientes de remesar (480.9A vence día 15).`,
     });
   }
@@ -295,6 +301,8 @@ export default async function CpaClientePage({
       alertasEntidad.push({
         tono: "amb",
         icono: "ti-certificate",
+        tipo: "relevo_vencido",
+        tipoLabel: "Certificado de Relevo vencido",
         texto: `Certificado de Relevo de ${v.name} vencido (${v.relevo_fecha_expiracion}).`,
       });
     }
@@ -305,6 +313,8 @@ export default async function CpaClientePage({
     alertasEntidad.push({
       tono: "amb",
       icono: "ti-file-percent",
+      tipo: "faltan_480",
+      tipoLabel: "480.6SP incompleta",
       texto: `${faltan480} contratista${faltan480 === 1 ? "" : "s"} sin datos completos para la 480.6SP.`,
     });
   }
@@ -314,6 +324,8 @@ export default async function CpaClientePage({
     alertasEntidad.push({
       tono: "red",
       icono: "ti-calendar-dollar",
+      tipo: "estimada_vencida",
+      tipoLabel: "Contribución estimada vencida",
       texto: `Contribución estimada vencida — ${formatMoneyAlerta(Number(e.amount_due ?? 0))} (venció ${e.due_date}).`,
     });
   }
@@ -322,6 +334,8 @@ export default async function CpaClientePage({
     alertasEntidad.push({
       tono: "amb",
       icono: "ti-trending-down",
+      tipo: "utilidad_negativa",
+      tipoLabel: "Utilidad neta negativa",
       texto: `Utilidad neta negativa en ${anioResultados}: ${formatMoneyAlerta(er.utilidadNeta)}.`,
     });
   }
@@ -355,18 +369,10 @@ export default async function CpaClientePage({
           <i className="ti ti-bulb text-muted" />
           <p className="text-xs uppercase tracking-wide text-muted">Alertas inteligentes</p>
         </div>
-        {alertasEntidad.length === 0 ? (
-          <p className="text-sm text-muted">Todo se ve normal con {entidad.name} — sin pendientes urgentes.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {alertasEntidad.map((a, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <i className={`ti ${a.icono} mt-0.5 flex-shrink-0 ${a.tono === "red" ? "text-red" : "text-amb"}`} />
-                <span>{a.texto}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <AlertasAgrupadas
+          alertas={alertasEntidad}
+          emptyText={`Todo se ve normal con ${entidad.name} — sin pendientes urgentes.`}
+        />
       </div>
 
       <CpaTabs

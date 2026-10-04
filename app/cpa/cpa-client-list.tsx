@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { formatMoney } from "@/lib/format";
 
@@ -17,17 +17,63 @@ export type ClienteCpa = {
   ein: string | null;
   ownerName: string | null;
   alertCount: number;
+  // Favoritos por contable (migración 0140, 4 oct 2026, pedido de Joel a
+  // nombre de su esposa) — true si EL CONTABLE LOGUEADO marcó este cliente
+  // como suyo, no es compartido con el resto del equipo.
+  esFavorito: boolean;
   ivu: { status: "depositado" | "overdue" | "pendiente"; monto: number } | null;
 };
 
 export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) {
   const [busqueda, setBusqueda] = useState("");
-  const [tab, setTab] = useState<"todos" | "alertas">("todos");
+  const [tab, setTab] = useState<"todos" | "mios" | "alertas">("todos");
+  // Estado optimista de favoritos — arranca del valor que trajo el server
+  // (esFavorito) y se actualiza al instante al hacer click en la
+  // estrellita, sin esperar la respuesta ni recargar la página.
+  const [favoritos, setFavoritos] = useState<Set<string>>(
+    () => new Set(clientes.filter((c) => c.esFavorito).map((c) => c.id)),
+  );
+  const [guardandoFavorito, setGuardandoFavorito] = useState<string | null>(null);
+
+  async function toggleFavorito(e: MouseEvent, entityId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    const yaEsFavorito = favoritos.has(entityId);
+    // Optimista: cambia la estrellita de una vez, antes de que responda el
+    // servidor — es solo organización visual de un contable, no hace falta
+    // esperar.
+    setFavoritos((prev) => {
+      const next = new Set(prev);
+      if (yaEsFavorito) next.delete(entityId);
+      else next.add(entityId);
+      return next;
+    });
+    setGuardandoFavorito(entityId);
+    try {
+      await fetch("/api/cpa/favoritos", {
+        method: yaEsFavorito ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entityId }),
+      });
+    } catch {
+      // Si falla la red, se revierte — mejor eso que dejar una estrellita
+      // mintiendo sobre lo que de verdad quedó guardado.
+      setFavoritos((prev) => {
+        const next = new Set(prev);
+        if (yaEsFavorito) next.add(entityId);
+        else next.delete(entityId);
+        return next;
+      });
+    } finally {
+      setGuardandoFavorito(null);
+    }
+  }
 
   const conAlertas = clientes.filter((c) => c.alertCount > 0);
+  const misClientes = clientes.filter((c) => favoritos.has(c.id));
 
   const filtrados = useMemo(() => {
-    const base = tab === "alertas" ? conAlertas : clientes;
+    const base = tab === "alertas" ? conAlertas : tab === "mios" ? misClientes : clientes;
     const q = busqueda.trim().toLowerCase();
     if (!q) return base;
     return base.filter(
@@ -36,7 +82,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
         (c.ein ?? "").toLowerCase().includes(q) ||
         (c.ownerName ?? "").toLowerCase().includes(q),
     );
-  }, [clientes, conAlertas, tab, busqueda]);
+  }, [clientes, conAlertas, misClientes, tab, busqueda]);
 
   return (
     <div className="vc-card">
@@ -65,6 +111,15 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
             Todos ({clientes.length})
           </button>
           <button
+            onClick={() => setTab("mios")}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              tab === "mios" ? "bg-teal text-white" : "text-muted hover:text-text"
+            }`}
+          >
+            <i className="ti ti-star mr-1" style={{ fontSize: 11 }} />
+            Mis clientes ({misClientes.length})
+          </button>
+          <button
             onClick={() => setTab("alertas")}
             className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               tab === "alertas" ? "bg-teal text-white" : "text-muted hover:text-text"
@@ -81,18 +136,35 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
         </p>
       ) : filtrados.length === 0 ? (
         <p className="text-xs text-muted">
-          {tab === "alertas" ? "Ningún cliente tiene alertas pendientes ahora mismo." : "No hay clientes que coincidan con esa búsqueda."}
+          {tab === "alertas"
+            ? "Ningún cliente tiene alertas pendientes ahora mismo."
+            : tab === "mios"
+              ? "Todavía no has marcado ningún cliente con la estrella — búscalo en \"Todos\" y márcalo para que aparezca aquí."
+              : "No hay clientes que coincidan con esa búsqueda."}
         </p>
       ) : (
         <div className="flex flex-col divide-y divide-border">
           {filtrados.map((c) => (
             <Link key={c.id} href={`/cpa/${c.id}`} className="flex items-center justify-between py-3 hover:opacity-80">
-              <div>
-                <p className="text-sm font-medium">{c.name}</p>
-                <p className="text-xs text-muted">
-                  {c.entityType} {c.ein ? `· EIN ${c.ein}` : ""}
-                  {c.ownerName ? ` · de ${c.ownerName}` : ""}
-                </p>
+              <div className="flex items-start gap-2">
+                <button
+                  onClick={(e) => toggleFavorito(e, c.id)}
+                  disabled={guardandoFavorito === c.id}
+                  title={favoritos.has(c.id) ? "Quitar de Mis clientes" : "Marcar como Mis clientes"}
+                  className="mt-0.5 flex-shrink-0"
+                >
+                  <i
+                    className={favoritos.has(c.id) ? "ti ti-star-filled text-amb" : "ti ti-star text-muted"}
+                    style={{ fontSize: 16 }}
+                  />
+                </button>
+                <div>
+                  <p className="text-sm font-medium">{c.name}</p>
+                  <p className="text-xs text-muted">
+                    {c.entityType} {c.ein ? `· EIN ${c.ein}` : ""}
+                    {c.ownerName ? ` · de ${c.ownerName}` : ""}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {c.alertCount > 0 && (
