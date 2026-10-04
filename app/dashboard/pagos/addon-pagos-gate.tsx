@@ -59,9 +59,9 @@ export default function AddonPagosGate({
         <div className="mb-2 text-2xl">💳</div>
         <p className="mb-1 text-base font-semibold">Add-on Pagos — $24.99/mes</p>
         <p className="mb-4 text-sm text-muted">
-          Paga contratistas con retención automática (10% / 6%), control mensual del depósito para que nunca se te
-          pase la fecha, exportación directa de la 480.6SP al cierre fiscal, Certificado de Relevo por contratista y
-          archivo ACH/NACHA listo para subir al banco.
+          Registra tus pagos a contratistas con retención automática (10% / 6%), control mensual del depósito para
+          que nunca se te pase la fecha, exportación directa de la 480.6SP al cierre fiscal, Certificado de Relevo
+          por contratista y archivo ACH/NACHA listo para subir al banco.
         </p>
         {error && <p className="mb-3 text-xs text-red">{error}</p>}
         {puedeActivar ? (

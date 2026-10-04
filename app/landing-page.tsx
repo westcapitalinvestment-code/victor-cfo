@@ -564,8 +564,9 @@ export default function LandingPage() {
                   </div>
                 </div>
                 <div className={styles.addonDesc}>
-                  $24.99/mes · paga contratistas con retención automática (10% / 6%), control mensual del depósito
-                  para que nunca se te pase la fecha, y exportación directa de la 480.6SP al cierre fiscal
+                  $24.99/mes · registra tus pagos a contratistas con retención automática (10% / 6%), control
+                  mensual del depósito para que nunca se te pase la fecha, y exportación directa de la 480.6SP al
+                  cierre fiscal
                 </div>
               </div>
             </div>

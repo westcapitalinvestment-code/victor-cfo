@@ -265,7 +265,7 @@ export async function sendFirmaInvitationEmail(params: {
     `Hola,\n\n` +
     `${quien} te está regalando una cuenta completa de VICTOR CFO (plan Business)${saludoNegocio} — ` +
     `incluida en el servicio de contabilidad que ya tienes con ${quien}, sin costo adicional para ti.\n\n` +
-    `Vas a poder conectar tu banco, facturar, pagar a tus contratistas y hablar con VICTOR todos los ` +
+    `Vas a poder conectar tu banco, facturar, registrar pagos a tus contratistas y hablar con VICTOR todos los ` +
     `días — exactamente igual que cualquier cliente que paga el plan completo. La diferencia es que la ` +
     `mensualidad la cubre ${quien}, no tú.\n\n` +
     `Para activar tu cuenta y poner tu contraseña, entra aquí:\n${acceptUrl}\n\n` +
@@ -287,7 +287,7 @@ export async function sendFirmaInvitationEmail(params: {
   </div>
   <p>Hola,</p>
   <p>${htmlSeguro.quien} te está regalando una cuenta completa de VICTOR CFO (<strong>plan Business</strong>)${htmlSeguro.saludoNegocio} — incluida en el servicio de contabilidad que ya tienes con ${htmlSeguro.quien}, sin costo adicional para ti.</p>
-  <p>Vas a poder conectar tu banco, facturar, pagar a tus contratistas y hablar con VICTOR todos los días — exactamente igual que cualquier cliente que paga el plan completo. La diferencia es que la mensualidad la cubre ${htmlSeguro.quien}, no tú.</p>
+  <p>Vas a poder conectar tu banco, facturar, registrar pagos a tus contratistas y hablar con VICTOR todos los días — exactamente igual que cualquier cliente que paga el plan completo. La diferencia es que la mensualidad la cubre ${htmlSeguro.quien}, no tú.</p>
   <div style="text-align: center; margin: 28px 0;">
     <a href="${acceptUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Activar mi cuenta</a>
   </div>

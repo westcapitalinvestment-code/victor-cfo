@@ -167,7 +167,7 @@ export default function LandingPricing() {
           <hr className={styles.priceDivider} />
           <ul className={styles.priceFeatures}>
             <li>Todo lo del Pro</li>
-            <li>Pagos a contratistas incluido — retención automática (10% / 6%), control del depósito mensual y exportación directa de la 480.6SP</li>
+            <li>Registro de pagos a contratistas incluido — retención automática (10% / 6%), control del depósito mensual y exportación directa de la 480.6SP</li>
             <li>Secretaria o Administrador incluido (1 acceso)</li>
             <li>Hasta 3 técnicos de tu equipo incluidos</li>
           </ul>
