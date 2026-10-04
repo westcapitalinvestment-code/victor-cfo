@@ -445,6 +445,14 @@ function PagosTab({
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ nombre: string; neto: number }[] | null>(null);
   const [copiado, setCopiado] = useState(false);
+  // IDs + entidad de la corrida que se acaba de registrar (4 oct 2026,
+  // pedido de Joel: "cuando registro los pagos... es ahi dnd debe aparecer
+  // [el botón de ACH] para copiar esa corrida, no las de abajo pq esas son
+  // viejas") — antes el botón de ACH solo vivía en "Pagos recientes"
+  // mezclado con corridas de semanas pasadas; ahora también aparece pegado
+  // al resultado de la corrida recién guardada.
+  const [resultadoIds, setResultadoIds] = useState<string[]>([]);
+  const [resultadoEntityId, setResultadoEntityId] = useState<string | null>(null);
   // Confirmación con advertencia de entidad antes de guardar de verdad (4
   // sept 2026, pedido de Joel: calcado del mockup — "Registrar corrida" ya
   // no guarda directo, primero muestra bajo qué entidad va a quedar el pago.
@@ -502,18 +510,22 @@ function PagosTab({
   const [nachaError, setNachaError] = useState<string | null>(null);
   const [nachaAvisos, setNachaAvisos] = useState<string | null>(null);
 
-  async function descargarNacha() {
-    if (seleccionNacha.size === 0) return;
+  // idsOverride/entityIdOverride: usado por el botón pegado al resultado de
+  // una corrida recién registrada (esas filas aún no están en el prop
+  // `retenciones` del servidor hasta el próximo router.refresh()). Sin
+  // override, usa la selección manual de "Pagos recientes" como antes.
+  async function descargarNacha(idsOverride?: string[], entityIdOverride?: string) {
+    const ids = idsOverride ?? [...seleccionNacha];
+    if (ids.length === 0) return;
     setDescargandoNacha(true);
     setNachaError(null);
     setNachaAvisos(null);
-    const ids = [...seleccionNacha];
     // Todas las filas seleccionadas deberían ser de la misma entidad (un
     // archivo NACHA sale de UNA sola cuenta originadora) — se usa la
     // entidad de la primera fila seleccionada; si alguna otra es de otra
     // entidad, el backend la excluye y avisa en vez de fallar todo.
     const primeraFila = retenciones.find((r) => r.id === ids[0]);
-    const entityIdParaNacha = primeraFila?.entity_id ?? entidadId ?? "";
+    const entityIdParaNacha = entityIdOverride ?? primeraFila?.entity_id ?? entidadId ?? "";
     try {
       const res = await fetch(`/api/pagos/nacha?ids=${ids.join(",")}&entityId=${entityIdParaNacha}`);
       if (!res.ok) {
@@ -533,7 +545,11 @@ function PagosTab({
       a.download = nombreArchivo;
       a.click();
       URL.revokeObjectURL(url);
-      setSeleccionNacha(new Set());
+      if (idsOverride) {
+        setResultadoIds([]);
+      } else {
+        setSeleccionNacha(new Set());
+      }
     } catch {
       setNachaError("No se pudo generar el archivo ACH. Intenta de nuevo.");
     }
@@ -746,6 +762,8 @@ function PagosTab({
     }
 
     setResultado(filas.map((f) => ({ nombre: f.vendor.name, neto: f.neto })));
+    setResultadoIds((nuevasRetenciones ?? []).map((r) => r.id));
+    setResultadoEntityId(inserts[0]?.entity_id ?? null);
     setMontos({});
     setArchivosPendientes({});
     setCopiado(false);
@@ -1083,6 +1101,18 @@ function PagosTab({
               <span className="font-medium">{formatMoney(r.neto)}</span>
             </div>
           ))}
+          {resultadoIds.length > 0 && (
+            <button
+              type="button"
+              disabled={descargandoNacha}
+              className="vc-btn-secondary mt-2 w-full text-xs"
+              onClick={() => descargarNacha(resultadoIds, resultadoEntityId ?? undefined)}
+            >
+              {descargandoNacha ? "Generando..." : "Descargar archivo ACH de esta corrida"}
+            </button>
+          )}
+          {nachaError && <p className="mt-2 text-xs text-red">{nachaError}</p>}
+          {nachaAvisos && <p className="mt-2 text-xs text-amb">{nachaAvisos}</p>}
         </div>
       )}
 
@@ -1113,8 +1143,8 @@ function PagosTab({
             al portal del banco). Solo pagos "pendiente" (los ya remesados no
             hace falta volver a pagarlos). */}
         {nachaSeleccionables.length > 0 && (
-          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-teal/30 bg-teal/5 px-2.5 py-2">
-            <label className="flex items-center gap-1.5 text-xs">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-teal/30 bg-teal/5 px-2.5 py-2">
+            <label className="flex min-w-0 items-center gap-1.5 text-xs">
               <input
                 type="checkbox"
                 checked={seleccionNacha.size > 0 && seleccionNacha.size === nachaSeleccionables.length}
@@ -1122,13 +1152,15 @@ function PagosTab({
                   setSeleccionNacha(e.target.checked ? new Set(nachaSeleccionables.map((r) => r.id)) : new Set())
                 }
               />
-              {seleccionNacha.size > 0 ? `${seleccionNacha.size} seleccionado(s)` : "Seleccionar todos los pendientes"}
+              <span className="truncate">
+                {seleccionNacha.size > 0 ? `${seleccionNacha.size} seleccionado(s)` : "Seleccionar todos los pendientes"}
+              </span>
             </label>
             <button
               type="button"
               disabled={seleccionNacha.size === 0 || descargandoNacha}
-              className="vc-btn-secondary flex-shrink-0 text-xs"
-              onClick={descargarNacha}
+              className="vc-btn-secondary flex-shrink-0 whitespace-nowrap text-xs"
+              onClick={() => descargarNacha()}
             >
               {descargandoNacha ? "Generando..." : "Descargar archivo ACH"}
             </button>
