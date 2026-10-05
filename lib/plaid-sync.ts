@@ -94,11 +94,16 @@ export async function sincronizarPlaidDeUsuario(
     const hoy = fechaHoyPR();
     const { data: cfgUsuario } = await supabase
       .from("users")
-      .select("addon_entidades_seats, plaid_refresh_count, plaid_refresh_count_fecha")
+      .select("addon_entidades_seats, plaid_refresh_count, plaid_refresh_count_fecha, billed_by_firma_id")
       .eq("id", ownerId)
       .maybeSingle();
     const contadorHoy = cfgUsuario?.plaid_refresh_count_fecha === hoy ? (cfgUsuario?.plaid_refresh_count ?? 0) : 0;
-    const limiteHoy = 2 + 2 * (cfgUsuario?.addon_entidades_seats ?? 0);
+    // Clientes regalados por una Firma Accountant (billed_by_firma_id): 1
+    // refresh/día en vez de 2 (5 oct 2026, pedido de Joel — protege el margen
+    // del wholesale de $60/mes). Las entidades extra que el cliente pague
+    // por su cuenta siguen sumando +2/día cada una, igual que antes.
+    const baseRefreshDiario = cfgUsuario?.billed_by_firma_id ? 1 : 2;
+    const limiteHoy = baseRefreshDiario + 2 * (cfgUsuario?.addon_entidades_seats ?? 0);
     puedeRefrescarHoy = contadorHoy < limiteHoy;
     if (puedeRefrescarHoy) {
       await supabase

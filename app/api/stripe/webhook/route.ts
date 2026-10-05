@@ -12,7 +12,7 @@ import {
   todosLosPriceIdsDePlanes,
 } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { LIMITES_MENSUALES_CENTAVOS } from "@/lib/limites-ia";
+import { limiteMensualIaCentavos } from "@/lib/limites-ia";
 import { sendReferralCreditEmail, sendReferralCreditoPendienteEmail, sendWelcomeEmail, sendCancellationWinbackEmail, sendPaymentFailedEmail, sendFirmaInvitationEmail } from "@/lib/email";
 import { enviarEventoCAPI } from "@/lib/meta-capi";
 
@@ -37,7 +37,7 @@ async function rodarCreditoAlNuevoCiclo(
 ) {
   const { data: perfilAnterior } = await supabase
     .from("users")
-    .select("ciclo_inicio, plan")
+    .select("ciclo_inicio, plan, billed_by_firma_id")
     .eq("id", userId)
     .maybeSingle();
 
@@ -66,7 +66,7 @@ async function rodarCreditoAlNuevoCiclo(
 
   const costoFinalCicloAnterior = Number(usoFila?.costo_centavos ?? 0);
   const planAnterior = (perfilAnterior?.plan as string | null) ?? "core";
-  const limiteMensualAnterior = LIMITES_MENSUALES_CENTAVOS[planAnterior] ?? LIMITES_MENSUALES_CENTAVOS.core;
+  const limiteMensualAnterior = limiteMensualIaCentavos(planAnterior, perfilAnterior?.billed_by_firma_id as string | null | undefined);
 
   const consumoCredito = Math.min(creditoAntiguo, Math.max(0, costoFinalCicloAnterior - limiteMensualAnterior));
   const remanente = Math.max(0, creditoAntiguo - consumoCredito);

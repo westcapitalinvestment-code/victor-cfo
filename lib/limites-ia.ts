@@ -15,6 +15,21 @@
 // plan de $99.99. Joel pidió subirlo a ~$30 (3 oct 2026).
 export const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 750, pro: 1500, proplus: 3000 };
 
+// Clientes Business regalados por una Firma Accountant (users.billed_by_firma_id
+// no nulo) — 5 oct 2026, pedido de Joel: bajar el precio wholesale a $60/mes
+// (primer año, luego se revisa) y, para proteger el margen, tope de IA de
+// $20 en vez de $30 (y 1 refresh diario de Plaid en vez de 2 — ver
+// lib/plaid-sync.ts). Siempre usar esta función en vez de leer
+// LIMITES_MENSUALES_CENTAVOS directo, para que el gate de route.ts, el
+// espejo en tools.ts y el rollover de créditos del webhook no diverjan.
+export const LIMITE_IA_FIRMA_CENTAVOS = 2000;
+
+export function limiteMensualIaCentavos(plan: string | null | undefined, billedByFirmaId?: string | null): number {
+  const p = plan ?? "core";
+  if (p === "proplus" && billedByFirmaId) return LIMITE_IA_FIRMA_CENTAVOS;
+  return LIMITES_MENSUALES_CENTAVOS[p] ?? LIMITES_MENSUALES_CENTAVOS.core;
+}
+
 // "Microtokens" — 8 sept 2026, pedido explícito de Joel: invertir el
 // enfoque anterior (CAPA 13 del system prompt le decía a VICTOR que
 // aclarara "esto NO es un conteo de tokens, es dólares reales"). Ahora es

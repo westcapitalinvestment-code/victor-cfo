@@ -144,8 +144,13 @@ export function priceIdAddonPagos(): string | null {
 // plan Business para contadores/billers que absorben la mensualidad en su
 // iguala (mismo mecanismo que "bill my firm" de QuickBooks Online
 // Accountant, pero con un solo plan y un solo % fijo en vez de una tabla de
-// tramos — más simple de operar). $79.99/mes = 20% off el precio normal de
-// Business ($99.99/mes) — Price fijo configurado en Stripe, por SEAT
+// tramos — más simple de operar). 5 oct 2026: Joel bajó el precio de
+// $79.99 (20% off) a $60/mes (40% off el precio normal de Business,
+// $99.99/mes) como precio de lanzamiento del PRIMER AÑO — después se
+// revisa. Requiere crear un Price NUEVO de $60 en Stripe (los Price no se
+// editan) y actualizar STRIPE_PRICE_WHOLESALE_BUSINESS en Vercel. Los
+// clientes de Firma tienen además tope de IA de $20 (lib/limites-ia.ts) y
+// 1 refresh diario de Plaid (lib/plaid-sync.ts). Price fijo, por SEAT
 // (quantity = # de clientes activos bajo la firma), nunca un descuento
 // calculado en código. Solo cubre el plan BASE; los addons (Técnicos,
 // Administrador, Entidades, Pagos) siguen facturándose aparte al cliente a

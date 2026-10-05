@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 //     aprobación de Joel, instantáneo (ver /api/firma/activar).
 //  2. Ya activado — botón "Invitar cliente nuevo" que abre un modal
 //     EXPLICATIVO primero (pedido explícito de Joel: "cuando la click ahi
-//     debe explicar como funciona y el 20% aplicable solo en el plan
+//     debe explicar como funciona y el descuento aplicable solo en el plan
 //     Business") y solo después deja escribir el email del cliente.
 export default function FirmaAccountantPanel() {
   const [cargando, setCargando] = useState(true);
@@ -105,7 +105,7 @@ export default function FirmaAccountantPanel() {
         <>
           <p className="mb-1 text-sm font-medium">Hazte VICTOR Accountant</p>
           <p className="mb-3 text-xs text-muted">
-            Regala el plan Business a tus clientes nuevos — tú pagas 20% menos ($79.99/mes en vez de $99.99) y
+            Regala el plan Business a tus clientes nuevos — tú pagas 40% menos ($60/mes en vez de $99.99, precio de lanzamiento el primer año) y
             decides si se lo cobras, lo incluyes en tu iguala, o lo regalas. El cliente usa su cuenta de VICTOR
             todos los días; la mensualidad la ves tú, no él.
           </p>
@@ -160,8 +160,8 @@ export default function FirmaAccountantPanel() {
           <div className="vc-card w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 text-sm font-medium">Cómo funciona</p>
             <p className="mb-3 text-xs text-muted">
-              El plan Business de tu cliente ($99.99/mes de lista) queda incluido en TU factura, con 20% de
-              descuento ($79.99/mes) — nunca se le cobra nada a él por el plan base. El 20% aplica SOLO al plan
+              El plan Business de tu cliente ($99.99/mes de lista) queda incluido en TU factura, con 40% de
+              descuento ($60/mes, precio de lanzamiento el primer año) — nunca se le cobra nada a él por el plan base. El descuento aplica SOLO al plan
               Business; si tu cliente activa un addon después (Técnicos, Administrador, Entidades adicionales o
               Pagos), eso se factura aparte, directo a él, a precio normal. Si es tu primer cliente, te vamos a
               pedir que registres una tarjeta para esta suscripción — de ahí en adelante, cada cliente nuevo solo

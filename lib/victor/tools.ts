@@ -7,7 +7,7 @@ import { buscarIdentidadCultural } from "@/lib/victor/identidad-cultural";
 import { direccionCategoriaValida } from "@/lib/direccion-categoria";
 import { fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import { claveCicloUso, progresoCicloUso } from "@/lib/ciclo-uso";
-import { LIMITES_MENSUALES_CENTAVOS, centavosAMicrotokens } from "@/lib/limites-ia";
+import { limiteMensualIaCentavos, centavosAMicrotokens } from "@/lib/limites-ia";
 import { esFounder } from "@/lib/founder";
 
 // El texto real del banco (description_raw) casi nunca coincide palabra
@@ -2611,7 +2611,7 @@ export async function executeVictorTool(
       // bloquea — si eso cambia allá, hay que cambiarlo aquí también.
       const { data: yo, error: errorYo } = await supabase
         .from("users")
-        .select("plan, email, ciclo_inicio, ciclo_fin")
+        .select("plan, email, ciclo_inicio, ciclo_fin, billed_by_firma_id")
         .eq("id", ownerId)
         .maybeSingle();
       if (errorYo || !yo) {
@@ -2663,7 +2663,7 @@ export async function executeVictorTool(
       const cicloClave = claveCicloUso(yo);
       const { diaDelPeriodo, diasEnElPeriodo } = progresoCicloUso(yo);
       const planActual = yo.plan ?? "core";
-      const limiteMensual = LIMITES_MENSUALES_CENTAVOS[planActual] ?? LIMITES_MENSUALES_CENTAVOS.core;
+      const limiteMensual = limiteMensualIaCentavos(planActual, yo.billed_by_firma_id);
 
       const [{ data: usoCiclo }, { data: creditosCiclo }] = await Promise.all([
         supabase.from("uso_ia_mensual").select("costo_centavos").eq("owner_id", ownerId).eq("ciclo_clave", cicloClave).maybeSingle(),
