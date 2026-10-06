@@ -40,6 +40,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let vistaGlobalNegocio = false;
   let esFounderUsuario = false;
   let firmaNombre: string | null = null;
+  let firmaLogoUrl: string | null = null;
   try {
     const supabase = createClient();
     const {
@@ -64,10 +65,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
       if (userRow?.billed_by_firma_id) {
         const { data: firma } = await createAdminClient()
           .from("users")
-          .select("full_name")
+          .select("full_name, firma_logo_r2_key")
           .eq("id", userRow.billed_by_firma_id)
           .maybeSingle();
         firmaNombre = firma?.full_name ?? "Tu contador";
+        if (firma?.firma_logo_r2_key) firmaLogoUrl = `/api/firma/logo/${userRow.billed_by_firma_id}`;
       }
       fullName = userRow?.full_name ?? null;
       plan = userRow?.plan ?? null;
@@ -105,6 +107,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           entidadActivaId={entidadActivaId}
           vistaGlobalNegocio={vistaGlobalNegocio}
           firmaNombre={firmaNombre}
+          firmaLogoUrl={firmaLogoUrl}
         />
         <BadgeUpdater />
         <AutoRefresh />

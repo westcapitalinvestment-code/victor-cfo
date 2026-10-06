@@ -1645,6 +1645,74 @@ export async function sendFirmaClienteLiberadoEmail(params: {
   }
 }
 
+// Recordatorio semanal de gracia (6 oct 2026, pedido de Joel: "hay que
+// enviarle email semanal, pq la idea es que no se pierda y menos si tiene
+// addon activo"). Lo manda el cron firma-gracia cada 7 días a un cliente que
+// su firma liberó y todavía no contrató su propio plan. Si tiene addons
+// activos se le dice cuáles perdería al pasar a gratis.
+export async function sendFirmaGraciaRecordatorioEmail(params: {
+  clienteEmail: string;
+  clienteNombre: string | null;
+  firmaNombre: string | null;
+  graciaHasta: string;
+  diasRestantes: number;
+  addons: string[];
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+
+  const { clienteEmail, clienteNombre, firmaNombre, graciaHasta, diasRestantes, addons } = params;
+  const firma = firmaNombre || "tu contador";
+  const fecha = new Date(graciaHasta).toLocaleDateString("es-PR", { day: "numeric", month: "long", year: "numeric" });
+  const url = `${SITE_URL}/dashboard/config`;
+  const diasTxt = diasRestantes <= 1 ? "mañana" : `en ${diasRestantes} días`;
+  const addonsTxt = addons.length > 0 ? addons.join(", ") : "";
+
+  const textoAddons = addonsTxt
+    ? `Tienes activos estos addons: ${addonsTxt}. Si tu cuenta pasa al plan gratis, dejarán de funcionar.\n\n`
+    : "";
+  const texto =
+    (clienteNombre ? `Hola ${clienteNombre},\n\n` : `Hola,\n\n`) +
+    `Te recordamos que ${firma} ya no incluye tu plan Business de VICTOR CFO. Tu plan vence ${diasTxt} (${fecha}).\n\n` +
+    textoAddons +
+    `Para no perder el acceso a tu plan Business, actívalo aquí:\n${url}\n\n` +
+    `Tus datos no se borran, pero sin plan pagado tu cuenta pasa al plan gratis.\n\n— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const bloqueAddons = addonsTxt
+    ? `<p style="background:#fff7e6;border:1px solid #f0c36d;border-radius:8px;padding:10px 12px;font-size:14px;">Tienes activos estos addons: <strong>${escapeHtml(addonsTxt)}</strong>. Si tu cuenta pasa al plan gratis, dejarán de funcionar.</p>`
+    : "";
+
+  const html = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${clienteNombre ? `Hola, <strong>${escapeHtml(clienteNombre)}</strong>,` : `Hola,`}</p>
+  <p>Te recordamos que <strong>${escapeHtml(firma)}</strong> ya no incluye tu plan Business. Tu plan vence <strong>${diasTxt}</strong> (${escapeHtml(fecha)}).</p>
+  ${bloqueAddons}
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${url}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Mantener mi plan Business</a>
+  </div>
+  <p style="font-size: 14px; color: #555;">Tus datos no se borran, pero sin plan pagado tu cuenta pasa al plan gratis.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: clienteEmail,
+      subject: `Tu plan Business vence ${diasTxt} — no pierdas tu cuenta`,
+      text: texto,
+      html,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
 // Correo automático al CANCELAR (27 sept 2026, pedido de Joel: "que de
 // manera automatica como el email de bienvenida se le envia uno si
 // cancelan haciendo unas preguntas para saber la razon y ofrecerle alguna

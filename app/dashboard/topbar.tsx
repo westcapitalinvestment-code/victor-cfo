@@ -61,6 +61,7 @@ export default function Topbar({
   entidadActivaId = null,
   vistaGlobalNegocio = false,
   firmaNombre = null,
+  firmaLogoUrl = null,
 }: {
   fullName: string | null;
   plan: string | null;
@@ -70,6 +71,8 @@ export default function Topbar({
   // Nombre del contador/firma que trajo a este cliente (6 oct 2026, pedido de
   // Joel): en vez de "Invita a tu contable" se muestra quién es su contador.
   firmaNombre?: string | null;
+  // Logo que subió la firma desde su Portal CPA (si no hay, se usan iniciales).
+  firmaLogoUrl?: string | null;
 }) {
   const iniciales = (firmaNombre ?? "")
     .split(/\s+/)
@@ -224,23 +227,32 @@ export default function Topbar({
             contenido real que un contador puede usar, así que se reactiva. */}
         {firmaNombre ? (
           <Link href="/dashboard/config" className="vc-invite-banner">
-            <span
-              aria-hidden
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: "50%",
-                background: "#1D9E75",
-                color: "#fff",
-                fontSize: 10,
-                fontWeight: 700,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {iniciales || "C"}
-            </span>
+            {firmaLogoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={firmaLogoUrl}
+                alt={firmaNombre}
+                style={{ width: 22, height: 22, borderRadius: 4, objectFit: "contain", background: "#fff" }}
+              />
+            ) : (
+              <span
+                aria-hidden
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  background: "#1D9E75",
+                  color: "#fff",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {iniciales || "C"}
+              </span>
+            )}
             <span>
               <span className="vc-invite-title">{firmaNombre}</span>
               <span className="vc-invite-sub">Tu contador · plan incluido</span>

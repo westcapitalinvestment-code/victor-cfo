@@ -82,7 +82,14 @@ export async function liberarClienteDeFirma(
 
   const { data: actualizados, error } = await admin
     .from("users")
-    .update({ billed_by_firma_id: null, firma_gracia_hasta: graciaHasta, firma_liberado_de_id: firmaId })
+    .update({
+      billed_by_firma_id: null,
+      firma_gracia_hasta: graciaHasta,
+      firma_liberado_de_id: firmaId,
+      // El correo de "te liberaron" cuenta como primer aviso; el cron reenvía
+      // cada 7 días desde aquí.
+      firma_gracia_ultimo_aviso_at: new Date().toISOString(),
+    })
     .eq("id", clienteId)
     .eq("billed_by_firma_id", firmaId)
     .select("id");
