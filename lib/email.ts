@@ -1,5 +1,7 @@
 import { Resend } from "resend";
 import QRCode from "qrcode";
+import { urlBajaCorreos } from "./email-baja";
+import type { TipVictor } from "./tips-victor";
 
 // Envío de correo transaccional — hoy solo se usa para la invitación al
 // contable/CPA, pero cualquier otro email futuro (recordatorios, recibos)
@@ -1447,6 +1449,139 @@ export async function sendNurtureFiscalizacionEmail(params: {
       subject: "Hacienda ya cruza tus datos — ¿tus números están listos?",
       text: textoPlano,
       html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
+// ============================================================================
+// Nurture v2 (6 oct 2026, migración 0141, pedido de Joel): correo guía de
+// CSV/Excel (día 3) + tips semanales de VICTOR (estilo blog, desde día 14).
+// Ambos llevan link de baja (lib/email-baja.ts) en el pie.
+// ============================================================================
+function envolverCorreoNurture(params: { saludo: string; cuerpoHtml: string; ctaTexto: string; ctaUrl: string; bajaUrl: string }): string {
+  const { saludo, cuerpoHtml, ctaTexto, ctaUrl, bajaUrl } = params;
+  return `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${saludo ? `Hola, <strong>${escapeHtml(saludo)}</strong>,` : `Hola,`}</p>
+  ${cuerpoHtml}
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${ctaUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">${escapeHtml(ctaTexto)}</a>
+  </div>
+  <p style="font-size: 14px;">Cualquier duda o pregunta, escríbenos a <a href="mailto:soporte@victorcfo.com" style="color: #1D9E75;">soporte@victorcfo.com</a>.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a><br/><a href="${bajaUrl}" style="color: #999;">Dejar de recibir estos correos</a></p>
+</div>`.trim();
+}
+
+export async function sendNurtureCsvGuiaEmail(params: {
+  toEmail: string;
+  toName: string | null;
+  userId: string;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+
+  const { toEmail, toName, userId } = params;
+  const cuentasUrl = `${SITE_URL}/dashboard/cuentas`;
+  const bajaUrl = urlBajaCorreos(SITE_URL, userId);
+
+  const pasos: [string, string][] = [
+    ["Descarga tu estado del banco", "Entra a la página o app de tu banco y busca \"Descargar transacciones\" o \"Exportar\". Escoge formato CSV o Excel y el rango de fechas (con los últimos 2 o 3 meses es suficiente para empezar)."],
+    ["Entra a Cuentas en VICTOR", "Toca \"Añadir cuenta manual\", ponle un nombre (por ejemplo, \"Banco Popular\") y luego \"Subir estado de cuenta\"."],
+    ["Sube el archivo y revisa", "Selecciona tu CSV o Excel, confirma las columnas y listo: tus movimientos aparecen en Transacciones. Categorízalos una vez y tu dashboard cobra vida con ingresos, gastos y a dónde se va tu dinero."],
+  ];
+
+  const textoPlano =
+    (toName ? `Hola ${toName},\n\n` : `Hola,\n\n`) +
+    `¿Ya viste tu dashboard con tus números reales? Te toma 5 minutos y es lo que más vale la pena hacer en tu cuenta gratis:\n\n` +
+    pasos.map(([t, x], i) => `${i + 1}. ${t} — ${x}`).join("\n\n") +
+    `\n\nSube tu primer estado aquí:\n${cuentasUrl}\n\n` +
+    `Si tu banco solo da PDF, también lo puedes subir.\n\n— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}\n\nDejar de recibir estos correos: ${bajaUrl}`;
+
+  const pasosHtml = pasos
+    .map(
+      ([t, x], i) => `
+  <div style="display: flex; gap: 14px; margin-bottom: 20px;">
+    <div style="flex-shrink: 0; width: 28px; height: 28px; border-radius: 9999px; background: #eefaf4; color: #14543d; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center;">${i + 1}</div>
+    <div>
+      <p style="margin: 0 0 4px 0; font-weight: 600;">${escapeHtml(t)}</p>
+      <p style="margin: 0; color: #555; font-size: 14px;">${escapeHtml(x)}</p>
+    </div>
+  </div>`
+    )
+    .join("");
+
+  const html = envolverCorreoNurture({
+    saludo: toName || "",
+    cuerpoHtml: `<p>¿Ya viste tu dashboard con tus <strong>números reales</strong>? Te toma unos 5 minutos y es lo que más vale la pena hacer en tu cuenta gratis:</p>
+  <div style="margin: 24px 0;">${pasosHtml}</div>
+  <p style="font-size: 14px; color: #555;">Si tu banco solo da PDF, también lo puedes subir.</p>`,
+    ctaTexto: "Subir mi primer estado",
+    ctaUrl: cuentasUrl,
+    bajaUrl,
+  });
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: "Ve tu dashboard con tus números reales (5 minutos)",
+      text: textoPlano,
+      html,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
+export async function sendNurtureTipEmail(params: {
+  toEmail: string;
+  toName: string | null;
+  userId: string;
+  tip: TipVictor;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+
+  const { toEmail, toName, userId, tip } = params;
+  const bajaUrl = urlBajaCorreos(SITE_URL, userId);
+  const ctaUrl = `${SITE_URL}${tip.accion?.path ?? "/dashboard"}`;
+  const ctaTexto = tip.accion?.texto ?? "Abrir mi cuenta";
+  const upgradeUrl = `${SITE_URL}/dashboard/config?upgrade=core`;
+
+  const textoPlano =
+    (toName ? `Hola ${toName},\n\n` : `Hola,\n\n`) +
+    `${tip.titulo}\n\n` +
+    tip.parrafos.join("\n\n") +
+    `\n\n${ctaTexto}: ${ctaUrl}\n\n` +
+    `Cuando quieras que VICTOR haga esto por ti, con tu banco conectado y chat 24/7, prueba Core 7 días gratis: ${upgradeUrl}\n\n` +
+    `— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}\n\nDejar de recibir estos correos: ${bajaUrl}`;
+
+  const html = envolverCorreoNurture({
+    saludo: toName || "",
+    cuerpoHtml: `<h2 style="font-size: 20px; margin: 16px 0 12px 0;">${escapeHtml(tip.titulo)}</h2>
+  ${tip.parrafos.map((p) => `<p style="color: #333;">${escapeHtml(p)}</p>`).join("\n  ")}
+  <p style="font-size: 13.5px; color: #555; background: #fafafa; border-left: 3px solid #1D9E75; padding: 10px 14px; border-radius: 4px; margin-top: 22px;">¿Quieres que VICTOR lo haga por ti, con tu banco conectado y chat 24/7? <a href="${upgradeUrl}" style="color: #1D9E75; font-weight: 600;">Prueba Core 7 días gratis</a>.</p>`,
+    ctaTexto,
+    ctaUrl,
+    bajaUrl,
+  });
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: tip.asunto,
+      text: textoPlano,
+      html,
     });
     if (error) return { sent: false, reason: error.message };
     return { sent: true };

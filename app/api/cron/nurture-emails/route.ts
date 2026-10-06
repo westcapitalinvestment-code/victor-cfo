@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendNurtureFeaturesGratisEmail, sendNurtureTrialOfertaEmail, sendNurtureFiscalizacionEmail } from "@/lib/email";
+import {
+  sendNurtureFeaturesGratisEmail,
+  sendNurtureTrialOfertaEmail,
+  sendNurtureFiscalizacionEmail,
+  sendNurtureCsvGuiaEmail,
+  sendNurtureTipEmail,
+} from "@/lib/email";
+import { TIPS_VICTOR } from "@/lib/tips-victor";
 
 // Cron diario (25 sept 2026, pedido de Joel) — secuencia de nurture para
 // cuentas plan='gratis', pensada para convertir a Core/Pro usando el email
@@ -38,6 +45,7 @@ export async function GET(req: NextRequest) {
     .from("users")
     .select("id, email, full_name, created_at")
     .eq("plan", "gratis")
+    .is("email_marketing_baja_at", null)
     .is("nurture_features_gratis_enviado_at", null)
     .lte("created_at", new Date(ahora - diasMs(2)).toISOString())
     .gte("created_at", new Date(ahora - diasMs(5)).toISOString());
@@ -66,6 +74,7 @@ export async function GET(req: NextRequest) {
     .from("users")
     .select("id, email, full_name, created_at")
     .eq("plan", "gratis")
+    .is("email_marketing_baja_at", null)
     .is("nurture_trial_oferta_enviado_at", null)
     .lte("created_at", new Date(ahora - diasMs(5)).toISOString())
     .gte("created_at", new Date(ahora - diasMs(8)).toISOString());
@@ -94,6 +103,7 @@ export async function GET(req: NextRequest) {
     .from("users")
     .select("id, email, full_name, created_at")
     .eq("plan", "gratis")
+    .is("email_marketing_baja_at", null)
     .is("nurture_fiscalizacion_enviado_at", null)
     .lte("created_at", new Date(ahora - diasMs(8)).toISOString())
     .gte("created_at", new Date(ahora - diasMs(11)).toISOString());
@@ -118,7 +128,75 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log("[nurture-emails]", JSON.stringify({ enviadosDia2, enviadosDia5, enviadosDia8, resultados }));
+  // --- Día 3: guía para subir CSV/Excel (6 oct 2026, migración 0141) -----
+  const { data: candidatosCsv, error: errorCsv } = await supabase
+    .from("users")
+    .select("id, email, full_name, created_at")
+    .eq("plan", "gratis")
+    .is("email_marketing_baja_at", null)
+    .is("nurture_csv_guia_enviado_at", null)
+    .lte("created_at", new Date(ahora - diasMs(3)).toISOString())
+    .gte("created_at", new Date(ahora - diasMs(6)).toISOString());
 
-  return NextResponse.json({ ok: true, enviadosDia2, enviadosDia5, enviadosDia8, resultados });
+  if (errorCsv) return NextResponse.json({ error: errorCsv.message, resultados }, { status: 500 });
+
+  let enviadosCsv = 0;
+  for (const usuario of candidatosCsv || []) {
+    try {
+      if (!usuario.email) {
+        resultados[`csv:${usuario.id}`] = { enviado: false, razon: "sin email" };
+        continue;
+      }
+      const resultado = await sendNurtureCsvGuiaEmail({ toEmail: usuario.email, toName: usuario.full_name ?? null, userId: usuario.id });
+      if (resultado.sent || resultado.reason === "RESEND_API_KEY no está configurada en el servidor.") {
+        await supabase.from("users").update({ nurture_csv_guia_enviado_at: new Date().toISOString() }).eq("id", usuario.id);
+      }
+      if (resultado.sent) enviadosCsv++;
+      resultados[`csv:${usuario.id}`] = { enviado: resultado.sent, razon: resultado.reason };
+    } catch (err) {
+      resultados[`csv:${usuario.id}`] = { enviado: false, error: err instanceof Error ? err.message : "Error desconocido" };
+    }
+  }
+
+  // --- Tips semanales de VICTOR (desde día 14, 1 por semana) --------------
+  // El siguiente tip es el índice nurture_tips_enviados de lib/tips-victor.ts;
+  // al agotar la lista, la serie termina sola.
+  const { data: candidatosTips, error: errorTips } = await supabase
+    .from("users")
+    .select("id, email, full_name, nurture_tips_enviados")
+    .eq("plan", "gratis")
+    .is("email_marketing_baja_at", null)
+    .lt("nurture_tips_enviados", TIPS_VICTOR.length)
+    .lte("created_at", new Date(ahora - diasMs(14)).toISOString())
+    .or(`nurture_tips_ultimo_at.is.null,nurture_tips_ultimo_at.lte.${new Date(ahora - diasMs(7)).toISOString()}`);
+
+  if (errorTips) return NextResponse.json({ error: errorTips.message, resultados }, { status: 500 });
+
+  let enviadosTips = 0;
+  for (const usuario of candidatosTips || []) {
+    try {
+      if (!usuario.email) {
+        resultados[`tip:${usuario.id}`] = { enviado: false, razon: "sin email" };
+        continue;
+      }
+      const indice = usuario.nurture_tips_enviados ?? 0;
+      const tip = TIPS_VICTOR[indice];
+      if (!tip) continue;
+      const resultado = await sendNurtureTipEmail({ toEmail: usuario.email, toName: usuario.full_name ?? null, userId: usuario.id, tip });
+      if (resultado.sent || resultado.reason === "RESEND_API_KEY no está configurada en el servidor.") {
+        await supabase
+          .from("users")
+          .update({ nurture_tips_enviados: indice + 1, nurture_tips_ultimo_at: new Date().toISOString() })
+          .eq("id", usuario.id);
+      }
+      if (resultado.sent) enviadosTips++;
+      resultados[`tip:${usuario.id}`] = { enviado: resultado.sent, razon: resultado.reason };
+    } catch (err) {
+      resultados[`tip:${usuario.id}`] = { enviado: false, error: err instanceof Error ? err.message : "Error desconocido" };
+    }
+  }
+
+  console.log("[nurture-emails]", JSON.stringify({ enviadosDia2, enviadosDia5, enviadosDia8, enviadosCsv, enviadosTips, resultados }));
+
+  return NextResponse.json({ ok: true, enviadosDia2, enviadosDia5, enviadosDia8, enviadosCsv, enviadosTips, resultados });
 }
