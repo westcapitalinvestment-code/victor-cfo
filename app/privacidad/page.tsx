@@ -50,7 +50,7 @@ export default function PoliticaPrivacidadPage() {
         </li>
         <li className="mb-1">
           <strong>Datos técnicos y de mercadeo:</strong> dirección IP, tipo de dispositivo y navegador, y
-          cookies o identificadores (incluidas cookies de Meta, ver sección 4).
+          cookies o identificadores necesarios para que la sesión funcione.
         </li>
         <li className="mb-1">
           <strong>Comunicaciones:</strong> los correos que nos escribes a soporte.
@@ -68,7 +68,6 @@ export default function PoliticaPrivacidadPage() {
           y, si te registraste en el plan gratis, correos con guías y consejos sobre el producto. Puedes
           darte de baja de los correos de mercadeo con el enlace al pie de cada uno.
         </li>
-        <li className="mb-1">Para medir y mejorar nuestra publicidad (ver sección 4).</li>
         <li className="mb-1">Para prevenir fraude, abuso y garantizar la seguridad del Servicio.</li>
       </ul>
       <p className="mb-4">
@@ -92,7 +91,6 @@ export default function PoliticaPrivacidadPage() {
         <li className="mb-1"><strong>Stripe</strong> — procesamiento de pagos y suscripciones.</li>
         <li className="mb-1"><strong>Resend</strong> — envío y recepción de correos (incluido soporte).</li>
         <li className="mb-1"><strong>Vercel</strong> — hospedaje de la aplicación.</li>
-        <li className="mb-1"><strong>Meta Platforms</strong> — medición de publicidad (ver sección 4).</li>
       </ul>
       <p className="mb-4">
         Solo compartimos lo mínimo necesario con cada uno, y están sujetos a sus propias obligaciones de
@@ -100,15 +98,15 @@ export default function PoliticaPrivacidadPage() {
         exige, o para proteger nuestros derechos y la seguridad de los usuarios.
       </p>
 
-      <h2 className="mb-2 mt-6 text-base font-semibold">4. Publicidad y cookies (Meta)</h2>
+      <h2 className="mb-2 mt-6 text-base font-semibold">4. Publicidad y cookies</h2>
       <p className="mb-4">
-        Usamos el Píxel de Meta en nuestro sitio y en la página de registro, y enviamos a Meta algunos
-        eventos de conversión (por ejemplo, cuando alguien se registra o inicia una suscripción) para medir
-        el rendimiento de nuestros anuncios. Para esto podemos enviar a Meta tu correo electrónico y
-        teléfono en formato cifrado (hash), tu dirección IP, el tipo de navegador y los identificadores de
-        las cookies de Meta. <strong>No enviamos a Meta tus transacciones, balances, facturas ni documentos.</strong>{" "}
-        Puedes controlar esto desde la configuración de anuncios de tu cuenta de Meta, bloqueando las
-        cookies en tu navegador, o escribiéndonos para que dejemos de enviar eventos asociados a tu correo.
+        Promocionamos VICTOR CFO en redes sociales como Facebook e Instagram, pero{" "}
+        <strong>no instalamos píxeles de seguimiento de publicidad en nuestro sitio ni en la aplicación, y no
+        enviamos a redes de publicidad datos de nuestros usuarios</strong> (ni correo, ni teléfono, ni
+        transacciones, balances, facturas o documentos). Si en el futuro decidimos usar herramientas de
+        medición de anuncios, actualizaremos esta política antes y te daremos la opción de rechazarlas.
+        Si haces clic en uno de nuestros anuncios, la red social donde lo viste puede registrar ese clic
+        según sus propias políticas.
       </p>
 
       <h2 className="mb-2 mt-6 text-base font-semibold">5. Quién más puede ver tus datos dentro del Servicio</h2>

@@ -9,6 +9,12 @@
 // "¿existe window.fbq?" en cada sitio.
 export const META_PIXEL_ID = "1107383785154187";
 
+// Interruptor maestro (6 oct 2026): false = el Pixel NO se carga y la API de
+// conversiones (lib/meta-capi.ts) NO envía nada a Meta. Los anuncios pueden
+// seguir corriendo sin Pixel. Si se reactiva, actualizar la Política de
+// Privacidad (sección Meta) y agregar banner de cookies con opción de rechazar.
+export const META_TRACKING_ACTIVO = false;
+
 type FbqEventoEstandar =
   | "Lead"
   | "CompleteRegistration"

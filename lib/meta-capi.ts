@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { META_PIXEL_ID } from "@/lib/fbpixel";
+import { META_PIXEL_ID, META_TRACKING_ACTIVO } from "@/lib/fbpixel";
 
 // Meta Conversions API — el evento de "Purchase" que faltaba (22 sept 2026,
 // pedido de Joel: "lo que haga falta para optimizar y coger más clientes").
@@ -37,6 +37,8 @@ export async function enviarEventoCAPI(params: {
   currency?: string;
   customData?: Record<string, unknown>;
 }) {
+  // Apagado por el interruptor maestro (lib/fbpixel.ts): no se envía nada a Meta.
+  if (!META_TRACKING_ACTIVO) return;
   const accessToken = process.env.META_CAPI_ACCESS_TOKEN;
   if (!accessToken) {
     // Silencioso a propósito — igual que el pixel del navegador, esto nunca

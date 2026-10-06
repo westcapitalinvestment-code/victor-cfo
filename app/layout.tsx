@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
 import PwaRegister from "./pwa-register";
-import { META_PIXEL_ID } from "@/lib/fbpixel";
+import { META_PIXEL_ID, META_TRACKING_ACTIVO } from "@/lib/fbpixel";
 
 export const metadata: Metadata = {
   title: "VICTOR CFO",
@@ -72,8 +72,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             render inicial, pero corre apenas la página es interactiva — lo
             normal para pixels de tracking que no son críticos para el
             primer pintado. */}
-        <Script id="meta-pixel-base" strategy="afterInteractive">
-          {`
+        {/* APAGADO (6 oct 2026, Joel: "si apagalo, igual eso no funciona y nos
+            evitamos complicaciones"). Para reactivar: META_TRACKING_ACTIVO = true
+            en lib/fbpixel.ts (y revisar política de privacidad + banner de cookies). */}
+        {META_TRACKING_ACTIVO && (
+          <>
+            <Script id="meta-pixel-base" strategy="afterInteractive">
+              {`
             !function(f,b,e,v,n,t,s)
             {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
             n.callMethod.apply(n,arguments):n.queue.push(arguments)};
@@ -85,16 +90,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             fbq('init', '${META_PIXEL_ID}');
             fbq('track', 'PageView');
           `}
-        </Script>
-        <noscript>
-          <img
-            height="1"
-            width="1"
-            style={{ display: "none" }}
-            src={`https://www.facebook.com/tr?id=${META_PIXEL_ID}&ev=PageView&noscript=1`}
-            alt=""
-          />
-        </noscript>
+            </Script>
+            <noscript>
+              <img
+                height="1"
+                width="1"
+                style={{ display: "none" }}
+                src={`https://www.facebook.com/tr?id=${META_PIXEL_ID}&ev=PageView&noscript=1`}
+                alt=""
+              />
+            </noscript>
+          </>
+        )}
         <PwaRegister />
         {children}
       </body>
