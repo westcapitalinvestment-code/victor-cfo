@@ -235,7 +235,7 @@ export default function AceptarInvitacionCpaPage() {
           <img src="/victor-avatar.png" alt="VICTOR" className="h-9 w-9 flex-shrink-0 rounded-full object-cover" style={{ background: "#fff" }} />
           <span className="text-lg font-medium">VICTOR</span>
           <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-[10px] font-medium text-teal">
-            Portal CPA
+            Portal Contable
           </span>
         </div>
 

@@ -16,6 +16,8 @@ export type ClienteCpa = {
   entityType: string | null;
   ein: string | null;
   ownerName: string | null;
+  // Correo del dueño, para el botón "Escribir" (abre el correo del contable).
+  ownerEmail: string | null;
   // "firma" = cliente invitado bajo el plan de la firma (el contador lo paga);
   // "propio" = cliente que ya tenía VICTOR y te dio acceso.
   origen: "firma" | "propio";
@@ -217,6 +219,22 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
                   </span>
                 ) : (
                   <span className="rounded-full bg-muted/10 px-2 py-1 text-[10px] text-muted">Sin datos IVU</span>
+                )}
+                {c.ownerEmail && (
+                  // Botón (no <a>) porque la fila ya es un <Link>; abre el cliente de correo del contable.
+                  <button
+                    type="button"
+                    title={`Escribir a ${c.ownerName || c.ownerEmail}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const asunto = encodeURIComponent(`${c.name} — consulta de tu contable`);
+                      window.location.href = `mailto:${c.ownerEmail}?subject=${asunto}`;
+                    }}
+                    className="flex items-center gap-1 rounded-full border border-teal px-2 py-1 text-[10px] font-medium text-teal"
+                  >
+                    <i className="ti ti-mail" style={{ fontSize: 12 }} /> Escribir
+                  </button>
                 )}
               </div>
             </Link>
