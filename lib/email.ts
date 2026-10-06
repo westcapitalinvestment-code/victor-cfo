@@ -1590,6 +1590,61 @@ export async function sendNurtureTipEmail(params: {
   }
 }
 
+// Aviso al cliente cuando su firma lo libera del plan wholesale (6 oct 2026):
+// conserva Business y sus datos durante la gracia; si no asume su plan, baja
+// a gratis (nunca se borra nada).
+export async function sendFirmaClienteLiberadoEmail(params: {
+  clienteEmail: string;
+  clienteNombre: string | null;
+  firmaNombre: string | null;
+  graciaHasta: string;
+  dias: number;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+
+  const { clienteEmail, clienteNombre, firmaNombre, graciaHasta, dias } = params;
+  const firma = firmaNombre || "tu contador";
+  const fecha = new Date(graciaHasta).toLocaleDateString("es-PR", { day: "numeric", month: "long", year: "numeric" });
+  const url = `${SITE_URL}/dashboard/config`;
+
+  const texto =
+    (clienteNombre ? `Hola ${clienteNombre},\n\n` : `Hola,\n\n`) +
+    `${firma} ya no incluye tu plan Business de VICTOR CFO. Tu cuenta y todos tus datos siguen intactos, y conservas el plan Business ${dias} días más, hasta el ${fecha}.\n\n` +
+    `Para continuar sin interrupciones, activa tu propio plan aquí:\n${url}\n\n` +
+    `Si no lo haces, tu cuenta pasa al plan gratis — no se borra nada.\n\n— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const html = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>${clienteNombre ? `Hola, <strong>${escapeHtml(clienteNombre)}</strong>,` : `Hola,`}</p>
+  <p><strong>${escapeHtml(firma)}</strong> ya no incluye tu plan Business de VICTOR CFO. Tu cuenta y todos tus datos siguen intactos, y conservas el plan Business <strong>${dias} días más, hasta el ${escapeHtml(fecha)}</strong>.</p>
+  <p>Para continuar sin interrupciones, activa tu propio plan:</p>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${url}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Continuar con mi plan</a>
+  </div>
+  <p style="font-size: 14px; color: #555;">Si no lo haces, tu cuenta pasa al plan gratis — no se borra nada.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: clienteEmail,
+      subject: `Tu plan Business de VICTOR CFO — ${dias} días para continuar`,
+      text: texto,
+      html,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
 // Correo automático al CANCELAR (27 sept 2026, pedido de Joel: "que de
 // manera automatica como el email de bienvenida se le envia uno si
 // cancelan haciendo unas preguntas para saber la razon y ofrecerle alguna

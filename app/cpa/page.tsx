@@ -57,7 +57,7 @@ export default async function CpaPortalPage() {
   // de `users` que no fuera la suya propia.
   const ownerIds = Array.from(new Set((entidades ?? []).map((e) => e.owner_id).filter((id): id is string => !!id)));
   const { data: duenos } = ownerIds.length
-    ? await supabase.from("users").select("id, full_name, email").in("id", ownerIds)
+    ? await supabase.from("users").select("id, full_name, email, billed_by_firma_id").in("id", ownerIds)
     : { data: [] as never[] };
   const duenoPorId = new Map((duenos ?? []).map((d) => [d.id, d]));
   const nombreDueno = (ownerId: string | null) => {
@@ -283,6 +283,9 @@ export default async function CpaPortalPage() {
             entityType: ent.entity_type,
             ein: ent.ein,
             ownerName: nombreDueno(ent.owner_id),
+            // Referido (incluido por la firma del contador logueado) vs. cliente propio.
+            origen:
+              ent.owner_id && duenoPorId.get(ent.owner_id)?.billed_by_firma_id === user.id ? "firma" : "propio",
             alertCount,
             esFavorito: favoritosSet.has(ent.id),
             ivu: ivu

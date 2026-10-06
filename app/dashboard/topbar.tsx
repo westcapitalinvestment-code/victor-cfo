@@ -60,13 +60,23 @@ export default function Topbar({
   entidadesNegocio = [],
   entidadActivaId = null,
   vistaGlobalNegocio = false,
+  firmaNombre = null,
 }: {
   fullName: string | null;
   plan: string | null;
   entidadesNegocio?: EntidadNegocio[];
   entidadActivaId?: string | null;
   vistaGlobalNegocio?: boolean;
+  // Nombre del contador/firma que trajo a este cliente (6 oct 2026, pedido de
+  // Joel): en vez de "Invita a tu contable" se muestra quién es su contador.
+  firmaNombre?: string | null;
 }) {
+  const iniciales = (firmaNombre ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join("");
   const esPro = plan === "pro" || plan === "proplus";
   // Badge de plan (30 agosto 2026, reportado por Joel): antes esto solo
   // distinguía Pro de "todo lo demás" (mostraba "Core" incluso para un
@@ -212,13 +222,39 @@ export default function Topbar({
             sesión con el Gem CPA (propinas, IVU estatal/municipal, SC2916,
             Relevo por contratista, alerta CBA, desglose de POS) — ya hay
             contenido real que un contador puede usar, así que se reactiva. */}
-        <Link href="/dashboard/invitar-contable" className="vc-invite-banner">
-          <i className="ti ti-user-plus" style={{ fontSize: 15 }} />
-          <span>
-            <span className="vc-invite-title">Invita a tu contable</span>
-            <span className="vc-invite-sub">Acceso gratis · sin costo adicional</span>
-          </span>
-        </Link>
+        {firmaNombre ? (
+          <Link href="/dashboard/config" className="vc-invite-banner">
+            <span
+              aria-hidden
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: "50%",
+                background: "#1D9E75",
+                color: "#fff",
+                fontSize: 10,
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {iniciales || "C"}
+            </span>
+            <span>
+              <span className="vc-invite-title">{firmaNombre}</span>
+              <span className="vc-invite-sub">Tu contador · plan incluido</span>
+            </span>
+          </Link>
+        ) : (
+          <Link href="/dashboard/invitar-contable" className="vc-invite-banner">
+            <i className="ti ti-user-plus" style={{ fontSize: 15 }} />
+            <span>
+              <span className="vc-invite-title">Invita a tu contable</span>
+              <span className="vc-invite-sub">Acceso gratis · sin costo adicional</span>
+            </span>
+          </Link>
+        )}
       </div>
 
       {/* Tabs de contexto — Personal está disponible en Core. Negocio

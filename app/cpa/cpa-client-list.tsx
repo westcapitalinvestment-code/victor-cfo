@@ -16,6 +16,9 @@ export type ClienteCpa = {
   entityType: string | null;
   ein: string | null;
   ownerName: string | null;
+  // "firma" = cliente invitado bajo el plan de la firma (el contador lo paga);
+  // "propio" = cliente que ya tenía VICTOR y te dio acceso.
+  origen: "firma" | "propio";
   alertCount: number;
   // Favoritos por contable (migración 0140, 4 oct 2026, pedido de Joel a
   // nombre de su esposa) — true si EL CONTABLE LOGUEADO marcó este cliente
@@ -189,6 +192,11 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {c.origen === "firma" && (
+                  <span className="rounded-full bg-teal/10 px-2 py-1 text-[10px] font-medium text-teal">
+                    Incluido por tu firma
+                  </span>
+                )}
                 {c.alertCount > 0 && (
                   <span className="rounded-full bg-red/10 px-2 py-1 text-[10px] font-medium text-red">
                     {c.alertCount} alerta{c.alertCount === 1 ? "" : "s"}

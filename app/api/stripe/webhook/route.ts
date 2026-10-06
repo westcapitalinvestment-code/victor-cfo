@@ -314,6 +314,10 @@ export async function POST(req: NextRequest) {
           plan_status: "active",
         };
         if (esPlanValido(plan)) datosActualizar.plan = plan;
+        // Cliente liberado por su firma que contrata su propio plan (6 oct
+        // 2026): termina la gracia — el cron firma-gracia ya no lo baja.
+        datosActualizar.firma_gracia_hasta = null;
+        datosActualizar.firma_liberado_de_id = null;
 
         // session.subscription normalmente solo trae el ID, no el objeto
         // completo — hace falta buscarlo aparte para sacar las fechas del

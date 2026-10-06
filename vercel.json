@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/liberar-comision-anual-vendedor",
       "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/firma-gracia",
+      "schedule": "0 20 * * *"
     }
   ]
 }

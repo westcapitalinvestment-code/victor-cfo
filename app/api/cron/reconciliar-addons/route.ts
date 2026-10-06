@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getStripe, priceIdAddonEntidadAdicional, priceIdAddonSecretaria, priceIdAddonAdministrador, priceIdWholesaleBusiness } from "@/lib/stripe";
+import { getStripe, priceIdAddonEntidadAdicional, priceIdAddonSecretaria, priceIdAddonAdministrador } from "@/lib/stripe";
+import { sincronizarSeatsFirma } from "@/lib/firma-seats";
 
 // Cron diario — red de seguridad para los 3 addons "por seat" (Entidades
 // adicionales, Secretaria, Administrador). Cada uno ya se sincroniza con
@@ -208,39 +209,19 @@ export async function GET(req: NextRequest) {
   // tiene una columna de status propia, solo firma_subscription_item_id
   // (presente o null) funciona como el status. Lógica equivalente, escrita
   // a mano para esta forma distinta de los datos.
+  // 6 oct 2026: la lógica vive ahora en lib/firma-seats.ts (compartida con
+  // liberar/cancelar invitación). Cuenta clientes aceptados activos +
+  // invitaciones pendientes y, si llega a 0, cancela la suscripción
+  // wholesale en vez de dejarla cobrando un seat fantasma.
   for (const f of firmas ?? []) {
     try {
-      const { count: clientesActivos } = await supabase
-        .from("users")
-        .select("id", { count: "exact", head: true })
-        .eq("billed_by_firma_id", f.id)
-        .eq("plan", "proplus")
-        .eq("plan_status", "active");
-
-      const seatsReales = clientesActivos ?? 0;
-
-      if ((f.firma_seats_activos ?? 0) === seatsReales) continue;
-
-      const priceId = priceIdWholesaleBusiness();
-      if (!priceId) {
-        resultadosFirmas[f.id] = { error: "Falta el Price ID wholesale de Business en las variables de entorno." };
-        continue;
+      const r = await sincronizarSeatsFirma(supabase, f.id);
+      if (r.error) {
+        resultadosFirmas[f.id] = { error: r.error };
+      } else if (r.seats !== (f.firma_seats_activos ?? 0) || r.cancelada) {
+        corregidosFirmas++;
+        resultadosFirmas[f.id] = { seatsAntes: f.firma_seats_activos ?? 0, seatsAhora: r.seats, cancelada: r.cancelada };
       }
-
-      if (f.firma_subscription_item_id) {
-        await getStripe().subscriptionItems.update(f.firma_subscription_item_id, { quantity: Math.max(seatsReales, 1) });
-      } else if (seatsReales > 0) {
-        const item = await getStripe().subscriptionItems.create({
-          subscription: f.firma_stripe_subscription_id!,
-          price: priceId,
-          quantity: seatsReales,
-        });
-        await supabase.from("users").update({ firma_subscription_item_id: item.id }).eq("id", f.id);
-      }
-
-      await supabase.from("users").update({ firma_seats_activos: seatsReales }).eq("id", f.id);
-      corregidosFirmas++;
-      resultadosFirmas[f.id] = { seatsAntes: f.firma_seats_activos ?? 0, seatsAhora: seatsReales };
     } catch (err) {
       resultadosFirmas[f.id] = { error: err instanceof Error ? err.message : "Error desconocido" };
     }

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { fechaHoyPR } from "@/lib/hora-pr";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 import { esFounder } from "@/lib/founder";
@@ -38,6 +39,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let entidadActivaId: string | null = null;
   let vistaGlobalNegocio = false;
   let esFounderUsuario = false;
+  let firmaNombre: string | null = null;
   try {
     const supabase = createClient();
     const {
@@ -54,9 +56,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
       const { data: userRow } = await supabase
         .from("users")
-        .select("full_name, plan, referred_by")
+        .select("full_name, plan, referred_by, billed_by_firma_id")
         .eq("id", user.id)
         .maybeSingle();
+      // Cliente traído por un contador (Firma Accountant): se lee el nombre de
+      // la firma con el cliente admin (RLS de users solo deja leer la propia fila).
+      if (userRow?.billed_by_firma_id) {
+        const { data: firma } = await createAdminClient()
+          .from("users")
+          .select("full_name")
+          .eq("id", userRow.billed_by_firma_id)
+          .maybeSingle();
+        firmaNombre = firma?.full_name ?? "Tu contador";
+      }
       fullName = userRow?.full_name ?? null;
       plan = userRow?.plan ?? null;
       esReferido = !!userRow?.referred_by;
@@ -92,6 +104,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           entidadesNegocio={entidadesNegocio}
           entidadActivaId={entidadActivaId}
           vistaGlobalNegocio={vistaGlobalNegocio}
+          firmaNombre={firmaNombre}
         />
         <BadgeUpdater />
         <AutoRefresh />

@@ -32,15 +32,80 @@ export default function FirmaAccountantPanel() {
   const [errorInvitar, setErrorInvitar] = useState<string | null>(null);
   const [exito, setExito] = useState<string | null>(null);
 
+  // Gestión de clientes bajo el plan (6 oct 2026, pedido de Joel: "de parte
+  // del contable debe existir un boton para eliminar o manejar las cuentas
+  // individuales para q no le sigan cobrando clientes que ya no tiene").
+  type ClienteFirma = { id: string; email: string; nombre: string | null; desde: string };
+  type PendienteFirma = { id: string; email: string; nombreNegocio: string | null; enviada: string };
+  const [clientes, setClientes] = useState<ClienteFirma[]>([]);
+  const [pendientes, setPendientes] = useState<PendienteFirma[]>([]);
+  const [mostrarClientes, setMostrarClientes] = useState(false);
+  const [accionEn, setAccionEn] = useState<string | null>(null);
+  const [errorAccion, setErrorAccion] = useState<string | null>(null);
+
+  async function cargarClientes() {
+    const r = await fetch("/api/firma/clientes").catch(() => null);
+    const d = await r?.json().catch(() => null);
+    if (d) {
+      setClientes(d.clientes ?? []);
+      setPendientes(d.pendientes ?? []);
+      setSeatsActivos((d.clientes?.length ?? 0) + (d.pendientes?.length ?? 0));
+    }
+  }
+
+  async function liberar(c: ClienteFirma) {
+    const nombre = c.nombre || c.email;
+    if (
+      !window.confirm(
+        `¿Liberar a ${nombre}?\n\nDejarás de pagar su plan desde hoy. Él conserva Business y todos sus datos 30 días para continuar con su propio plan; si no lo hace, pasa al plan gratis. No se borra nada.`,
+      )
+    )
+      return;
+    setAccionEn(c.id);
+    setErrorAccion(null);
+    const res = await fetch("/api/firma/liberar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clienteId: c.id }),
+    });
+    const json = await res.json().catch(() => null);
+    setAccionEn(null);
+    if (!res.ok) {
+      setErrorAccion(json?.error || "No se pudo liberar al cliente.");
+      return;
+    }
+    await cargarClientes();
+  }
+
+  async function cancelarInvitacion(p: PendienteFirma) {
+    if (!window.confirm(`¿Cancelar la invitación a ${p.email}? Dejará de contar en tu factura.`)) return;
+    setAccionEn(p.id);
+    setErrorAccion(null);
+    const res = await fetch("/api/firma/cancelar-invitacion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invitacionId: p.id }),
+    });
+    const json = await res.json().catch(() => null);
+    setAccionEn(null);
+    if (!res.ok) {
+      setErrorAccion(json?.error || "No se pudo cancelar la invitación.");
+      return;
+    }
+    await cargarClientes();
+  }
+
   useEffect(() => {
     fetch("/api/firma/activar")
       .then((r) => r.json())
       .then((d) => {
         setEsFirma(!!d.esFirmaAccountant);
         setSeatsActivos(d.seatsActivos ?? 0);
+        if (d.esFirmaAccountant) cargarClientes();
       })
       .catch(() => {})
       .finally(() => setCargando(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function activar(e: React.FormEvent) {
@@ -94,7 +159,7 @@ export default function FirmaAccountantPanel() {
     setExito(`Invitación enviada a ${email}.`);
     setEmail("");
     setNombreNegocio("");
-    setSeatsActivos((n) => n + 1);
+    cargarClientes();
   }
 
   if (cargando) return null;
@@ -149,6 +214,61 @@ export default function FirmaAccountantPanel() {
             </button>
           </div>
           {exito && <p className="mt-2 text-xs text-teal">{exito}</p>}
+
+          {(clientes.length > 0 || pendientes.length > 0) && (
+            <div className="mt-3 border-t border-border pt-3">
+              <button
+                type="button"
+                onClick={() => setMostrarClientes((v) => !v)}
+                className="flex w-full items-center justify-between text-xs font-medium text-muted"
+              >
+                <span>Administrar clientes bajo tu plan ({clientes.length + pendientes.length})</span>
+                <i className={`ti ${mostrarClientes ? "ti-chevron-up" : "ti-chevron-down"}`} />
+              </button>
+
+              {mostrarClientes && (
+                <div className="mt-2 flex flex-col divide-y divide-border">
+                  {errorAccion && <p className="mb-2 text-xs text-red">{errorAccion}</p>}
+                  {clientes.map((c) => (
+                    <div key={c.id} className="flex items-center justify-between gap-2 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{c.nombre || c.email}</p>
+                        <p className="truncate text-xs text-muted">{c.nombre ? c.email : "Cliente activo"}</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={accionEn === c.id}
+                        onClick={() => liberar(c)}
+                        className="flex-shrink-0 whitespace-nowrap rounded-full border border-red px-3 py-1 text-xs font-medium text-red hover:opacity-80"
+                      >
+                        {accionEn === c.id ? "Liberando..." : "Liberar"}
+                      </button>
+                    </div>
+                  ))}
+                  {pendientes.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between gap-2 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{p.nombreNegocio || p.email}</p>
+                        <p className="truncate text-xs text-muted">Invitación pendiente · {p.email}</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={accionEn === p.id}
+                        onClick={() => cancelarInvitacion(p)}
+                        className="flex-shrink-0 whitespace-nowrap rounded-full border border-border px-3 py-1 text-xs font-medium text-muted hover:opacity-80"
+                      >
+                        {accionEn === p.id ? "Cancelando..." : "Cancelar"}
+                      </button>
+                    </div>
+                  ))}
+                  <p className="pt-2 text-[11px] text-muted">
+                    Al liberar a un cliente dejas de pagar su plan desde hoy. Él conserva Business y todos sus datos 30 días
+                    para continuar con su propio plan; después pasa al plan gratis. No se borra nada.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 

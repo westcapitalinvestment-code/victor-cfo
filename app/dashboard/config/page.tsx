@@ -31,7 +31,7 @@ export default async function ConfigPage() {
   // mostrar el fallback "core"/"trialing" de abajo.
   const { data: profile } = await supabase
     .from("users")
-    .select("full_name, plan, plan_status, deletion_scheduled_for, is_demo, billed_by_firma_id")
+    .select("full_name, plan, plan_status, deletion_scheduled_for, is_demo, billed_by_firma_id, firma_gracia_hasta, firma_liberado_de_id")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -51,6 +51,22 @@ export default async function ConfigPage() {
       .eq("id", profile.billed_by_firma_id)
       .maybeSingle();
     nombreFirmaQuePaga = firma?.full_name ?? "tu contador";
+  }
+
+  // Cliente liberado por su firma (6 oct 2026): conserva Business durante la
+  // gracia — se le muestra hasta cuándo y qué firma lo liberó.
+  let graciaHasta: string | null = null;
+  let firmaLiberadoNombre: string | null = null;
+  if (!profile?.billed_by_firma_id && profile?.firma_gracia_hasta) {
+    graciaHasta = profile.firma_gracia_hasta as string;
+    if (profile.firma_liberado_de_id) {
+      const { data: firmaLib } = await admin
+        .from("users")
+        .select("full_name")
+        .eq("id", profile.firma_liberado_de_id)
+        .maybeSingle();
+      firmaLiberadoNombre = firmaLib?.full_name ?? null;
+    }
   }
 
   const { data: entities } = await supabase
@@ -166,7 +182,11 @@ export default async function ConfigPage() {
 
       <SessionTimeoutConfig />
 
-      <GestionarPlan pagadoPorFirma={nombreFirmaQuePaga} />
+      <GestionarPlan
+        pagadoPorFirma={nombreFirmaQuePaga}
+        graciaHasta={graciaHasta}
+        firmaLiberadoNombre={firmaLiberadoNombre}
+      />
 
       <CreditosIA />
 
