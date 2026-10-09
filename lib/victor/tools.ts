@@ -1216,6 +1216,12 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
         situacion: { type: "string", description: "Soltero/a, casado/a, con pareja, etc., en sus propias palabras." },
         tiene_hijos: { type: "boolean", description: "Si el usuario tiene hijos." },
         hijos_detalle: { type: "string", description: "Cuántos hijos y edades, si lo compartió." },
+        tipo_ingreso: {
+          type: "string",
+          enum: ["empleado", "cuenta_propia", "corporacion"],
+          description:
+            "Cómo genera su ingreso: 'empleado' (nómina/W-2), 'cuenta_propia' (servicios profesionales, contratista, LLC; también si dijo que ambas) o 'corporacion'. Alimenta la tarjeta de impuestos.",
+        },
       },
       required: [],
     },
@@ -4979,6 +4985,23 @@ export async function executeVictorTool(
 
       const { error } = await supabase.from("user_profiles").update(patch).eq("id", ownerId);
       if (error) return { ok: false, message: `No se pudo guardar el perfil: ${error.message}` };
+
+      // 9 oct 2026 (Joel: "las estimadas solo son para el que trabaja por
+      // servicios profesionales; el de nómina todo se le saca del cheque"):
+      // el tipo de ingreso del onboarding llena el perfil personal de la
+      // tarjeta de impuestos, sin pisar lo que el usuario ya haya ajustado.
+      const tipoIngreso = input.tipo_ingreso;
+      if (tipoIngreso === "empleado" || tipoIngreso === "cuenta_propia" || tipoIngreso === "corporacion") {
+        const { data: existente } = await supabase
+          .from("tax_estimate_settings")
+          .select("id")
+          .eq("owner_id", ownerId)
+          .is("entity_id", null)
+          .maybeSingle();
+        if (!existente) {
+          await supabase.from("tax_estimate_settings").insert({ owner_id: ownerId, entity_id: null, tipo: tipoIngreso });
+        }
+      }
       return { ok: true, message: "Perfil de onboarding guardado." };
     }
 
