@@ -38,6 +38,9 @@ export default function ImpuestosEstimadosCard({
   anioDatosPR: number;
 }) {
   const router = useRouter();
+  // Plegada por defecto (9 oct 2026, Joel: "molesta ver eso tan grande que se
+  // va a usar cada 3 meses"): solo se ve una línea de resumen.
+  const [abierto, setAbierto] = useState(false);
   const [editando, setEditando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,22 +91,30 @@ export default function ImpuestosEstimadosCard({
 
   return (
     <div className="vc-card !p-0 mb-3">
-      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-        <div className="flex items-center gap-2">
+      <div className={`flex items-center justify-between gap-2 px-4 py-2.5 ${abierto ? "border-b border-border" : ""}`}>
+        <button type="button" onClick={() => setAbierto((v) => !v)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <span aria-hidden style={{ fontSize: 14 }}>
             🧾
           </span>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Impuestos {resultado.anio}: lo que debes apartar</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setEditando((v) => !v)}
-          className="text-xs font-medium text-teal hover:opacity-80"
-        >
-          {editando ? "Cerrar" : "Ajustar mis datos"}
+          <span className="min-w-0">
+            <span className="block text-xs font-medium uppercase tracking-wide text-muted">Impuestos {resultado.anio}: lo que debes apartar</span>
+            {!abierto && !esEmpleado && !sinIngresos && (
+              <span className="block truncate text-[11px] text-muted">
+                Aparta ~{pctApartar}% de cada ingreso
+                {resultado.proxima ? ` · próxima estimada ${resultado.proxima.fecha.slice(5, 7)}/${resultado.proxima.fecha.slice(8, 10)}/${resultado.proxima.fecha.slice(0, 4)}` : ""}
+              </span>
+            )}
+          </span>
+          <i className={`ti ${abierto ? "ti-chevron-up" : "ti-chevron-down"} ml-auto`} style={{ fontSize: 14, color: "var(--muted)" }} />
         </button>
+        {abierto && (
+          <button type="button" onClick={() => setEditando((v) => !v)} className="text-xs font-medium text-teal hover:opacity-80">
+            {editando ? "Cerrar" : "Ajustar mis datos"}
+          </button>
+        )}
       </div>
 
+      {abierto && (
       <div className="p-4">
         {!perfilGuardado && !editando && (
           <p className="mb-2 text-[11px] text-muted">
@@ -289,6 +300,7 @@ export default function ImpuestosEstimadosCard({
 
         <p className="mt-2 text-[11px] text-muted">Esto es un estimado, no asesoría fiscal — confírmalo con tu contador.</p>
       </div>
+      )}
     </div>
   );
 }

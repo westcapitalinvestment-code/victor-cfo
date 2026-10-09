@@ -698,6 +698,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // tarjeta no se muestra) si la migración todavía no corrió o algo falla.
   const estimadoImpuestos = await obtenerEstimadoImpuestos(supabase, user.id, null, hoyStrPR);
 
+  // Recordatorio de estimada (9 oct 2026, pedido de Joel: "que prenda una
+  // alerta... antes del 15 que recuerde que se debe pagar"): aparece en
+  // Alertas inteligentes desde 21 días antes de cada fecha de estimada y
+  // desaparece cuando el usuario anota que ya está pagada.
+  if (estimadoImpuestos && estimadoImpuestos.resultado.calendario.length > 0) {
+    const r = estimadoImpuestos.resultado;
+    const prox = r.calendario.find((c) => c.estado !== "pagada" && c.fecha >= hoyStrPR);
+    if (prox) {
+      const dias = Math.round((new Date(`${prox.fecha}T00:00:00Z`).getTime() - new Date(`${hoyStrPR}T00:00:00Z`).getTime()) / (24 * 60 * 60 * 1000));
+      if (dias <= 21) {
+        const monto = prox.pendiente > 0 ? prox.pendiente : prox.total;
+        alertasReglas.push({
+          tipo: "salud",
+          icono: "🧾",
+          texto: `${dias === 0 ? "Hoy" : `En ${dias} día${dias === 1 ? "" : "s"}`} (${prox.fecha.slice(5, 7)}/${prox.fecha.slice(8, 10)}) vence tu estimada de impuestos: aprox. ${formatMoney(monto)}${prox.irs > 0 && prox.hacienda > 0 ? ` (IRS ${formatMoney(prox.irs)} · Hacienda ${formatMoney(prox.hacienda)})` : ""}. Págala y anótala en la tarjeta Impuestos, o confírmala con tu contador.`,
+        });
+      }
+    }
+  }
+
   return (
     <div className="vc-shell">
       <div className="mb-4">
