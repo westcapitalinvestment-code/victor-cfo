@@ -283,8 +283,7 @@ ganancias del cash value — validar con CPA
 de decreto
 **Primer paso accionable:**
 Antes de considerar IUL, verificar si ya se está aprovechando el IRA (límite
-$7,500/año 2026) y cualquier match de 401K disponible. Si no — empezar ahí
-primero.`,
+$7,500/año 2026) y cualquier match de 401K disponible. Si no — empezar ahí primero.`,
   },
   {
     numero: 6,

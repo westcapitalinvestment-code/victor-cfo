@@ -17,7 +17,17 @@ buildscript {
 
 apply from: "variables.gradle"
 
+// Fix de raíz para "Unable to delete directory" en Windows: esta carpeta
+// del proyecto vive dentro de OneDrive, y OneDrive (y/o el antivirus)
+// bloquea archivos de build que Gradle acaba de crear/borrar, tumbando
+// Clean Project una y otra vez sin importar qué antivirus se use. La
+// solución real es sacar TODOS los archivos temporales de compilación
+// (carpetas "build") de la carpeta sincronizada por completo, a una
+// carpeta normal de Windows que nadie vigila en tiempo real.
+def carpetaBuildExterna = new File("C:/AndroidBuilds/victor-cfo-app")
+
 allprojects {
+    buildDir = new File(carpetaBuildExterna, project.name)
     repositories {
         google()
         mavenCentral()
