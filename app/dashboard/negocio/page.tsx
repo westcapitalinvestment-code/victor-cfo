@@ -7,6 +7,8 @@ import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 import GastosPendientesCard from "../gastos-pendientes-card";
 import ResumenCard from "../resumen-card";
+import ImpuestosEstimadosCard from "../impuestos-estimados-card";
+import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 
 // Fix (30 sept 2026): new Date().toISOString() es UTC — en PR, después de
 // las 8pm esto ya da la fecha de mañana. fechaHoyPR() (ya importado arriba)
@@ -408,6 +410,14 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
 
   const totalAlertas = facturasVencidas.length + documentosPorVencer.length + (riesgoCBA ? 1 : 0);
 
+  // "Impuestos: lo que debes apartar" (8 oct 2026, pedido de Joel) — mismo
+  // estimado que en Personal pero solo con las transacciones de ESTA
+  // entidad; aquí sí se restan los gastos categorizados como deducibles
+  // (con su multiplicador, ej. comidas 50%). Devuelve null si la
+  // migración 0144 todavía no corrió o algo falla — la tarjeta no se
+  // muestra en ese caso, nunca rompe el Inicio.
+  const estimadoImpuestos = await obtenerEstimadoImpuestos(supabase, user.id, entidadId, hoyStrPR);
+
   return (
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
@@ -524,6 +534,21 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
           <p className="mt-0.5 text-[10px] text-muted">{tieneCuentas ? "cuentas de inversión" : "sin cuentas asignadas"}</p>
         </div>
       </div>
+
+      {/* Impuestos estimados de esta entidad (8 oct 2026) — ver
+          lib/impuestos-estimados.ts. */}
+      {estimadoImpuestos && (
+        <ImpuestosEstimadosCard
+          resultado={estimadoImpuestos.resultado}
+          perfil={estimadoImpuestos.perfil}
+          perfilGuardado={estimadoImpuestos.perfilGuardado}
+          entityId={entidadId}
+          ingresosYTD={estimadoImpuestos.ingresosYTD}
+          ingresoMesActual={estimadoImpuestos.ingresoMesActual}
+          anioDatosFederal={estimadoImpuestos.anioDatosFederal}
+          anioDatosPR={estimadoImpuestos.anioDatosPR}
+        />
+      )}
 
       {/* Metas / Alertas / Próxima cita — mismo grid de 2 columnas que usa
           Personal (dashboard/page.tsx) para las mismas 3 tarjetas. */}

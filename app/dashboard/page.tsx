@@ -8,6 +8,8 @@ import GastosPendientesCard from "./gastos-pendientes-card";
 import ResumenCard from "./resumen-card";
 import ResumenReglasCard from "./resumen-reglas-card";
 import AlertasPatronCard, { type AlertaRegla } from "./alertas-patron-card";
+import ImpuestosEstimadosCard from "./impuestos-estimados-card";
+import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 
 // Primer día del mes SIGUIENTE a "YYYY-MM" — mismo helper que en
 // /dashboard/gastos/page.tsx, copiado aquí para no crear una dependencia
@@ -689,6 +691,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const flujoProyectado = ingresoProyectado - gastoProyectado;
   const tasaAhorroYTD = ingresosYTD > 0 ? Math.round(((ingresosYTD - gastosYTD) / ingresosYTD) * 100) : 0;
 
+  // "Impuestos: lo que debes apartar" (8 oct 2026, pedido de Joel) — estimado
+  // de cuánto apartar / reintegro / estimadas, calculado con los tramos de
+  // tax_brackets (migración 0144). Siempre sobre el año y mes REALES de hoy
+  // (hoyStrPR), no sobre el mes del selector de arriba. Devuelve null (y la
+  // tarjeta no se muestra) si la migración todavía no corrió o algo falla.
+  const estimadoImpuestos = await obtenerEstimadoImpuestos(supabase, user.id, null, hoyStrPR);
+
   return (
     <div className="vc-shell">
       <div className="mb-4">
@@ -808,6 +817,24 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <p className="mt-0.5 text-[10px] text-muted">{bancoConectado ? "cuentas de inversión" : "conecta tu banco"}</p>
         </div>
       </div>
+
+      {/* Impuestos estimados (8 oct 2026): cuánto apartar para el IRS y
+          Hacienda, reintegro proyectado y próximas estimadas. Va arriba de
+          todo lo demás a propósito (pedido de Joel: "debe aparecer en el
+          home") para ir preparando el camino antes de la época de
+          planillas. Ver lib/impuestos-estimados.ts. */}
+      {estimadoImpuestos && (
+        <ImpuestosEstimadosCard
+          resultado={estimadoImpuestos.resultado}
+          perfil={estimadoImpuestos.perfil}
+          perfilGuardado={estimadoImpuestos.perfilGuardado}
+          entityId={null}
+          ingresosYTD={estimadoImpuestos.ingresosYTD}
+          ingresoMesActual={estimadoImpuestos.ingresoMesActual}
+          anioDatosFederal={estimadoImpuestos.anioDatosFederal}
+          anioDatosPR={estimadoImpuestos.anioDatosPR}
+        />
+      )}
 
       {/* "Tu resumen del mes" (25 sept 2026) — regalo real al plan gratis:
           nada de VICTOR/IA aquí, solo SQL sobre las transacciones que el
