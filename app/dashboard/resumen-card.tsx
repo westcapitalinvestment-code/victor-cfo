@@ -32,6 +32,7 @@ export default function ResumenCard({
   flujoProyectado,
   tasaAhorroYTD,
   reservaImpuestos,
+  reservaNota,
 }: {
   anio: number;
   mesLabel: string;
@@ -46,6 +47,10 @@ export default function ResumenCard({
   flujoProyectado: number;
   tasaAhorroYTD: number;
   reservaImpuestos?: number;
+  // Texto explicativo de cómo se calculó la reserva (8 oct 2026): cuando hay
+  // estimado real de impuestos (tarjeta "Impuestos"), el Inicio de negocio
+  // pasa aquí esa explicación en vez del 25% fijo de antes.
+  reservaNota?: string;
 }) {
   const [abierto, setAbierto] = useState(false);
 
@@ -113,7 +118,9 @@ export default function ResumenCard({
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm font-medium">Reserva de impuestos sugerida</p>
-                  <p className="mt-0.5 text-xs text-muted">Estimado: 25% de la ganancia de este negocio, año a la fecha</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {reservaNota ?? "Estimado: 25% de la ganancia de este negocio, año a la fecha"}
+                  </p>
                 </div>
                 <p className="text-sm font-medium" style={{ color: "#B7860F" }}>
                   <Sensitive>{formatMoney(reservaImpuestos)}</Sensitive>

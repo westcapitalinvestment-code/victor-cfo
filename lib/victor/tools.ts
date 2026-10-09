@@ -9,6 +9,7 @@ import { fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import { claveCicloUso, progresoCicloUso } from "@/lib/ciclo-uso";
 import { limiteMensualIaCentavos, centavosAMicrotokens } from "@/lib/limites-ia";
 import { esFounder } from "@/lib/founder";
+import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 
 // El texto real del banco (description_raw) casi nunca coincide palabra
 // por palabra con cómo el usuario describe una transacción en el chat —
@@ -375,6 +376,27 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     input_schema: {
       type: "object",
       properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "calcular_impuestos_estimados",
+    description:
+      "Calcula en vivo cuánto debería apartar el usuario para impuestos, cuánto sería su reintegro o balance a " +
+      "pagar, y cuánto toca pagar en la próxima contribución estimada — separado entre IRS (incluye el 15.3% de " +
+      "self-employment de los cuentapropistas) y Hacienda de PR. Es el MISMO cálculo de la tarjeta 'Impuestos' del " +
+      "Inicio. OBLIGATORIO: llama esta herramienta SIEMPRE que el usuario pregunte cuánto apartar para taxes, " +
+      "cuánto debe del IRS o de Hacienda, cuánto tendría de reintegro, cuándo y cuánto pagar de estimadas, o el " +
+      "15.3% de self-employment — NUNCA calcules de memoria ni inventes un porcentaje. Sin entidad_nombre calcula " +
+      "Personal; con entidad_nombre calcula esa entidad de negocio. Es un ESTIMADO, no asesoría fiscal.",
+    input_schema: {
+      type: "object",
+      properties: {
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio. Omítelo para calcular los impuestos de Personal.",
+        },
+      },
       required: [],
     },
   },
@@ -2597,6 +2619,74 @@ export async function executeVictorTool(
         message:
           `Confirmado en vivo sobre el programa de referidos (Victor-a-Victor):\n${partes.map((p) => `- ${p}`).join("\n")}\n\n` +
           `Usa estos datos tal cual para contestar — no inventes montos ni digas que no tienes forma de verlo.`,
+      };
+    }
+
+    case "calcular_impuestos_estimados": {
+      // 8 oct 2026 (pedido de Joel: "que VICTOR calcule cuánto apartar para
+      // el IRS y Hacienda"). Reusa EXACTAMENTE el mismo cálculo de la
+      // tarjeta "Impuestos" del Inicio (lib/impuestos-estimados*.ts) para
+      // que lo que dice VICTOR nunca difiera de lo que ve el usuario.
+      const nombre = typeof input.entidad_nombre === "string" ? input.entidad_nombre.trim() : "";
+      let entityId: string | null = null;
+      let etiquetaAmbito = "Personal";
+      if (nombre) {
+        const ent = await resolverEntidadFacturacion(supabase, ownerId, nombre);
+        if (!ent.ok) return { ok: false, message: ent.message };
+        entityId = ent.entidad.id;
+        etiquetaAmbito = ent.entidad.name;
+      }
+
+      const est = await obtenerEstimadoImpuestos(supabase, ownerId, entityId, fechaHoyPR());
+      if (!est) {
+        return {
+          ok: false,
+          message:
+            "No se pudo calcular el estimado de impuestos en este momento (puede que las tablas de tramos todavía no estén cargadas). " +
+            "Dile al usuario que lo intente más tarde o que lo vea en la tarjeta 'Impuestos' del Inicio.",
+        };
+      }
+      const r = est.resultado;
+      const p = est.perfil;
+      const $ = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const partes: string[] = [];
+      partes.push(
+        `Ámbito: ${etiquetaAmbito}. Perfil usado: ${p.tipo === "cuenta_propia" ? "cuenta propia" : p.tipo === "corporacion" ? "corporación" : "empleado"}, ` +
+          `reside en ${p.residencia === "pr" ? "Puerto Rico" : "EE.UU. continental"}` +
+          (est.perfilGuardado ? "." : " (valores por defecto: el usuario todavía no ha ajustado sus datos en la tarjeta Impuestos del Inicio — avísale que puede afinarlo ahí).")
+      );
+      partes.push(`Ingresos del año a la fecha: ${$(est.ingresosYTD)}. Proyección a fin de año: ${$(r.ingresoBrutoProyectado)} brutos, ${$(r.netoProyectado)} netos.`);
+      if (r.tasaApartado > 0) {
+        partes.push(
+          `Debe apartar aprox. ${Math.round(r.tasaApartado * 1000) / 10}% de cada ingreso. De lo que entró este mes: ${$(r.apartadoMes)}. ` +
+            `Debería tener apartado a hoy: ${$(r.apartadoYTD)}.`
+        );
+      }
+      partes.push(
+        `Impuesto total estimado del año: ${$(r.totalImpuesto)} — al IRS ${$(r.totalIRS)}` +
+          (r.seTax > 0 ? ` (self-employment 15.3%: ${$(r.seTax)}${r.impuestoFederal > 0 ? `; federal: ${$(r.impuestoFederal)}` : ""})` : "") +
+          `, a Hacienda de PR ${$(r.totalHacienda)}.`
+      );
+      if (r.pagadoYTD > 0) partes.push(`Ya pagado/retenido (dato que escribió el usuario): ${$(r.pagadoYTD)}.`);
+      partes.push(
+        r.balance < 0
+          ? `Reintegro estimado: ${$(Math.abs(r.balance))}.`
+          : `Balance estimado a pagar: ${$(r.balance)}.`
+      );
+      if (r.cuotas.length > 0) {
+        partes.push(
+          "Próximas estimadas: " +
+            r.cuotas.map((c) => `${c.etiqueta} → ${$(c.total)} (IRS ${$(c.irs)}, Hacienda ${$(c.hacienda)})`).join("; ") +
+            ". El saldo se reparte entre las cuotas que faltan; si no pagó las anteriores, que se ponga al día cuanto antes (puede haber recargos)."
+        );
+      }
+      if (r.proyeccionTemprana) partes.push("Llevan pocos días del año con datos: la proyección es poco confiable todavía.");
+      return {
+        ok: true,
+        message:
+          `Estimado de impuestos (tramos federal ${est.anioDatosFederal} / PR ${est.anioDatosPR}):\n${partes.map((x) => `- ${x}`).join("\n")}\n\n` +
+          `Supuestos: ${r.supuestos.join(" ")} No incluye exenciones/deducciones personales de PR, créditos, CBA/AMT ni impuesto estatal. ` +
+          `Usa estos números tal cual — no los recalcules ni inventes otros — y recuérdale que es un estimado, no asesoría fiscal: que lo confirme con su contador.`,
       };
     }
 

@@ -688,7 +688,16 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
         gastoProyectado={gastoProyectadoNegocio}
         flujoProyectado={flujoProyectadoNegocio}
         tasaAhorroYTD={tasaAhorroYTDNegocio}
-        reservaImpuestos={reservaImpuestosNegocio}
+        // 8 oct 2026: si hay estimado real (tarjeta "Impuestos" de arriba,
+        // tramos del IRS/Hacienda), la reserva sale de ahí para que ambos
+        // números cuadren; el 25% fijo queda solo como respaldo cuando la
+        // migración 0144 todavía no ha corrido.
+        reservaImpuestos={estimadoImpuestos ? estimadoImpuestos.resultado.apartadoYTD : reservaImpuestosNegocio}
+        reservaNota={
+          estimadoImpuestos
+            ? `Estimado con tus tramos de impuestos: ${Math.round(estimadoImpuestos.resultado.tasaApartado * 1000) / 10}% de lo que ha entrado este año (ver tarjeta Impuestos)`
+            : undefined
+        }
       />
     </div>
   );
