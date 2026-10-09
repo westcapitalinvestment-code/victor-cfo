@@ -75,12 +75,20 @@ export interface EntradaEstimado {
   hoyStr: string;
 }
 
+export type EstadoCuota = "pagada" | "parcial" | "vencida" | "futura";
+
 export interface Cuota {
   fecha: string; // YYYY-MM-DD
   etiqueta: string;
+  // Monto ideal de la cuota (1/4 del impuesto proyectado), separado por destino.
   irs: number;
   hacienda: number;
   total: number;
+  // Cuánto de lo ya pagado cae en esta cuota y cuánto falta.
+  pagado: number;
+  pendiente: number;
+  estado: EstadoCuota;
+  esProxima?: boolean;
 }
 
 export interface ResultadoEstimado {
@@ -103,8 +111,14 @@ export interface ResultadoEstimado {
   apartadoYTD: number;
   // Lo que corresponde apartar del ingreso de ESTE mes.
   apartadoMes: number;
-  // Próximas cuotas (solo las que aún no vencen). Vacío si tipo = empleado.
-  cuotas: Cuota[];
+  // Calendario de las 4 cuotas del año con su estado. Vacío si tipo = empleado.
+  calendario: Cuota[];
+  // Suma de lo que falta de las cuotas ya vencidas.
+  atrasado: number;
+  // Próxima cuota por pagar (o null).
+  proxima: Cuota | null;
+  // Fecha en que se presenta la planilla del año y se salda la diferencia.
+  fechaPlanilla: string;
   // Separación para mostrar "al IRS" vs "a Hacienda" (año proyectado).
   totalIRS: number;
   totalHacienda: number;
@@ -260,20 +274,47 @@ export function calcularEstimado(entrada: EntradaEstimado): ResultadoEstimado {
   const apartadoMes = redondear(entrada.ingresoMesActual * tasaApartado);
 
   // --- Estimadas trimestrales -------------------------------------------
-  const cuotas: Cuota[] = [];
+  // Calendario completo de las 4 cuotas del año: cada una vale 1/4 del
+  // impuesto proyectado; lo ya pagado (estimadas + retenido) se asigna a las
+  // cuotas más viejas primero. La diferencia real se salda con la planilla
+  // (15 abr del año siguiente).
+  const calendario: Cuota[] = [];
+  let atrasado = 0;
+  let proxima: Cuota | null = null;
   if (perfil.tipo !== "empleado" && totalImpuesto > 0) {
-    const restantes = fechasCuotas(anio, perfil.tipo).filter((c) => c.fecha >= hoyStr);
-    const porPagar = Math.max(0, balance);
-    if (restantes.length > 0 && porPagar > 0) {
-      const fracIRS = totalIRS / totalImpuesto;
-      const porCuota = porPagar / restantes.length;
-      for (const c of restantes) {
-        const irs = redondear(porCuota * fracIRS);
-        const hacienda = redondear(porCuota * (1 - fracIRS));
-        cuotas.push({ fecha: c.fecha, etiqueta: c.etiqueta, irs, hacienda, total: redondear(irs + hacienda) });
-      }
+    const fracIRS = totalIRS / totalImpuesto;
+    const ideal = totalImpuesto / 4;
+    let restantePagado = pagadoYTD;
+    for (const c of fechasCuotas(anio, perfil.tipo)) {
+      const pagadoCuota = Math.min(ideal, Math.max(0, restantePagado));
+      restantePagado -= pagadoCuota;
+      const pendiente = redondear(ideal - pagadoCuota);
+      const vencida = c.fecha < hoyStr;
+      let estado: EstadoCuota;
+      if (pendiente <= 0.5) estado = "pagada";
+      else if (vencida) estado = "vencida";
+      else if (pagadoCuota > 0) estado = "parcial";
+      else estado = "futura";
+      const cuota: Cuota = {
+        fecha: c.fecha,
+        etiqueta: c.etiqueta,
+        irs: redondear(ideal * fracIRS),
+        hacienda: redondear(ideal * (1 - fracIRS)),
+        total: redondear(ideal),
+        pagado: redondear(pagadoCuota),
+        pendiente: estado === "pagada" ? 0 : pendiente,
+        estado,
+      };
+      if (estado === "vencida") atrasado += cuota.pendiente;
+      calendario.push(cuota);
+    }
+    const sigue = calendario.find((c) => c.fecha >= hoyStr && c.estado !== "pagada");
+    if (sigue) {
+      sigue.esProxima = true;
+      proxima = sigue;
     }
   }
+  atrasado = redondear(atrasado);
 
   return {
     anio,
@@ -289,7 +330,10 @@ export function calcularEstimado(entrada: EntradaEstimado): ResultadoEstimado {
     tasaApartado,
     apartadoYTD,
     apartadoMes,
-    cuotas,
+    calendario,
+    atrasado,
+    proxima,
+    fechaPlanilla: `${anio + 1}-04-15`,
     totalIRS,
     totalHacienda,
     proyeccionTemprana: diasTranscurridos < 30,

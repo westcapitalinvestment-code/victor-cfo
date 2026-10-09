@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sensitive } from "@/lib/privacy";
+import CalendarioEstimadas from "./calendario-estimadas";
 import { formatMoney } from "@/lib/format";
 import type { PerfilImpuestos, ResultadoEstimado } from "@/lib/impuestos-estimados";
 
@@ -194,27 +195,11 @@ export default function ImpuestosEstimadosCard({
               </p>
             )}
 
-            {resultado.cuotas.length > 0 && (
-              <div className="rounded-lg border border-border p-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted">Próximas estimadas</p>
-                <div className="mt-1 flex flex-col gap-1">
-                  {resultado.cuotas.map((c) => (
-                    <p key={c.fecha} className="text-xs text-text">
-                      <span className="font-medium">{c.etiqueta}</span> — <Sensitive>{formatMoney(c.total)}</Sensitive>
-                      {c.irs > 0 && c.hacienda > 0 && (
-                        <span className="text-muted">
-                          {" "}
-                          (IRS <Sensitive>{formatMoney(c.irs)}</Sensitive> · Hacienda <Sensitive>{formatMoney(c.hacienda)}</Sensitive>)
-                        </span>
-                      )}
-                    </p>
-                  ))}
-                </div>
-                <p className="mt-1 text-[10px] text-muted">
-                  El saldo pendiente se reparte entre las cuotas que faltan. Si no pagaste las anteriores, ponte al día cuanto antes (puede haber
-                  recargos).
-                </p>
-              </div>
+            <CalendarioEstimadas resultado={resultado} />
+            {resultado.calendario.length > 0 && (
+              <p className="text-[10px] text-muted">
+                Anota lo que ya pagaste en &quot;Ajustar mis datos&quot; para que las cuotas se marquen como pagadas.
+              </p>
             )}
 
             {resultado.proyeccionTemprana && (

@@ -2673,11 +2673,17 @@ export async function executeVictorTool(
           ? `Reintegro estimado: ${$(Math.abs(r.balance))}.`
           : `Balance estimado a pagar: ${$(r.balance)}.`
       );
-      if (r.cuotas.length > 0) {
+      if (r.calendario.length > 0) {
         partes.push(
-          "Próximas estimadas: " +
-            r.cuotas.map((c) => `${c.etiqueta} → ${$(c.total)} (IRS ${$(c.irs)}, Hacienda ${$(c.hacienda)})`).join("; ") +
-            ". El saldo se reparte entre las cuotas que faltan; si no pagó las anteriores, que se ponga al día cuanto antes (puede haber recargos)."
+          "Calendario de estimadas (cada una = 1/4 del impuesto proyectado): " +
+            r.calendario
+              .map(
+                (c) =>
+                  `${c.etiqueta} → ${$(c.total)} (IRS ${$(c.irs)}, Hacienda ${$(c.hacienda)}) [${c.estado}${c.pendiente > 0 && c.estado !== "futura" ? `, falta ${$(c.pendiente)}` : ""}]`
+              )
+              .join("; ") +
+            `.${r.atrasado > 0 ? ` Atrasado: ${$(r.atrasado)} (cuotas vencidas; puede haber recargos).` : ""} ` +
+            `La diferencia final se salda con la planilla (${r.fechaPlanilla}): se paga el balance o se recibe el reintegro.`
         );
       }
       if (r.proyeccionTemprana) partes.push("Llevan pocos días del año con datos: la proyección es poco confiable todavía.");

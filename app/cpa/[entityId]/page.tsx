@@ -3,10 +3,12 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import CpaTabs from "./cpa-tabs";
 import { calcularEstadoResultados } from "@/lib/estado-resultados";
-import { saludoPorHora } from "@/lib/hora-pr";
+import { saludoPorHora, fechaHoyPR } from "@/lib/hora-pr";
 import { formatMoney as formatMoneyAlerta } from "@/lib/format";
 import AlertasAgrupadas, { type AlertaCpa } from "../alertas-agrupadas";
 import CpaAccountMenu from "../cpa-account-menu";
+import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
+import ImpuestosCliente from "./impuestos-cliente";
 
 // Portal CPA — dashboard de un cliente (pantalla "Dashboard" del mockup
 // "VICTOR — Portal CPA.html"). Todo lo que se lee aquí pasa por RLS
@@ -341,6 +343,24 @@ export default async function CpaClientePage({
     });
   }
 
+  // Impuestos estimados calculados (9 oct 2026): mismo motor que el Inicio del
+  // dueño. Si ya hay cuotas vencidas sin cubrir, también sale como alerta.
+  const estimadoImpuestos = await obtenerEstimadoImpuestos(supabase, entidad.owner_id, entityId, fechaHoyPR(hoy));
+  if (estimadoImpuestos && estimadoImpuestos.resultado.atrasado > 0) {
+    alertasEntidad.push({
+      tono: "amb",
+      icono: "ti-calendar-dollar",
+      tipo: "estimada_calculada",
+      tipoLabel: "Estimadas sin cubrir",
+      texto: `Estimadas calculadas: ${formatMoneyAlerta(estimadoImpuestos.resultado.atrasado)} de cuotas vencidas sin cubrir según lo que el cliente ha anotado. Confirma con él.`,
+    });
+  }
+  let clienteEmail: string | null = null;
+  if (entidad.owner_id) {
+    const { data: dueno } = await supabase.from("users").select("email").eq("id", entidad.owner_id).maybeSingle();
+    clienteEmail = dueno?.email ?? null;
+  }
+
   alertasEntidad.sort((a, b) => (a.tono === b.tono ? 0 : a.tono === "red" ? -1 : 1));
 
   return (
@@ -378,6 +398,14 @@ export default async function CpaClientePage({
           emptyText={`Todo se ve normal con ${entidad.name} — sin pendientes urgentes.`}
         />
       </div>
+
+      {estimadoImpuestos && (
+        <ImpuestosCliente
+          entidadNombre={entidad.name}
+          clienteEmail={clienteEmail}
+          estimado={estimadoImpuestos}
+        />
+      )}
 
       <CpaTabs
         ivuApplies={entidad.ivu_applies}
