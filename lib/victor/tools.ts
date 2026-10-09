@@ -2631,10 +2631,16 @@ export async function executeVictorTool(
       let entityId: string | null = null;
       let etiquetaAmbito = "Personal";
       if (nombre) {
-        const ent = await resolverEntidadFacturacion(supabase, ownerId, nombre);
-        if (!ent.ok) return { ok: false, message: ent.message };
-        entityId = ent.entidad.id;
-        etiquetaAmbito = ent.entidad.name;
+        // 9 oct 2026: el estimado por entidad se apagó (Joel: las estimadas
+        // normalmente se pagan por la persona, no por la entidad; falta
+        // confirmar con el contable). Solo se calcula lo personal.
+        return {
+          ok: false,
+          message:
+            "El estimado de impuestos por negocio no está disponible todavía: las contribuciones estimadas normalmente se pagan a nivel personal " +
+            "del dueño (o de la corporación según su tipo) y hay que confirmarlo con su contador. Dile eso en una frase y, si quiere, " +
+            "ofrécele el estimado personal (llama la herramienta sin entidad_nombre).",
+        };
       }
 
       const est = await obtenerEstimadoImpuestos(supabase, ownerId, entityId, fechaHoyPR());

@@ -7,8 +7,6 @@ import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 import GastosPendientesCard from "../gastos-pendientes-card";
 import ResumenCard from "../resumen-card";
-import ImpuestosEstimadosCard from "../impuestos-estimados-card";
-import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 
 // Fix (30 sept 2026): new Date().toISOString() es UTC — en PR, después de
 // las 8pm esto ya da la fecha de mañana. fechaHoyPR() (ya importado arriba)
@@ -410,14 +408,6 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
 
   const totalAlertas = facturasVencidas.length + documentosPorVencer.length + (riesgoCBA ? 1 : 0);
 
-  // "Impuestos: lo que debes apartar" (8 oct 2026, pedido de Joel) — mismo
-  // estimado que en Personal pero solo con las transacciones de ESTA
-  // entidad; aquí sí se restan los gastos categorizados como deducibles
-  // (con su multiplicador, ej. comidas 50%). Devuelve null si la
-  // migración 0144 todavía no corrió o algo falla — la tarjeta no se
-  // muestra en ese caso, nunca rompe el Inicio.
-  const estimadoImpuestos = await obtenerEstimadoImpuestos(supabase, user.id, entidadId, hoyStrPR);
-
   return (
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
@@ -535,20 +525,6 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
         </div>
       </div>
 
-      {/* Impuestos estimados de esta entidad (8 oct 2026) — ver
-          lib/impuestos-estimados.ts. */}
-      {estimadoImpuestos && (
-        <ImpuestosEstimadosCard
-          resultado={estimadoImpuestos.resultado}
-          perfil={estimadoImpuestos.perfil}
-          perfilGuardado={estimadoImpuestos.perfilGuardado}
-          entityId={entidadId}
-          ingresosYTD={estimadoImpuestos.ingresosYTD}
-          ingresoMesActual={estimadoImpuestos.ingresoMesActual}
-          anioDatosFederal={estimadoImpuestos.anioDatosFederal}
-          anioDatosPR={estimadoImpuestos.anioDatosPR}
-        />
-      )}
 
       {/* Metas / Alertas / Próxima cita — mismo grid de 2 columnas que usa
           Personal (dashboard/page.tsx) para las mismas 3 tarjetas. */}
@@ -688,16 +664,10 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
         gastoProyectado={gastoProyectadoNegocio}
         flujoProyectado={flujoProyectadoNegocio}
         tasaAhorroYTD={tasaAhorroYTDNegocio}
-        // 8 oct 2026: si hay estimado real (tarjeta "Impuestos" de arriba,
-        // tramos del IRS/Hacienda), la reserva sale de ahí para que ambos
-        // números cuadren; el 25% fijo queda solo como respaldo cuando la
-        // migración 0144 todavía no ha corrido.
-        reservaImpuestos={estimadoImpuestos ? estimadoImpuestos.resultado.apartadoYTD : reservaImpuestosNegocio}
-        reservaNota={
-          estimadoImpuestos
-            ? `Estimado con tus tramos de impuestos: ${Math.round(estimadoImpuestos.resultado.tasaApartado * 1000) / 10}% de lo que ha entrado este año (ver tarjeta Impuestos)`
-            : undefined
-        }
+        // 9 oct 2026: el estimado de impuestos por entidad se apagó (Joel: no
+        // está claro cómo manejan las estimadas los contables para entidades);
+        // vuelve la reserva simple de 25%.
+        reservaImpuestos={reservaImpuestosNegocio}
       />
     </div>
   );

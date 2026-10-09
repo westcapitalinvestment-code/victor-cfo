@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatMoney } from "@/lib/format";
 import { saludoPorHora, fechaHoyPR } from "@/lib/hora-pr";
-import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 import CpaClientList, { type ClienteCpa } from "./cpa-client-list";
 import FirmaAccountantPanel from "./firma-accountant-panel";
 import AlertasAgrupadas, { type AlertaCpa } from "./alertas-agrupadas";
@@ -208,52 +207,6 @@ export default async function CpaPortalPage() {
     });
   }
 
-  // Estimadas calculadas por cliente (9 oct 2026, pedido de Joel: que el
-  // contable vea qué debe pagar cada cliente por trimestre). Se limita a los
-  // primeros 40 clientes para no disparar cientos de consultas; el detalle
-  // completo vive en /cpa/[entityId].
-  const resumenEstimadas: { id: string; nombre: string; fecha: string; monto: number; atrasado: number; total: number }[] = [];
-  const estimados = await Promise.all(
-    (entidades ?? []).slice(0, 40).map(async (ent) => ({
-      ent,
-      est: ent.owner_id ? await obtenerEstimadoImpuestos(supabase, ent.owner_id, ent.id, hoyISO) : null,
-    }))
-  );
-  const dentro30 = new Date(`${hoyISO}T00:00:00Z`).getTime() + 30 * 24 * 60 * 60 * 1000;
-  for (const { ent, est } of estimados) {
-    const r = est?.resultado;
-    if (!r || r.totalImpuesto <= 0 || r.calendario.length === 0) continue;
-    if (r.atrasado > 0) {
-      alertas.push({
-        tono: "amb",
-        icono: "ti-calendar-dollar",
-        tipo: "estimada_calculada",
-        tipoLabel: "Estimadas sin cubrir",
-        texto: `${ent.name}: ${formatMoney(r.atrasado)} de estimadas vencidas sin cubrir (según lo anotado por el cliente).`,
-      });
-    }
-    if (r.proxima) {
-      resumenEstimadas.push({
-        id: ent.id,
-        nombre: ent.name,
-        fecha: r.proxima.fecha,
-        monto: r.proxima.pendiente > 0 ? r.proxima.pendiente : r.proxima.total,
-        atrasado: r.atrasado,
-        total: r.totalImpuesto,
-      });
-      if (new Date(`${r.proxima.fecha}T00:00:00Z`).getTime() <= dentro30) {
-        alertas.push({
-          tono: "amb",
-          icono: "ti-calendar-event",
-          tipo: "estimada_proxima",
-          tipoLabel: "Estimada próxima (30 días)",
-          texto: `${ent.name}: estimada del ${r.proxima.fecha} ≈ ${formatMoney(r.proxima.pendiente > 0 ? r.proxima.pendiente : r.proxima.total)}. Confirma con el cliente.`,
-        });
-      }
-    }
-  }
-  resumenEstimadas.sort((a, b) => a.fecha.localeCompare(b.fecha));
-
   alertas.sort((a, b) => (a.tono === b.tono ? 0 : a.tono === "red" ? -1 : 1));
 
   // Favoritos del contable logueado (migración 0140, 4 oct 2026, pedido de
@@ -313,31 +266,6 @@ export default async function CpaPortalPage() {
         <div className="vc-card mb-4">
           <p className="mb-3 text-xs uppercase tracking-wide text-muted">Alertas Inteligentes</p>
           <AlertasAgrupadas alertas={alertas} emptyText="Todo se ve normal con tu cartera — sin pendientes urgentes." />
-        </div>
-      )}
-
-      {resumenEstimadas.length > 0 && (
-        <div className="vc-card mb-4">
-          <p className="mb-1 text-xs uppercase tracking-wide text-muted">Próximas contribuciones estimadas</p>
-          <p className="mb-2 text-[11px] text-muted">
-            Cálculo automático por cliente (1/4 del impuesto proyectado). Abre el cliente para ver el desglose IRS / Hacienda y confirmarlo con él.
-          </p>
-          {resumenEstimadas.map((x) => (
-            <Link
-              key={x.id}
-              href={`/cpa/${x.id}`}
-              className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0 hover:opacity-80"
-            >
-              <span>
-                {x.nombre}
-                {x.atrasado > 0 && <span className="ml-2 text-[10px] text-amb">atrasado {formatMoney(x.atrasado)}</span>}
-              </span>
-              <span className="text-right">
-                <span className="font-medium">{formatMoney(x.monto)}</span>
-                <span className="ml-2 text-xs text-muted">{x.fecha.slice(5, 7)}/{x.fecha.slice(8, 10)}/{x.fecha.slice(0, 4)}</span>
-              </span>
-            </Link>
-          ))}
         </div>
       )}
 
