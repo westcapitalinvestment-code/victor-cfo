@@ -17,11 +17,13 @@ export async function GET(req: NextRequest, { params }: { params: { fileId: stri
     return NextResponse.json({ error: "Sesión expirada." }, { status: 401 });
   }
 
+  // 10 oct 2026: ya no se filtra por owner_id aquí — la RLS de document_files
+  // decide quién lee: el dueño (document_files_all) o su contable, solo si
+  // activó "compartir finanzas personales" (document_files_cpa_read, 0146).
   const { data: archivo, error } = await supabase
     .from("document_files")
     .select("r2_key")
     .eq("id", params.fileId)
-    .eq("owner_id", user.id)
     .single();
 
   if (error || !archivo) {

@@ -28,6 +28,8 @@ type AccesoCpa = {
   active: boolean;
   entity_id: string | null;
   delegated_from_email: string | null;
+  // 0146: el contable ve tus finanzas PERSONALES solo si lo activas aquí.
+  share_personal: boolean;
 };
 
 export default function InvitarContablePage() {
@@ -49,7 +51,7 @@ export default function InvitarContablePage() {
   async function cargarAccesos() {
     const { data } = await supabase
       .from("account_members")
-      .select("id, member_email, active, entity_id, delegated_from_email")
+      .select("id, member_email, active, entity_id, delegated_from_email, share_personal")
       .eq("role", "cpa")
       .order("invited_at", { ascending: false });
     setAccesos(data ?? []);
@@ -64,6 +66,16 @@ export default function InvitarContablePage() {
   async function toggleAcceso(id: string, nuevoActivo: boolean) {
     setActualizandoId(id);
     const { error: updateError } = await supabase.from("account_members").update({ active: nuevoActivo }).eq("id", id);
+    if (!updateError) await cargarAccesos();
+    setActualizandoId(null);
+  }
+
+  async function togglePersonal(id: string, compartir: boolean) {
+    setActualizandoId(id);
+    const { error: updateError } = await supabase
+      .from("account_members")
+      .update({ share_personal: compartir })
+      .eq("id", id);
     if (!updateError) await cargarAccesos();
     setActualizandoId(null);
   }
@@ -179,23 +191,44 @@ export default function InvitarContablePage() {
         ) : (
           <div className="flex flex-col divide-y divide-border">
             {accesos.map((a) => (
-              <div key={a.id} className="flex items-center justify-between py-3">
-                <div>
-                  <p className="text-sm font-medium">{a.member_email}</p>
-                  <p className="text-xs text-muted">
-                    {a.entity_id ? "Una entidad" : "Todas tus entidades"}
-                    {a.delegated_from_email ? ` · agregado por ${a.delegated_from_email}` : ""}
-                  </p>
+              <div key={a.id} className="py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">{a.member_email}</p>
+                    <p className="text-xs text-muted">
+                      {a.entity_id ? "Una entidad" : "Todas tus entidades"}
+                      {a.delegated_from_email ? ` · agregado por ${a.delegated_from_email}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    className={`rounded-full px-3 py-1 text-[11px] font-medium ${
+                      a.active ? "bg-red/10 text-red" : "bg-grn/10 text-grn"
+                    }`}
+                    disabled={actualizandoId === a.id}
+                    onClick={() => toggleAcceso(a.id, !a.active)}
+                  >
+                    {actualizandoId === a.id ? "..." : a.active ? "Quitar acceso" : "Reactivar"}
+                  </button>
                 </div>
-                <button
-                  className={`rounded-full px-3 py-1 text-[11px] font-medium ${
-                    a.active ? "bg-red/10 text-red" : "bg-grn/10 text-grn"
-                  }`}
-                  disabled={actualizandoId === a.id}
-                  onClick={() => toggleAcceso(a.id, !a.active)}
-                >
-                  {actualizandoId === a.id ? "..." : a.active ? "Quitar acceso" : "Reactivar"}
-                </button>
+                {a.active && (
+                  <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={a.share_personal}
+                      disabled={actualizandoId === a.id}
+                      onChange={(e) => togglePersonal(a.id, e.target.checked)}
+                    />
+                    <span className="text-xs">
+                      <span className="font-medium">Compartir también mis finanzas personales</span>
+                      <span className="block text-muted">
+                        {a.share_personal
+                          ? "Ve (solo lectura) tus ingresos, gastos, impuestos estimados, metas y documentos personales. Puedes apagarlo cuando quieras."
+                          : "Apagado: solo ve tus entidades de negocio. Actívalo si te prepara también tu planilla personal."}
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
             ))}
           </div>

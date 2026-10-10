@@ -26,6 +26,12 @@ export async function GET(req: NextRequest) {
   const desde = searchParams.get("desde");
   const hasta = searchParams.get("hasta");
   const entityId = searchParams.get("entityId");
+  // 10 oct 2026: el contable (con permiso "ver lo personal", migración 0146)
+  // descarga el reporte personal de su cliente con ?ownerId=. La barrera real
+  // es la RLS de transactions/users — si el contable no tiene el permiso, la
+  // consulta vuelve vacía; aquí no se confía en el parámetro.
+  const ownerParam = searchParams.get("ownerId");
+  const targetOwnerId = !entityId && ownerParam ? ownerParam : user.id;
 
   if (entityId) {
     const { data: entidad } = await supabase
@@ -42,7 +48,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from("transactions")
     .select("fecha, description_raw, amount, hacienda_category_id, tipo_flujo")
-    .eq("owner_id", user.id)
+    .eq("owner_id", targetOwnerId)
     .eq("es_duplicada", false)
     .order("fecha", { ascending: true });
   query = entityId ? query.eq("entity_id", entityId) : query.is("entity_id", null);
@@ -63,7 +69,7 @@ export async function GET(req: NextRequest) {
   const { data: entidad } = entityId
     ? await supabase.from("business_entities").select("name, logo_r2_key").eq("id", entityId).eq("owner_id", user.id).maybeSingle()
     : { data: null };
-  const { data: owner } = entityId ? { data: null } : await supabase.from("users").select("full_name").eq("id", user.id).maybeSingle();
+  const { data: owner } = entityId ? { data: null } : await supabase.from("users").select("full_name").eq("id", targetOwnerId).maybeSingle();
   const nombreTitular = entidad?.name || owner?.full_name || "VICTOR CFO";
   const logo = await cargarLogoExcel(entidad?.logo_r2_key);
 

@@ -24,6 +24,9 @@ export async function GET(req: NextRequest) {
   const desde = searchParams.get("desde");
   const hasta = searchParams.get("hasta");
   const entityId = searchParams.get("entityId");
+  // Contable con permiso "ver lo personal" (0146): ?ownerId=. La RLS decide.
+  const ownerParam = searchParams.get("ownerId");
+  const targetOwnerId = !entityId && ownerParam ? ownerParam : user.id;
 
   if (entityId) {
     const { data: entidad } = await supabase
@@ -40,7 +43,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from("transactions")
     .select("fecha, description_raw, amount, hacienda_category_id, tipo_flujo")
-    .eq("owner_id", user.id)
+    .eq("owner_id", targetOwnerId)
     .eq("es_duplicada", false)
     .order("fecha", { ascending: true });
   query = entityId ? query.eq("entity_id", entityId) : query.is("entity_id", null);
@@ -58,7 +61,7 @@ export async function GET(req: NextRequest) {
   const { data: entidad } = entityId
     ? await supabase.from("business_entities").select("name, logo_r2_key").eq("id", entityId).eq("owner_id", user.id).maybeSingle()
     : { data: null };
-  const { data: owner } = entityId ? { data: null } : await supabase.from("users").select("full_name").eq("id", user.id).maybeSingle();
+  const { data: owner } = entityId ? { data: null } : await supabase.from("users").select("full_name").eq("id", targetOwnerId).maybeSingle();
   const nombreTitular = entidad?.name || owner?.full_name || "VICTOR CFO";
 
   const filas = (transacciones ?? []).map((t) => {

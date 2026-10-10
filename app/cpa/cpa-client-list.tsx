@@ -108,7 +108,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
   return (
     <div className="vc-card">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-xs uppercase tracking-wide text-muted">Tus clientes ({clientes.length})</p>
+        <p className="text-xs uppercase tracking-wide text-muted">Entidades ({clientes.length})</p>
       </div>
 
       {errorFavorito && (

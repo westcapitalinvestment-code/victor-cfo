@@ -219,6 +219,25 @@ export default async function CpaPortalPage() {
     .eq("member_email", user.email ?? "");
   const favoritosSet = new Set((favoritos ?? []).map((f) => f.entity_id));
 
+  // Clientes que compartieron sus finanzas PERSONALES con este contable
+  // (account_members.share_personal, migración 0146, 10 oct 2026). Se lee con
+  // account_members_self_read: solo salen filas propias del contable. Sección
+  // "Personal" aparte de "Entidades" — mismo cliente puede estar en ambas.
+  const { data: miembrosPersonal } = await supabase
+    .from("account_members")
+    .select("owner_id")
+    .eq("member_email", user.email ?? "")
+    .eq("role", "cpa")
+    .eq("active", true)
+    .eq("share_personal", true);
+  const personalOwnerIds = Array.from(new Set((miembrosPersonal ?? []).map((m) => m.owner_id)));
+  const { data: duenosPersonal } = personalOwnerIds.length
+    ? await supabase.from("users").select("id, full_name, email").in("id", personalOwnerIds)
+    : { data: [] as never[] };
+  const personales = (duenosPersonal ?? [])
+    .map((d) => ({ id: d.id as string, nombre: (d.full_name || d.email || "Cliente") as string, email: (d.email ?? null) as string | null }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
   return (
     <div className="vc-shell">
       <div className="mb-6 flex items-center justify-between">
@@ -268,6 +287,35 @@ export default async function CpaPortalPage() {
           <AlertasAgrupadas alertas={alertas} emptyText="Todo se ve normal con tu cartera — sin pendientes urgentes." />
         </div>
       )}
+
+      {/* Personal (10 oct 2026, pedido de Joel: "dividir personal de entidades")
+          — finanzas personales de clientes que dieron permiso. Solo lectura. */}
+      <div className="vc-card mb-4">
+        <p className="mb-1 text-xs uppercase tracking-wide text-muted">Personal ({personales.length})</p>
+        <p className="mb-3 text-xs text-muted">
+          Finanzas personales de clientes que decidieron compartirlas contigo (planilla personal, estimadas, documentos).
+        </p>
+        {personales.length === 0 ? (
+          <p className="text-xs text-muted">
+            Ningún cliente ha compartido sus finanzas personales todavía. Cada cliente lo activa desde “Invita a tu
+            contable”.
+          </p>
+        ) : (
+          <div className="flex flex-col divide-y divide-border">
+            {personales.map((p) => (
+              <Link key={p.id} href={`/cpa/personal/${p.id}`} className="flex items-center justify-between py-3 hover:opacity-80">
+                <div>
+                  <p className="text-sm font-medium">{p.nombre}</p>
+                  {p.email && p.email !== p.nombre && <p className="text-xs text-muted">{p.email}</p>}
+                </div>
+                <span className="rounded-full border border-teal px-2 py-1 text-[10px] font-medium text-teal">
+                  Ver personal <i className="ti ti-chevron-right" />
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Lista de clientes (2 oct 2026, pedido de Joel) — sin $ sumados de
           todo el portafolio arriba: eso crea ansiedad innecesaria en un CPA
