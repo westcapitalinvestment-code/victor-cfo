@@ -449,7 +449,7 @@ export default async function CpaPersonalPage({
       {tab === "boveda" && (
         <div className="vc-card">
           {docs.length === 0 ? (
-            <p className="text-xs text-muted">El cliente no tiene documentos personales en su Bóveda.</p>
+            <p className="text-xs text-muted">El cliente no ha marcado documentos personales para compartir contigo.</p>
           ) : (
             <div className="divide-y divide-border">
               {docs.map((d) => {

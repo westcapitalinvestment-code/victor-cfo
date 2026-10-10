@@ -36,6 +36,8 @@ export default function EditarDocumentoPage() {
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("Otro");
   const [fechaVencimiento, setFechaVencimiento] = useState("");
+  const [compartirContador, setCompartirContador] = useState(false);
+  const [esPersonal, setEsPersonal] = useState(true);
   const [fechaVencimientoOriginal, setFechaVencimientoOriginal] = useState("");
   const [archivosGuardados, setArchivosGuardados] = useState<ArchivoGuardado[]>([]);
   const [borrandoArchivoId, setBorrandoArchivoId] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export default function EditarDocumentoPage() {
       const [{ data: doc, error: fetchError }, { data: archivos, error: archivosError }] = await Promise.all([
         supabase
           .from("documents")
-          .select("id, nombre, tipo, fecha_vencimiento")
+          .select("id, nombre, tipo, fecha_vencimiento, entity_id, compartir_contador")
           .eq("id", params.id)
           .eq("owner_id", user.id)
           .single(),
@@ -78,6 +80,8 @@ export default function EditarDocumentoPage() {
       setTipo(doc.tipo ?? "Otro");
       setFechaVencimiento(doc.fecha_vencimiento ?? "");
       setFechaVencimientoOriginal(doc.fecha_vencimiento ?? "");
+      setCompartirContador(!!doc.compartir_contador);
+      setEsPersonal(!doc.entity_id);
       if (!archivosError && archivos) setArchivosGuardados(archivos);
       setFetching(false);
     })();
@@ -138,6 +142,7 @@ export default function EditarDocumentoPage() {
         nombre,
         tipo,
         fecha_vencimiento: fechaVencimiento || null,
+        compartir_contador: esPersonal ? compartirContador : false,
         ...(cambioFecha ? { alerta_90: false, alerta_30: false, alerta_7: false } : {}),
       })
       .eq("id", params.id);
@@ -235,6 +240,24 @@ export default function EditarDocumentoPage() {
             onChange={(e) => setFechaVencimiento(e.target.value)}
           />
         </div>
+
+        {esPersonal && (
+        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={compartirContador}
+            onChange={(e) => setCompartirContador(e.target.checked)}
+          />
+          <span className="text-xs">
+            <span className="font-medium">Compartir con mi contable</span>
+            <span className="block text-muted">
+              Solo lo verá si le compartiste tus finanzas personales. Déjalo apagado en documentos que no le interesan
+              (marbetes, seguros, tarjetas).
+            </span>
+          </span>
+        </label>
+        )}
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Archivos</label>

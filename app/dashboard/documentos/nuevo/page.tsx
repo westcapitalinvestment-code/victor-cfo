@@ -26,6 +26,7 @@ export default function NuevoDocumentoPage() {
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("Otro");
   const [fechaVencimiento, setFechaVencimiento] = useState("");
+  const [compartirContador, setCompartirContador] = useState(false);
   const [archivos, setArchivos] = useState<ArchivoPendiente[]>([]);
 
   function agregarArchivos(e: React.ChangeEvent<HTMLInputElement>) {
@@ -82,6 +83,7 @@ export default function NuevoDocumentoPage() {
         tipo,
         fecha_vencimiento: fechaVencimiento || null,
         estado: "activo",
+        compartir_contador: compartirContador,
       })
       .select("id")
       .single();
@@ -160,6 +162,22 @@ export default function NuevoDocumentoPage() {
             onChange={(e) => setFechaVencimiento(e.target.value)}
           />
         </div>
+
+        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={compartirContador}
+            onChange={(e) => setCompartirContador(e.target.checked)}
+          />
+          <span className="text-xs">
+            <span className="font-medium">Compartir con mi contable</span>
+            <span className="block text-muted">
+              Solo lo verá si le compartiste tus finanzas personales. Déjalo apagado en documentos que no le interesan
+              (marbetes, seguros, tarjetas).
+            </span>
+          </span>
+        </label>
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Archivos (opcional)</label>
