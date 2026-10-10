@@ -22,23 +22,32 @@ export async function GET(req: NextRequest) {
   const entityId = searchParams.get("entityId");
   const anio = Number(searchParams.get("anio")) || new Date().getFullYear();
 
-  if (!entityId) {
-    return NextResponse.json({ error: "Falta entityId — el Estado de Resultados es exclusivo de negocio." }, { status: 400 });
+  // 10 oct 2026: también sirve el Estado de Resultados PERSONAL (?ownerId=,
+  // sin entityId) para el dueño y para su contable con permiso (0146). La RLS
+  // de users/transactions decide: sin permiso, el usuario no aparece o las
+  // transacciones vuelven vacías.
+  const ownerParam = searchParams.get("ownerId");
+  if (!entityId && !ownerParam) {
+    return NextResponse.json({ error: "Falta entityId u ownerId." }, { status: 400 });
   }
   // Sin filtro .eq("owner_id", user.id) a propósito (2 oct 2026, fix CPA) —
   // RLS (business_entities_owner / business_entities_cpa_read, migración
-  // 0003) ya resuelve esto solo: si el caller es el dueño O un CPA con
-  // acceso vía account_members, esta fila existe; si no, no existe. Así
-  // este mismo endpoint sirve tanto al dueño como a su CPA sin duplicar
-  // lógica, usando entidad.owner_id (NO user.id) para el resto del reporte.
-  const { data: entidad } = await supabase
-    .from("business_entities")
-    .select("id, name, logo_r2_key, owner_id")
-    .eq("id", entityId)
-    .maybeSingle();
+  // 0003) ya resuelve dueño vs. CPA con acceso.
+  let entidad: { name: string; logo_r2_key: string | null; owner_id: string } | null = null;
+  if (entityId) {
+    const { data } = await supabase
+      .from("business_entities")
+      .select("id, name, logo_r2_key, owner_id")
+      .eq("id", entityId)
+      .maybeSingle();
+    entidad = data ? { name: data.name, logo_r2_key: data.logo_r2_key ?? null, owner_id: data.owner_id } : null;
+  } else {
+    const { data: u } = await supabase.from("users").select("id, full_name, email").eq("id", ownerParam!).maybeSingle();
+    entidad = u ? { name: `${u.full_name || u.email || "Cliente"} — Personal`, logo_r2_key: null, owner_id: u.id } : null;
+  }
   if (!entidad) return NextResponse.json({ error: "Entidad inválida." }, { status: 400 });
 
-  const er = await calcularEstadoResultados(supabase, { ownerId: entidad.owner_id, entityId, anio });
+  const er = await calcularEstadoResultados(supabase, { ownerId: entidad.owner_id, entityId: entityId ?? null, anio });
 
   const pdf = await PDFDocument.create();
   const width = 792;

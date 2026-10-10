@@ -6,6 +6,8 @@ import { fechaHoyPR } from "@/lib/hora-pr";
 import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 import CalendarioEstimadas from "@/app/dashboard/calendario-estimadas";
 import CpaAccountMenu from "../../cpa-account-menu";
+import EstadoResultadosTabla from "../../estado-resultados-tabla";
+import { calcularEstadoResultados } from "@/lib/estado-resultados";
 
 // Portal CPA — sección PERSONAL de un cliente (10 oct 2026, pedido de Joel:
 // "dividir personal de entidades, cada una con sus tabs y reportes").
@@ -144,6 +146,9 @@ export default async function CpaPersonalPage({
     .sort((a, b) => b.gastos + b.ingresos - (a.gastos + a.ingresos));
   const catSel = searchParams?.cat ?? null;
   const txsCat = catSel ? txs.filter((t) => String(t.hacienda_category_id ?? "none") === catSel).slice(0, 300) : [];
+
+  // ---- Reportes (Estado de Resultados personal)
+  const er = tab === "reportes" ? await calcularEstadoResultados(supabase, { ownerId, entityId: null, anio }) : null;
 
   // ---- Impuestos
   const estimado = tab === "impuestos" ? await obtenerEstimadoImpuestos(supabase, ownerId, null, hoyStr) : null;
@@ -485,32 +490,61 @@ export default async function CpaPersonalPage({
         </div>
       )}
 
-      {tab === "reportes" && (
-        <div className="vc-card">
-          <p className="mb-3 text-xs text-muted">
-            Reporte de ingresos y gastos personales de {nombreDueno}, con la categoría y la línea contable de cada
-            transacción.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {aniosOpciones.map((a) => (
-              <div key={a} className="flex items-center gap-1 rounded-lg border border-border p-1.5">
-                <span className="px-1 text-xs font-medium">{a}</span>
-                <a
-                  className="rounded-md bg-teal px-2.5 py-1 text-[11px] font-medium text-white"
-                  href={`/api/transacciones/exportar/excel?ownerId=${ownerId}&desde=${a}-01-01&hasta=${a}-12-31`}
-                >
-                  Excel
-                </a>
-                <a
-                  className="rounded-md border border-teal px-2.5 py-1 text-[11px] font-medium text-teal"
-                  href={`/api/transacciones/exportar/pdf?ownerId=${ownerId}&desde=${a}-01-01&hasta=${a}-12-31`}
-                >
-                  PDF
-                </a>
-              </div>
-            ))}
+      {tab === "reportes" && er && (
+        <>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold">Estado de Resultados — {anio}</p>
+              <p className="text-xs text-muted">Ingresos y gastos personales por categoría y mes.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link href={`${base}?tab=reportes&anio=${anio - 1}`} className="rounded-pill border border-border px-2.5 py-1 text-xs">
+                ← {anio - 1}
+              </Link>
+              <Link href={`${base}?tab=reportes&anio=${anio + 1}`} className="rounded-pill border border-border px-2.5 py-1 text-xs">
+                {anio + 1} →
+              </Link>
+            </div>
           </div>
-        </div>
+
+          <div className="vc-card mb-3 flex flex-wrap gap-4">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted">Ingresos</div>
+              <div className="text-base font-semibold" style={{ color: "#0f6b4e" }}>{formatMoney(er.totalIngresos)}</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted">Gastos</div>
+              <div className="text-base font-semibold" style={{ color: "#d44c3d" }}>{formatMoney(er.totalGastos)}</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted">Utilidad neta</div>
+              <div className="text-base font-semibold" style={{ color: er.utilidadNeta >= 0 ? "#0f6b4e" : "#d44c3d" }}>
+                {formatMoney(er.utilidadNeta)}
+              </div>
+            </div>
+            <div className="ml-auto flex items-end gap-3">
+              <a href={`/api/reportes/estado-resultados/excel?ownerId=${ownerId}&anio=${anio}`} className="text-xs font-medium hover:text-teal">
+                ↓ Excel
+              </a>
+              <a href={`/api/reportes/estado-resultados/pdf?ownerId=${ownerId}&anio=${anio}`} className="text-xs font-medium hover:text-teal">
+                ↓ PDF
+              </a>
+            </div>
+          </div>
+
+          <EstadoResultadosTabla er={er} anio={anio} />
+
+          <p className="mt-3 text-[11px] text-muted">
+            Excluye transferencias entre cuentas y transacciones duplicadas o pendientes. Detalle transacción por transacción:{" "}
+            <a className="underline" href={`/api/transacciones/exportar/excel?ownerId=${ownerId}&desde=${anio}-01-01&hasta=${anio}-12-31`}>
+              Excel
+            </a>{" "}
+            ·{" "}
+            <a className="underline" href={`/api/transacciones/exportar/pdf?ownerId=${ownerId}&desde=${anio}-01-01&hasta=${anio}-12-31`}>
+              PDF
+            </a>
+          </p>
+        </>
       )}
     </div>
   );
