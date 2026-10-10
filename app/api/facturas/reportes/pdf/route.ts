@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   let facturasQuery = supabase
     .from("invoices")
     .select(
-      "id, numero, subtotal, total, retencion_pct, retencion_monto, estado, fecha_emision, fecha_vencimiento, metodo_pago, fee_real, fee_fuente, entity_id, client_id, clients(name, email)"
+      "id, numero, subtotal, total, retencion_pct, retencion_monto, estado, fecha_emision, fecha_vencimiento, metodo_pago, fee_real, fee_fuente, fee_adicional, entity_id, client_id, clients(name, email)"
     )
     .eq("owner_id", user.id)
     .neq("estado", "borrador")
@@ -81,6 +81,9 @@ export async function GET(req: NextRequest) {
   const STRIPE_FEE_PCT = 0.029;
   const STRIPE_FEE_FIJO = 0.3;
   function feeProcesamiento(f: any): number {
+    return feeBase(f) + Number(f.fee_adicional ?? 0);
+  }
+  function feeBase(f: any): number {
     // Fase 1 de reconciliación bruto/neto (1 oct 2026) — usa el fee real de
     // Stripe cuando está guardado, igual que facturacion-portal.tsx.
     if (f.fee_fuente === "real" && f.fee_real !== null) return Number(f.fee_real);

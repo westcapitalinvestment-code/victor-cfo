@@ -43,6 +43,9 @@ type Factura = {
   // poblado (puede venir null por facturas viejas o pagos no-pasarela).
   fee_real: number | null;
   fee_fuente: "real" | "estimado" | null;
+  // Fees no recuperables extra (migración 0149): p.ej. cobro duplicado
+  // reembolsado — Stripe no devuelve el fee. Se suma al fee normal.
+  fee_adicional?: number | null;
   // Desglose estatal/municipal del IVU (migración 0124, 1 oct 2026, #782) —
   // son dos pasivos a dos entidades distintas (SURI vs. el municipio). La
   // suma de los dos sigue siendo ivu_monto; se guardan aparte solo para
@@ -92,6 +95,10 @@ function feeEstimadoPago(total: number, metodo: string): number {
 // poder pasar, pero si por error queda marcada "ATH Móvil Business" en una
 // entidad sin pATH, no se le inventa un fee).
 function feeProcesamiento(f: Factura, entidadesConAth: Set<string>): number {
+  return feeBase(f, entidadesConAth) + Number(f.fee_adicional ?? 0);
+}
+
+function feeBase(f: Factura, entidadesConAth: Set<string>): number {
   // Fase 1 de reconciliación bruto/neto: si el webhook de Stripe ya guardó
   // el fee real (balance_transaction), lo usamos en vez de estimar — es
   // exacto, no una aproximación por regla fija.

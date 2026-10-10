@@ -66,6 +66,7 @@ type Factura = {
   // pagada por otra vía — manual, ATH, etc. — y no hay fee de Stripe que
   // mostrar aquí).
   fee_real: number | null;
+  fee_adicional?: number | null;
   monto_neto_real: number | null;
   fee_fuente: "real" | "estimado" | null;
   // Conciliación automática de depósitos (migración 0131, 2 oct 2026) —
@@ -294,6 +295,28 @@ export default function FacturaDetalle({
         });
       }
     }
+  }
+
+  // Fee extra no recuperable (migración 0149) — p.ej. cobro duplicado que se
+  // reembolsó: Stripe no devuelve el fee del reembolsado, es gasto deducible.
+  const [editandoFeeExtra, setEditandoFeeExtra] = useState(false);
+  const [feeExtraTxt, setFeeExtraTxt] = useState(String(factura.fee_adicional ?? 0));
+  async function guardarFeeExtra() {
+    const monto = Math.round(Number(feeExtraTxt.replace(",", ".")) * 100) / 100;
+    if (!Number.isFinite(monto) || monto < 0) {
+      setError("Escribe un monto válido (0 o mayor).");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const { error: updateError } = await supabase.from("invoices").update({ fee_adicional: monto }).eq("id", factura.id);
+    setLoading(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setEditandoFeeExtra(false);
+    router.refresh();
   }
 
   async function actualizarEstado(
@@ -618,6 +641,40 @@ export default function FacturaDetalle({
                   </div>
                 </>
               )}
+              <div className="py-0.5 text-xs">
+                {editandoFeeExtra ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted">Fee extra $</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={feeExtraTxt}
+                      onChange={(e) => setFeeExtraTxt(e.target.value)}
+                      className="w-24 rounded border border-border px-2 py-1"
+                    />
+                    <button type="button" onClick={guardarFeeExtra} disabled={loading} className="font-medium text-teal">
+                      Guardar
+                    </button>
+                    <button type="button" onClick={() => setEditandoFeeExtra(false)} className="text-muted">
+                      Cancelar
+                    </button>
+                  </div>
+                ) : Number(factura.fee_adicional ?? 0) > 0 ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">Fee extra no recuperable (ej. cobro duplicado reembolsado)</span>
+                    <span>
+                      <span className="text-red">-{formatMoney(Number(factura.fee_adicional))}</span>{" "}
+                      <button type="button" onClick={() => setEditandoFeeExtra(true)} className="text-teal">
+                        Editar
+                      </button>
+                    </span>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setEditandoFeeExtra(true)} className="text-teal">
+                    + Agregar fee extra (cobro duplicado reembolsado)
+                  </button>
+                )}
+              </div>
               <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-medium">
                 <span>Balance</span>
                 <span className="text-teal">{formatMoney(0)}</span>

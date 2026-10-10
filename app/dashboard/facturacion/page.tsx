@@ -67,7 +67,7 @@ export default async function FacturacionPage({
   let facturasQuery = supabase
     .from("invoices")
     .select(
-      "id, numero, subtotal, ivu_monto, ivu_estatal_monto, ivu_municipal_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, fecha_pago, metodo_pago, fee_real, fee_fuente, entity_id, client_id, clients(name)"
+      "id, numero, subtotal, ivu_monto, ivu_estatal_monto, ivu_municipal_monto, retencion_pct, retencion_monto, total, estado, fecha_emision, fecha_vencimiento, fecha_pago, metodo_pago, fee_real, fee_fuente, fee_adicional, entity_id, client_id, clients(name)"
     )
     .eq("owner_id", user.id)
     .order("fecha_emision", { ascending: false });
