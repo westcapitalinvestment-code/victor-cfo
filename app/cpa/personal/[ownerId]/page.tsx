@@ -15,8 +15,9 @@ import CpaAccountMenu from "../../cpa-account-menu";
 // personales vuelven vacíos para el contable. Aquí además se comprueba la
 // fila de account_members para mandar a notFound() en vez de mostrar una
 // pantalla vacía engañosa.
-type Tab = "resumen" | "categorias" | "impuestos" | "boveda" | "reportes";
+type Tab = "alertas" | "resumen" | "categorias" | "impuestos" | "boveda" | "reportes";
 const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: "alertas", label: "Alertas", icon: "ti-bell" },
   { id: "resumen", label: "Resumen", icon: "ti-chart-bar" },
   { id: "categorias", label: "Por categoría", icon: "ti-category" },
   { id: "impuestos", label: "Impuestos", icon: "ti-receipt-tax" },
@@ -174,6 +175,67 @@ export default async function CpaPersonalPage({
     }
   }
 
+  // ---- Alertas (qué debe / qué falta, en concreto)
+  type AlertaP = { tono: "red" | "amb"; titulo: string; detalle: string };
+  const alertasP: AlertaP[] = [];
+  {
+    const [est, { data: docsAl }, { count: sinCat }] = await Promise.all([
+      obtenerEstimadoImpuestos(supabase, ownerId, null, hoyStr),
+      supabase
+        .from("documents")
+        .select("nombre, fecha_vencimiento")
+        .eq("owner_id", ownerId)
+        .is("entity_id", null)
+        .not("fecha_vencimiento", "is", null)
+        .lte("fecha_vencimiento", new Date(hoy.getTime() + 30 * 86400000).toISOString().slice(0, 10))
+        .order("fecha_vencimiento", { ascending: true }),
+      supabase
+        .from("transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", ownerId)
+        .is("entity_id", null)
+        .eq("es_duplicada", false)
+        .is("hacienda_category_id", null)
+        .in("tipo_flujo", ["ingreso", "gasto"])
+        .gte("fecha", `${anioActual}-01-01`),
+    ]);
+    const r = est?.resultado;
+    if (r && r.atrasado > 0.5) {
+      const vencidas = r.calendario.filter((c) => c.estado === "vencida" || (c.estado === "parcial" && c.fecha < hoyStr));
+      alertasP.push({
+        tono: "red",
+        titulo: `Estimada de impuestos atrasada: ${formatMoney(r.atrasado)}`,
+        detalle:
+          vencidas.map((c) => `${c.etiqueta} (${formatFecha(c.fecha)}): falta ${formatMoney(c.pendiente)}`).join(" · ") ||
+          "Hay cuotas vencidas sin pagar.",
+      });
+    } else if (r && r.proxima) {
+      const dias = Math.round((new Date(r.proxima.fecha).getTime() - new Date(hoyStr).getTime()) / 86400000);
+      if (dias >= 0 && dias <= 30) {
+        alertasP.push({
+          tono: "amb",
+          titulo: `Próxima estimada en ${dias} día${dias === 1 ? "" : "s"}: ${formatMoney(r.proxima.pendiente)}`,
+          detalle: `${r.proxima.etiqueta} · vence ${formatFecha(r.proxima.fecha)}`,
+        });
+      }
+    }
+    for (const d of docsAl ?? []) {
+      const vencido = d.fecha_vencimiento < hoyStr;
+      alertasP.push({
+        tono: vencido ? "red" : "amb",
+        titulo: `${vencido ? "Documento vencido" : "Documento por vencer"}: ${d.nombre}`,
+        detalle: `${vencido ? "Venció" : "Vence"} ${formatFecha(d.fecha_vencimiento)}`,
+      });
+    }
+    if ((sinCat ?? 0) > 0) {
+      alertasP.push({
+        tono: "amb",
+        titulo: `${sinCat} transacciones sin categorizar en ${anioActual}`,
+        detalle: "Las ve en la pestaña “Por categoría” como “Sin categorizar”.",
+      });
+    }
+  }
+
   const aniosOpciones = [anioActual, anioActual - 1, anioActual - 2];
 
   return (
@@ -231,6 +293,26 @@ export default async function CpaPersonalPage({
           </div>
         )}
       </div>
+
+      {tab === "alertas" && (
+        <div className="vc-card">
+          {alertasP.length === 0 ? (
+            <p className="text-xs text-muted">Todo se ve normal con este cliente — sin pendientes urgentes.</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-border">
+              {alertasP.map((a, i) => (
+                <div key={i} className="flex items-start gap-2 py-3">
+                  <i className={`ti ${a.tono === "red" ? "ti-alert-triangle text-red" : "ti-clock text-amb"} mt-0.5`} />
+                  <div>
+                    <p className="text-sm font-medium">{a.titulo}</p>
+                    <p className="text-xs text-muted">{a.detalle}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {tab === "resumen" && (
         <div className="vc-card">

@@ -30,6 +30,7 @@ export type ClienteCpa = {
 };
 
 export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) {
+  const [abierto, setAbierto] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [tab, setTab] = useState<"todos" | "mios" | "alertas">("todos");
   // Estado optimista de favoritos — arranca del valor que trajo el server
@@ -107,9 +108,23 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
 
   return (
     <div className="vc-card">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-xs uppercase tracking-wide text-muted">Entidades ({clientes.length})</p>
-      </div>
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        aria-expanded={abierto}
+        className="mb-3 flex w-full items-center justify-between gap-2 text-left"
+      >
+        <span className="text-xs uppercase tracking-wide text-muted">
+          Entidades ({clientes.length})
+          {!abierto && conAlertas.length > 0 && (
+            <span className="ml-2 rounded-full bg-red/10 px-2 py-0.5 text-[10px] font-medium normal-case text-red">
+              {conAlertas.length} con alertas
+            </span>
+          )}
+        </span>
+        <i className={`ti ${abierto ? "ti-chevron-up" : "ti-chevron-down"} text-muted`} />
+      </button>
+      {abierto && (<>
 
       {errorFavorito && (
         <p className="mb-2 rounded-lg bg-red/10 px-2.5 py-1.5 text-xs text-red">
@@ -241,6 +256,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
           ))}
         </div>
       )}
+      </>)}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type MouseEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 // Lista "Personal" del Portal CPA — mismo formato que CpaClientList
 // (buscador + Todos / Mis clientes / Con alertas), pero por dueño y no por
@@ -15,6 +16,8 @@ export type ClientePersonal = {
 };
 
 export default function CpaPersonalList({ clientes }: { clientes: ClientePersonal[] }) {
+  const router = useRouter();
+  const [abierto, setAbierto] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [tab, setTab] = useState<"todos" | "mios" | "alertas">("todos");
   const [favoritos, setFavoritos] = useState<Set<string>>(
@@ -74,10 +77,28 @@ export default function CpaPersonalList({ clientes }: { clientes: ClientePersona
 
   return (
     <div className="vc-card mb-4">
-      <p className="mb-1 text-xs uppercase tracking-wide text-muted">Personal ({clientes.length})</p>
-      <p className="mb-3 text-xs text-muted">
-        Finanzas personales de clientes que decidieron compartirlas contigo (planilla personal, estimadas, documentos).
-      </p>
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        className="flex w-full items-center justify-between text-left"
+        aria-expanded={abierto}
+      >
+        <span className="text-xs uppercase tracking-wide text-muted">
+          Personal ({clientes.length})
+          {!abierto && conAlertas.length > 0 && (
+            <span className="ml-2 rounded-full bg-red/10 px-2 py-0.5 text-[10px] font-medium normal-case text-red">
+              {conAlertas.length} con alertas
+            </span>
+          )}
+        </span>
+        <i className={`ti ${abierto ? "ti-chevron-up" : "ti-chevron-down"} text-muted`} />
+      </button>
+      {abierto && (
+        <p className="mb-3 mt-1 text-xs text-muted">
+          Finanzas personales de clientes que decidieron compartirlas contigo (planilla personal, estimadas, documentos).
+        </p>
+      )}
+      {abierto && (<>
 
       {errorFav && (
         <p className="mb-2 rounded-lg bg-red/10 px-2.5 py-1.5 text-xs text-red">
@@ -148,7 +169,17 @@ export default function CpaPersonalList({ clientes }: { clientes: ClientePersona
               </div>
               <div className="flex items-center gap-2">
                 {c.alertas.length > 0 && (
-                  <span title={c.alertas.join("\n")} className="rounded-full bg-red/10 px-2 py-1 text-[10px] font-medium text-red">
+                  // Va directo al tab "Alertas" del cliente (no al resumen).
+                  <span
+                    role="link"
+                    title={c.alertas.join("\n")}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      router.push(`/cpa/personal/${c.id}?tab=alertas`);
+                    }}
+                    className="cursor-pointer rounded-full bg-red/10 px-2 py-1 text-[10px] font-medium text-red hover:underline"
+                  >
                     {c.alertas.length} alerta{c.alertas.length === 1 ? "" : "s"}
                   </span>
                 )}
@@ -171,6 +202,7 @@ export default function CpaPersonalList({ clientes }: { clientes: ClientePersona
           ))}
         </div>
       )}
+      </>)}
     </div>
   );
 }
