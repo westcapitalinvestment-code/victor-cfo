@@ -95,6 +95,16 @@ export default function TerminosSociosPage() {
           de disputa.
         </li>
         <li className="mb-1">
+          <strong>Prospectos registrados (Vendedores):</strong> si eres Vendedor, puedes registrar en tu portal
+          el nombre y el email y/o teléfono de una persona a quien le presentaste VICTOR CFO. Solo debes
+          registrar contactos que te dieron su información o que te autorizaron a contactarlos. Si esa persona
+          crea su cuenta dentro de los 60 días siguientes al registro del prospecto, por cualquier vía (incluida
+          la página principal), y su email o teléfono coincide, la referencia se te atribuye. Un contacto solo
+          puede estar vigente con un Vendedor a la vez (gana el primero en registrarlo), no se pueden registrar
+          personas que ya tienen cuenta, y un código o link usado expresamente en el registro tiene prioridad
+          sobre un prospecto registrado. Si no hay coincidencia de email ni teléfono, no se puede atribuir.
+        </li>
+        <li className="mb-1">
           Si el cliente cancela su plan y vuelve a suscribirse más adelante, esa segunda suscripción no
           genera una comisión nueva para ningún Socio, salvo que WCV decida lo contrario a su discreción.
         </li>

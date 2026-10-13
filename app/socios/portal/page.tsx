@@ -31,6 +31,34 @@ const ESTADO_LABEL: Record<ClienteFila["estado"], { texto: string; color: string
   cerrado_perdido: { texto: "Cliente canceló — perdido", color: "text-red" },
 };
 
+// Prospectos (migración 0150, 13 oct 2026) — contactos a los que el vendedor
+// le presentó VICTOR. Si se registran con ese email/teléfono dentro de 60
+// días (por cualquier vía, también por la landing), la comisión es del
+// vendedor. Aquí además es su herramienta de seguimiento: llamar o escribir
+// por WhatsApp directo desde la lista.
+type Prospecto = {
+  id: string;
+  nombre: string;
+  email: string | null;
+  telefono: string | null;
+  notas: string | null;
+  estado: "vigente" | "convertido" | "vencido" | "otro_vendedor";
+  diasRestantes: number | null;
+  creadoEn: string;
+  convertidoEn: string | null;
+};
+
+const PROSPECTO_ESTADO: Record<Prospecto["estado"], { texto: string; color: string }> = {
+  vigente: { texto: "Vigente", color: "text-amb" },
+  convertido: { texto: "Se registró ✓", color: "text-teal" },
+  vencido: { texto: "Venció", color: "text-muted" },
+  otro_vendedor: { texto: "No aplicó", color: "text-muted" },
+};
+
+function fmtTel(d: string) {
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
 function fmt(centavos: number) {
   return `$${(centavos / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -53,6 +81,13 @@ export default function SocioPortalPage() {
     totalRetenidoCentavos: number;
     clientes: ClienteFila[];
   } | null>(null);
+  const [prospectos, setProspectos] = useState<Prospecto[] | null>(null);
+  const [pNombre, setPNombre] = useState("");
+  const [pEmail, setPEmail] = useState("");
+  const [pTelefono, setPTelefono] = useState("");
+  const [pNotas, setPNotas] = useState("");
+  const [pGuardando, setPGuardando] = useState(false);
+  const [pError, setPError] = useState<string | null>(null);
 
   async function entrar(e: React.FormEvent) {
     e.preventDefault();
@@ -82,15 +117,58 @@ export default function SocioPortalPage() {
   }
 
   async function cargarDatos() {
-    const res = await fetch("/api/socios/portal/me");
+    const [res, resP] = await Promise.all([fetch("/api/socios/portal/me"), fetch("/api/socios/portal/prospectos")]);
     const json = await res.json().catch(() => null);
     if (res.ok) setDatos(json);
+    const jsonP = await resP.json().catch(() => null);
+    if (resP.ok) setProspectos(jsonP.prospectos ?? []);
+  }
+
+  async function agregarProspecto(e: React.FormEvent) {
+    e.preventDefault();
+    setPError(null);
+    if (pNombre.trim().length < 2) {
+      setPError("Escribe el nombre del prospecto.");
+      return;
+    }
+    if (!pEmail.trim() && !pTelefono.trim()) {
+      setPError("Pon al menos un email o un teléfono.");
+      return;
+    }
+    setPGuardando(true);
+    const res = await fetch("/api/socios/portal/prospectos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre: pNombre, email: pEmail, telefono: pTelefono, notas: pNotas }),
+    });
+    const json = await res.json().catch(() => null);
+    setPGuardando(false);
+    if (!res.ok) {
+      setPError(json?.error || "No se pudo guardar el prospecto.");
+      return;
+    }
+    setPNombre("");
+    setPEmail("");
+    setPTelefono("");
+    setPNotas("");
+    await cargarDatos();
+  }
+
+  async function borrarProspecto(id: string) {
+    if (!window.confirm("¿Quitar este prospecto? Perderás la protección de 60 días sobre este contacto.")) return;
+    const res = await fetch("/api/socios/portal/prospectos", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (res.ok) await cargarDatos();
   }
 
   async function salir() {
     await fetch("/api/socios/portal/logout", { method: "POST" });
     setSesion(null);
     setDatos(null);
+    setProspectos(null);
     setCodigo("");
     setPin("");
   }
@@ -166,6 +244,104 @@ export default function SocioPortalPage() {
             <div className="vc-card mb-4 text-[11px] text-muted">
               Se te retuvo <span className="font-medium text-muted">{fmt(datos.totalRetenidoCentavos)}</span> en total
               (Sección 1062.03 de Hacienda) — los montos de arriba ya son netos, después de esa retención.
+            </div>
+          )}
+
+          {/* Prospectos: protege tu comisión si el cliente se registra después
+              por la landing, y te deja dar seguimiento (llamar / WhatsApp). */}
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">
+            Tus prospectos {prospectos ? `(${prospectos.length})` : ""}
+          </p>
+          <form onSubmit={agregarProspecto} className="vc-card mb-3 flex flex-col gap-2">
+            <p className="text-[11px] text-muted">
+              Registra a quien le presentaste VICTOR. Si se registra con ese email o teléfono en los próximos 60 días, por
+              donde sea, la venta es tuya.
+            </p>
+            {pError && <p className="text-xs text-red">{pError}</p>}
+            <input
+              value={pNombre}
+              onChange={(e) => setPNombre(e.target.value)}
+              placeholder="Nombre (persona o negocio)"
+              className="rounded-lg border border-border p-2 text-sm"
+            />
+            <div className="flex gap-2">
+              <input
+                value={pEmail}
+                onChange={(e) => setPEmail(e.target.value)}
+                placeholder="Email"
+                type="email"
+                inputMode="email"
+                className="w-1/2 rounded-lg border border-border p-2 text-sm"
+              />
+              <input
+                value={pTelefono}
+                onChange={(e) => setPTelefono(e.target.value)}
+                placeholder="Teléfono"
+                type="tel"
+                inputMode="tel"
+                className="w-1/2 rounded-lg border border-border p-2 text-sm"
+              />
+            </div>
+            <input
+              value={pNotas}
+              onChange={(e) => setPNotas(e.target.value)}
+              placeholder="Nota (opcional)"
+              className="rounded-lg border border-border p-2 text-sm"
+            />
+            <button type="submit" disabled={pGuardando} className="rounded-pill bg-teal p-2 text-sm font-medium text-white">
+              {pGuardando ? "Guardando..." : "Registrar prospecto"}
+            </button>
+          </form>
+
+          {prospectos && prospectos.length > 0 && (
+            <div className="mb-4 flex flex-col gap-2">
+              {prospectos.map((p) => {
+                const info = PROSPECTO_ESTADO[p.estado];
+                return (
+                  <div key={p.id} className="vc-card">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{p.nombre}</p>
+                        <p className="truncate text-[11px] text-muted">
+                          {[p.email, p.telefono ? fmtTel(p.telefono) : null].filter(Boolean).join(" · ")}
+                        </p>
+                        {p.notas && <p className="mt-0.5 text-[11px] text-muted">{p.notas}</p>}
+                      </div>
+                      <span className={`shrink-0 text-[11px] font-medium ${info.color}`}>
+                        {info.texto}
+                        {p.estado === "vigente" && p.diasRestantes !== null ? ` · ${p.diasRestantes} d` : ""}
+                      </span>
+                    </div>
+                    {p.estado === "vigente" && (
+                      <div className="mt-2 flex flex-wrap gap-3 border-t border-border pt-2 text-[12px]">
+                        {p.telefono && (
+                          <a href={`tel:+1${p.telefono}`} className="font-medium text-teal">
+                            Llamar
+                          </a>
+                        )}
+                        {p.telefono && (
+                          <a
+                            href={`https://wa.me/1${p.telefono}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-teal"
+                          >
+                            WhatsApp
+                          </a>
+                        )}
+                        {p.email && (
+                          <a href={`mailto:${p.email}`} className="font-medium text-teal">
+                            Email
+                          </a>
+                        )}
+                        <button type="button" onClick={() => borrarProspecto(p.id)} className="ml-auto text-muted">
+                          Quitar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 

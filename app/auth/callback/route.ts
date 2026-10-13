@@ -77,16 +77,34 @@ export async function GET(req: NextRequest) {
 
   // Aplica referido/socio/plan-gratis si venían en la URL — no-op si no hay
   // nada que aplicar, o si la cuenta ya no califica (ver la función).
-  if (ref || socio || gratis) {
+  //
+  // 13 oct 2026 (migración 0150, prospectos del vendedor): ahora también se
+  // llama cuando la cuenta es nueva aunque NO venga ningún parámetro — el
+  // caso típico es un vendedor que presentó VICTOR y el cliente entra por la
+  // landing con Google. La función cruza su email/teléfono con los prospectos
+  // del vendedor y, si coincide, le atribuye la venta. El teléfono (opcional,
+  // del formulario de /registro) viaja en una cookie corta y no en la URL
+  // para que no quede en logs ni en el historial.
+  const tel = req.cookies.get("vc_tel")?.value || null;
+  const cuentaNueva =
+    !!sesionData.user?.created_at && Date.now() - new Date(sesionData.user.created_at).getTime() < 15 * 60 * 1000;
+  if (ref || socio || gratis || tel || cuentaNueva) {
     await supabase.rpc("aplicar_datos_registro_oauth", {
       p_ref_id: ref,
       p_socio_codigo: socio,
       p_gratis: gratis,
+      p_telefono: tel,
     });
   }
 
+  // El teléfono de la cookie ya se usó — se borra en cualquier salida de aquí.
+  const limpiarTel = (res: NextResponse) => {
+    if (tel) res.cookies.set("vc_tel", "", { path: "/", maxAge: 0 });
+    return res;
+  };
+
   if (gratis) {
-    return NextResponse.redirect(`${origin}/onboarding`);
+    return limpiarTel(NextResponse.redirect(`${origin}/onboarding`));
   }
 
   // Camino de pago (el primario, ver /registro): si venía un plan elegido,
@@ -114,5 +132,5 @@ export async function GET(req: NextRequest) {
     destino = membresiaAdmin ? "/admin" : membresiaCpa ? "/cpa" : destino;
   }
 
-  return NextResponse.redirect(`${origin}${destino}`);
+  return limpiarTel(NextResponse.redirect(`${origin}${destino}`));
 }

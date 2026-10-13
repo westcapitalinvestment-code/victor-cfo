@@ -177,6 +177,17 @@ function RegistroForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // "¿Te presentó un vendedor de VICTOR?" (13 oct 2026, migración 0150) —
+  // campos opcionales para que el vendedor que presentó la app reciba crédito
+  // aunque el cliente no haya entrado por su link: el teléfono se cruza con
+  // los prospectos que el vendedor registró (por si usas otro email), y el
+  // código cubre a quien no vino con ?socio= en la URL.
+  const [telefono, setTelefono] = useState("");
+  const [codigoManual, setCodigoManual] = useState("");
+  const codigoManualValido = SOCIO_CODIGO_RE.test(codigoManual.trim()) ? codigoManual.trim().toUpperCase() : null;
+  const socioEfectivo = socioCodigo ?? codigoManualValido;
+  const telefonoDigitos = telefono.replace(/\D/g, "");
+  const telefonoValido = telefonoDigitos.length === 10 || (telefonoDigitos.length === 11 && telefonoDigitos.startsWith("1"));
   const [aceptaTerminos, setAceptaTerminos] = useState(false);
   const [loading, setLoading] = useState(false);
   const [accionEnCurso, setAccionEnCurso] = useState<"pago" | "gratis" | null>(null);
@@ -211,8 +222,15 @@ function RegistroForm() {
 
     const params = new URLSearchParams({ plan: planEscogido, ciclo });
     if (refId) params.set("ref", refId);
-    if (socioCodigo) params.set("socio", socioCodigo);
+    if (socioEfectivo) params.set("socio", socioEfectivo);
     if (esGratis) params.set("gratis", "true");
+    // El teléfono NO va en la URL (quedaría en logs/historial): viaja en una
+    // cookie de 15 min que /auth/callback lee y borra.
+    if (telefonoValido) {
+      document.cookie = `vc_tel=${encodeURIComponent(telefonoDigitos)}; max-age=900; path=/; SameSite=Lax${
+        window.location.protocol === "https:" ? "; Secure" : ""
+      }`;
+    }
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -249,7 +267,8 @@ function RegistroForm() {
         data: {
           signup_gratis: esGratis ? "true" : "false",
           ...(refId ? { ref_id: refId } : {}),
-          ...(socioCodigo ? { socio_codigo: socioCodigo } : {}),
+          ...(socioEfectivo ? { socio_codigo: socioEfectivo } : {}),
+          ...(telefonoValido ? { telefono: telefonoDigitos } : {}),
         },
       },
     });
@@ -402,6 +421,37 @@ function RegistroForm() {
       {/* Panel de las 3 tarjetas */}
       <div className="flex flex-1 items-center justify-center px-6 py-10">
         <div className={mostrarEmailForm ? "w-full max-w-md" : "w-full max-w-5xl"}>
+          {/* ¿Te presentó un vendedor de VICTOR? — opcional, colapsado para no
+              estorbar a quien llega solo. Ver comentario de los estados arriba. */}
+          <details className="mx-auto mb-4 w-full max-w-md rounded-lg border border-border bg-bg px-3 py-2 text-left text-xs">
+            <summary className="cursor-pointer font-medium text-text">¿Te presentó VICTOR un vendedor? (opcional)</summary>
+            <p className="mt-2 text-muted">
+              Si un vendedor te enseñó la app, déjanos el teléfono con el que te contactó o su código, para que reciba su
+              crédito. No cambia tu precio.
+            </p>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="tel"
+                inputMode="tel"
+                value={telefono}
+                onChange={(e) => setTelefono(e.target.value)}
+                placeholder="Tu teléfono (787-555-1234)"
+                className="w-full rounded-lg border border-border p-2 text-sm"
+                autoComplete="tel"
+              />
+              <input
+                type="text"
+                value={codigoManual}
+                onChange={(e) => setCodigoManual(e.target.value)}
+                placeholder="Código del vendedor"
+                className="w-full rounded-lg border border-border p-2 text-sm"
+                autoCapitalize="characters"
+                disabled={!!socioCodigo}
+              />
+            </div>
+            {socioCodigo && <p className="mt-1.5 text-[11px] text-teal">Ya viniste con el link de tu vendedor ✓</p>}
+          </details>
+
           {!mostrarEmailForm ? (
             <>
               {error && <p className="mb-3 text-center text-xs text-red">{error}</p>}

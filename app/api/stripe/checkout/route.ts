@@ -27,6 +27,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Plan o ciclo inválido." }, { status: 400 });
   }
 
+  // Red de seguridad de la atribución por prospecto (13 oct 2026, migración
+  // 0150): el cruce principal ocurre al registrarse, pero si por cualquier
+  // razón no corrió (o el teléfono se guardó después), aquí se reintenta
+  // justo antes de que haya un pago. Es idempotente y no atribuye a cuentas
+  // anteriores al prospecto. Nunca debe bloquear el checkout.
+  const supabaseAdmin = createAdminClient();
+  try {
+    await supabaseAdmin.rpc("atribuir_prospecto_a_usuario", { p_user_id: user.id });
+  } catch (err) {
+    console.error("No se pudo cruzar al usuario con prospectos de vendedor:", err);
+  }
+
   const { data: perfil } = await supabase
     .from("users")
     .select("stripe_customer_id, referred_by, referido_por_socio_id")
@@ -37,7 +49,6 @@ export async function POST(req: NextRequest) {
   // trial — ver el bloque de abajo (2 oct 2026, migración 0135). Se lee con
   // el cliente admin porque socios no tiene políticas de RLS (a propósito,
   // mismo patrón que referral_rewards).
-  const supabaseAdmin = createAdminClient();
   let socioTipo: string | null = null;
   if (perfil?.referido_por_socio_id) {
     const { data: socio } = await supabaseAdmin
