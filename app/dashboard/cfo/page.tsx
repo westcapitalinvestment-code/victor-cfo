@@ -61,6 +61,7 @@ export default async function CfoPage() {
     { data: vendedorClientes },
     { data: creditosReferidos },
     { data: retencionesVendedor },
+    { data: prospectosVendedor },
   ] = await Promise.all([
     admin
       .from("users")
@@ -117,6 +118,10 @@ export default async function CfoPage() {
     // 0138, 3 oct 2026) — una fila por comisión, ver socios-panel.tsx para
     // cómo se amarra a cada ComisionFila por comision_id.
     admin.from("socios_vendedor_retenciones").select("comision_id, retention_centavos"),
+    // Prospectos registrados por cada vendedor (migración 0150) — solo
+    // conteos por estado en el panel del founder; si la migración aún no
+    // corrió, data viene null y el panel muestra ceros.
+    admin.from("socios_prospectos").select("socio_id, estado"),
   ]);
 
   const todos = usuarios ?? [];
@@ -439,6 +444,10 @@ export default async function CfoPage() {
           treintaCentavos: Number(v.treinta_centavos),
           treintaEstado: v.treinta_estado as "pendiente" | "liberada" | "perdida",
           montoBaseCentavos: v.monto_base_centavos != null ? Number(v.monto_base_centavos) : null,
+        }))}
+        prospectos={(prospectosVendedor ?? []).map((p) => ({
+          socioId: p.socio_id as string,
+          estado: p.estado as string,
         }))}
       />
 

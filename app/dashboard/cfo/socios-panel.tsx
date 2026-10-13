@@ -114,10 +114,12 @@ export default function SociosPanel({
   socios: sociosIniciales,
   comisiones: comisionesIniciales,
   vendedorClientes = [],
+  prospectos = [],
 }: {
   socios: SocioFila[];
   comisiones: ComisionFila[];
   vendedorClientes?: VendedorClienteFila[];
+  prospectos?: { socioId: string; estado: string }[];
 }) {
   const [abierto, setAbierto] = useState(false);
   const [socios, setSocios] = useState(sociosIniciales);
@@ -391,6 +393,18 @@ export default function SociosPanel({
                         const enGeneracion = clientesDeEsteVendedor.filter((v) => v.treintaEstado === "pendiente").length;
                         const cerradosCobrados = clientesDeEsteVendedor.filter((v) => v.treintaEstado === "liberada").length;
                         const perdidos = clientesDeEsteVendedor.filter((v) => v.treintaEstado === "perdida").length;
+                        // 30% que se le deberá si esos clientes llegan a su 3er
+                        // pago real (deuda contingente, no vencida todavía).
+                        const treintaPorDeber = clientesDeEsteVendedor
+                          .filter((v) => v.treintaEstado === "pendiente")
+                          .reduce((sum, v) => sum + v.treintaCentavos, 0);
+                        const pagadoALaFecha = propias
+                          .filter((c) => c.estado === "pagada")
+                          .reduce((sum, c) => sum + c.comisionCentavos - (c.retenidoCentavos ?? 0), 0);
+                        const susProspectos = prospectos.filter((p) => p.socioId === s.id);
+                        const prosVigentes = susProspectos.filter((p) => p.estado === "vigente").length;
+                        const prosConvertidos = susProspectos.filter((p) => p.estado === "convertido").length;
+                        const prosVencidos = susProspectos.filter((p) => p.estado === "vencido").length;
                         return (
                           <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2 text-[11px]">
                             <div className="flex items-center justify-between">
@@ -407,6 +421,16 @@ export default function SociosPanel({
                               <span>{enGeneracion} generando comisión</span>
                               <span>{cerradosCobrados} ciclo completo</span>
                               {perdidos > 0 && <span>{perdidos} perdidos</span>}
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted">
+                              <span>Prospectos: {prosVigentes} vigentes</span>
+                              <span>{prosConvertidos} convertidos</span>
+                              <span>{prosVencidos} vencidos</span>
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted">
+                              <span>Pagado a la fecha (neto): <span className="font-medium text-white">{fmt(pagadoALaFecha)}</span></span>
+                              <span>Por pagar ahora (neto): <span className="font-medium text-white">{fmt(totalPendiente - pendiente.reduce((sum, c) => sum + (c.retenidoCentavos ?? 0), 0))}</span></span>
+                              <span>30% por deber (si llegan al 3er pago): <span className="font-medium text-white">{fmt(treintaPorDeber)}</span></span>
                             </div>
                             <p>
                               Ingreso mensual bruto para WCV: <span className="font-medium text-white">{fmt(ingresoMensualBruto)}</span>
