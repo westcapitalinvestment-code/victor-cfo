@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const SITE_URL = "https://www.victorcfo.com";
 
 // Portal público del vendedor (Programa de Socios, modelo 70/30, migración
 // 0107, 29 sept 2026) — mismo patrón que /tecnico: entra con código corto +
@@ -88,6 +90,39 @@ export default function SocioPortalPage() {
   const [pNotas, setPNotas] = useState("");
   const [pGuardando, setPGuardando] = useState(false);
   const [pError, setPError] = useState<string | null>(null);
+  // Link personal + QR (13 oct 2026): el correo de aprobación puede caer en
+  // Junk y bloquear el adjunto, así que el QR también vive aquí, descargable.
+  const [codigoSocio, setCodigoSocio] = useState("");
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState(false);
+  const linkPersonal = codigoSocio ? `${SITE_URL}/registro?socio=${codigoSocio}` : "";
+
+  useEffect(() => {
+    if (!linkPersonal) {
+      setQrUrl(null);
+      return;
+    }
+    let cancelado = false;
+    import("qrcode")
+      .then((QR) => QR.toDataURL(linkPersonal, { width: 480, margin: 2 }))
+      .then((url) => {
+        if (!cancelado) setQrUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+  }, [linkPersonal]);
+
+  async function copiarLink() {
+    try {
+      await navigator.clipboard.writeText(linkPersonal);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      /* sin permiso de portapapeles: el link igual está visible */
+    }
+  }
 
   async function entrar(e: React.FormEvent) {
     e.preventDefault();
@@ -111,6 +146,7 @@ export default function SocioPortalPage() {
       return;
     }
 
+    setCodigoSocio(codigo.trim().toUpperCase());
     setSesion({ nombre: json.nombre });
     await cargarDatos();
     setLoading(false);
@@ -169,6 +205,7 @@ export default function SocioPortalPage() {
     setSesion(null);
     setDatos(null);
     setProspectos(null);
+    setCodigoSocio("");
     setCodigo("");
     setPin("");
   }
@@ -246,6 +283,36 @@ export default function SocioPortalPage() {
               (Sección 1062.03 de Hacienda) — los montos de arriba ya son netos, después de esa retención.
             </div>
           )}
+
+          {/* Link personal + QR: para enseñarlo en persona o compartirlo */}
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">Tu link y tu QR</p>
+          <div className="vc-card mb-4 flex flex-col items-center gap-2 text-center">
+            <p className="text-[11px] text-muted">
+              Cualquier negocio que se registre por este link o este QR queda conectado a ti automáticamente.
+            </p>
+            {qrUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={qrUrl} alt={`QR de ${codigoSocio}`} width={200} height={200} className="rounded-lg bg-white" />
+            ) : (
+              <div className="flex h-[200px] w-[200px] items-center justify-center text-[11px] text-muted">Generando QR…</div>
+            )}
+            <p className="text-sm font-semibold tracking-wide">{codigoSocio}</p>
+            <p className="break-all text-[11px] text-muted">{linkPersonal}</p>
+            <div className="flex gap-2">
+              <button type="button" onClick={copiarLink} className="rounded-pill border border-border px-3 py-1.5 text-[12px] font-medium">
+                {copiado ? "Copiado ✓" : "Copiar link"}
+              </button>
+              {qrUrl && (
+                <a
+                  href={qrUrl}
+                  download={`qr-${codigoSocio}.png`}
+                  className="rounded-pill bg-teal px-3 py-1.5 text-[12px] font-medium text-white"
+                >
+                  Descargar QR
+                </a>
+              )}
+            </div>
+          </div>
 
           {/* Prospectos: protege tu comisión si el cliente se registra después
               por la landing, y te deja dar seguimiento (llamar / WhatsApp). */}
