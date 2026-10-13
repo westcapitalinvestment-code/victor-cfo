@@ -8,7 +8,6 @@ import { PLAN_LABEL } from "@/lib/plan-label";
 import Colapsable from "./colapsable";
 import EmailCanceladoBoton from "./email-cancelado-boton";
 import UsuariosPanel from "./usuarios-panel";
-import SociosPanel from "./socios-panel";
 
 // Dashboard de Operaciones — vivía en /dashboard/admin, pero esa ruta la
 // necesitaba el módulo real de Admin/Secretaria (2 sept 2026, pedido de
@@ -56,12 +55,7 @@ export default async function CfoPage() {
     { data: usoIa, error: errorUso },
     { data: logIa, error: errorLog },
     { data: creditosCompras },
-    { data: socios },
-    { data: comisionesSocios },
-    { data: vendedorClientes },
     { data: creditosReferidos },
-    { data: retencionesVendedor },
-    { data: prospectosVendedor },
   ] = await Promise.all([
     admin
       .from("users")
@@ -80,48 +74,13 @@ export default async function CfoPage() {
       .from("creditos_ia_compras")
       .select("precio_pagado_centavos, credito_centavos")
       .gte("created_at", inicioMesPR.toISOString()),
-    // Programa de Socios (migración 0070, 5 sept 2026) — se traen TODOS
-    // (pendientes/aprobados/suspendidos y todas las comisiones), el panel
-    // del cliente (socios-panel.tsx) decide cómo agruparlos.
-    admin
-      .from("socios")
-      .select(
-        "id, tipo, nombre, email, telefono, como_promociona, codigo, estado, created_at, payment_token, datos_pago_completados_at, bank_name, account_last4"
-      )
-      .order("created_at", { ascending: false }),
-    admin
-      .from("socios_comisiones")
-      .select("id, socio_id, plan, comision_centavos, estado, created_at"),
-    // Estado por cliente de vendedor — modelo viejo 70/30 (migración 0107)
-    // y modelo nuevo de pago único (migración 0135, 2 oct 2026, columna
-    // `modelo`) conviven en esta misma tabla. El panel la usa para el
-    // desglose por vendedor (cuántos clientes, en qué estado, y el ingreso
-    // mensual bruto que le generan a WCV, para que Joel compare comisión
-    // pagada vs ingreso real) — ver cálculo de ingresoMensualBruto en
-    // socios-panel.tsx, que usa monto_base_centavos para los 'unico'
-    // anuales porque ahí la comisión (20%) ya NO es igual al ingreso real.
-    admin
-      .from("socios_vendedor_clientes")
-      .select(
-        "id, socio_id, referred_id, ciclo, modelo, primer_pago_at, setenta_centavos, treinta_centavos, treinta_estado, monto_base_centavos"
-      ),
     // Créditos de referidos peer-to-peer (migración 0062, 8 sept 2026,
     // pedido de Joel: "¿como yo veo eso para efectos contables?"). OJO: esto
     // NO es un gasto en efectivo — es un descuento sobre la próxima factura
-    // del referidor, aplicado como saldo negativo en Stripe (createBalanceTransaction
-    // en app/api/stripe/webhook/route.ts). Contablemente va como
-    // contra-ingreso ("descuentos por referidos"), no como costo operativo
-    // — a diferencia del Programa de Socios (comisiones en efectivo, sí
-    // sale plata real, ver socios_comisiones arriba).
+    // del referidor, aplicado como saldo negativo en Stripe. Contablemente va
+    // como contra-ingreso. (El Programa de Socios — comisiones en efectivo —
+    // se mudó a /dashboard/ventas el 13 oct 2026.)
     admin.from("referral_rewards").select("credit_cents, created_at"),
-    // Retención Sección 1062.03 sobre comisiones de vendedor (migración
-    // 0138, 3 oct 2026) — una fila por comisión, ver socios-panel.tsx para
-    // cómo se amarra a cada ComisionFila por comision_id.
-    admin.from("socios_vendedor_retenciones").select("comision_id, retention_centavos"),
-    // Prospectos registrados por cada vendedor (migración 0150) — solo
-    // conteos por estado en el panel del founder; si la migración aún no
-    // corrió, data viene null y el panel muestra ceros.
-    admin.from("socios_prospectos").select("socio_id, estado"),
   ]);
 
   const todos = usuarios ?? [];
@@ -401,53 +360,6 @@ export default async function CfoPage() {
           planStatus: u.plan_status,
           creadoEn: u.created_at,
           gastoIaCentavos: costoIaPorUsuarioCentavos.get(u.id) ?? 0,
-        }))}
-      />
-
-      {/* Programa de Socios (CPAs/influencers, migración 0070) — aprobar
-          solicitudes y marcar comisiones en efectivo como pagadas */}
-      <SociosPanel
-        socios={(socios ?? []).map((s) => ({
-          id: s.id,
-          tipo: s.tipo,
-          nombre: s.nombre,
-          email: s.email,
-          telefono: s.telefono,
-          comoPromociona: s.como_promociona,
-          codigo: s.codigo,
-          estado: s.estado as "pendiente" | "aprobado" | "suspendido",
-          createdAt: s.created_at,
-          paymentToken: s.payment_token,
-          datosPagoCompletados: !!s.datos_pago_completados_at,
-          bankName: s.bank_name,
-          accountLast4: s.account_last4,
-        }))}
-        comisiones={(comisionesSocios ?? []).map((c) => {
-          const retencion = (retencionesVendedor ?? []).find((r) => r.comision_id === c.id);
-          return {
-            id: c.id,
-            socioId: c.socio_id,
-            plan: c.plan,
-            comisionCentavos: Number(c.comision_centavos),
-            estado: c.estado as "pendiente" | "pagada",
-            createdAt: c.created_at,
-            retenidoCentavos: retencion ? Number(retencion.retention_centavos) : 0,
-          };
-        })}
-        vendedorClientes={(vendedorClientes ?? []).map((v) => ({
-          id: v.id,
-          socioId: v.socio_id,
-          ciclo: v.ciclo as "mensual" | "anual",
-          modelo: (v.modelo ?? "setenta_treinta") as "setenta_treinta" | "unico",
-          primerPagoAt: v.primer_pago_at,
-          setentaCentavos: Number(v.setenta_centavos),
-          treintaCentavos: Number(v.treinta_centavos),
-          treintaEstado: v.treinta_estado as "pendiente" | "liberada" | "perdida",
-          montoBaseCentavos: v.monto_base_centavos != null ? Number(v.monto_base_centavos) : null,
-        }))}
-        prospectos={(prospectosVendedor ?? []).map((p) => ({
-          socioId: p.socio_id as string,
-          estado: p.estado as string,
         }))}
       />
 

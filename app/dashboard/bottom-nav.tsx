@@ -54,6 +54,9 @@ const TAB_CONFIG = { href: "/dashboard/config", label: "Config", icon: "ti-setti
 // módulo real de Admin/Secretaria. Se mudó a su propio ícono aquí, oculto
 // para cualquiera que no sea el founder (2 sept 2026, pedido de Joel).
 const TAB_CFO = { href: "/dashboard/cfo", label: "CFO", icon: "ti-crown" };
+// Ventas (13 oct 2026, pedido de Joel): vendedores, socios y contables. Solo
+// founder, penúltimo tab (justo antes de CFO).
+const TAB_VENTAS = { href: "/dashboard/ventas", label: "Ventas", icon: "ti-briefcase" };
 
 function NavLink({ tab, active }: { tab: { href: string; label: string; icon: string }; active: boolean }) {
   return (
@@ -103,6 +106,7 @@ export default function BottomNav({ esFounder = false }: { esFounder?: boolean }
           <NavLink key={tab.href} tab={tab} active={isActive(tab.href)} />
         ))}
         <NavLink tab={TAB_CONFIG} active={isActive(TAB_CONFIG.href)} />
+        {esFounder && <NavLink tab={TAB_VENTAS} active={isActive(TAB_VENTAS.href)} />}
         {esFounder && <NavLink tab={TAB_CFO} active={isActive(TAB_CFO.href)} />}
       </div>
     </div>

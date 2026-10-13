@@ -121,7 +121,8 @@ export default function SociosPanel({
   vendedorClientes?: VendedorClienteFila[];
   prospectos?: { socioId: string; estado: string }[];
 }) {
-  const [abierto, setAbierto] = useState(false);
+  // Abierto por defecto: ahora vive en su propia pantalla (/dashboard/ventas).
+  const [abierto, setAbierto] = useState(true);
   const [socios, setSocios] = useState(sociosIniciales);
   const [comisiones, setComisiones] = useState(comisionesIniciales);
   const [cargando, setCargando] = useState<string | null>(null);
