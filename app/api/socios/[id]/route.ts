@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esFounder } from "@/lib/founder";
-import { sendSocioAprobadoEmail } from "@/lib/email";
+import { sendSocioAprobadoEmail, sendSocioDocumentosEmail } from "@/lib/email";
 import { hashPin } from "@/lib/pin";
 
 // Aprobar/suspender un socio — solo el founder (mismo panel que el
@@ -60,7 +60,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const admin = createAdminClient();
   const { data: socio } = await admin
     .from("socios")
-    .select("id, nombre, tipo, codigo, payment_token, email, pin_hash")
+    .select("id, nombre, tipo, codigo, payment_token, email, pin_hash, documentos_completados_at")
     .eq("id", params.id)
     .maybeSingle();
   if (!socio) return NextResponse.json({ error: "Socio no encontrado." }, { status: 404 });
@@ -72,8 +72,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // este socio es/pasa a ser vendedor y todavía no tiene uno. Se incluye en
   // el correo de aprobación de abajo; nunca se devuelve en la respuesta
   // JSON de esta ruta (el founder no necesita verlo, solo el vendedor).
+  //
+  // 13 oct 2026: si es vendedor y todavía no completó sus documentos (contrato
+  // + datos de pago, ver app/api/socios/pago/[token]/route.ts), NO se genera
+  // PIN ni se manda el correo con código/QR todavía — se le manda primero el
+  // link para completar documentos, y el PIN sale al terminar.
+  const docsPendientes = tipoEfectivo === "vendedor" && !socio.documentos_completados_at;
   let pinPlano: string | null = null;
-  if (tipoEfectivo === "vendedor" && !socio.pin_hash) {
+  if (tipoEfectivo === "vendedor" && !socio.pin_hash && !docsPendientes) {
     pinPlano = generarPin();
     datosActualizar.pin_hash = hashPin(pinPlano, socio.id);
   }
@@ -95,7 +101,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         const { error } = await admin.from("socios").update({ ...datosActualizar, codigo }).eq("id", params.id);
         if (!error) {
           if (socio.email) {
-            sendSocioAprobadoEmail({ toEmail: socio.email, toName: socio.nombre, codigo, pin: pinPlano }).catch(() => {});
+            if (docsPendientes && socio.payment_token) {
+              sendSocioDocumentosEmail({ toEmail: socio.email, toName: socio.nombre, token: socio.payment_token }).catch(() => {});
+            } else {
+              sendSocioAprobadoEmail({ toEmail: socio.email, toName: socio.nombre, codigo, pin: pinPlano }).catch(() => {});
+            }
           }
           return NextResponse.json({ ok: true, codigo, paymentToken: socio.payment_token });
         }
@@ -111,7 +121,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // el PIN por pasar a vendedor), también le mandamos el correo — puede que
   // haya perdido el código original o esta sea la primera vez que recibe PIN.
   if (estado === "aprobado" && socio.codigo && socio.email) {
-    sendSocioAprobadoEmail({ toEmail: socio.email, toName: socio.nombre, codigo: socio.codigo, pin: pinPlano }).catch(() => {});
+    if (docsPendientes && socio.payment_token) {
+      sendSocioDocumentosEmail({ toEmail: socio.email, toName: socio.nombre, token: socio.payment_token }).catch(() => {});
+    } else {
+      sendSocioAprobadoEmail({ toEmail: socio.email, toName: socio.nombre, codigo: socio.codigo, pin: pinPlano }).catch(() => {});
+    }
   }
 
   return NextResponse.json({ ok: true, codigo: socio.codigo, paymentToken: socio.payment_token });

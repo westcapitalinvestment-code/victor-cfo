@@ -2059,3 +2059,172 @@ export async function sendSocioAprobadoEmail(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Solicitud de socio / vendedor (13 oct 2026, pedido de Joel): flujo
+//   1) candidato envía solicitud + currículum en /socios
+//      → sendSocioSolicitudRecibidaEmail (próximos pasos) y
+//        sendSocioNuevaSolicitudAJoelEmail (aviso a info@victorcfo.com)
+//   2) el equipo revisa y aprueba en Ventas
+//      → sendSocioDocumentosEmail (link privado para completar contrato +
+//        datos de pago)
+//   3) al completar los documentos se manda el correo con código/PIN/QR
+//      (sendSocioAprobadoEmail, más arriba).
+// ---------------------------------------------------------------------------
+function envolverCorreoSocio(cuerpoHtml: string): string {
+  return `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  ${cuerpoHtml}
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+}
+
+export async function sendSocioSolicitudRecibidaEmail(params: {
+  toEmail: string;
+  toName: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  const { toEmail, toName } = params;
+  const saludo = toName ? `Hola ${toName},` : "Hola,";
+
+  const texto =
+    `${saludo}\n\n` +
+    `Recibimos tu solicitud para unirte al equipo de VICTOR CFO. Gracias por tu interés.\n\n` +
+    `Qué sigue:\n` +
+    `1. El equipo de VICTOR CFO revisa tu solicitud y tu currículum.\n` +
+    `2. Si tu perfil es aprobado, te avisaremos por correo y por WhatsApp.\n` +
+    `3. Ahí completarás tus documentos (contrato y datos de pago) desde un link privado.\n` +
+    `4. Al terminar, recibirás tu código, tu QR y el acceso a tu portal de vendedor.\n\n` +
+    `No tienes que hacer nada más por ahora. Si tienes dudas, responde a este correo.\n\n` +
+    `— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const html = envolverCorreoSocio(`
+  <p>${toName ? `Hola, <strong>${escapeHtml(toName)}</strong>,` : "Hola,"}</p>
+  <p>Recibimos tu solicitud para unirte al equipo de VICTOR CFO. Gracias por tu interés.</p>
+  <p style="margin-bottom: 4px;"><strong>Qué sigue</strong></p>
+  <ol style="padding-left: 20px; margin-top: 4px; font-size: 14px;">
+    <li>El equipo de VICTOR CFO revisa tu solicitud y tu currículum.</li>
+    <li>Si tu perfil es aprobado, te avisamos por correo y por WhatsApp.</li>
+    <li>Ahí completas tus documentos (contrato y datos de pago) desde un link privado.</li>
+    <li>Al terminar, recibes tu código, tu QR y el acceso a tu portal de vendedor.</li>
+  </ol>
+  <p style="font-size: 13px; color: #666;">No tienes que hacer nada más por ahora. Si tienes dudas, responde a este correo.</p>`);
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      replyTo: "info@victorcfo.com",
+      subject: "Recibimos tu solicitud — VICTOR CFO",
+      text: texto,
+      html,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
+export async function sendSocioNuevaSolicitudAJoelEmail(params: {
+  nombre: string;
+  email: string;
+  telefono: string | null;
+  tipo: string;
+  comoPromociona: string | null;
+  tieneResume: boolean;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  const { nombre, email, telefono, tipo, comoPromociona, tieneResume } = params;
+
+  const texto =
+    `Nueva solicitud al Programa de Socios.\n\n` +
+    `Nombre: ${nombre}\nEmail: ${email}\nTeléfono: ${telefono ?? "—"}\nTipo: ${tipo}\n` +
+    `Currículum: ${tieneResume ? "adjunto (verlo en Ventas)" : "no subió"}\n\n` +
+    `Cómo planea promocionar:\n${comoPromociona ?? "—"}\n\n` +
+    `Revísala en ${SITE_URL}/dashboard/ventas`;
+
+  const html = envolverCorreoSocio(`
+  <p style="font-size: 14px;"><strong>Nueva solicitud al Programa de Socios</strong></p>
+  <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+    <tr><td style="padding: 3px 0; color: #999; width: 90px;">Nombre</td><td>${escapeHtml(nombre)}</td></tr>
+    <tr><td style="padding: 3px 0; color: #999;">Email</td><td>${escapeHtml(email)}</td></tr>
+    <tr><td style="padding: 3px 0; color: #999;">Teléfono</td><td>${escapeHtml(telefono ?? "—")}</td></tr>
+    <tr><td style="padding: 3px 0; color: #999;">Tipo</td><td>${escapeHtml(tipo)}</td></tr>
+    <tr><td style="padding: 3px 0; color: #999;">Currículum</td><td>${tieneResume ? "Adjunto (verlo en Ventas)" : "No subió"}</td></tr>
+  </table>
+  <div style="background: #f7f7f7; border-radius: 8px; padding: 12px; font-size: 13px; white-space: pre-wrap; margin: 12px 0;">${escapeHtml(comoPromociona ?? "—")}</div>
+  <p style="text-align: center;"><a href="${SITE_URL}/dashboard/ventas" style="color: #1D9E75;">Revisar en Ventas</a></p>`);
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: "info@victorcfo.com",
+      replyTo: email,
+      subject: `[Nueva solicitud de socio] ${nombre}`,
+      text: texto,
+      html,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
+// Aprobación → pide completar documentos (contrato + datos de pago). El
+// código, el QR y el PIN se mandan DESPUÉS, al completar (ver
+// app/api/socios/pago/[token]/route.ts).
+export async function sendSocioDocumentosEmail(params: {
+  toEmail: string;
+  toName: string | null;
+  token: string;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  const { toEmail, toName, token } = params;
+  const link = `${SITE_URL}/socios/pago/${token}`;
+  const saludo = toName ? `Hola ${toName},` : "Hola,";
+
+  const texto =
+    `${saludo}\n\n` +
+    `¡Buenas noticias! Tu solicitud fue aprobada por el equipo de VICTOR CFO.\n\n` +
+    `Último paso: completa tus documentos en este link privado (toma unos 5 minutos):\n${link}\n\n` +
+    `Ahí vas a:\n` +
+    `1. Leer y aceptar el Contrato de Servicios Independientes.\n` +
+    `2. Dar tus datos de contratista (nombre legal, SSN o EIN y dirección).\n` +
+    `3. Dar los datos de tu cuenta bancaria para pagarte tus comisiones por ACH.\n\n` +
+    `Cuando termines te enviaremos tu código personal, tu QR y el acceso a tu portal de vendedor.\n\n` +
+    `— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const html = envolverCorreoSocio(`
+  <p>${toName ? `Hola, <strong>${escapeHtml(toName)}</strong>,` : "Hola,"}</p>
+  <p>¡Buenas noticias! Tu solicitud fue aprobada por el equipo de VICTOR CFO.</p>
+  <p>Último paso: completa tus documentos en tu link privado (toma unos 5 minutos).</p>
+  <p style="text-align: center; margin: 24px 0;"><a href="${link}" style="background: #1D9E75; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 9999px; font-size: 14px; font-weight: 600; display: inline-block;">Completar mis documentos</a></p>
+  <ol style="padding-left: 20px; font-size: 14px;">
+    <li>Leer y aceptar el Contrato de Servicios Independientes.</li>
+    <li>Dar tus datos de contratista (nombre legal, SSN o EIN y dirección).</li>
+    <li>Dar los datos de tu cuenta bancaria para pagarte tus comisiones por ACH.</li>
+  </ol>
+  <p style="font-size: 13px; color: #666;">Cuando termines te enviamos tu código personal, tu QR y el acceso a tu portal de vendedor.</p>`);
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      replyTo: "info@victorcfo.com",
+      subject: "Fuiste aprobado — completa tus documentos de VICTOR CFO",
+      text: texto,
+      html,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}

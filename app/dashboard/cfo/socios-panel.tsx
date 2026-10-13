@@ -11,6 +11,12 @@ import { useMemo, useState } from "react";
 // dejan constancia o te dan lo que necesitas para transferir por fuera de
 // la app (Mercury).
 
+// Número para wa.me: solo dígitos; si son 10 (Puerto Rico / EE. UU.) antepone 1.
+function waNumero(tel: string): string {
+  const d = tel.replace(/\D/g, "");
+  return d.length === 10 ? `1${d}` : d;
+}
+
 export type SocioFila = {
   id: string;
   tipo: string;
@@ -25,6 +31,10 @@ export type SocioFila = {
   datosPagoCompletados: boolean;
   bankName: string | null;
   accountLast4: string | null;
+  // Solicitud con currículum + documentos (migración 0151, 13 oct 2026)
+  tieneResume: boolean;
+  contratoAceptado: boolean;
+  documentosCompletos: boolean;
 };
 
 export type ComisionFila = {
@@ -251,6 +261,25 @@ export default function SociosPanel({
                         <p className="truncate font-medium">{s.nombre} <span className="text-[11px] text-muted">· {TIPO_LABEL[s.tipo] ?? s.tipo}</span></p>
                         <p className="truncate text-[11px] text-muted">{s.email}{s.telefono ? ` · ${s.telefono}` : ""}</p>
                         {s.comoPromociona && <p className="mt-1 text-[11px] text-muted">&quot;{s.comoPromociona}&quot;</p>}
+                        <div className="mt-1 flex gap-3 text-[11px]">
+                          {s.tieneResume ? (
+                            <a
+                              href={`/api/socios/${s.id}/resume`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium text-teal"
+                            >
+                              Ver currículum
+                            </a>
+                          ) : (
+                            <span className="text-muted">Sin currículum</span>
+                          )}
+                          {s.telefono && (
+                            <a href={`https://wa.me/${waNumero(s.telefono)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-teal">
+                              WhatsApp
+                            </a>
+                          )}
+                        </div>
                       </div>
                       <div className="flex shrink-0 gap-1">
                         <button
@@ -343,24 +372,44 @@ export default function SociosPanel({
                         </div>
                       </div>
 
-                      {/* Datos de pago: si no los ha llenado, dale el link para mandarle;
-                          si ya los llenó, muestra ···last4 con opción de revelar completo. */}
+                      {/* Documentos (contrato + datos de pago): si faltan, link para mandarle
+                          y botón de WhatsApp con el mensaje listo; si ya los llenó, muestra
+                          ···last4 con opción de revelar completo. */}
                       <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
-                        {s.datosPagoCompletados ? (
-                          <span className="text-muted">
-                            🏦 {s.bankName ?? "Banco"} ···{s.accountLast4}
-                          </span>
-                        ) : (
-                          <span className="text-amb">⚠️ Falta que llene sus datos de pago</span>
-                        )}
+                        <div className="min-w-0">
+                          {s.tipo === "vendedor" && (
+                            <p className={s.contratoAceptado ? "text-muted" : "text-amb"}>
+                              {s.contratoAceptado ? "✅ Contrato aceptado" : "⚠️ Falta aceptar el contrato"}
+                            </p>
+                          )}
+                          {s.datosPagoCompletados ? (
+                            <p className="text-muted">
+                              🏦 {s.bankName ?? "Banco"} ···{s.accountLast4}
+                            </p>
+                          ) : (
+                            <p className="text-amb">⚠️ Falta que llene sus datos de pago</p>
+                          )}
+                        </div>
                         <div className="flex shrink-0 gap-1">
-                          {!s.datosPagoCompletados && linkPago && (
+                          {!s.documentosCompletos && linkPago && (
                             <button
                               onClick={() => copiarLink(linkPago, `pago-${s.id}`)}
                               className="rounded-pill border border-border px-2 py-0.5 font-medium text-muted"
                             >
-                              {copiado === `pago-${s.id}` ? "¡Copiado!" : "Copiar link de pago"}
+                              {copiado === `pago-${s.id}` ? "¡Copiado!" : "Copiar link"}
                             </button>
+                          )}
+                          {!s.documentosCompletos && linkPago && s.telefono && (
+                            <a
+                              href={`https://wa.me/${waNumero(s.telefono)}?text=${encodeURIComponent(
+                                `Hola ${s.nombre.split(" ")[0]}, ¡fuiste aprobado en VICTOR CFO! Completa tus documentos (contrato y datos de pago) aquí: ${linkPago}`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded-pill border border-teal px-2 py-0.5 font-medium text-teal"
+                            >
+                              Avisar por WhatsApp
+                            </a>
                           )}
                           {s.datosPagoCompletados && !revelado && (
                             <button

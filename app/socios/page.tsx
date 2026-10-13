@@ -16,6 +16,7 @@ export default function SociosPage() {
   const [tipo, setTipo] = useState<"cpa" | "influencer" | "otro">("otro");
   const [comoPromociona, setComoPromociona] = useState("");
   const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [resume, setResume] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [enviado, setEnviado] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +27,18 @@ export default function SociosPage() {
       setError("Completa tu nombre y email para continuar.");
       return;
     }
+    if (!telefono.trim()) {
+      setError("Pon tu número de WhatsApp — por ahí te avisamos si eres aprobado.");
+      return;
+    }
+    if (!resume) {
+      setError("Sube tu currículum (PDF o Word) para continuar.");
+      return;
+    }
+    if (resume.size > 4 * 1024 * 1024) {
+      setError("El currículum pesa más de 4 MB — usa un archivo más liviano.");
+      return;
+    }
     if (!aceptaTerminos) {
       setError("Tienes que aceptar los Términos del Programa de Socios para continuar.");
       return;
@@ -34,18 +47,16 @@ export default function SociosPage() {
     setLoading(true);
     setError(null);
 
-    const res = await fetch("/api/socios", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        nombre: nombre.trim(),
-        email: email.trim(),
-        telefono: telefono.trim() || null,
-        tipo,
-        comoPromociona: comoPromociona.trim() || null,
-        aceptaTerminos,
-      }),
-    });
+    // multipart/form-data para poder adjuntar el currículum (13 oct 2026).
+    const datos = new FormData();
+    datos.append("nombre", nombre.trim());
+    datos.append("email", email.trim());
+    datos.append("telefono", telefono.trim());
+    datos.append("tipo", tipo);
+    datos.append("comoPromociona", comoPromociona.trim());
+    datos.append("aceptaTerminos", String(aceptaTerminos));
+    datos.append("resume", resume);
+    const res = await fetch("/api/socios", { method: "POST", body: datos });
     const json = await res.json().catch(() => null);
     setLoading(false);
 
@@ -67,9 +78,15 @@ export default function SociosPage() {
           <div className="vc-card">
             <p className="mb-2 text-sm font-medium">¡Solicitud enviada!</p>
             <p className="text-xs text-muted">
-              Recibimos tu información. Te vamos a contactar por email en los próximos días para confirmar tu código
-              de socio y explicarte cómo funciona el pago de comisiones.
+              Recibimos tu información y tu currículum. Te mandamos un correo con los próximos pasos (revisa también
+              tu carpeta de spam).
             </p>
+            <ol className="mt-3 list-decimal space-y-1 pl-4 text-left text-xs text-muted">
+              <li>El equipo de VICTOR CFO revisa tu solicitud.</li>
+              <li>Si eres aprobado, te avisamos por correo y por WhatsApp.</li>
+              <li>Completas tus documentos (contrato y datos de pago) desde un link privado.</li>
+              <li>Recibes tu código, tu QR y el acceso a tu portal.</li>
+            </ol>
           </div>
         </div>
       </div>
@@ -146,9 +163,10 @@ export default function SociosPage() {
           <input
             className="vc-input"
             type="tel"
-            placeholder="Teléfono (opcional)"
+            placeholder="Teléfono / WhatsApp"
             value={telefono}
             onChange={(e) => setTelefono(e.target.value)}
+            required
           />
           <textarea
             className="vc-input"
@@ -158,6 +176,18 @@ export default function SociosPage() {
             onChange={(e) => setComoPromociona(e.target.value)}
             required
           />
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted">Currículum (PDF o Word, máx. 4 MB)</label>
+            <input
+              className="vc-input !py-2 text-xs"
+              type="file"
+              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={(e) => setResume(e.target.files?.[0] ?? null)}
+              required
+            />
+            {resume && <p className="mt-1 truncate text-[11px] text-teal">{resume.name}</p>}
+          </div>
 
           <label className="flex items-start gap-2 text-xs text-muted">
             <input

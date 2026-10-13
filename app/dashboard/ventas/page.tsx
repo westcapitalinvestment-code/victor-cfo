@@ -49,7 +49,7 @@ export default async function VentasPage() {
     admin
       .from("socios")
       .select(
-        "id, tipo, nombre, email, telefono, como_promociona, codigo, estado, created_at, payment_token, datos_pago_completados_at, bank_name, account_last4"
+        "id, tipo, nombre, email, telefono, como_promociona, codigo, estado, created_at, payment_token, datos_pago_completados_at, bank_name, account_last4, resume_key, contrato_aceptado_at, documentos_completados_at"
       )
       .order("created_at", { ascending: false }),
     admin.from("socios_comisiones").select("id, socio_id, plan, comision_centavos, estado, created_at"),
@@ -178,6 +178,9 @@ export default async function VentasPage() {
           datosPagoCompletados: !!s.datos_pago_completados_at,
           bankName: s.bank_name,
           accountLast4: s.account_last4,
+          tieneResume: !!s.resume_key,
+          contratoAceptado: !!s.contrato_aceptado_at,
+          documentosCompletos: !!s.documentos_completados_at,
         }))}
         comisiones={(comisionesSocios ?? []).map((c) => {
           const retencion = (retencionesVendedor ?? []).find((r) => r.comision_id === c.id);
