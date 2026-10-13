@@ -642,7 +642,10 @@ function PagosTab({
         // respaldo real si hay un Certificado de Relevo VIGENTE archivado —
         // Sección 1062.03(g). Si alguien bajó el % a mano sin eso, se marca
         // la fila para bloquear "Registrar corrida" más abajo.
-        const relevoOk = pct >= 10 || estadoRelevo(v, fechaPago) === "vigente";
+        // 13 oct 2026: tampoco se bloquea si el acumulado del año (con este
+        // pago) no pasa de $500 — no hay base sujeta a retención, el % es irrelevante.
+        const relevoOk =
+          pct >= 10 || estadoRelevo(v, fechaPago) === "vigente" || acumuladoPrevio + bruto <= UMBRAL_DECLARAR_DOLARES;
         return { vendor: v, bruto, pct, retenido, neto, relevoOk };
       })
       .filter((f) => f.bruto > 0);
@@ -955,10 +958,21 @@ function PagosTab({
                       {formatMoney(brutoNum > 0 ? neto : 0)}
                     </span>
                   </div>
-                  <p className="mt-1.5 pl-10 text-[11px] text-red">
-                    ⚠️ Le estás aplicando {pctNum}% pero no tiene Certificado de Relevo vigente archivado — sin ese papel
-                    Hacienda exige el 10% completo. Súbelo en "Contratistas" o pon el % en 10 para poder registrar.
-                  </p>
+                  {(acumuladoAnual.get(v.id) ?? 0) + brutoNum <= UMBRAL_DECLARAR_DOLARES ? (
+                    // 13 oct 2026, pedido de Joel: si el acumulado del año no
+                    // pasa de $500 no hay base sujeta a retención (ver
+                    // retencionMarginal), así que el % no cambia nada y no se
+                    // bloquea — p.ej. un software que solo se deduce.
+                    <p className="mt-1.5 pl-10 text-[11px] text-amb">
+                      ℹ️ Sin Certificado de Relevo, pero no pasa de $500 en el año ({formatMoney((acumuladoAnual.get(v.id) ?? 0) + brutoNum)}):
+                      no hay retención que aplicar y puedes registrar la corrida igual. Si luego pasa de $500, necesitarás el Relevo o el 10%.
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 pl-10 text-[11px] text-red">
+                      ⚠️ Le estás aplicando {pctNum}% pero no tiene Certificado de Relevo vigente archivado — sin ese papel
+                      Hacienda exige el 10% completo. Súbelo en "Contratistas" o pon el % en 10 para poder registrar.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <>
