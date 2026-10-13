@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { esFounder } from "@/lib/founder";
 import SociosPanel from "../cfo/socios-panel";
+import ContablesPanel from "./contables-panel";
 
 // Ventas (13 oct 2026, pedido de Joel: "sácalo de CFO y ponme Ventas como
 // penúltimo; ahí va todo lo que tenga que ver con ventas, socios y
@@ -13,6 +14,16 @@ import SociosPanel from "../cfo/socios-panel";
 // políticas de RLS para usuarios normales.
 function fmt(centavos: number) {
   return `$${(centavos / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function Tarjeta({ titulo, valor, nota }: { titulo: string; valor: string; nota?: string }) {
+  return (
+    <div className="vc-card">
+      <p className="text-[10px] uppercase tracking-wide text-muted">{titulo}</p>
+      <p className="mt-1 text-lg font-medium">{valor}</p>
+      {nota && <p className="text-[10px] text-muted">{nota}</p>}
+    </div>
+  );
 }
 
 export default async function VentasPage() {
@@ -67,13 +78,89 @@ export default async function VentasPage() {
     clientesPorFirma.set(id, actual);
   }
 
+  // ---- Tarjetas de producción (vendedores) ----
+  // Solo cuentan clientes cuyo usuario sigue con plan activo (en prueba
+  // también cuenta como activo, igual que el resto del dashboard).
+  const vendedoresIds = new Set((socios ?? []).filter((s) => s.tipo === "vendedor" && s.estado === "aprobado").map((s) => s.id));
+  const filasVendedor = (vendedorClientes ?? []).filter((v) => vendedoresIds.has(v.socio_id));
+  const referidosIds = filasVendedor.map((v) => v.referred_id).filter(Boolean) as string[];
+  const { data: usuariosReferidos } = referidosIds.length
+    ? await admin.from("users").select("id, plan_status").in("id", referidosIds)
+    : { data: [] as { id: string; plan_status: string | null }[] };
+  const activosSet = new Set((usuariosReferidos ?? []).filter((u) => u.plan_status === "active").map((u) => u.id));
+
+  const ingresoMensualFila = (v: (typeof filasVendedor)[number]) => {
+    const setenta = Number(v.setenta_centavos);
+    const treinta = Number(v.treinta_centavos);
+    if (v.modelo === "unico") {
+      const real = v.monto_base_centavos != null ? Number(v.monto_base_centavos) : setenta;
+      return v.ciclo === "anual" ? Math.round(real / 12) : real;
+    }
+    return setenta + treinta;
+  };
+
+  const clientesActivosVendedores = filasVendedor.filter((v) => activosSet.has(v.referred_id as string));
+  const mrrVendedores = clientesActivosVendedores.reduce((sum, v) => sum + ingresoMensualFila(v), 0);
+  const treintaPorDeber = filasVendedor
+    .filter((v) => v.treinta_estado === "pendiente")
+    .reduce((sum, v) => sum + Number(v.treinta_centavos), 0);
+
+  const comisionesVendedor = (comisionesSocios ?? []).filter((c) => vendedoresIds.has(c.socio_id));
+  const retencionDe = (comisionId: string) =>
+    Number((retencionesVendedor ?? []).find((r) => r.comision_id === comisionId)?.retention_centavos ?? 0);
+  const comisionNeto = (c: (typeof comisionesVendedor)[number]) => Number(c.comision_centavos) - retencionDe(c.id);
+  const pagadoVendedores = comisionesVendedor.filter((c) => c.estado === "pagada").reduce((sum, c) => sum + comisionNeto(c), 0);
+  const porPagarVendedores = comisionesVendedor.filter((c) => c.estado === "pendiente").reduce((sum, c) => sum + comisionNeto(c), 0);
+
+  const prospectosDeVendedores = (prospectosVendedor ?? []).filter((p) => vendedoresIds.has(p.socio_id as string));
+  const prosVigentes = prospectosDeVendedores.filter((p) => p.estado === "vigente").length;
+  const prosConvertidos = prospectosDeVendedores.filter((p) => p.estado === "convertido").length;
+
+  // ---- Tarjetas de producción (contables) ----
+  const PRECIO_FIRMA_CENTAVOS = 6000; // $60/mes (40% menos que $99.99), ver lib/stripe.ts
+  const contablesFilas = (firmas ?? []).map((f) => {
+    const c = clientesPorFirma.get(f.id) ?? { total: 0, activos: 0 };
+    return {
+      id: f.id as string,
+      nombre: (f.full_name || f.email || "Contable") as string,
+      email: (f.email || "") as string,
+      registroComerciante: (f.firma_registro_comerciante as string | null) ?? null,
+      clientesActivos: c.activos,
+      clientesInvitados: c.total,
+      seats: Number(f.firma_seats_activos ?? 0),
+      ingresoMensualCentavos: c.activos * PRECIO_FIRMA_CENTAVOS,
+    };
+  });
+  const clientesActivosContables = contablesFilas.reduce((sum, c) => sum + c.clientesActivos, 0);
+  const mrrContables = clientesActivosContables * PRECIO_FIRMA_CENTAVOS;
+
   return (
     <div className="vc-shell">
       <div className="mb-1 flex items-center gap-2">
         <h1 className="text-lg font-medium">Ventas</h1>
         <span className="rounded-pill border border-teal px-2 py-0.5 text-[10px] font-medium text-teal">Ops</span>
       </div>
-      <p className="mb-4 text-xs text-muted">Vendedores, socios y contables en un solo lugar.</p>
+      <p className="mb-3 text-xs text-muted">Vendedores, socios y contables en un solo lugar.</p>
+
+      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">Producción — Vendedores</p>
+      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <Tarjeta titulo="Ingreso mensual generado" valor={fmt(mrrVendedores)} nota="MRR de clientes activos" />
+        <Tarjeta titulo="Clientes activos" valor={String(clientesActivosVendedores.length)} nota={`${filasVendedor.length} traídos en total`} />
+        <Tarjeta titulo="Comisión pagada (neto)" valor={fmt(pagadoVendedores)} nota="a la fecha" />
+        <Tarjeta titulo="Por pagar ahora (neto)" valor={fmt(porPagarVendedores)} nota="comisiones pendientes" />
+        <Tarjeta titulo="30% por deber" valor={fmt(treintaPorDeber)} nota="si llegan al 3er pago" />
+        <Tarjeta titulo="Vendedores activos" valor={String(vendedoresIds.size)} nota="aprobados" />
+        <Tarjeta titulo="Prospectos vigentes" valor={String(prosVigentes)} nota="en ventana de 60 días" />
+        <Tarjeta titulo="Prospectos convertidos" valor={String(prosConvertidos)} nota="se hicieron clientes" />
+      </div>
+
+      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">Producción — Contables</p>
+      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <Tarjeta titulo="Ingreso mensual generado" valor={fmt(mrrContables)} nota="est. a $60 por cliente" />
+        <Tarjeta titulo="Clientes activos" valor={String(clientesActivosContables)} nota="invitados por contables" />
+        <Tarjeta titulo="Contables activados" valor={String(contablesFilas.length)} nota="VICTOR Accountant" />
+        <Tarjeta titulo="Ingreso total ventas" valor={fmt(mrrVendedores + mrrContables)} nota="vendedores + contables / mes" />
+      </div>
 
       {/* Programa de Socios: solicitudes, vendedores, comisiones, prospectos y pagos */}
       <SociosPanel
@@ -122,41 +209,7 @@ export default async function VentasPage() {
       />
 
       {/* Contables: VICTOR Accountant (40% menos en Business para clientes que invitan) */}
-      <div className="vc-card mt-3">
-        <p className="mb-1 text-sm font-medium">Contables — VICTOR Accountant ({(firmas ?? []).length})</p>
-        <p className="mb-3 text-[11px] text-muted">
-          Business a $60/mes (40% menos) por cada cliente que invitan. Los addons se facturan aparte al cliente.
-        </p>
-        {(firmas ?? []).length === 0 ? (
-          <p className="py-2 text-center text-sm text-muted">Ningún contable activado todavía.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {(firmas ?? []).map((f) => {
-              const c = clientesPorFirma.get(f.id) ?? { total: 0, activos: 0 };
-              const seats = Number(f.firma_seats_activos ?? 0);
-              return (
-                <div key={f.id} className="rounded-lg border border-border p-2 text-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{f.full_name || f.email}</p>
-                      <p className="truncate text-[11px] text-muted">
-                        {f.email}
-                        {f.firma_registro_comerciante ? ` · Reg. Comerciante ${f.firma_registro_comerciante}` : ""}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right text-[11px] text-muted">
-                      <p>{c.activos} clientes activos ({c.total} invitados)</p>
-                      <p>
-                        Facturado al contable (est. a $60):<span className="font-medium text-white">{fmt(seats * 6000)}/mes</span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <ContablesPanel contables={contablesFilas} />
     </div>
   );
 }

@@ -136,6 +136,15 @@ export default function SociosPanel({
   const aprobados = socios.filter((s) => s.estado === "aprobado");
   const suspendidos = socios.filter((s) => s.estado === "suspendido");
 
+  // Búsqueda (Ventas, 13 oct 2026): por nombre, email, código o tipo.
+  const [busqueda, setBusqueda] = useState("");
+  const termino = busqueda.trim().toLowerCase();
+  const aprobadosFiltrados = termino
+    ? aprobados.filter((s) =>
+        [s.nombre, s.email, s.codigo ?? "", TIPO_LABEL[s.tipo] ?? s.tipo].some((v) => v.toLowerCase().includes(termino))
+      )
+    : aprobados;
+
   const comisionesPorSocio = useMemo(() => {
     const mapa = new Map<string, ComisionFila[]>();
     for (const c of comisiones) {
@@ -277,12 +286,23 @@ export default function SociosPanel({
 
           {/* Socios activos — código + link de pago, comisiones pendientes/pagadas y alerta de 1062.03 */}
           <div>
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">Socios activos</p>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted">Socios activos</p>
+              <input
+                type="search"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar vendedor o socio…"
+                className="vc-input !w-56 !py-1 text-xs"
+              />
+            </div>
             {aprobados.length === 0 ? (
               <p className="py-2 text-center text-sm text-muted">Ninguno aprobado todavía.</p>
+            ) : aprobadosFiltrados.length === 0 ? (
+              <p className="py-2 text-center text-sm text-muted">Sin resultados para “{busqueda}”.</p>
             ) : (
               <div className="flex flex-col gap-2">
-                {aprobados.map((s) => {
+                {aprobadosFiltrados.map((s) => {
                   const propias = comisionesPorSocio.get(s.id) ?? [];
                   const pendiente = propias.filter((c) => c.estado === "pendiente");
                   const pagadasEsteAño = propias.filter(
