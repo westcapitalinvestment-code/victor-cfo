@@ -965,12 +965,12 @@ function PagosTab({
                     // bloquea — p.ej. un software que solo se deduce.
                     <p className="mt-1.5 pl-10 text-[11px] text-amb">
                       ℹ️ Sin Certificado de Relevo, pero no pasa de $500 en el año ({formatMoney((acumuladoAnual.get(v.id) ?? 0) + brutoNum)}):
-                      no hay retención que aplicar y puedes registrar la corrida igual. Si luego pasa de $500, necesitarás el Relevo o el 10%.
+                      no hay retención que aplicar. Si luego pasa de $500, necesitarás el Relevo o el 10%.
                     </p>
                   ) : (
                     <p className="mt-1.5 pl-10 text-[11px] text-red">
                       ⚠️ Le estás aplicando {pctNum}% pero no tiene Certificado de Relevo vigente archivado — sin ese papel
-                      Hacienda exige el 10% completo. Súbelo en "Contratistas" o pon el % en 10 para poder registrar.
+                      Hacienda exige el 10% completo. Súbelo en "Contratistas" o pon el % en 10. Puedes registrar igual, pero queda bajo tu responsabilidad.
                     </p>
                   )}
                 </div>
@@ -1079,12 +1079,12 @@ function PagosTab({
 
         {filasConProblemaRelevo.length > 0 && (
           <p className="mt-2 text-[11px] text-red">
-            ⚠️ No se puede registrar la corrida: {filasConProblemaRelevo.length === 1 ? "hay un contratista" : `hay ${filasConProblemaRelevo.length} contratistas`} con % reducido sin Relevo vigente (marcados arriba en rojo).
+            ⚠️ {filasConProblemaRelevo.length === 1 ? "Hay un contratista" : `Hay ${filasConProblemaRelevo.length} contratistas`} con % reducido sin Relevo vigente (marcados arriba en rojo). Puedes registrar la corrida igual, pero Hacienda podría exigir el 10% completo.
           </p>
         )}
         <button
           className="vc-btn-primary mt-3"
-          disabled={filas.length === 0 || guardando || filasConProblemaRelevo.length > 0}
+          disabled={filas.length === 0 || guardando}
           onClick={() => setMostrarConfirmacion(true)}
         >
           {guardando ? "Guardando..." : `Registrar corrida${filas.length > 0 ? ` (${filas.length})` : ""}`}
