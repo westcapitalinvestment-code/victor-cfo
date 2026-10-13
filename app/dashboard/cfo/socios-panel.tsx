@@ -153,13 +153,13 @@ export default function SociosPanel({
     return mapa;
   }, [vendedorClientes]);
 
-  async function actualizarSocio(id: string, estado: "aprobado" | "suspendido") {
+  async function actualizarSocio(id: string, estado: "aprobado" | "suspendido", tipo?: "vendedor") {
     setCargando(id);
     setError(null);
     const res = await fetch(`/api/socios/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ estado }),
+      body: JSON.stringify(tipo ? { estado, tipo } : { estado }),
     });
     const json = await res.json().catch(() => null);
     setCargando(null);
@@ -169,7 +169,7 @@ export default function SociosPanel({
     }
     setSocios((prev) =>
       prev.map((s) =>
-        s.id === id ? { ...s, estado, codigo: json?.codigo ?? s.codigo, paymentToken: json?.paymentToken ?? s.paymentToken } : s
+        s.id === id ? { ...s, estado, ...(tipo ? { tipo } : {}), codigo: json?.codigo ?? s.codigo, paymentToken: json?.paymentToken ?? s.paymentToken } : s
       )
     );
   }
@@ -248,6 +248,15 @@ export default function SociosPanel({
                         >
                           {cargando === s.id ? "..." : "Aprobar"}
                         </button>
+                        {s.tipo !== "vendedor" && (
+                          <button
+                            onClick={() => actualizarSocio(s.id, "aprobado", "vendedor")}
+                            disabled={cargando === s.id}
+                            className="rounded-pill border border-teal bg-teal px-2 py-1 text-[11px] font-medium text-white"
+                          >
+                            Aprobar como Vendedor
+                          </button>
+                        )}
                         <button
                           onClick={() => actualizarSocio(s.id, "suspendido")}
                           disabled={cargando === s.id}
