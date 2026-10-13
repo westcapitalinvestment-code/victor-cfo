@@ -2011,7 +2011,7 @@ export async function sendSocioAprobadoEmail(params: {
     <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
   </div>
   <p>${htmlSeguro ? `Hola, <strong>${htmlSeguro}</strong>,` : `Hola,`}</p>
-  <p>🎉 ¡Ya estás aprobado! Este es tu link personal — cualquier negocio que se registre por aquí queda conectado a ti automáticamente.</p>
+  <p>¡Ya estás aprobado! Este es tu link personal — cualquier negocio que se registre por aquí queda conectado a ti automáticamente.</p>
   <div style="text-align: center; margin: 24px 0;">
     <div style="display: inline-block; background: #eefaf4; border: 1px solid #1D9E75; border-radius: 12px; padding: 14px 24px;">
       <div style="font-size: 12px; color: #14543d;">Tu código</div>
