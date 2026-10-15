@@ -42,7 +42,10 @@ function LoginForm() {
           supabase.from("account_members").select("id").ilike("member_email", user.email).eq("role", "admin").eq("active", true).limit(1).maybeSingle(),
           supabase.from("account_members").select("id").ilike("member_email", user.email).eq("role", "cpa").eq("active", true).limit(1).maybeSingle(),
         ]);
-        router.replace(membresiaAdmin ? "/admin" : membresiaCpa ? "/cpa" : "/dashboard");
+        // 15 oct 2026: contables que abrieron cuenta por /registro/cpa (sin
+        // invitación) traen cuenta_tipo='contable' en su metadata.
+        const esContable = user.user_metadata?.cuenta_tipo === "contable";
+        router.replace(membresiaAdmin ? "/admin" : membresiaCpa || esContable ? "/cpa" : "/dashboard");
         return;
       }
       router.replace("/dashboard");
@@ -102,7 +105,7 @@ function LoginForm() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       setError(error.message);
@@ -143,7 +146,9 @@ function LoginForm() {
         .maybeSingle(),
     ]);
 
-    const destino = membresiaAdmin ? "/admin" : membresiaCpa ? "/cpa" : "/dashboard";
+    // Contable que abrió cuenta por /registro/cpa (sin invitación todavía).
+    const esContable = signInData?.user?.user_metadata?.cuenta_tipo === "contable";
+    const destino = membresiaAdmin ? "/admin" : membresiaCpa || esContable ? "/cpa" : "/dashboard";
 
     // MFA (4 sept 2026, migración 0068): la contraseña correcta solo sube
     // la sesión a aal1 — si la cuenta tiene un factor TOTP verificado,
