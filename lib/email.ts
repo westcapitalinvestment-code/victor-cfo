@@ -693,6 +693,7 @@ export async function sendInvoiceEmail(params: {
   ${portalUrl ? `<p style="font-size: 13px;"><a href="${portalUrl}" style="color: #1D9E75;">Ver todas mis facturas</a></p>` : ""}
   <p>¡Gracias por tu confianza!</p>
   <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #888;">¿Tienes un negocio? Factura y cobra fácil con <a href="${SITE_URL}/?utm_source=email-factura" style="color: #1D9E75;">VICTOR CFO</a>.</p>
   <p style="font-size: 11px; color: #bbb;">Enviado a través de VICTOR CFO<br/><a href="${SITE_URL}" style="color: #bbb;">victorcfo.com</a></p>
 </div>`.trim();
 
@@ -1228,6 +1229,7 @@ export async function sendFollowUpReminderEmail(params: {
   <p>Si quieres coordinar, solo contesta este correo y lo agendamos.</p>
   <p>¡Gracias por tu confianza!</p>
   <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #888;">¿Tienes un negocio? Factura y cobra fácil con <a href="${SITE_URL}/?utm_source=email-recordatorio" style="color: #1D9E75;">VICTOR CFO</a>.</p>
   <p style="font-size: 11px; color: #bbb;">Enviado a través de VICTOR CFO<br/><a href="${SITE_URL}" style="color: #bbb;">victorcfo.com</a></p>
 </div>`.trim();
 

@@ -47,7 +47,7 @@ export default async function PortalClientePage({
   if (!TOKEN_RE.test(params.token)) return <Mensaje titulo="Enlace no válido" texto="Pídele a tu proveedor que te reenvíe el enlace." />;
 
   const supabase = createAdminClient();
-  const { data: cliente } = await supabase.from("clients").select("id, name, owner_id").eq("portal_token", params.token).maybeSingle();
+  const { data: cliente } = await supabase.from("clients").select("id, name").eq("portal_token", params.token).maybeSingle();
   if (!cliente) return <Mensaje titulo="Enlace no válido" texto="Pídele a tu proveedor que te reenvíe el enlace." />;
 
   const { data: filas } = await supabase
@@ -177,7 +177,7 @@ export default async function PortalClientePage({
           VICTOR CFO factura, cobra y te dice cómo van tus finanzas. Prueba gratis.
         </div>
         <a
-          href={`https://www.victorcfo.com/registro${cliente.owner_id ? `?ref=${cliente.owner_id}` : ""}`}
+          href="https://www.victorcfo.com/?utm_source=portal-cliente"
           style={{ display: "inline-block", background: "#1D9E75", color: "#fff", padding: "8px 18px", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}
         >
           Conoce VICTOR CFO
