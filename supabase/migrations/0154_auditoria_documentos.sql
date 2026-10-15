@@ -7,6 +7,8 @@
 -- hizo. audit_log sigue siendo solo lectura para los clientes: los triggers son
 -- SECURITY DEFINER.
 --
+-- Solo se audita lo compartido con el contable (compartir_contador = true).
+--
 -- Quién actuó:
 --  * Con sesión de usuario (auth.uid()): dueño si es el owner_id; si no, el rol
 --    de su fila en account_members (admin / cpa).
@@ -58,6 +60,12 @@ BEGIN
   IF r.entity_id IS NULL THEN
     RETURN NULL;
   END IF;
+  -- Solo se audita lo que se comparte con el contable (pedido de Joel). En un
+  -- UPDATE también cuenta si ANTES estaba compartido, para que quede registrado
+  -- el momento en que se dejó de compartir.
+  IF TG_OP = 'INSERT' AND NOT COALESCE(NEW.compartir_contador, false) THEN RETURN NULL; END IF;
+  IF TG_OP = 'DELETE' AND NOT COALESCE(OLD.compartir_contador, false) THEN RETURN NULL; END IF;
+  IF TG_OP = 'UPDATE' AND NOT (COALESCE(NEW.compartir_contador, false) OR COALESCE(OLD.compartir_contador, false)) THEN RETURN NULL; END IF;
 
   IF TG_OP = 'INSERT' THEN
     v_action := 'documento_creado';
@@ -101,9 +109,9 @@ DECLARE
   v_doc uuid;
 BEGIN
   v_doc := COALESCE(NEW.document_id, OLD.document_id);
-  SELECT id, owner_id, entity_id, nombre, ultimo_editor_email INTO d FROM documents WHERE id = v_doc;
-  IF NOT FOUND OR d.entity_id IS NULL THEN
-    RETURN NULL; -- documento ya borrado (cascada) o personal
+  SELECT id, owner_id, entity_id, nombre, ultimo_editor_email, compartir_contador INTO d FROM documents WHERE id = v_doc;
+  IF NOT FOUND OR d.entity_id IS NULL OR NOT COALESCE(d.compartir_contador, false) THEN
+    RETURN NULL; -- documento ya borrado (cascada), personal o no compartido
   END IF;
   SELECT * INTO a FROM audit_actor(d.owner_id, d.ultimo_editor_email);
   INSERT INTO audit_log (actor_id, actor_role, actor_email, entity_id, action, target_table, target_id, changes)
