@@ -202,7 +202,7 @@ export default async function CpaClientePage({
   const metricasFacturas = {
     emitidas: facturasDelMes.length,
     cobradas: facturasDelMes.filter((f) => f.estado === "pagada").length,
-    vencidas: (facturas ?? []).filter((f) => f.estado !== "pagada" && f.fecha_vencimiento && f.fecha_vencimiento < hoyISO)
+    vencidas: (facturas ?? []).filter((f) => f.estado !== "pagada" && f.estado !== "anulada" && f.fecha_vencimiento && f.fecha_vencimiento < hoyISO)
       .length,
     total: facturasDelMes.reduce((acc, f) => acc + Number(f.total ?? 0), 0),
   };
@@ -215,7 +215,7 @@ export default async function CpaClientePage({
   const facturasAnio = (facturas ?? []).filter(
     (f) => f.fecha_emision >= inicioAnioResultados && f.fecha_emision <= finAnioResultados
   );
-  const facturasVencidasAnio = facturasAnio.filter((f) => f.estado !== "pagada" && f.fecha_vencimiento && f.fecha_vencimiento < hoyISO);
+  const facturasVencidasAnio = facturasAnio.filter((f) => f.estado !== "pagada" && f.estado !== "anulada" && f.fecha_vencimiento && f.fecha_vencimiento < hoyISO);
   const montoFacturado = facturasAnio.reduce((acc, f) => acc + Number(f.total ?? 0), 0);
   const montoCobrado = facturasAnio.filter((f) => f.estado === "pagada").reduce((acc, f) => acc + Number(f.total ?? 0), 0);
   const resumenFacturacion = {
@@ -276,7 +276,7 @@ export default async function CpaClientePage({
   }
 
   const facturasVencidasEntidad = (facturas ?? []).filter(
-    (f) => f.estado !== "pagada" && f.fecha_vencimiento && f.fecha_vencimiento < hoyISO
+    (f) => f.estado !== "pagada" && f.estado !== "anulada" && f.fecha_vencimiento && f.fecha_vencimiento < hoyISO
   );
   if (facturasVencidasEntidad.length > 0) {
     alertasEntidad.push({

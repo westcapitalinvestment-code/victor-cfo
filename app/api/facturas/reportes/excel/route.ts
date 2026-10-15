@@ -12,7 +12,7 @@ import { formatFecha, slugificar } from "@/lib/format";
 // aplicó la pantalla) es igual a la del CSV original, solo cambia cómo se
 // escribe el archivo.
 function estaVencida(estado: string, fechaVencimiento: string | null): boolean {
-  return estado !== "pagada" && estado !== "borrador" && !!fechaVencimiento && fechaVencimiento < new Date().toISOString().slice(0, 10);
+  return estado !== "pagada" && estado !== "borrador" && estado !== "anulada" && !!fechaVencimiento && fechaVencimiento < new Date().toISOString().slice(0, 10);
 }
 
 function estadoMostrado(estado: string, fechaVencimiento: string | null): string {

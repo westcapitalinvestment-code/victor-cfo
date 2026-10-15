@@ -10,7 +10,7 @@ import { formatMoney, formatFecha, slugificar } from "@/lib/format";
 // pensado para mandarle un solo documento al CPA sin importar qué vista
 // tenía Joel abierta en pantalla al pedirlo.
 function estaVencida(estado: string, fechaVencimiento: string | null): boolean {
-  return estado !== "pagada" && estado !== "borrador" && !!fechaVencimiento && fechaVencimiento < new Date().toISOString().slice(0, 10);
+  return estado !== "pagada" && estado !== "borrador" && estado !== "anulada" && !!fechaVencimiento && fechaVencimiento < new Date().toISOString().slice(0, 10);
 }
 function estadoMostrado(estado: string, fechaVencimiento: string | null): string {
   if (estado === "pagada" || estado === "borrador") return estado;

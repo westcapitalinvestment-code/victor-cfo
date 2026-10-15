@@ -123,7 +123,7 @@ function feeEstimadoPago(total: number, metodo: string): number {
 }
 
 function hoyVencida(f: Factura): boolean {
-  return f.estado !== "pagada" && f.estado !== "borrador" && !!f.fecha_vencimiento && f.fecha_vencimiento < new Date().toISOString().slice(0, 10);
+  return f.estado !== "pagada" && f.estado !== "borrador" && f.estado !== "anulada" && !!f.fecha_vencimiento && f.fecha_vencimiento < new Date().toISOString().slice(0, 10);
 }
 
 // Fix (30 sept 2026): new Date().toISOString() es UTC — en PR, después de
@@ -214,6 +214,100 @@ export default function FacturaDetalle({
   useEffect(() => {
     if (searchParams?.get("qr") === "1") setMostrarQR(true);
   }, [searchParams]);
+
+  // Acciones estilo FreshBooks (15 oct 2026): duplicar, anular (void) y nota
+  // de crédito / reembolso. Ver app/api/facturas/[id]/{duplicar,anular,nota-credito}.
+  const [accionCargando, setAccionCargando] = useState<string | null>(null);
+  const [panelAccion, setPanelAccion] = useState<"anular" | "nota" | null>(null);
+  const [motivoAnular, setMotivoAnular] = useState("");
+  const [montoNota, setMontoNota] = useState("");
+  const [motivoNota, setMotivoNota] = useState("");
+  const [metodoReembolso, setMetodoReembolso] = useState("Transferencia");
+  const [notas, setNotas] = useState<
+    { id: string; numero: string; tipo: string; monto: number; motivo: string | null; fecha: string; metodo_reembolso: string | null }[]
+  >([]);
+  useEffect(() => {
+    let vivo = true;
+    fetch(`/api/facturas/${factura.id}/nota-credito`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (vivo && d?.ok) setNotas(d.notas ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [factura.id, factura.total]);
+
+  async function duplicarFactura() {
+    setAccionCargando("duplicar");
+    setError(null);
+    const res = await fetch(`/api/facturas/${factura.id}/duplicar`, { method: "POST" });
+    const data = await res.json().catch(() => null);
+    setAccionCargando(null);
+    if (!res.ok || !data?.ok) {
+      setError(data?.error ?? "No se pudo duplicar la factura.");
+      return;
+    }
+    router.push(`${basePath}/${data.id}`);
+    router.refresh();
+  }
+
+  const [portalCopiado, setPortalCopiado] = useState(false);
+  async function copiarLinkPortal() {
+    setError(null);
+    const res = await fetch(`/api/clientes/${factura.client_id}/portal-link`);
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.url) {
+      setError(data?.error ?? "No se pudo obtener el enlace del portal.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(data.url);
+      setPortalCopiado(true);
+      setTimeout(() => setPortalCopiado(false), 3000);
+    } catch {
+      window.prompt("Copia este enlace:", data.url);
+    }
+  }
+
+  async function anularFactura() {
+    setAccionCargando("anular");
+    setError(null);
+    const res = await fetch(`/api/facturas/${factura.id}/anular`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ motivo: motivoAnular }),
+    });
+    const data = await res.json().catch(() => null);
+    setAccionCargando(null);
+    if (!res.ok || !data?.ok) {
+      setError(data?.error ?? "No se pudo anular la factura.");
+      return;
+    }
+    setPanelAccion(null);
+    router.refresh();
+  }
+
+  async function crearNotaCredito() {
+    setAccionCargando("nota");
+    setError(null);
+    const res = await fetch(`/api/facturas/${factura.id}/nota-credito`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ monto: Number(montoNota), motivo: motivoNota, metodo_reembolso: metodoReembolso }),
+    });
+    const data = await res.json().catch(() => null);
+    setAccionCargando(null);
+    if (!res.ok || !data?.ok) {
+      setError(data?.error ?? "No se pudo crear la nota.");
+      return;
+    }
+    setPanelAccion(null);
+    setMontoNota("");
+    setMotivoNota("");
+    router.refresh();
+  }
 
   const [enviandoEmail, setEnviandoEmail] = useState(false);
   // Confirmación visible de envío (21 sept 2026, pedido de Joel: le dio
@@ -551,7 +645,7 @@ export default function FacturaDetalle({
             className={`rounded px-2 py-1 text-xs font-medium ${
               estadoTexto === "pagada"
                 ? "bg-teal text-white"
-                : estadoTexto === "vencida"
+                : estadoTexto === "vencida" || estadoTexto === "anulada"
                 ? "bg-red/10 text-red"
                 : estadoTexto === "borrador"
                 ? "bg-border text-muted"
@@ -560,6 +654,8 @@ export default function FacturaDetalle({
           >
             {estadoTexto === "pagada"
               ? "Pagada"
+              : estadoTexto === "anulada"
+              ? "Anulada"
               : estadoTexto === "vencida"
               ? "Vencida"
               : estadoTexto === "borrador"
@@ -900,7 +996,7 @@ export default function FacturaDetalle({
             <i className={`ti ${emailEnviado ? "ti-check" : "ti-mail"} text-base`} />{" "}
             {enviandoEmail ? "Enviando..." : emailEnviado ? "✓ Enviado" : "Email"}
           </button>
-          {!modoAdmin && factura.estado !== "pagada" && (
+          {!modoAdmin && factura.estado !== "pagada" && factura.estado !== "anulada" && (
             <Link
               href={`${basePath}/${factura.id}/editar`}
               className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
@@ -934,7 +1030,7 @@ export default function FacturaDetalle({
           )}
         </div>
 
-        {factura.estado !== "pagada" && factura.business_entities?.stripe_connect_charges_enabled && (
+        {factura.estado !== "pagada" && factura.estado !== "anulada" && factura.business_entities?.stripe_connect_charges_enabled && (
           // Cobro real con tarjeta (Stripe Connect Standard, migración 0065)
           // — separado de "Registrar pago" de abajo: esto genera un link de
           // verdad y el cliente paga con su tarjeta ahí mismo; el webhook de
@@ -975,7 +1071,7 @@ export default function FacturaDetalle({
           </div>
         )}
 
-        {factura.estado !== "pagada" && (
+        {factura.estado !== "pagada" && factura.estado !== "anulada" && (
           // QR de cobro en persona (28 sept 2026, pedido de Joel: "que
           // ningún cliente se vaya sin pagar porque la plataforma no
           // soporte algo") — apunta a la página pública /cobro/[id], que le
@@ -1002,7 +1098,7 @@ export default function FacturaDetalle({
           </div>
         )}
 
-        {factura.estado !== "pagada" && (
+        {factura.estado !== "pagada" && factura.estado !== "anulada" && (
           <div className="no-imprimir flex flex-col gap-2 border-t border-border pt-3">
             {factura.estado === "borrador" && (
               <button className="vc-btn-secondary" disabled={loading} onClick={() => actualizarEstado("enviada")}>
@@ -1118,6 +1214,135 @@ export default function FacturaDetalle({
             )}
           </div>
         )}
+
+        {/* Notas de crédito / reembolsos ya emitidos sobre esta factura. */}
+        {notas.length > 0 && (
+          <div className="rounded-lg border border-border p-3 text-sm">
+            <p className="mb-1.5 text-xs uppercase tracking-wide text-muted">Notas de crédito y reembolsos</p>
+            {notas.map((n) => (
+              <div key={n.id} className="flex items-start justify-between py-0.5">
+                <div>
+                  <p>
+                    {n.numero} · {n.tipo === "reembolso" ? "Reembolso" : "Crédito"} · {formatFecha(n.fecha)}
+                  </p>
+                  {(n.motivo || n.metodo_reembolso) && (
+                    <p className="text-xs text-muted">
+                      {n.motivo}
+                      {n.metodo_reembolso ? ` · devuelto por ${n.metodo_reembolso}` : ""}
+                    </p>
+                  )}
+                </div>
+                <span className="font-medium text-red">-{formatMoney(n.monto)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {factura.estado === "anulada" && (
+          <p className="rounded-lg bg-red/10 p-3 text-xs text-red">
+            Esta factura está anulada: conserva su número para tu historial y el de tu contable, pero ya no cuenta como cobrada ni pendiente.
+          </p>
+        )}
+
+        {/* Acciones estilo FreshBooks (15 oct 2026) */}
+        <div className="no-imprimir flex flex-col gap-2 border-t border-border pt-3">
+          <p className="text-xs uppercase tracking-wide text-muted">Más acciones</p>
+          <div className="flex flex-wrap gap-2">
+            <button className="vc-btn-secondary" style={{ width: "auto" }} disabled={!!accionCargando} onClick={duplicarFactura}>
+              {accionCargando === "duplicar" ? "Duplicando..." : "⧉ Duplicar"}
+            </button>
+            {factura.client_id && (
+              <button className="vc-btn-secondary" style={{ width: "auto" }} onClick={copiarLinkPortal}>
+                {portalCopiado ? "✓ Enlace copiado" : "🔗 Portal del cliente"}
+              </button>
+            )}
+            {factura.estado !== "pagada" && factura.estado !== "anulada" && (
+              <button
+                className="vc-btn-secondary"
+                style={{ width: "auto" }}
+                disabled={!!accionCargando}
+                onClick={() => setPanelAccion(panelAccion === "anular" ? null : "anular")}
+              >
+                ⊘ Anular
+              </button>
+            )}
+            {factura.estado !== "borrador" && factura.estado !== "anulada" && Number(factura.total) > 0 && (
+              <button
+                className="vc-btn-secondary"
+                style={{ width: "auto" }}
+                disabled={!!accionCargando}
+                onClick={() => setPanelAccion(panelAccion === "nota" ? null : "nota")}
+              >
+                {factura.estado === "pagada" ? "↩ Reembolso / nota de crédito" : "− Nota de crédito"}
+              </button>
+            )}
+          </div>
+
+          {panelAccion === "anular" && (
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-bg p-3">
+              <p className="text-xs text-muted">
+                La factura no se borra: queda como anulada con su número, y deja de contar como cobro pendiente. Si ya te pagaron, usa un reembolso.
+              </p>
+              <input
+                className="vc-input"
+                placeholder="Motivo (opcional)"
+                value={motivoAnular}
+                onChange={(e) => setMotivoAnular(e.target.value)}
+              />
+              <div className="flex items-center gap-3">
+                <button className="vc-btn-primary" style={{ width: "auto" }} disabled={!!accionCargando} onClick={anularFactura}>
+                  {accionCargando === "anular" ? "..." : "Confirmar anulación"}
+                </button>
+                <button className="text-xs text-muted underline" onClick={() => setPanelAccion(null)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {panelAccion === "nota" && (
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-bg p-3">
+              <p className="text-xs text-muted">
+                {factura.estado === "pagada"
+                  ? "Esta factura ya está pagada: registras un reembolso. VICTOR no mueve el dinero — devuélvelo tú por el método que escojas y aquí queda anotado."
+                  : "Baja lo que el cliente te debe. Si la nota iguala el total, la factura queda anulada."}{" "}
+                Total actual: {formatMoney(factura.total)}.
+              </p>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="vc-input"
+                placeholder="Monto (total con impuestos)"
+                value={montoNota}
+                onChange={(e) => setMontoNota(e.target.value)}
+              />
+              <input className="vc-input" placeholder="Motivo (opcional)" value={motivoNota} onChange={(e) => setMotivoNota(e.target.value)} />
+              {factura.estado === "pagada" && (
+                <select className="vc-input" value={metodoReembolso} onChange={(e) => setMetodoReembolso(e.target.value)}>
+                  {METODOS_PAGO.map((m) => (
+                    <option key={m} value={m}>
+                      Devuelto por {m}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <div className="flex items-center gap-3">
+                <button
+                  className="vc-btn-primary"
+                  style={{ width: "auto" }}
+                  disabled={!!accionCargando || !(Number(montoNota) > 0)}
+                  onClick={crearNotaCredito}
+                >
+                  {accionCargando === "nota" ? "..." : "Crear nota"}
+                </button>
+                <button className="text-xs text-muted underline" onClick={() => setPanelAccion(null)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

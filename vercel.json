@@ -33,6 +33,10 @@
       "schedule": "0 17 * * *"
     },
     {
+      "path": "/api/cron/recordatorios-cobro",
+      "schedule": "30 14 * * *"
+    },
+    {
       "path": "/api/cron/nurture-emails",
       "schedule": "0 18 * * *"
     },

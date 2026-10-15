@@ -643,12 +643,15 @@ export async function sendInvoiceEmail(params: {
   // ponemos como Reply-To — así cuando el cliente le dé "Responder", le
   // llega a Joel directo a su correo de negocio, no a VICTOR CFO.
   replyToEmail?: string | null;
+  // Portal en línea del cliente (migración 0157): si viene, el correo añade un
+  // enlace discreto a "todas tus facturas".
+  portalUrl?: string | null;
 }): Promise<{ sent: boolean; reason?: string }> {
   if (!resend) {
     return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
   }
 
-  const { clientEmail, clientName, entityName, invoiceId, invoiceNumber, dueDate, cobroTarjetaDisponible, replyToEmail } = params;
+  const { clientEmail, clientName, entityName, invoiceId, invoiceNumber, dueDate, cobroTarjetaDisponible, replyToEmail, portalUrl } = params;
   const saludoNombre = clientName || "";
   const negocio = entityName || "";
   // Nombre para mostrar personalizado por negocio — la dirección real sigue
@@ -663,6 +666,7 @@ export async function sendInvoiceEmail(params: {
     `Aquí tienes tu factura ${invoiceNumber}${negocio ? ` de ${negocio}` : ""}.${vencePart}\n\n` +
     `Puedes verla aquí:\n${pdfUrl}\n\n` +
     (cobroTarjetaDisponible ? `¿Prefieres pagar con tarjeta ahora mismo? ${pagarUrl}\n\n` : "") +
+    (portalUrl ? `Todas tus facturas en un solo lugar: ${portalUrl}\n\n` : "") +
     `¡Gracias por tu confianza!\n\n` +
     `— ${negocio || "VICTOR CFO"}\n` +
     (negocio ? `Enviado a través de VICTOR CFO · ${SITE_URL}\n` : "");
@@ -686,6 +690,7 @@ export async function sendInvoiceEmail(params: {
     }
   </div>
   <p style="font-size: 12px; color: #666;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br/><a href="${pdfUrl}" style="color: #1D9E75; word-break: break-all;">${pdfUrl}</a></p>
+  ${portalUrl ? `<p style="font-size: 13px;"><a href="${portalUrl}" style="color: #1D9E75;">Ver todas mis facturas</a></p>` : ""}
   <p>¡Gracias por tu confianza!</p>
   <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
   <p style="font-size: 11px; color: #bbb;">Enviado a través de VICTOR CFO<br/><a href="${SITE_URL}" style="color: #bbb;">victorcfo.com</a></p>
@@ -1232,6 +1237,83 @@ export async function sendFollowUpReminderEmail(params: {
       to: clientEmail,
       ...(replyToEmail ? { replyTo: replyToEmail } : {}),
       subject: `${negocio ? `${negocio}: ` : ""}¿Coordinamos tu próximo ${servicioNombre}?`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
+// Recordatorio amable de factura vencida (15 oct 2026, auditoría de
+// facturación vs FreshBooks). Lo dispara app/api/cron/recordatorios-cobro solo
+// para entidades que activaron recordatorios_cobro_activos (migración 0157).
+// A diferencia del correo de la factura, aquí SÍ va el monto y la fecha de
+// vencimiento — es un aviso de cobro, no una sorpresa en el PDF — pero el tono
+// es cordial y siempre con el link de pago si la entidad cobra con tarjeta.
+export async function sendRecordatorioCobroEmail(params: {
+  clientEmail: string;
+  clientName: string | null;
+  entityName: string | null;
+  invoiceId: string;
+  invoiceNumber: string;
+  total: number;
+  dueDate: string;
+  diasVencida: number;
+  numeroRecordatorio: number;
+  cobroTarjetaDisponible?: boolean;
+  replyToEmail?: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const { clientEmail, clientName, entityName, invoiceId, invoiceNumber, total, dueDate, diasVencida, numeroRecordatorio, cobroTarjetaDisponible, replyToEmail } = params;
+  const saludoNombre = clientName || "";
+  const negocio = entityName || "";
+  const fromRecordatorio = negocio ? `${negocio} vía VICTOR CFO <${FROM_ADDRESS}>` : FROM;
+  const pdfUrl = `${SITE_URL}/api/facturas/${invoiceId}/pdf`;
+  const pagarUrl = `${SITE_URL}/api/facturas/${invoiceId}/pagar`;
+  const montoTxt = `$${Number(total).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const venceTxt = new Date(`${dueDate}T00:00:00Z`).toLocaleDateString("es-PR", { timeZone: "UTC" });
+  const intro =
+    numeroRecordatorio <= 1
+      ? `Un recordatorio amable: la factura ${invoiceNumber}${negocio ? ` de ${negocio}` : ""} por ${montoTxt} venció el ${venceTxt}.`
+      : `Te escribimos de nuevo sobre la factura ${invoiceNumber}${negocio ? ` de ${negocio}` : ""} por ${montoTxt}, vencida desde el ${venceTxt} (${diasVencida} días).`;
+
+  const textoPlano =
+    `Hola${saludoNombre ? ` ${saludoNombre}` : ""},\n\n` +
+    `${intro} Si ya la pagaste, ignora este mensaje y gracias.\n\n` +
+    `Puedes verla aquí:\n${pdfUrl}\n\n` +
+    (cobroTarjetaDisponible ? `Pagar con tarjeta: ${pagarUrl}\n\n` : "") +
+    `Si tienes alguna duda, contesta este correo.\n\n` +
+    `— ${negocio || "VICTOR CFO"}\n`;
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <p>Hola${saludoNombre ? ` ${escapeHtml(saludoNombre)}` : ""},</p>
+  <p>${escapeHtml(intro)} Si ya la pagaste, ignora este mensaje y gracias.</p>
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="${pdfUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Ver factura</a>
+    ${
+      cobroTarjetaDisponible
+        ? `<br/><a href="${pagarUrl}" style="display: inline-block; margin-top: 10px; color: #1D9E75; font-weight: 600; text-decoration: none; font-size: 13px;">💳 Pagar con tarjeta ahora</a>`
+        : ""
+    }
+  </div>
+  <p>Si tienes alguna duda, solo contesta este correo.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 11px; color: #bbb;">Enviado a través de VICTOR CFO<br/><a href="${SITE_URL}" style="color: #bbb;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: fromRecordatorio,
+      to: clientEmail,
+      ...(replyToEmail ? { replyTo: replyToEmail } : {}),
+      subject: `${numeroRecordatorio <= 1 ? "Recordatorio" : "Aviso"}: factura ${invoiceNumber}${negocio ? ` de ${negocio}` : ""}`,
       text: textoPlano,
       html: htmlCorreo,
     });

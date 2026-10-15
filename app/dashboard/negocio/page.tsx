@@ -295,7 +295,7 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
     clients: { name: string } | null;
   }[];
   const estaVencida = (f: (typeof todasFacturas)[number]) =>
-    f.estado !== "pagada" && f.estado !== "borrador" && !!f.fecha_vencimiento && f.fecha_vencimiento < hoyISO();
+    f.estado !== "pagada" && f.estado !== "borrador" && f.estado !== "anulada" && !!f.fecha_vencimiento && f.fecha_vencimiento < hoyISO();
 
   const facturasVencidas = todasFacturas.filter(estaVencida);
 

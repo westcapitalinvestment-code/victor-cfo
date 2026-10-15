@@ -192,11 +192,11 @@ function hoyISO(): string {
 }
 
 function estaVencida(f: Factura): boolean {
-  return f.estado !== "pagada" && f.estado !== "borrador" && !!f.fecha_vencimiento && f.fecha_vencimiento < hoyISO();
+  return f.estado !== "pagada" && f.estado !== "borrador" && f.estado !== "anulada" && !!f.fecha_vencimiento && f.fecha_vencimiento < hoyISO();
 }
 
 function estadoMostrado(f: Factura): string {
-  if (f.estado === "pagada" || f.estado === "borrador") return f.estado;
+  if (f.estado === "pagada" || f.estado === "borrador" || f.estado === "anulada") return f.estado;
   return estaVencida(f) ? "vencida" : f.estado;
 }
 
@@ -206,12 +206,14 @@ function Badge({ estado }: { estado: string }) {
     enviada: "bg-teal/10 text-teal",
     pagada: "bg-teal text-white",
     vencida: "bg-red/10 text-red",
+    anulada: "bg-border text-muted line-through",
   };
   const etiquetas: Record<string, string> = {
     borrador: "Borrador",
     enviada: "Enviada",
     pagada: "Pagada",
     vencida: "Vencida",
+    anulada: "Anulada",
   };
   return (
     <span className={`rounded px-2 py-1 text-xs font-medium ${estilos[estado] ?? "bg-border text-muted"}`}>
@@ -441,7 +443,7 @@ function FacturasTab({
     return (id: string | null) => (id ? mapa.get(id) ?? "Entidad eliminada" : mapa.get(entidadId ?? "") ?? "Personal");
   }, [entidades, entidadId]);
 
-  const noBorrador = facturas.filter((f) => f.estado !== "borrador");
+  const noBorrador = facturas.filter((f) => f.estado !== "borrador" && f.estado !== "anulada");
   const facturado = noBorrador.reduce((s, f) => s + Number(f.total), 0);
   const cobradas = facturas.filter((f) => f.estado === "pagada");
   const cobrado = cobradas.reduce((s, f) => s + Number(f.total), 0);
@@ -460,6 +462,7 @@ function FacturasTab({
       if (filtro === "pendientes" && estado !== "enviada") return false;
       if (filtro === "vencidas" && estado !== "vencida") return false;
       if (filtro === "borradores" && estado !== "borrador") return false;
+      if (filtro === "anuladas" && estado !== "anulada") return false;
       if (busqueda.trim()) {
         const q = busqueda.toLowerCase();
         const nombre = f.clients?.name?.toLowerCase() ?? "";
@@ -520,6 +523,7 @@ function FacturasTab({
           <option value="pendientes">Pendientes</option>
           <option value="vencidas">Vencidas</option>
           <option value="borradores">Borradores</option>
+            <option value="anuladas">Anuladas</option>
         </select>
         {/* Cobro Rápido (28 sept 2026, pedido de Joel: "que ningún cliente
             se vaya sin pagar porque la plataforma no soporte algo") — para
@@ -635,7 +639,7 @@ function FilaFactura({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const puedeRegistrarPago = factura.estado !== "pagada" && factura.estado !== "borrador";
+  const puedeRegistrarPago = factura.estado !== "pagada" && factura.estado !== "borrador" && factura.estado !== "anulada";
 
   async function marcarPagada() {
     setLoading(true);

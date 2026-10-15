@@ -138,7 +138,8 @@ export default function LandingPricing() {
             <li>Cobra por WhatsApp, ATH Móvil Business, tarjeta o transferencia</li>
             {proExpandido && (
               <>
-                <li>Tracking de facturas pagadas y pendientes, con alertas de cobros atrasados</li>
+                <li>Tracking de facturas pagadas y pendientes, con recordatorios automáticos de cobro a tus clientes (si tú lo activas)</li>
+                <li>Anula, duplica y corrige facturas con notas de crédito o reembolsos — y un portal en línea donde cada cliente ve y paga las suyas</li>
                 <li>Bóveda, Metas y Cuentas separadas para tu negocio</li>
                 <li>VICTOR te ayuda a distinguir salario de accionista de distribución de dividendos, calcula tu IVU y da seguimiento a tus créditos pendientes</li>
                 <li>Reportes listos para tu CPA</li>

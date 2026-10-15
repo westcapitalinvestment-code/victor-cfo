@@ -117,6 +117,7 @@ export default async function CpaPortalPage() {
           .select("entity_id, fecha_vencimiento, estado")
           .in("entity_id", entityIds)
           .neq("estado", "pagada")
+          .neq("estado", "anulada")
           .lt("fecha_vencimiento", hoyISO)
       : Promise.resolve({ data: [] as never[] }),
     entityIds.length

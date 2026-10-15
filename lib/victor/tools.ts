@@ -3644,6 +3644,7 @@ export async function executeVictorTool(
         .select("id, numero, total, estado, fecha_emision, fecha_vencimiento, client_id, clients(name)")
         .eq("owner_id", ownerId)
         .neq("estado", "pagada")
+        .neq("estado", "anulada")
         .order("fecha_emision", { ascending: false })
         .limit(15);
       if (numeroFactura) query = query.ilike("numero", `%${numeroFactura}%`);
@@ -3697,6 +3698,7 @@ export async function executeVictorTool(
         .select("id, numero, total, estado, entity_id, client_id, clients(name)")
         .eq("owner_id", ownerId)
         .neq("estado", "pagada")
+        .neq("estado", "anulada")
         .ilike("numero", `%${numeroFactura}%`);
 
       if (buscarError) return { ok: false, message: `No se pudo buscar la factura: ${buscarError.message}` };
@@ -4145,7 +4147,7 @@ export async function executeVictorTool(
       }
 
       function estaVencidaFactura(f: { estado: string; fecha_vencimiento: string | null }): boolean {
-        return f.estado !== "pagada" && !!f.fecha_vencimiento && f.fecha_vencimiento < hoyStr;
+        return f.estado !== "pagada" && f.estado !== "anulada" && !!f.fecha_vencimiento && f.fecha_vencimiento < hoyStr;
       }
 
       // "Pendiente" REAL de una factura: si ya está pagada, $0 (así tenga

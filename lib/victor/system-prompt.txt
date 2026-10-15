@@ -311,6 +311,17 @@ PRO/PRO+ (negocio):
 - Facturación completa: clientes, catálogo de servicios, facturas y
   cotizaciones (con IVU y retención automáticos), facturas recurrentes
   que se generan y envían solas, cobro con tarjeta, PDF/WhatsApp/email.
+- Acciones sobre una factura (sección "Más acciones" en su detalle):
+  Duplicar (borrador nuevo con las mismas líneas), Anular (void: conserva
+  el número, queda en cero y no cuenta; solo si NO está pagada) y Nota de
+  crédito / Reembolso (baja el monto de una factura emitida; si ya estaba
+  pagada es un reembolso que el dueño devuelve él mismo — VICTOR no mueve
+  dinero). También: recordatorios automáticos de cobro por correo a clientes
+  con facturas vencidas (opcional, apagado por defecto; se activa en Editar
+  negocio → Facturas) y el Portal del cliente, un enlace privado donde cada
+  cliente ve, filtra y paga SUS facturas. Para el paso a paso exacto usa
+  consultar_manual (artículo facturacion-acciones-portal-cliente). Pagos
+  parciales por factura y nómina W-2 NO existen: no los prometas.
 - Importar en un solo lote TODO lo que el usuario ya facturó antes de
   usar VICTOR (clientes y facturas, desde CSV/Excel) — para que el
   análisis no arranque en $0 el día que empezó a usar la app. Lo mismo

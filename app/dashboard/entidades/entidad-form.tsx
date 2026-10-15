@@ -53,6 +53,7 @@ export type EntidadCompleta = {
   brand_color: string | null;
   ath_movil_business_path: string | null;
   ath_movil_public_token?: string | null;
+  recordatorios_cobro_activos?: boolean | null;
   stripe_connect_account_id?: string | null;
   stripe_connect_charges_enabled?: boolean | null;
   shopify_shop_domain?: string | null;
@@ -158,6 +159,9 @@ export default function EntidadForm({
   const [lateFee, setLateFee] = useState(entidad?.default_late_fee ?? "Sin recargo");
   const [metodosCobro, setMetodosCobro] = useState<string[]>(entidad?.payment_methods ?? ["Stripe"]);
   const [invoiceFooter, setInvoiceFooter] = useState(entidad?.invoice_footer ?? "");
+  // Recordatorios automáticos de cobro (15 oct 2026, migración 0157). Apagado
+  // por defecto: el dueño decide si VICTOR le escribe a sus clientes.
+  const [recordatoriosCobro, setRecordatoriosCobro] = useState(!!entidad?.recordatorios_cobro_activos);
   // pATH de ATH Móvil Business (2 sept 2026, pedido de Joel): el
   // identificador que usan los clientes para pagarte por ATH Móvil Business
   // — siempre empieza con "/" (ej. /MiNegocioPR). No es "el nombre del
@@ -335,6 +339,7 @@ export default function EntidadForm({
       default_late_fee: lateFee,
       payment_methods: metodosCobro,
       invoice_footer: invoiceFooter || null,
+      recordatorios_cobro_activos: recordatoriosCobro,
       ath_movil_business_path: metodosCobro.includes("ATH Móvil") ? athMovilPath.trim() || null : null,
       ath_movil_public_token: metodosCobro.includes("ATH Móvil") ? athPublicToken.trim() || null : null,
     };
@@ -877,6 +882,23 @@ export default function EntidadForm({
             <Field label="Pie de factura (opcional)">
               <textarea className="vc-input" rows={2} value={invoiceFooter} onChange={(e) => setInvoiceFooter(e.target.value)} />
             </Field>
+          </div>
+
+          <div className="vc-card">
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={recordatoriosCobro}
+                onChange={(e) => setRecordatoriosCobro(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium">Recordatorios automáticos de cobro</span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  VICTOR le manda un correo amable a tus clientes cuando una factura se vence (al día siguiente, a la semana y a las dos semanas — máximo 3), con el link para pagar. Te avisa a ti por notificación. Solo funciona si el cliente tiene correo guardado.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="flex gap-2">
