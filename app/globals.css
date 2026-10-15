@@ -331,3 +331,21 @@ body {
 .vc-markdown th, .vc-markdown td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left; }
 .vc-markdown th { font-weight: 600; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .2px; }
 .vc-markdown tr:last-child td { border-bottom: none; }
+
+/* Botón "Atrás" / "Cancelar" (pedido de Joel, 15 oct 2026): navegación de
+   regreso y cancelar deben verse como botones, no como texto suelto. */
+.vc-btn-back {
+  display: inline-block;
+  color: var(--text);
+  border: 1.5px solid var(--muted);
+  background: var(--card);
+  border-radius: 10px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none;
+}
+.vc-btn-back:hover { background: var(--border); }
+.vc-btn-back:disabled { opacity: .5; cursor: not-allowed; }

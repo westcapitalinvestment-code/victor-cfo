@@ -97,7 +97,7 @@ export default async function AdminPagosPage({ params }: { params: { entityId: s
         entidades={[{ id: entidad.id, name: entidad.name }]}
         retencionDefault={entidad.default_contractor_retention_pct ?? 10}
         volverHref={`/admin/${entityId}`}
-        volverLabel="← Facturación"
+        volverLabel="← Atrás"
         ownerIdEfectivo={ownerId}
         adjuntosPorRetencion={adjuntosPorRetencion}
         chequeConfigs={{

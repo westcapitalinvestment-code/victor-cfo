@@ -511,7 +511,7 @@ export default function NuevaFacturaForm({
     <div className="mx-auto max-w-2xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium">Nueva factura</h1>
-        <button onClick={() => router.push(basePath)} className="text-sm text-muted hover:opacity-80">
+        <button onClick={() => router.push(basePath)} className="vc-btn-back">
           Cancelar
         </button>
       </div>

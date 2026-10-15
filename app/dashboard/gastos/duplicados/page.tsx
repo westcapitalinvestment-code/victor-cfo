@@ -40,8 +40,8 @@ export default async function DuplicadosPage() {
   return (
     <div className="vc-shell">
       <div className="mb-3 flex items-center gap-2">
-        <Link href="/dashboard/gastos" className="text-xs text-muted hover:text-teal">
-          ← Transacciones
+        <Link href="/dashboard/gastos" className="vc-btn-back">
+          ← Atrás
         </Link>
       </div>
       <h1 className="mb-1 text-lg font-medium">Posibles duplicados</h1>

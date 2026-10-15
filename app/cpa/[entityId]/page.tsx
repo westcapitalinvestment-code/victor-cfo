@@ -348,8 +348,8 @@ export default async function CpaClientePage({
   return (
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
-        <Link href="/cpa" className="text-sm text-muted hover:opacity-80">
-          ← Tus clientes
+        <Link href="/cpa" className="vc-btn-back">
+          ← Atrás
         </Link>
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[10px] text-muted">

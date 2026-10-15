@@ -319,8 +319,8 @@ export default function CotizacionDetalle({
   return (
     <div className="mx-auto max-w-2xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <button onClick={() => router.push("/dashboard/facturacion?tab=cotizaciones")} className="text-sm text-muted hover:opacity-80">
-          ← Cotizaciones
+        <button onClick={() => router.push("/dashboard/facturacion?tab=cotizaciones")} className="vc-btn-back">
+          ← Atrás
         </button>
       </div>
 

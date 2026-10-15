@@ -275,7 +275,7 @@ export default function PeajesTab({ entityId }: { entityId: string }) {
               <button className="vc-btn-primary !w-auto px-4 py-1.5 text-xs" onClick={confirmarImportacion} disabled={importando}>
                 {importando ? "Importando..." : `Confirmar e importar ${preview.cruces.length} cruces`}
               </button>
-              <button className="!w-auto px-4 py-1.5 text-xs text-muted hover:opacity-80" onClick={() => setPreview(null)} disabled={importando}>
+              <button className="vc-btn-back" onClick={() => setPreview(null)} disabled={importando}>
                 Cancelar
               </button>
             </div>

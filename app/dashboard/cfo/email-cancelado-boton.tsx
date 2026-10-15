@@ -69,7 +69,7 @@ export default function EmailCanceladoBoton({ toEmail, toName }: { toEmail: stri
         <p className="mb-2 text-[11px] text-red">{estado}</p>
       )}
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={() => setAbierto(false)} className="rounded-pill px-3 py-1.5 text-[11px] text-muted">
+        <button type="button" onClick={() => setAbierto(false)} className="vc-btn-back">
           Cancelar
         </button>
         <button

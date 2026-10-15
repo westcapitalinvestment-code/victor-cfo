@@ -324,8 +324,8 @@ export default function CuentasPage() {
   return (
     <div className="vc-shell">
       <div className="mb-6">
-        <Link href="/dashboard" className="text-sm text-muted hover:opacity-80">
-          ← VICTOR
+        <Link href="/dashboard" className="vc-btn-back">
+          ← Atrás
         </Link>
       </div>
       <h1 className="mb-4 text-lg font-medium">Cuentas</h1>

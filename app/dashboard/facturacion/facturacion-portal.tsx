@@ -234,7 +234,7 @@ export default function FacturacionPortal({
   basePath = "/dashboard/facturacion",
   clientesBasePath = "/dashboard/clientes",
   volverHref = "/dashboard",
-  volverLabel = "← VICTOR",
+  volverLabel = "← Atrás",
   ownerIdEfectivo,
   modoAdmin = false,
   tecnicos = [],
@@ -292,7 +292,7 @@ export default function FacturacionPortal({
         {modoAdmin ? (
           <CerrarSesionAdmin />
         ) : (
-          <Link href={volverHref} className="text-sm text-muted hover:opacity-80">
+          <Link href={volverHref} className="vc-btn-back">
             {volverLabel}
           </Link>
         )}
@@ -774,7 +774,7 @@ function FilaFactura({
             >
               {loading ? "..." : "Está correcto"}
             </button>
-            <button className="flex-shrink-0 text-xs text-muted hover:opacity-80" onClick={() => setPagando(false)}>
+            <button className="vc-btn-back" onClick={() => setPagando(false)}>
               Cancelar
             </button>
           </div>
@@ -1202,7 +1202,7 @@ function ServiciosTab({
             <button className="vc-btn-primary flex-1" disabled={!nombre || !precio || guardando} onClick={guardar}>
               {guardando ? "Guardando..." : "Guardar"}
             </button>
-            <button className="flex-shrink-0 px-3 text-xs text-muted hover:opacity-80" onClick={() => setFormAbierto(null)}>
+            <button className="vc-btn-back" onClick={() => setFormAbierto(null)}>
               Cancelar
             </button>
           </div>

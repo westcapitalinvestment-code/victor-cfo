@@ -65,8 +65,8 @@ export default async function CategoriasPage() {
             {filas.length} categorías ({totalPersonales} tuyas, {filas.length - totalPersonales} del catálogo global)
           </p>
         </div>
-        <Link href="/dashboard/gastos" className="text-xs font-medium text-teal hover:opacity-80">
-          ← Transacciones
+        <Link href="/dashboard/gastos" className="vc-btn-back">
+          ← Atrás
         </Link>
       </div>
 

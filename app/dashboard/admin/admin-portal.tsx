@@ -290,8 +290,8 @@ export default function AdminPortal({
   return (
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
-        <Link href="/dashboard" className="text-sm text-muted hover:opacity-80">
-          ← VICTOR
+        <Link href="/dashboard" className="vc-btn-back">
+          ← Atrás
         </Link>
       </div>
 

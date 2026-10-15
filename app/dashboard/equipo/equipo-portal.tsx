@@ -138,8 +138,8 @@ export default function EquipoPortal({
   return (
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
-        <Link href="/dashboard" className="text-sm text-muted hover:opacity-80">
-          ← VICTOR
+        <Link href="/dashboard" className="vc-btn-back">
+          ← Atrás
         </Link>
       </div>
 
@@ -1050,7 +1050,7 @@ function TecnicosTab({
             <button className="vc-btn-primary flex-1" disabled={!name.trim() || guardando} onClick={guardar}>
               {guardando ? "Guardando..." : "Guardar"}
             </button>
-            <button className="flex-shrink-0 px-3 text-xs text-muted hover:opacity-80" onClick={() => setFormAbierto(null)}>
+            <button className="vc-btn-back" onClick={() => setFormAbierto(null)}>
               Cancelar
             </button>
           </div>

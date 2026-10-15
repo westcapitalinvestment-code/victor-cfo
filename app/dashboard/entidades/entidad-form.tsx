@@ -445,7 +445,7 @@ export default function EntidadForm({
             Ir a Facturación →
           </button>
         ) : (
-          <button onClick={() => router.push(modo === "crear" ? "/dashboard" : "/dashboard/config")} className="text-sm text-muted hover:opacity-80">
+          <button onClick={() => router.push(modo === "crear" ? "/dashboard" : "/dashboard/config")} className="vc-btn-back">
             Cancelar
           </button>
         )}

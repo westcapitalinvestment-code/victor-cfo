@@ -308,7 +308,7 @@ export default function FirmaAccountantPanel() {
               </button>
               <button
                 type="button"
-                className="text-center text-xs text-muted underline"
+                className="vc-btn-back"
                 onClick={() => setMostrarModal(false)}
               >
                 Cancelar

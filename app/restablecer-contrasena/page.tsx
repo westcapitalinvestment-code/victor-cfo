@@ -144,7 +144,7 @@ export default function RestablecerContrasenaPage() {
           <button
             type="button"
             onClick={() => router.back()}
-            className="text-center text-xs text-muted hover:opacity-80"
+            className="vc-btn-back"
           >
             Cancelar
           </button>

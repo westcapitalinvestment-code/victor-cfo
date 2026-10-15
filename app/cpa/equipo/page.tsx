@@ -77,8 +77,8 @@ export default function EquipoCpaPage() {
     <div className="vc-shell">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium">Mi equipo</h1>
-        <button onClick={() => router.push("/cpa")} className="text-sm text-muted hover:opacity-80">
-          Volver
+        <button onClick={() => router.push("/cpa")} className="vc-btn-back">
+          ← Atrás
         </button>
       </div>
 

@@ -131,7 +131,7 @@ export default function InvitarContablePage() {
     <div className="vc-shell">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium">Invita a tu contable</h1>
-        <button onClick={() => router.push("/dashboard")} className="text-sm text-muted hover:opacity-80">
+        <button onClick={() => router.push("/dashboard")} className="vc-btn-back">
           Cancelar
         </button>
       </div>

@@ -98,7 +98,7 @@ export default function EstadosSubidosLista({ origen, cuentaId }: { origen: "pla
                 >
                   {borrandoId === e.id ? "Borrando…" : "Confirmar"}
                 </button>
-                <button className="text-[11px] text-muted underline" onClick={() => setConfirmandoId(null)}>
+                <button className="vc-btn-back" onClick={() => setConfirmandoId(null)}>
                   Cancelar
                 </button>
               </div>

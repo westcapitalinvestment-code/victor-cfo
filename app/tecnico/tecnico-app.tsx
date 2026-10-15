@@ -636,7 +636,7 @@ function PantallaGasto({ tipos, onVolver }: { tipos: TipoGasto[]; onVolver: () =
     <div className="vc-shell pb-10">
       <div className="mb-4 flex items-center justify-between pt-4">
         <p className="text-lg font-medium">Reportar gasto</p>
-        <button onClick={onVolver} className="text-xs text-muted hover:opacity-80">
+        <button onClick={onVolver} className="vc-btn-back">
           Cancelar
         </button>
       </div>
@@ -751,7 +751,7 @@ function SelectorCliente({
     <div className="vc-shell pb-10">
       <div className="mb-4 flex items-center justify-between pt-4">
         <p className="text-lg font-medium">{titulo}</p>
-        <button onClick={onCancelar} className="text-xs text-muted hover:opacity-80">
+        <button onClick={onCancelar} className="vc-btn-back">
           Cancelar
         </button>
       </div>
@@ -848,7 +848,7 @@ function SelectorClienteParaCobrar({ onCancelar, onCobrado }: { onCancelar: () =
     <div className="vc-shell pb-10">
       <div className="mb-4 flex items-center justify-between pt-4">
         <p className="text-lg font-medium">{clienteNombre}</p>
-        <button onClick={onCancelar} className="text-xs text-muted hover:opacity-80">
+        <button onClick={onCancelar} className="vc-btn-back">
           Cancelar
         </button>
       </div>
@@ -920,7 +920,7 @@ function SelectorClienteBusqueda({
     <div className="vc-shell pb-10">
       <div className="mb-4 flex items-center justify-between pt-4">
         <p className="text-lg font-medium">{titulo}</p>
-        <button onClick={onCancelar} className="text-xs text-muted hover:opacity-80">
+        <button onClick={onCancelar} className="vc-btn-back">
           Cancelar
         </button>
       </div>
@@ -1112,8 +1112,8 @@ function PantallaFactura({ facturaId, sesion, onVolver }: { facturaId: string; s
   if (!factura) {
     return (
       <div className="vc-shell pb-10 pt-4">
-        <button onClick={onVolver} className="mb-4 text-xs text-muted hover:opacity-80">
-          ← Volver
+        <button onClick={onVolver} className="vc-btn-back">
+          ← Atrás
         </button>
         <p className="text-xs text-red">{error ?? "Factura no encontrada."}</p>
       </div>
@@ -1161,8 +1161,8 @@ function PantallaFactura({ facturaId, sesion, onVolver }: { facturaId: string; s
   return (
     <div className="vc-shell pb-10">
       <div className="mb-4 flex items-center justify-between pt-4">
-        <button onClick={onVolver} className="text-xs text-muted hover:opacity-80">
-          ← Volver
+        <button onClick={onVolver} className="vc-btn-back">
+          ← Atrás
         </button>
         <p className="text-xs text-muted">{factura.numero}</p>
       </div>
@@ -1427,8 +1427,8 @@ function PantallaCotizacion({ cotizacionId, sesion, onVolver }: { cotizacionId: 
   if (!cotizacion) {
     return (
       <div className="vc-shell pb-10 pt-4">
-        <button onClick={onVolver} className="mb-4 text-xs text-muted hover:opacity-80">
-          ← Volver
+        <button onClick={onVolver} className="vc-btn-back">
+          ← Atrás
         </button>
         <p className="text-xs text-red">{error ?? "Cotización no encontrada."}</p>
       </div>
@@ -1452,8 +1452,8 @@ function PantallaCotizacion({ cotizacionId, sesion, onVolver }: { cotizacionId: 
   return (
     <div className="vc-shell pb-10">
       <div className="mb-4 flex items-center justify-between pt-4">
-        <button onClick={onVolver} className="text-xs text-muted hover:opacity-80">
-          ← Volver
+        <button onClick={onVolver} className="vc-btn-back">
+          ← Atrás
         </button>
         <p className="text-xs text-muted">{cotizacion.numero}</p>
       </div>

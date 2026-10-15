@@ -223,8 +223,8 @@ export default async function CpaPersonalPage({
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Link href="/cpa" className="text-sm text-muted hover:opacity-80">
-            <i className="ti ti-arrow-left" /> Clientes
+          <Link href="/cpa" className="vc-btn-back">
+            <i className="ti ti-arrow-left" /> Atrás
           </Link>
           <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-[10px] font-medium text-teal">
             Personal

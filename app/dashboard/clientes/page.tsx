@@ -44,8 +44,8 @@ export default async function ClientesPage({ searchParams }: { searchParams: { a
     <div className="vc-shell">
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Link href="/dashboard" className="text-sm text-muted hover:opacity-80">
-            ← VICTOR
+          <Link href="/dashboard" className="vc-btn-back">
+            ← Atrás
           </Link>
         </div>
       </div>

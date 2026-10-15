@@ -621,8 +621,8 @@ export default function FacturaDetalle({
       `}</style>
 
       <div className="no-imprimir mb-6 flex items-center justify-between">
-        <button onClick={() => router.push(basePath)} className="text-sm text-muted hover:opacity-80">
-          ← Facturas
+        <button onClick={() => router.push(basePath)} className="vc-btn-back">
+          ← Atrás
         </button>
       </div>
 
@@ -766,7 +766,7 @@ export default function FacturaDetalle({
                     <button type="button" onClick={guardarFeeExtra} disabled={loading} className="font-medium text-teal">
                       Guardar
                     </button>
-                    <button type="button" onClick={() => setEditandoFeeExtra(false)} className="text-muted">
+                    <button type="button" onClick={() => setEditandoFeeExtra(false)} className="vc-btn-back">
                       Cancelar
                     </button>
                   </div>
@@ -881,7 +881,7 @@ export default function FacturaDetalle({
               <button className="vc-btn-primary flex-1" style={{ width: "auto" }} disabled={loading} onClick={guardarEdicionPago}>
                 {loading ? "..." : "Guardar corrección"}
               </button>
-              <button className="text-xs text-muted underline" disabled={loading} onClick={() => setEditandoPago(false)}>
+              <button className="vc-btn-back" disabled={loading} onClick={() => setEditandoPago(false)}>
                 Cancelar
               </button>
             </div>
@@ -1234,7 +1234,7 @@ export default function FacturaDetalle({
                   </button>
                 </div>
                 <button
-                  className="self-start text-xs text-muted underline"
+                  className="vc-btn-back"
                   disabled={loading}
                   onClick={() => setConfirmandoPago(false)}
                 >
@@ -1323,7 +1323,7 @@ export default function FacturaDetalle({
                 <button className="vc-btn-primary" style={{ width: "auto" }} disabled={!!accionCargando} onClick={anularFactura}>
                   {accionCargando === "anular" ? "..." : "Confirmar anulación"}
                 </button>
-                <button className="text-xs text-muted underline" onClick={() => setPanelAccion(null)}>
+                <button className="vc-btn-back" onClick={() => setPanelAccion(null)}>
                   Cancelar
                 </button>
               </div>
@@ -1366,7 +1366,7 @@ export default function FacturaDetalle({
                 >
                   {accionCargando === "nota" ? "..." : "Crear nota"}
                 </button>
-                <button className="text-xs text-muted underline" onClick={() => setPanelAccion(null)}>
+                <button className="vc-btn-back" onClick={() => setPanelAccion(null)}>
                   Cancelar
                 </button>
               </div>

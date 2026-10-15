@@ -337,7 +337,7 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
                         <button type="submit" className="vc-btn-primary" disabled={subiendo}>
                           {subiendo ? "Guardando..." : "Guardar cambios"}
                         </button>
-                        <button type="button" className="text-xs text-muted" onClick={() => setRenovando(null)}>
+                        <button type="button" className="vc-btn-back" onClick={() => setRenovando(null)}>
                           Cancelar
                         </button>
                       </div>

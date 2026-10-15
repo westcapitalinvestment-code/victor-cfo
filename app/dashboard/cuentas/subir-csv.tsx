@@ -293,7 +293,7 @@ export default function SubirEstado({
               />
               {cargando && <p className="mt-2 text-xs text-muted">Leyendo archivo…</p>}
               {error && <p className="mt-2 text-xs text-red">{error}</p>}
-              <button className="mt-3 text-xs text-muted underline" onClick={onCerrar}>
+              <button className="vc-btn-back" onClick={onCerrar}>
                 Cancelar
               </button>
             </div>
@@ -423,7 +423,7 @@ export default function SubirEstado({
                 <button className="vc-btn-primary" disabled={cargando} onClick={confirmarImportacionCsv}>
                   {cargando ? "Importando…" : `Importar ${totalFilas} transacción(es)`}
                 </button>
-                <button className="text-xs text-muted underline" onClick={onCerrar}>
+                <button className="vc-btn-back" onClick={onCerrar}>
                   Cancelar
                 </button>
               </div>
@@ -445,7 +445,7 @@ export default function SubirEstado({
                 Extraer transacciones de un PDF usa inteligencia artificial — se activa con Core o Pro.
                 Mientras tanto, usa la pestaña de CSV / QuickBooks de arriba, que es gratis.
               </p>
-              <button className="text-xs text-muted underline" onClick={onCerrar}>
+              <button className="vc-btn-back" onClick={onCerrar}>
                 Cancelar
               </button>
             </div>
@@ -469,7 +469,7 @@ export default function SubirEstado({
               />
               {cargando && <p className="mt-2 text-xs text-muted">Leyendo el PDF con VICTOR… puede tardar unos segundos.</p>}
               {error && <p className="mt-2 text-xs text-red">{error}</p>}
-              <button className="mt-3 text-xs text-muted underline" onClick={onCerrar}>
+              <button className="vc-btn-back" onClick={onCerrar}>
                 Cancelar
               </button>
             </div>
@@ -511,7 +511,7 @@ export default function SubirEstado({
                 <button className="vc-btn-primary" disabled={cargando || transaccionesPdf.length === 0} onClick={confirmarImportacionPdf}>
                   {cargando ? "Importando…" : `Importar ${transaccionesPdf.length} transacción(es)`}
                 </button>
-                <button className="text-xs text-muted underline" onClick={onCerrar}>
+                <button className="vc-btn-back" onClick={onCerrar}>
                   Cancelar
                 </button>
               </div>

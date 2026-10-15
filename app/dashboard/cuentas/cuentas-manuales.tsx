@@ -378,7 +378,7 @@ export default function CuentasManuales({ entityId }: { entityId?: string | null
                 <button className="vc-btn-primary" disabled={guardandoEdicion} onClick={() => guardarEdicion(c.id)}>
                   {guardandoEdicion ? "Guardando…" : "Guardar cambios"}
                 </button>
-                <button className="text-xs text-muted underline" onClick={() => setEditandoCuentaId(null)}>
+                <button className="vc-btn-back" onClick={() => setEditandoCuentaId(null)}>
                   Cancelar
                 </button>
               </div>
@@ -438,7 +438,7 @@ export default function CuentasManuales({ entityId }: { entityId?: string | null
             <button className="vc-btn-primary" disabled={guardando} onClick={crearCuenta}>
               {guardando ? "Guardando…" : "Guardar cuenta"}
             </button>
-            <button className="text-xs text-muted underline" onClick={() => setMostrarForm(false)}>
+            <button className="vc-btn-back" onClick={() => setMostrarForm(false)}>
               Cancelar
             </button>
           </div>

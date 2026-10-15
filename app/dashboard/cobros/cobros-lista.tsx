@@ -57,8 +57,8 @@ export default function CobrosLista({
   return (
     <div className="vc-shell">
       <div className="mb-6 flex items-center justify-between">
-        <Link href="/dashboard" className="text-sm text-muted hover:opacity-80">
-          ← VICTOR
+        <Link href="/dashboard" className="vc-btn-back">
+          ← Atrás
         </Link>
       </div>
 
@@ -123,7 +123,7 @@ export default function CobrosLista({
                     {loading ? "..." : "Confirmar"}
                   </button>
                   <button
-                    className="flex-shrink-0 text-xs text-muted hover:opacity-80"
+                    className="vc-btn-back"
                     onClick={() => setPagando(null)}
                   >
                     Cancelar

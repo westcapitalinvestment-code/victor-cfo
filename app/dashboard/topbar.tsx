@@ -377,7 +377,7 @@ export default function Topbar({
             >
               Sí, continuar y crear la entidad
             </button>
-            <button className="w-full text-xs text-muted hover:opacity-80" onClick={() => setConfirmarAddEntidad(false)}>
+            <button className="vc-btn-back" onClick={() => setConfirmarAddEntidad(false)}>
               Cancelar
             </button>
           </div>

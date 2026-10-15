@@ -269,7 +269,7 @@ export default function PagosPortal({
   entidades = [],
   retencionDefault,
   volverHref = "/dashboard",
-  volverLabel = "← VICTOR",
+  volverLabel = "← Atrás",
   ownerIdEfectivo,
   modoAdmin = false,
   adjuntosPorRetencion = {},
@@ -311,7 +311,7 @@ export default function PagosPortal({
   return (
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
-        {modoAdmin ? <CerrarSesionAdminPagos /> : <Link href={volverHref} className="text-sm text-muted hover:opacity-80">{volverLabel}</Link>}
+        {modoAdmin ? <CerrarSesionAdminPagos /> : <Link href={volverHref} className="vc-btn-back">{volverLabel}</Link>}
       </div>
 
       <div className="mb-4 rounded-2xl border border-teal bg-teal/[.04] p-3.5">
@@ -2058,7 +2058,7 @@ function ContratistasTab({
             <button className="vc-btn-primary flex-1" disabled={!name.trim() || guardando} onClick={guardar}>
               {guardando ? "Guardando..." : "Guardar"}
             </button>
-            <button className="flex-shrink-0 px-3 text-xs text-muted hover:opacity-80" onClick={() => setFormAbierto(null)}>
+            <button className="vc-btn-back" onClick={() => setFormAbierto(null)}>
               Cancelar
             </button>
           </div>

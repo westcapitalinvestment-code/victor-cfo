@@ -88,7 +88,7 @@ export default function NuevoClienteForm({
     <div className="mx-auto max-w-lg px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium">Nuevo cliente</h1>
-        <button onClick={() => router.push(destino)} className="text-sm text-muted hover:opacity-80">
+        <button onClick={() => router.push(destino)} className="vc-btn-back">
           Cancelar
         </button>
       </div>

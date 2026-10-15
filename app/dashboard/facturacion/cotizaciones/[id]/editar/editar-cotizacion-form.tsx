@@ -219,7 +219,7 @@ export default function EditarCotizacionForm({
         <h1 className="text-lg font-medium">Editar cotización {cotizacion.numero}</h1>
         <button
           onClick={() => router.push(`/dashboard/facturacion/cotizaciones/${cotizacion.id}`)}
-          className="text-sm text-muted hover:opacity-80"
+          className="vc-btn-back"
         >
           Cancelar
         </button>

@@ -171,7 +171,7 @@ export default function PinConfig() {
             )}
           </div>
 
-          <button onClick={() => setEstado("sin_pin")} className="mt-3 text-xs text-muted underline">
+          <button onClick={() => setEstado("sin_pin")} className="vc-btn-back">
             Cancelar
           </button>
         </div>

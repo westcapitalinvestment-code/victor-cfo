@@ -49,8 +49,8 @@ export default function AddonPagosGate({
 
   return (
     <div className="mx-auto max-w-lg px-6 py-8">
-      <Link href={volverHref} className="mb-4 inline-block text-sm text-muted hover:opacity-80">
-        ← VICTOR
+      <Link href={volverHref} className="vc-btn-back">
+        ← Atrás
       </Link>
       <div
         className="rounded-2xl border p-5 text-center"
