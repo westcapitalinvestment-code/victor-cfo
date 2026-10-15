@@ -7,17 +7,17 @@ import { enviarPush } from "@/lib/push";
 // Recordatorios automáticos de cobro (15 oct 2026, auditoría de facturación
 // vs FreshBooks/QuickBooks). Cron diario: para entidades que lo activaron
 // (business_entities.recordatorios_cobro_activos, migración 0157, apagado por
-// defecto) manda un correo amable al cliente cuando una factura enviada está
+// defecto) envía un correo amable al cliente cuando una factura enviada está
 // vencida, con el link de pago. Calendario fijo, máximo 3 por factura:
-//   1.º → 1 día después del vencimiento
-//   2.º → 7 días después
-//   3.º → 14 días después
+//   1.º → 5 días después del vencimiento (a veces no ven el correo en 1-2 días)
+//   2.º → 10 días después
+//   3.º → 15 días después
 // Nunca a borradores, pagadas ni anuladas, ni a clientes sin correo. Al dueño
 // le llega un push resumen (uno por dueño) para que también pueda escribir
 // por WhatsApp. Mismo esquema de seguridad que los otros crons.
 export const maxDuration = 300;
 
-const CALENDARIO_DIAS = [1, 7, 14];
+const CALENDARIO_DIAS = [5, 10, 15];
 const MS_DIA = 24 * 60 * 60 * 1000;
 
 function diasEntre(desdeISO: string, hastaISO: string): number {
@@ -122,8 +122,8 @@ export async function GET(req: NextRequest) {
       if (!subs || subs.length === 0) continue;
       const body =
         cantidad === 1
-          ? "VICTOR le mandó un recordatorio de cobro a 1 cliente con factura vencida."
-          : `VICTOR les mandó recordatorios de cobro a ${cantidad} clientes con facturas vencidas.`;
+          ? "VICTOR le envió un recordatorio de cobro a 1 cliente con factura vencida."
+          : `VICTOR les envió recordatorios de cobro a ${cantidad} clientes con facturas vencidas.`;
       for (const sub of subs) {
         const resultado = await enviarPush(
           { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },

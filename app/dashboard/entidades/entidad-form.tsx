@@ -895,7 +895,7 @@ export default function EntidadForm({
               <span>
                 <span className="font-medium">Recordatorios automáticos de cobro</span>
                 <span className="mt-0.5 block text-xs text-muted">
-                  VICTOR le manda un correo amable a tus clientes cuando una factura se vence (al día siguiente, a la semana y a las dos semanas — máximo 3), con el link para pagar. Te avisa a ti por notificación. Solo funciona si el cliente tiene correo guardado.
+                  VICTOR le envía un correo amable a tus clientes cuando una factura se vence (a los 5, 10 y 15 días de vencida — máximo 3), con el link para pagar. Te avisa a ti por notificación. Solo funciona si el cliente tiene correo guardado.
                 </span>
               </span>
             </label>
