@@ -4,7 +4,7 @@ import path from "path";
 
 // Cheques impresos desde Pagos (15 oct 2026). Una hoja Carta por cheque con el
 // formato "cheque arriba" de los talonarios de QuickBooks: cheque en el tercio
-// superior y dos talones (control y copia del beneficiario) debajo.
+// superior y un talonario (copia del beneficiario) debajo.
 //
 // Dos modos de papel:
 //  - "preimpreso": el banco ya trae nombre, cuenta y MICR → solo se imprime
@@ -178,12 +178,15 @@ export async function generarChequesPDF(entidad: EntidadCheque, cheques: ChequeD
       }
     }
 
-    // ---- Dos talones: control y copia ----
-    for (let i = 0; i < 2; i++) {
+    // ---- Un solo talonario: copia del beneficiario ----
+    // (15 oct 2026, pedido de Joel: ya no se imprime el de control — el
+    // registro queda en VICTOR y la idea es no guardar papel. Si hiciera
+    // falta, subir el tope a 2: el 2.º sería "CONTROL", al final de la hoja.)
+    for (let i = 0; i < 1; i++) {
       const top = 270 + i * 258;
       page.drawLine({ start: { x: 30, y: H - top + 10 }, end: { x: W - 30, y: H - top + 10 }, thickness: 0.5, color: gris, dashArray: [4, 3] });
       txt(page, entidad.nombre, 40, top + 14, 10, negrita);
-      txt(page, i === 0 ? "TALÓN DE CONTROL" : "COPIA DEL BENEFICIARIO", 400, top + 14, 8, normal, gris);
+      txt(page, i === 0 ? "TALONARIO (BENEFICIARIO)" : "TALONARIO (CONTROL)", 400, top + 14, 8, normal, gris);
       txt(page, `Cheque #${c.numero}`, 40, top + 34, 10, negrita);
       txt(page, `Fecha: ${fechaMDY(c.fecha)}`, 200, top + 34, 10);
       txt(page, `Beneficiario: ${c.beneficiario}`, 40, top + 52, 10);

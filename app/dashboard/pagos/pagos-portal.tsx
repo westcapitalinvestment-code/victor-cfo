@@ -1338,7 +1338,7 @@ function PagosTab({
                   </label>
                 </div>
                 <p className="text-muted">
-                  Con talonario del banco solo se imprime fecha, beneficiario, monto y talones. El banco no cobra un cheque
+                  Con talonario del banco solo se imprime fecha, beneficiario, monto y el talonario del beneficiario. El banco no cobra un cheque
                   impreso en papel normal sin tóner MICR.
                 </p>
               </div>
