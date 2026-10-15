@@ -45,6 +45,10 @@
       "schedule": "0 19 * * *"
     },
     {
+      "path": "/api/cron/recargos-mora",
+      "schedule": "0 15 * * *"
+    },
+    {
       "path": "/api/cron/firma-gracia",
       "schedule": "0 20 * * *"
     }

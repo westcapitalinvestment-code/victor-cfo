@@ -1265,12 +1265,13 @@ export async function sendRecordatorioCobroEmail(params: {
   numeroRecordatorio: number;
   cobroTarjetaDisponible?: boolean;
   replyToEmail?: string | null;
+  portalUrl?: string | null;
 }): Promise<{ sent: boolean; reason?: string }> {
   if (!resend) {
     return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
   }
 
-  const { clientEmail, clientName, entityName, invoiceId, invoiceNumber, total, dueDate, diasVencida, numeroRecordatorio, cobroTarjetaDisponible, replyToEmail } = params;
+  const { clientEmail, clientName, entityName, invoiceId, invoiceNumber, total, dueDate, diasVencida, numeroRecordatorio, cobroTarjetaDisponible, replyToEmail, portalUrl } = params;
   const saludoNombre = clientName || "";
   const negocio = entityName || "";
   const fromRecordatorio = negocio ? `${negocio} vía VICTOR CFO <${FROM_ADDRESS}>` : FROM;
@@ -1288,6 +1289,7 @@ export async function sendRecordatorioCobroEmail(params: {
     `${intro} Si ya la pagaste, ignora este mensaje y gracias.\n\n` +
     `Puedes verla aquí:\n${pdfUrl}\n\n` +
     (cobroTarjetaDisponible ? `Pagar con tarjeta: ${pagarUrl}\n\n` : "") +
+    (portalUrl ? `Todas tus facturas: ${portalUrl}\n\n` : "") +
     `Si tienes alguna duda, contesta este correo.\n\n` +
     `— ${negocio || "VICTOR CFO"}\n`;
 
@@ -1303,6 +1305,7 @@ export async function sendRecordatorioCobroEmail(params: {
         : ""
     }
   </div>
+  ${portalUrl ? `<p style="font-size: 13px;"><a href="${portalUrl}" style="color: #1D9E75;">Ver todas mis facturas</a></p>` : ""}
   <p>Si tienes alguna duda, solo contesta este correo.</p>
   <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
   <p style="font-size: 11px; color: #bbb;">Enviado a través de VICTOR CFO<br/><a href="${SITE_URL}" style="color: #bbb;">victorcfo.com</a></p>

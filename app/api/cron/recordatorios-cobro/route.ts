@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   const { data: facturas, error } = await supabase
     .from("invoices")
     .select(
-      "id, owner_id, numero, total, estado, fecha_vencimiento, ultimo_recordatorio_cobro_en, recordatorios_cobro_enviados, clients(name, email), business_entities!inner(name, email, stripe_connect_charges_enabled, recordatorios_cobro_activos)"
+      "id, owner_id, numero, total, estado, fecha_vencimiento, ultimo_recordatorio_cobro_en, recordatorios_cobro_enviados, clients(name, email, portal_token), business_entities!inner(name, email, stripe_connect_charges_enabled, recordatorios_cobro_activos)"
     )
     .in("estado", ["enviada", "vista", "vencida"])
     .lt("fecha_vencimiento", hoyISO)
@@ -88,6 +88,7 @@ export async function GET(req: NextRequest) {
         numeroRecordatorio: enviadosAntes + 1,
         cobroTarjetaDisponible: !!entidad?.stripe_connect_charges_enabled,
         replyToEmail: entidad?.email ?? null,
+        portalUrl: cliente.portal_token ? `https://www.victorcfo.com/portal-cliente/${cliente.portal_token}` : null,
       });
 
       if (!r.sent) {

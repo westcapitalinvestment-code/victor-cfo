@@ -79,6 +79,7 @@ type Factura = {
   late_fee_tipo: string | null;
   late_fee_monto: number;
   late_fee_dias_gracia: number;
+  recargo_mora_monto?: number | null;
   clients: { name: string; email: string | null; telefono: string | null; tax_id: string | null } | null;
   business_entities: {
     name: string;
@@ -269,6 +270,20 @@ export default function FacturaDetalle({
     } catch {
       window.prompt("Copia este enlace:", data.url);
     }
+  }
+
+  async function quitarRecargo() {
+    if (!window.confirm("¿Quitar el recargo por mora de esta factura?")) return;
+    setAccionCargando("recargo");
+    setError(null);
+    const res = await fetch(`/api/facturas/${factura.id}/recargo-mora`, { method: "DELETE" });
+    const data = await res.json().catch(() => null);
+    setAccionCargando(null);
+    if (!res.ok || !data?.ok) {
+      setError(data?.error ?? "No se pudo quitar el recargo.");
+      return;
+    }
+    router.refresh();
   }
 
   async function anularFactura() {
@@ -900,11 +915,26 @@ export default function FacturaDetalle({
         )}
 
         {factura.late_fee_habilitado && (
-          <p className="text-xs text-amb">
-            Recargo por mora: {factura.late_fee_tipo === "porcentaje" ? `${factura.late_fee_monto}%` : formatMoney(factura.late_fee_monto)}
-            {" "}
-            después de {factura.late_fee_dias_gracia} días de vencida (referencia — no se suma solo al total).
-          </p>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-amb">
+            <span>
+              Recargo por mora: {factura.late_fee_tipo === "porcentaje" ? `${factura.late_fee_monto}%` : formatMoney(factura.late_fee_monto)}
+              {" "}
+              después de {factura.late_fee_dias_gracia} días de vencida
+              {Number(factura.recargo_mora_monto ?? 0) > 0
+                ? ` — ya sumado al total (${formatMoney(Number(factura.recargo_mora_monto))}).`
+                : " — se suma solo al total cuando pase ese plazo."}
+            </span>
+            {Number(factura.recargo_mora_monto ?? 0) > 0 && factura.estado !== "pagada" && (
+              <button
+                type="button"
+                onClick={quitarRecargo}
+                disabled={accionCargando === "recargo"}
+                className="rounded-lg border-[1.5px] border-muted bg-card px-2 py-1 text-xs text-text disabled:opacity-50"
+              >
+                {accionCargando === "recargo" ? "Quitando…" : "Quitar recargo"}
+              </button>
+            )}
+          </div>
         )}
 
         {adjuntos.length > 0 && (

@@ -67,6 +67,12 @@ export default async function PortalClientePage({
   const pendientes = facturas.filter((f) => f.estado !== "pagada" && Number(f.total) > 0);
   const saldo = pendientes.reduce((s, f) => s + Number(f.total), 0);
   const saldoVencido = pendientes.filter(vencida).reduce((s, f) => s + Number(f.total), 0);
+  const pagadas = facturas.filter((f) => f.estado === "pagada");
+  const totalPagado = pagadas.reduce((s, f) => s + Number(f.total), 0);
+  const anioActual = hoy.slice(0, 4);
+  const pagadoEsteAnio = pagadas
+    .filter((f) => (f.fecha_pago ?? f.fecha_emision ?? "").startsWith(anioActual))
+    .reduce((s, f) => s + Number(f.total), 0);
 
   const ver = searchParams.ver === "pagadas" || searchParams.ver === "pendientes" ? searchParams.ver : "todas";
   const mostrar = facturas.filter((f) => (ver === "pagadas" ? f.estado === "pagada" : ver === "pendientes" ? f.estado !== "pagada" : true));
@@ -95,15 +101,19 @@ export default async function PortalClientePage({
       <h1 style={{ fontSize: 22, margin: 0 }}>Hola, {cliente.name}</h1>
       <p style={{ fontSize: 14, color: "#666", marginTop: 4 }}>Aquí puedes ver y pagar tus facturas.</p>
 
-      <div style={{ display: "flex", gap: 12, margin: "20px 0" }}>
-        <div style={{ flex: 1, border: "1px solid #d9e3df", borderRadius: 12, padding: 14 }}>
-          <div style={{ fontSize: 12, color: "#666" }}>Saldo pendiente</div>
-          <div style={{ fontSize: 22, fontWeight: 600 }}>{formatMoney(saldo)}</div>
-        </div>
-        <div style={{ flex: 1, border: "1px solid #d9e3df", borderRadius: 12, padding: 14 }}>
-          <div style={{ fontSize: 12, color: "#666" }}>De eso, vencido</div>
-          <div style={{ fontSize: 22, fontWeight: 600, color: saldoVencido > 0 ? "#c0392b" : "#1a1a1a" }}>{formatMoney(saldoVencido)}</div>
-        </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, margin: "20px 0" }}>
+        {[
+          { t: "Saldo pendiente", v: formatMoney(saldo), sub: `${pendientes.length} factura${pendientes.length === 1 ? "" : "s"}`, c: "#1a1a1a" },
+          { t: "De eso, vencido", v: formatMoney(saldoVencido), sub: "", c: saldoVencido > 0 ? "#c0392b" : "#1a1a1a" },
+          { t: `Pagado en ${anioActual}`, v: formatMoney(pagadoEsteAnio), sub: "", c: "#1D9E75" },
+          { t: "Pagado en total", v: formatMoney(totalPagado), sub: `${pagadas.length} factura${pagadas.length === 1 ? "" : "s"}`, c: "#1D9E75" },
+        ].map((k) => (
+          <div key={k.t} style={{ border: "1px solid #d9e3df", borderRadius: 12, padding: 14 }}>
+            <div style={{ fontSize: 12, color: "#666" }}>{k.t}</div>
+            <div style={{ fontSize: 20, fontWeight: 600, color: k.c }}>{k.v}</div>
+            {k.sub && <div style={{ fontSize: 11, color: "#999" }}>{k.sub}</div>}
+          </div>
+        ))}
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
