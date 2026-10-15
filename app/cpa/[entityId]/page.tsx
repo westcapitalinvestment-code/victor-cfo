@@ -139,10 +139,10 @@ export default async function CpaClientePage({
       .limit(4),
     supabase
       .from("audit_log")
-      .select("id, actor_role, action, target_table, changes, created_at")
+      .select("id, actor_role, actor_email, action, target_table, changes, created_at")
       .eq("entity_id", entityId)
       .order("created_at", { ascending: false })
-      .limit(30),
+      .limit(500),
   ]);
 
   // Estado de Resultados (1 oct 2026, pedido de Joel: "hay que activarlo

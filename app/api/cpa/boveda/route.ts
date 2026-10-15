@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
       archivosViejos = viejos ?? [];
     }
 
-    const cambios: Record<string, unknown> = { estado: "activo" };
+    const cambios: Record<string, unknown> = { estado: "activo", ultimo_editor_email: user.email };
     if (nombre) cambios.nombre = nombre;
     if (form.get("tipo")) cambios.tipo = tipo;
     if (sinVencimiento) {
@@ -160,6 +160,7 @@ export async function POST(req: NextRequest) {
         compartir_contador: true,
         subido_por_contable: true,
         subido_por_email: user.email,
+        ultimo_editor_email: user.email,
       })
       .select("id")
       .single();
@@ -256,6 +257,8 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Solo puedes borrar archivos que subiste tú." }, { status: 403 });
   }
 
+  // Deja constancia de quién borra (lo lee el trigger de auditoría).
+  await admin.from("documents").update({ ultimo_editor_email: user.email }).eq("id", archivo.document_id);
   try {
     await borrarArchivoR2(archivo.r2_key);
   } catch (err) {

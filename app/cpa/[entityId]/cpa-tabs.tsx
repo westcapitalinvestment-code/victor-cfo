@@ -92,6 +92,7 @@ type Estimado = {
 type Auditoria = {
   id: string;
   actor_role: string;
+  actor_email: string | null;
   action: string;
   target_table: string | null;
   changes: unknown;
@@ -127,6 +128,153 @@ function Badge({ tone, children }: { tone: "grn" | "amb" | "red" | "muted"; chil
           ? "bg-red/10 text-red"
           : "bg-muted/10 text-muted";
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${clases}`}>{children}</span>;
+}
+
+const TZ = "America/Puerto_Rico";
+
+const ACCIONES: Record<string, string> = {
+  documento_creado: "Documento creado",
+  documento_editado: "Documento editado",
+  documento_renovado: "Documento renovado / cambio de vencimiento",
+  documento_eliminado: "Documento eliminado",
+  archivo_agregado: "Archivo agregado",
+  archivo_eliminado: "Archivo eliminado",
+  category_override: "Categoría corregida",
+};
+
+const ROLES: Record<string, string> = { owner: "Dueño", admin: "Admin / secretaria", cpa: "Contable", system: "Sistema" };
+
+function fechaCorta(f: unknown): string {
+  if (typeof f !== "string" || f.length < 10) return "sin fecha";
+  const [y, m, d] = f.slice(0, 10).split("-");
+  return `${m}/${d}/${y}`;
+}
+
+function detalleAuditoria(a: Auditoria): string {
+  const c = (a.changes ?? {}) as Record<string, unknown>;
+  const doc = typeof c.documento === "string" ? c.documento : null;
+  if (a.action === "documento_renovado")
+    return `${doc ?? "Documento"}: vencimiento ${fechaCorta(c.fecha_anterior)} → ${fechaCorta(c.fecha_nueva)}`;
+  if (a.action === "documento_editado") {
+    const partes: string[] = [];
+    if (typeof c.nombre_anterior === "string") partes.push(`antes "${c.nombre_anterior}"`);
+    if (c.compartido_antes !== c.compartido_ahora)
+      partes.push(c.compartido_ahora ? "ahora compartido con el contable" : "ya no se comparte con el contable");
+    return `${doc ?? "Documento"}${partes.length ? " — " + partes.join(", ") : ""}`;
+  }
+  if (a.action === "archivo_agregado" || a.action === "archivo_eliminado")
+    return `${doc ?? "Documento"}${typeof c.archivo === "string" && c.archivo ? ` (${c.archivo})` : ""}`;
+  if (doc) return doc;
+  return a.target_table ?? "";
+}
+
+// Valor de <input type="datetime-local"> ("YYYY-MM-DDTHH:mm") → instante UTC
+// interpretando la hora como hora de Puerto Rico (AST, UTC-4 todo el año).
+function localPRaMs(v: string): number | null {
+  if (!v) return null;
+  const ms = Date.parse(`${v}:00-04:00`);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function AuditoriaTab({ auditoria }: { auditoria: Auditoria[] }) {
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [accion, setAccion] = useState("");
+  const [rol, setRol] = useState("");
+
+  const dMs = localPRaMs(desde);
+  const hMs = localPRaMs(hasta);
+  const filtrados = auditoria.filter((a) => {
+    const t = new Date(a.created_at).getTime();
+    if (dMs !== null && t < dMs) return false;
+    if (hMs !== null && t > hMs + 59_999) return false;
+    if (accion && a.action !== accion) return false;
+    if (rol && a.actor_role !== rol) return false;
+    return true;
+  });
+  const hayFiltro = !!(desde || hasta || accion || rol);
+
+  return (
+    <div className="vc-card">
+      <p className="mb-3 text-xs uppercase tracking-wide text-muted">Historial de cambios</p>
+
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
+        <div>
+          <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Desde (fecha y hora)</label>
+          <input className="vc-input" type="datetime-local" value={desde} onChange={(e) => setDesde(e.target.value)} />
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Hasta (fecha y hora)</label>
+          <input className="vc-input" type="datetime-local" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Tipo de cambio</label>
+          <select className="vc-input" value={accion} onChange={(e) => setAccion(e.target.value)}>
+            <option value="">Todos</option>
+            {Object.entries(ACCIONES).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Quién</label>
+          <select className="vc-input" value={rol} onChange={(e) => setRol(e.target.value)}>
+            <option value="">Todos</option>
+            {Object.entries(ROLES).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="mb-2 flex items-center justify-between text-[11px] text-muted">
+        <span>
+          {filtrados.length} de {auditoria.length} registros · horas en hora de Puerto Rico
+        </span>
+        {hayFiltro && (
+          <button
+            type="button"
+            className="text-teal"
+            onClick={() => {
+              setDesde("");
+              setHasta("");
+              setAccion("");
+              setRol("");
+            }}
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+
+      {filtrados.length === 0 ? (
+        <p className="text-sm text-muted">
+          {auditoria.length === 0 ? "No hay actividad registrada todavía." : "Nada coincide con esos filtros."}
+        </p>
+      ) : (
+        <ul className="flex flex-col divide-y divide-border">
+          {filtrados.map((a) => (
+            <li key={a.id} className="py-2 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium">{ACCIONES[a.action] ?? a.action}</p>
+                <span className="whitespace-nowrap text-[11px] text-muted">
+                  {new Date(a.created_at).toLocaleString("es-PR", { timeZone: TZ })}
+                </span>
+              </div>
+              <p className="text-xs">{detalleAuditoria(a)}</p>
+              <p className="text-[11px] text-muted">
+                {ROLES[a.actor_role] ?? a.actor_role}
+                {a.actor_email ? ` · ${a.actor_email}` : ""}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export default function CpaTabs({
@@ -795,29 +943,7 @@ export default function CpaTabs({
         </div>
       )}
 
-      {tab === "auditoria" && (
-        <div className="vc-card">
-          <p className="mb-3 text-xs uppercase tracking-wide text-muted">Historial de cambios</p>
-          {auditoria.length === 0 ? (
-            <p className="text-sm text-muted">No hay actividad registrada todavía.</p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-border">
-              {auditoria.map((a) => (
-                <li key={a.id} className="py-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">{a.action}</p>
-                    <span className="text-[11px] text-muted">{new Date(a.created_at).toLocaleString("es-PR")}</span>
-                  </div>
-                  <p className="text-[11px] text-muted">
-                    {a.actor_role}
-                    {a.target_table ? ` · ${a.target_table}` : ""}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {tab === "auditoria" && <AuditoriaTab auditoria={auditoria} />}
     </div>
   );
 }
