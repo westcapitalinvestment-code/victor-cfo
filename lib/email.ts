@@ -45,6 +45,57 @@ function escapeHtml(texto: string): string {
     .replace(/"/g, "&quot;");
 }
 
+// Aviso al dueño cuando su contable sube o renueva un documento en la Bóveda
+// compartida (15 oct 2026).
+export async function sendDocumentoDeContableEmail(params: {
+  toEmail: string;
+  contableNombre: string;
+  documentoNombre: string;
+  renovado: boolean;
+  fechaVencimiento: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) {
+    return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  }
+
+  const accion = params.renovado ? "renovó" : "subió";
+  const venceTxt = params.fechaVencimiento ? ` Nueva fecha de vencimiento: ${params.fechaVencimiento}.` : "";
+  const link = `${SITE_URL}/dashboard/documentos`;
+  const nombre = escapeHtml(params.contableNombre);
+  const doc = escapeHtml(params.documentoNombre);
+
+  const textoPlano =
+    `Tu contable ${params.contableNombre} ${accion} "${params.documentoNombre}" en tu Bóveda de VICTOR.${venceTxt}\n\n` +
+    `Míralo aquí: ${link}\n\n` +
+    `— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}`;
+
+  const htmlCorreo = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p>Tu contable <strong>${nombre}</strong> ${accion} <strong>${doc}</strong> en tu Bóveda.${escapeHtml(venceTxt)}</p>
+  <p style="text-align: center; margin: 24px 0;"><a href="${link}" style="background: #0F766E; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">Ver mi Bóveda</a></p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: params.toEmail,
+      subject: `Tu contable ${accion} un documento en tu Bóveda`,
+      text: textoPlano,
+      html: htmlCorreo,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
 // Aviso de seguridad cuando alguien usa un código de respaldo de MFA (4
 // sept 2026) — usar un código de respaldo APAGA la verificación en dos
 // pasos de la cuenta (ver /api/mfa/backup-code), así que el dueño real

@@ -400,6 +400,7 @@ export default async function CpaClientePage({
         tienePos={tienePos}
         retenciones={retenciones ?? []}
         entityId={entityId}
+        ownerId={entidad.owner_id}
       />
     </div>
   );

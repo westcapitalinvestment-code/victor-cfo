@@ -6,6 +6,7 @@ import { fechaHoyPR } from "@/lib/hora-pr";
 import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 import CalendarioEstimadas from "@/app/dashboard/calendario-estimadas";
 import CpaAccountMenu from "../../cpa-account-menu";
+import BovedaCompartida from "../../boveda-compartida";
 import EstadoResultadosTabla from "../../estado-resultados-tabla";
 import { calcularEstadoResultados } from "@/lib/estado-resultados";
 
@@ -153,32 +154,7 @@ export default async function CpaPersonalPage({
   // ---- Impuestos
   const estimado = tab === "impuestos" ? await obtenerEstimadoImpuestos(supabase, ownerId, null, hoyStr) : null;
 
-  // ---- Bóveda (documentos personales)
-  type Doc = { id: string; nombre: string; tipo: string | null; fecha_vencimiento: string | null; estado: string | null };
-  let docs: Doc[] = [];
-  const archivosPorDoc = new Map<string, { id: string; etiqueta: string | null }[]>();
-  if (tab === "boveda") {
-    const { data } = await supabase
-      .from("documents")
-      .select("id, nombre, tipo, fecha_vencimiento, estado")
-      .eq("owner_id", ownerId)
-      .is("entity_id", null)
-      .order("nombre", { ascending: true });
-    docs = (data ?? []) as Doc[];
-    const ids = docs.map((d) => d.id);
-    if (ids.length) {
-      const { data: files } = await supabase
-        .from("document_files")
-        .select("id, document_id, etiqueta, orden")
-        .in("document_id", ids)
-        .order("orden", { ascending: true });
-      for (const f of files ?? []) {
-        const arr = archivosPorDoc.get(f.document_id) ?? [];
-        arr.push({ id: f.id, etiqueta: f.etiqueta });
-        archivosPorDoc.set(f.document_id, arr);
-      }
-    }
-  }
+  // ---- Bóveda: la carga/subida/renovación vive en <BovedaCompartida /> (/api/cpa/boveda).
 
   // ---- Alertas (qué debe / qué falta, en concreto)
   type AlertaP = { tono: "red" | "amb"; titulo: string; detalle: string };
@@ -451,44 +427,7 @@ export default async function CpaPersonalPage({
         </div>
       )}
 
-      {tab === "boveda" && (
-        <div className="vc-card">
-          {docs.length === 0 ? (
-            <p className="text-xs text-muted">El cliente no ha marcado documentos personales para compartir contigo.</p>
-          ) : (
-            <div className="divide-y divide-border">
-              {docs.map((d) => {
-                const archivos = archivosPorDoc.get(d.id) ?? [];
-                return (
-                  <div key={d.id} className="py-3">
-                    <p className="text-sm font-medium">{d.nombre}</p>
-                    <p className="text-xs text-muted">
-                      {d.tipo ?? "Documento"}
-                      {d.fecha_vencimiento ? ` · vence ${formatFecha(d.fecha_vencimiento)}` : ""}
-                    </p>
-                    {archivos.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {archivos.map((a, i) => (
-                          <a
-                            key={a.id}
-                            href={`/api/documentos/archivo/${a.id}/ver`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded-full border border-teal px-2.5 py-1 text-[11px] font-medium text-teal"
-                          >
-                            <i className="ti ti-file mr-1" />
-                            {a.etiqueta || `Archivo ${i + 1}`}
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+      {tab === "boveda" && <BovedaCompartida ownerId={ownerId} entityId={null} />}
 
       {tab === "reportes" && er && (
         <>

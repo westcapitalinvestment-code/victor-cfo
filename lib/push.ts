@@ -121,6 +121,28 @@ export async function notificarFounder(payload: PayloadNotificacion): Promise<vo
   }
 }
 
+// Avisar por push (PWA + app nativa) a un dueño de cuenta concreto — lo usa
+// la Bóveda compartida para decirle "tu contable subió/renovó un documento".
+// Best-effort: nunca lanza.
+export async function notificarOwner(ownerId: string, payload: PayloadNotificacion): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    const { data: subs } = await admin
+      .from("push_subscriptions")
+      .select("id, endpoint, p256dh, auth")
+      .eq("owner_id", ownerId);
+    for (const sub of subs ?? []) {
+      const resultado = await enviarPush({ endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth }, payload);
+      if (resultado.expirada) {
+        await admin.from("push_subscriptions").delete().eq("id", sub.id);
+      }
+    }
+    await enviarPushNativoPorOwner(ownerId, payload);
+  } catch {
+    // Best-effort.
+  }
+}
+
 // Mismo patrón que enviarPush()/notificarFounder() pero para CUALQUIER
 // usuario (no solo el founder) — pensado para el cron diario de
 // notificaciones-push y cualquier otro sitio que ya recorra

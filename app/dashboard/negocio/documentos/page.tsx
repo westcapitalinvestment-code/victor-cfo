@@ -48,7 +48,7 @@ export default async function DocumentosNegocioPage() {
   const [{ data: documentos, error }, { data: archivos }] = await Promise.all([
     supabase
       .from("documents")
-      .select("id, nombre, tipo, fecha_vencimiento, estado")
+      .select("id, nombre, tipo, fecha_vencimiento, estado, subido_por_contable")
       .eq("owner_id", user.id)
       .eq("entity_id", entidadId)
       .order("fecha_vencimiento", { ascending: true, nullsFirst: false }),
@@ -98,7 +98,14 @@ export default async function DocumentosNegocioPage() {
               return (
                 <li key={d.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
                   <div>
-                    <p>{d.nombre}</p>
+                    <p>
+                      {d.nombre}
+                      {d.subido_por_contable && (
+                        <span className="ml-2 rounded-full border border-teal px-1.5 py-0.5 text-[10px] font-medium text-teal">
+                          Subido por tu contable
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-muted">
                       {d.tipo}
                       {cantidadArchivos > 0 && ` · 📎 ${cantidadArchivos}`}

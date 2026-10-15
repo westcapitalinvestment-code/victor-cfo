@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
+import BovedaCompartida from "../boveda-compartida";
 import type { EstadoResultados } from "@/lib/estado-resultados";
 import { MESES_CORTOS } from "@/lib/estado-resultados";
 
@@ -109,6 +110,7 @@ const TABS = [
   { id: "resultados", label: "Resultados", icon: "ti-chart-bar" },
   { id: "ivu", label: "IVU", icon: "ti-receipt-tax" },
   { id: "recibos", label: "Recibos", icon: "ti-camera" },
+  { id: "boveda", label: "Bóveda", icon: "ti-folder" },
   { id: "estimados", label: "Estimados", icon: "ti-calendar-dollar" },
   { id: "auditoria", label: "Auditoría", icon: "ti-history" },
 ] as const;
@@ -148,6 +150,7 @@ export default function CpaTabs({
   tienePos,
   retenciones,
   entityId,
+  ownerId,
 }: {
   ivuApplies: boolean;
   ivuTracker: IvuTracker;
@@ -178,6 +181,7 @@ export default function CpaTabs({
   tienePos: boolean;
   retenciones: Retencion[];
   entityId: string;
+  ownerId: string;
 }) {
   const [tab, setTab] = useState<TabId>("facturas");
   const hoyISO = new Date().toISOString().slice(0, 10);
@@ -505,6 +509,8 @@ export default function CpaTabs({
           )}
         </div>
       )}
+
+      {tab === "boveda" && <BovedaCompartida ownerId={ownerId} entityId={entityId} />}
 
       {tab === "recibos" && (
         <div className="vc-card">
