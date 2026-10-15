@@ -2964,7 +2964,7 @@ function ReportesTab({
         </a>
         <a
           href={excelHref}
-          className="flex-1 rounded-lg border border-border py-2.5 text-center text-xs font-medium text-muted hover:opacity-80"
+          className="flex-1 rounded-lg border-[1.5px] border-muted bg-card py-2.5 text-center text-xs font-medium text-muted hover:opacity-80"
         >
           Exportar Excel
         </a>

@@ -511,25 +511,25 @@ export default function CotizacionDetalle({
             href={`/api/cotizaciones/${cotizacion.id}/pdf`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+            className="flex flex-col items-center gap-1 rounded-lg border-[1.5px] border-muted bg-card py-2 text-xs font-medium hover:opacity-80"
           >
             <i className="ti ti-file-download text-base" /> PDF
           </a>
           <button
             onClick={enviarPorWhatsapp}
-            className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+            className="flex flex-col items-center gap-1 rounded-lg border-[1.5px] border-muted bg-card py-2 text-xs font-medium hover:opacity-80"
           >
             <i className="ti ti-brand-whatsapp text-base" /> WhatsApp
           </button>
           {cotizacion.estado !== "convertida" ? (
             <Link
               href={`/dashboard/facturacion/cotizaciones/${cotizacion.id}/editar`}
-              className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+              className="flex flex-col items-center gap-1 rounded-lg border-[1.5px] border-blue text-blue bg-card py-2 text-xs font-medium hover:opacity-80"
             >
               <i className="ti ti-edit text-base" /> Editar
             </Link>
           ) : (
-            <span className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium text-muted opacity-40">
+            <span className="flex flex-col items-center gap-1 rounded-lg border-[1.5px] border-blue text-blue bg-card py-2 text-xs font-medium text-muted opacity-40">
               <i className="ti ti-edit text-base" /> Editar
             </span>
           )}

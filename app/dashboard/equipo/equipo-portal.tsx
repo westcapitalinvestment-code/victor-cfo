@@ -402,7 +402,7 @@ function PanelTab({
                 </button>
                 <Link
                   href={`/dashboard/facturacion/cotizaciones/${c.id}`}
-                  className="flex flex-1 items-center justify-center rounded-lg border border-border py-2 text-xs font-medium"
+                  className="flex flex-1 items-center justify-center rounded-lg border-[1.5px] border-muted bg-card py-2 text-xs font-medium"
                 >
                   Ver detalle
                 </Link>
@@ -429,13 +429,13 @@ function PanelTab({
             <div className="flex gap-2">
               <Link
                 href="/dashboard/facturacion/nueva"
-                className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+                className="flex flex-1 items-center justify-center gap-1 rounded-lg border-[1.5px] border-muted bg-card py-2 text-xs font-medium hover:opacity-80"
               >
                 <i className="ti ti-file-invoice" /> Nueva factura
               </Link>
               <Link
                 href="/dashboard/facturacion/cotizaciones/nueva"
-                className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+                className="flex flex-1 items-center justify-center gap-1 rounded-lg border-[1.5px] border-muted bg-card py-2 text-xs font-medium hover:opacity-80"
               >
                 <i className="ti ti-file-description" /> Nueva cotización
               </Link>
@@ -476,7 +476,7 @@ function PanelTab({
                 )}
                 <Link
                   href={`/dashboard/facturacion/${f.id}`}
-                  className="flex flex-1 items-center justify-center rounded-lg border border-border py-2 text-xs font-medium"
+                  className="flex flex-1 items-center justify-center rounded-lg border-[1.5px] border-muted bg-card py-2 text-xs font-medium"
                 >
                   Ver detalle
                 </Link>
@@ -1104,7 +1104,7 @@ function TecnicosTab({
               <button onClick={() => resetearPin(t)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium">
                 <i className="ti ti-refresh" /> Restablecer PIN
               </button>
-              <button onClick={() => abrirEditar(t)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium">
+              <button onClick={() => abrirEditar(t)} className="flex items-center gap-1 rounded-lg border-[1.5px] border-blue text-blue bg-card px-2.5 py-1.5 text-[11px] font-medium">
                 <i className="ti ti-edit" /> Editar
               </button>
             </div>

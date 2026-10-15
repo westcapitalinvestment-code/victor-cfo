@@ -16,6 +16,7 @@ const config: Config = {
         grn: "var(--grn)",
         red: "var(--red)",
         amb: "var(--amb)",
+        blue: "var(--blue)",
       },
       borderRadius: {
         card: "12px",

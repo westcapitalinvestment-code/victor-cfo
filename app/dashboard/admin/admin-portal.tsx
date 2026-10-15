@@ -498,7 +498,7 @@ export default function AdminPortal({
                 <button
                   disabled
                   title="Próximamente"
-                  className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs font-medium text-muted opacity-50"
+                  className="flex flex-1 items-center justify-center gap-1 rounded-lg border-[1.5px] border-muted bg-card py-2 text-xs font-medium text-muted opacity-50"
                 >
                   <i className="ti ti-eye" /> Ver su dashboard
                 </button>

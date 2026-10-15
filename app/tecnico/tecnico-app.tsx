@@ -1268,12 +1268,12 @@ function PantallaFactura({ facturaId, sesion, onVolver }: { facturaId: string; s
             Evidencia {evidenciaSubida > 0 && <span className="normal-case text-teal">· {evidenciaSubida} subida{evidenciaSubida === 1 ? "" : "s"}</span>}
           </p>
           <div className="flex gap-2">
-            <label className="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs font-medium">
+            <label className="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border-[1.5px] border-muted bg-card py-2 text-xs font-medium">
               <i className="ti ti-camera" /> {subiendoEvidencia ? "Subiendo..." : "Tomar foto"}
               <input type="file" accept="image/*" capture="environment" className="hidden" onChange={alTomarFoto} disabled={subiendoEvidencia} />
             </label>
             <button
-              className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs font-medium"
+              className="flex flex-1 items-center justify-center gap-1 rounded-lg border-[1.5px] border-muted bg-card py-2 text-xs font-medium"
               onClick={() => setMostrarFirma(true)}
             >
               <i className="ti ti-signature" /> Firma del cliente

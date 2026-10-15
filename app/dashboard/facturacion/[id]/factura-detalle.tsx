@@ -974,13 +974,13 @@ export default function FacturaDetalle({
             href={`/api/facturas/${factura.id}/pdf`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+            className="flex flex-col items-center gap-1 rounded-lg border-[1.5px] border-muted bg-card py-2 text-xs font-medium hover:opacity-80"
           >
             <i className="ti ti-file-download text-base" /> PDF
           </a>
           <button
             onClick={enviarPorWhatsapp}
-            className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+            className="flex flex-col items-center gap-1 rounded-lg border-[1.5px] border-muted bg-card py-2 text-xs font-medium hover:opacity-80"
           >
             <i className="ti ti-brand-whatsapp text-base" /> Reenviar
           </button>
@@ -989,8 +989,8 @@ export default function FacturaDetalle({
             onClick={enviarPorEmail}
             disabled={enviandoEmail || emailEnviado || !factura.clients?.email}
             title={!factura.clients?.email ? "Este cliente no tiene correo guardado" : undefined}
-            className={`flex flex-col items-center gap-1 rounded-lg border py-2 text-xs font-medium hover:opacity-80 disabled:opacity-50 ${
-              emailEnviado ? "border-teal text-teal" : "border-border"
+            className={`flex flex-col items-center gap-1 rounded-lg border-[1.5px] bg-card py-2 text-xs font-medium hover:opacity-80 disabled:opacity-50 ${
+              emailEnviado ? "border-teal text-teal" : "border-muted"
             }`}
           >
             <i className={`ti ${emailEnviado ? "ti-check" : "ti-mail"} text-base`} />{" "}
@@ -999,7 +999,7 @@ export default function FacturaDetalle({
           {!modoAdmin && factura.estado !== "pagada" && factura.estado !== "anulada" && (
             <Link
               href={`${basePath}/${factura.id}/editar`}
-              className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+              className="flex flex-col items-center gap-1 rounded-lg border-[1.5px] border-blue text-blue bg-card py-2 text-xs font-medium hover:opacity-80"
             >
               <i className="ti ti-edit text-base" /> Editar
             </Link>
@@ -1014,7 +1014,7 @@ export default function FacturaDetalle({
             <button
               type="button"
               onClick={abrirEditarPago}
-              className="flex flex-col items-center gap-1 rounded-lg border border-border py-2 text-xs font-medium hover:opacity-80"
+              className="flex flex-col items-center gap-1 rounded-lg border-[1.5px] border-blue text-blue bg-card py-2 text-xs font-medium hover:opacity-80"
             >
               <i className="ti ti-edit text-base" /> Editar
             </button>
@@ -1023,7 +1023,7 @@ export default function FacturaDetalle({
             <button
               onClick={eliminarFactura}
               disabled={eliminando}
-              className="flex flex-col items-center gap-1 rounded-lg border border-red py-2 text-xs font-medium text-red hover:opacity-80 disabled:opacity-50"
+              className="flex flex-col items-center gap-1 rounded-lg border-[1.5px] border-red bg-card py-2 text-xs font-medium text-red hover:opacity-80 disabled:opacity-50"
             >
               <i className="ti ti-trash text-base" /> {eliminando ? "..." : confirmarEliminar ? "¿Seguro?" : "Eliminar"}
             </button>

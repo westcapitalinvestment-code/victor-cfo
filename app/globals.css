@@ -14,6 +14,7 @@
   --grn: #1a7f37;
   --red: #cf222e;
   --amb: #9a6700;
+  --blue: #0969da;
 }
 html.dark {
   --bg: #0d1117;
@@ -23,6 +24,7 @@ html.dark {
   --muted: #8b949e;
   --grn: #3fb950;
   --red: #f85149;
+  --blue: #58a6ff;
   --amb: #d29922;
 }
 body {
@@ -225,9 +227,11 @@ body {
    Joel fue explícito en que pagar debe verse como la opción principal. */
 .vc-btn-secondary {
   width: 100%;
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--border);
+  color: var(--text);
+  /* 15 oct 2026 (pedido de Joel): todo botón con función debe verse como
+     botón — borde marcado y fondo de tarjeta, no texto flotando. */
+  border: 1.5px solid var(--muted);
+  background: var(--card);
   border-radius: 10px;
   padding: 11px;
   font-size: 13px;
