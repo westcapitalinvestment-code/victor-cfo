@@ -91,7 +91,13 @@ type Retencion = {
   remittance_status: string;
   entity_id: string | null;
   created_at: string;
+  // Migración 0155: cheque impreso desde Pagos.
+  cheque_numero?: number | null;
+  cheque_anulado?: boolean | null;
 };
+
+// Configuración de cheques por entidad (migración 0155).
+type ChequeConfig = { siguiente: number; modo: "preimpreso" | "blanco"; micr: boolean };
 
 // Evidencia (foto/PDF) de un pago — migración 0085, 12 sept 2026, pedido de
 // Joel: "poner un boton de foto y upload por si se necesitara poner una
@@ -267,10 +273,13 @@ export default function PagosPortal({
   ownerIdEfectivo,
   modoAdmin = false,
   adjuntosPorRetencion = {},
+  chequeConfigs = {},
 }: {
   vendors: Vendor[];
   retenciones: Retencion[];
   entidadId: string | null;
+  // Config de cheques por entidad (id → config), migración 0155.
+  chequeConfigs?: Record<string, ChequeConfig>;
   // 7 sept 2026 — bug real reportado por Joel ("no me esta trayendo los
   // reportes"): entidadId SIEMPRE traía un valor (con fallback a
   // entities[0].id incluso en "Vista global" del topbar), así que el
@@ -357,6 +366,7 @@ export default function PagosPortal({
           ownerIdEfectivo={ownerIdEfectivo}
           adjuntosPorRetencionInicial={adjuntosPorRetencion}
           modoAdmin={modoAdmin}
+          chequeConfigsInicial={chequeConfigs}
         />
       )}
       {tab === "contratistas" && (
@@ -427,6 +437,7 @@ function PagosTab({
   ownerIdEfectivo,
   adjuntosPorRetencionInicial = {},
   modoAdmin = false,
+  chequeConfigsInicial = {},
 }: {
   vendors: Vendor[];
   retenciones: Retencion[];
@@ -435,6 +446,7 @@ function PagosTab({
   ownerIdEfectivo?: string;
   adjuntosPorRetencionInicial?: Record<string, AdjuntoPago[]>;
   modoAdmin?: boolean;
+  chequeConfigsInicial?: Record<string, ChequeConfig>;
 }) {
   const supabase = createClient();
   const router = useRouter();
@@ -554,6 +566,96 @@ function PagosTab({
       setNachaError("No se pudo generar el archivo ACH. Intenta de nuevo.");
     }
     setDescargandoNacha(false);
+  }
+
+  // Cheques impresos (15 oct 2026, migración 0155): la secretaria registra el
+  // pago y genera el cheque del talonario; el número consecutivo queda en
+  // vendor_retenciones. Reimprimir un pago con cheque conserva su número.
+  const [chequeCfgs, setChequeCfgs] = useState<Record<string, ChequeConfig>>(chequeConfigsInicial);
+  const [imprimiendoCheque, setImprimiendoCheque] = useState(false);
+  const [chequeError, setChequeError] = useState<string | null>(null);
+  const [chequeMsg, setChequeMsg] = useState<string | null>(null);
+  const [chequeConfigAbierta, setChequeConfigAbierta] = useState(false);
+  const [guardandoChequeCfg, setGuardandoChequeCfg] = useState(false);
+  const [chequeFecha, setChequeFecha] = useState(hoyISO());
+  const [chequeMemo, setChequeMemo] = useState("");
+
+  const entidadCheque = entidadId ?? Object.keys(chequeCfgs)[0] ?? null;
+  const cfgActiva: ChequeConfig = (entidadCheque && chequeCfgs[entidadCheque]) || { siguiente: 1001, modo: "preimpreso", micr: false };
+
+  async function imprimirCheques(ids: string[], entityIdOverride?: string) {
+    if (ids.length === 0) return;
+    const primera = retenciones.find((r) => r.id === ids[0]);
+    const entityId = entityIdOverride ?? primera?.entity_id ?? entidadId ?? "";
+    if (!entityId) {
+      setChequeError("Escoge una entidad para imprimir cheques.");
+      return;
+    }
+    setImprimiendoCheque(true);
+    setChequeError(null);
+    setChequeMsg(null);
+    try {
+      const res = await fetch("/api/pagos/cheque", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, entityId, fecha: chequeFecha, memo: chequeMemo }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setChequeError(data.error ?? "No se pudo generar el cheque.");
+        setImprimiendoCheque(false);
+        return;
+      }
+      const numeros = res.headers.get("X-Cheque-Numeros");
+      const siguiente = Number(res.headers.get("X-Cheque-Siguiente"));
+      if (numeros) setChequeMsg(`Cheque(s) #${numeros.split(",").join(", #")} listos para imprimir.`);
+      if (Number.isFinite(siguiente) && siguiente > 0) {
+        setChequeCfgs((prev) => ({ ...prev, [entityId]: { ...(prev[entityId] ?? cfgActiva), siguiente } }));
+      }
+      const blob = await res.blob();
+      const nombreArchivo = res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ?? "cheques.pdf";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombreArchivo;
+      a.click();
+      URL.revokeObjectURL(url);
+      setSeleccionNacha(new Set());
+      router.refresh();
+    } catch {
+      setChequeError("No se pudo generar el cheque. Intenta de nuevo.");
+    }
+    setImprimiendoCheque(false);
+  }
+
+  async function guardarChequeCfg(cambios: Partial<ChequeConfig>) {
+    if (!entidadCheque) return;
+    const nueva = { ...cfgActiva, ...cambios };
+    setGuardandoChequeCfg(true);
+    setChequeError(null);
+    const res = await fetch("/api/pagos/cheque", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entityId: entidadCheque, siguiente: nueva.siguiente, modo: nueva.modo, micr: nueva.micr }),
+    });
+    if (res.ok) {
+      setChequeCfgs((prev) => ({ ...prev, [entidadCheque]: nueva }));
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setChequeError(data.error ?? "No se pudo guardar la configuración.");
+    }
+    setGuardandoChequeCfg(false);
+  }
+
+  async function anularCheque(retencionId: string, entityId: string | null) {
+    if (!entityId || !confirm("¿Anular este cheque? El número no se reutiliza.")) return;
+    const res = await fetch("/api/pagos/cheque", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accion: "anular", id: retencionId, entityId }),
+    });
+    if (res.ok) router.refresh();
+    else setChequeError("No se pudo anular el cheque.");
   }
 
   function abrirCamaraEvidencia(retencionId: string) {
@@ -1125,6 +1227,18 @@ function PagosTab({
               {descargandoNacha ? "Generando..." : "Descargar archivo ACH de esta corrida"}
             </button>
           )}
+          {resultadoIds.length > 0 && (
+            <button
+              type="button"
+              disabled={imprimiendoCheque}
+              className="vc-btn-secondary mt-2 w-full text-xs"
+              onClick={() => imprimirCheques(resultadoIds, resultadoEntityId ?? undefined)}
+            >
+              {imprimiendoCheque ? "Generando..." : "Imprimir cheques de esta corrida"}
+            </button>
+          )}
+          {chequeError && <p className="mt-2 text-xs text-red">{chequeError}</p>}
+          {chequeMsg && <p className="mt-2 text-xs text-teal">{chequeMsg}</p>}
           {nachaError && <p className="mt-2 text-xs text-red">{nachaError}</p>}
           {nachaAvisos && <p className="mt-2 text-xs text-amb">{nachaAvisos}</p>}
         </div>
@@ -1152,6 +1266,87 @@ function PagosTab({
 
       <SeccionColapsable titulo={`Pagos recientes${historialOrdenado.length > 0 ? ` (${historialOrdenado.length})` : ""}`} defaultAbierta={false}>
         {historialOrdenado.length === 0 && <p className="text-xs text-muted">Todavía no has registrado ningún pago.</p>}
+        {/* Cheques impresos (migración 0155). */}
+        {entidadCheque && (
+          <div className="mb-2 rounded-lg border border-border px-2.5 py-2">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between text-xs font-medium"
+              onClick={() => setChequeConfigAbierta((v) => !v)}
+            >
+              <span>
+                <i className="ti ti-writing-sign mr-1" />
+                Cheques · próximo #{cfgActiva.siguiente}
+              </span>
+              <i className={`ti ${chequeConfigAbierta ? "ti-chevron-up" : "ti-chevron-down"} text-muted`} />
+            </button>
+            {chequeConfigAbierta && (
+              <div className="mt-2 space-y-2 text-xs">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="text-muted">Próximo número</span>
+                    <input
+                      type="number"
+                      min={1}
+                      className="vc-input mt-0.5 w-full"
+                      defaultValue={cfgActiva.siguiente}
+                      key={cfgActiva.siguiente}
+                      onBlur={(e) => {
+                        const n = Number(e.target.value);
+                        if (Number.isInteger(n) && n > 0 && n !== cfgActiva.siguiente) guardarChequeCfg({ siguiente: n });
+                      }}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-muted">Papel</span>
+                    <select
+                      className="vc-input mt-0.5 w-full"
+                      value={cfgActiva.modo}
+                      disabled={guardandoChequeCfg}
+                      onChange={(e) => guardarChequeCfg({ modo: e.target.value as ChequeConfig["modo"] })}
+                    >
+                      <option value="preimpreso">Talonario del banco (preimpreso)</option>
+                      <option value="blanco">Papel en blanco (tóner MICR)</option>
+                    </select>
+                  </label>
+                </div>
+                {cfgActiva.modo === "blanco" && (
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={cfgActiva.micr}
+                      disabled={guardandoChequeCfg}
+                      onChange={(e) => guardarChequeCfg({ micr: e.target.checked })}
+                    />
+                    <span>Imprimir línea MICR (requiere tóner MICR y la cuenta ACH de la entidad)</span>
+                  </label>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="text-muted">Fecha del cheque</span>
+                    <input type="date" className="vc-input mt-0.5 w-full" value={chequeFecha} onChange={(e) => setChequeFecha(e.target.value)} />
+                  </label>
+                  <label className="block">
+                    <span className="text-muted">Memo (opcional)</span>
+                    <input
+                      type="text"
+                      maxLength={48}
+                      className="vc-input mt-0.5 w-full"
+                      value={chequeMemo}
+                      onChange={(e) => setChequeMemo(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <p className="text-muted">
+                  Con talonario del banco solo se imprime fecha, beneficiario, monto y talones. El banco no cobra un cheque
+                  impreso en papel normal sin tóner MICR.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+        {chequeError && !resultado && <p className="mb-2 text-xs text-red">{chequeError}</p>}
+        {chequeMsg && !resultado && <p className="mb-2 text-xs text-teal">{chequeMsg}</p>}
         {/* Selección para archivo ACH/NACHA (30 sept 2026, pedido de Joel: el
             otro camino además de copiar/pegar — un archivo .ach para subir
             al portal del banco). Solo pagos "pendiente" (los ya remesados no
@@ -1170,14 +1365,24 @@ function PagosTab({
                 {seleccionNacha.size > 0 ? `${seleccionNacha.size} seleccionado(s)` : "Seleccionar todos los pendientes"}
               </span>
             </label>
-            <button
-              type="button"
-              disabled={seleccionNacha.size === 0 || descargandoNacha}
-              className="vc-btn-secondary flex-shrink-0 whitespace-nowrap text-xs"
-              onClick={() => descargarNacha()}
-            >
-              {descargandoNacha ? "Generando..." : "Descargar archivo ACH"}
-            </button>
+            <div className="flex flex-shrink-0 gap-1.5">
+              <button
+                type="button"
+                disabled={seleccionNacha.size === 0 || imprimiendoCheque}
+                className="vc-btn-secondary whitespace-nowrap text-xs"
+                onClick={() => imprimirCheques([...seleccionNacha])}
+              >
+                {imprimiendoCheque ? "Generando..." : "Imprimir cheques"}
+              </button>
+              <button
+                type="button"
+                disabled={seleccionNacha.size === 0 || descargandoNacha}
+                className="vc-btn-secondary whitespace-nowrap text-xs"
+                onClick={() => descargarNacha()}
+              >
+                {descargandoNacha ? "Generando..." : "Descargar archivo ACH"}
+              </button>
+            </div>
           </div>
         )}
         {nachaError && <p className="mb-2 text-xs text-red">{nachaError}</p>}
@@ -1210,6 +1415,32 @@ function PagosTab({
                     {formatFecha(r.period_start)} · Bruto {formatMoney(Number(r.gross_amount))} · Retenido{" "}
                     {formatMoney(Number(r.retention_amount))} ({Number(r.retention_pct)}%)
                   </p>
+                  {r.cheque_numero != null && (
+                    <p className="text-xs">
+                      <span className={r.cheque_anulado ? "text-red line-through" : "text-teal"}>Cheque #{r.cheque_numero}</span>
+                      {r.cheque_anulado ? (
+                        <span className="ml-1 text-red">anulado</span>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="ml-2 text-muted hover:text-teal"
+                            disabled={imprimiendoCheque}
+                            onClick={() => imprimirCheques([r.id], r.entity_id ?? undefined)}
+                          >
+                            Reimprimir
+                          </button>
+                          <button
+                            type="button"
+                            className="ml-2 text-muted hover:text-red"
+                            onClick={() => anularCheque(r.id, r.entity_id ?? entidadId)}
+                          >
+                            Anular
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  )}
                 </div>
                 <span className="flex-shrink-0 text-sm font-medium">{formatMoney(Number(r.net_paid))}</span>
                 <button

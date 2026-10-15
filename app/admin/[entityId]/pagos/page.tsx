@@ -42,7 +42,7 @@ export default async function AdminPagosPage({ params }: { params: { entityId: s
 
   const { data: entidad } = await supabase
     .from("business_entities")
-    .select("id, name, default_contractor_retention_pct")
+    .select("id, name, default_contractor_retention_pct, cheque_siguiente_numero, cheque_modo, cheque_imprimir_micr")
     .eq("id", entityId)
     .eq("owner_id", ownerId)
     .maybeSingle();
@@ -59,7 +59,7 @@ export default async function AdminPagosPage({ params }: { params: { entityId: s
       .order("name", { ascending: true }),
     supabase
       .from("vendor_retenciones")
-      .select("id, vendor_id, gross_amount, retention_pct, retention_amount, net_paid, period_start, period_end, remittance_status, entity_id, created_at")
+      .select("id, vendor_id, gross_amount, retention_pct, retention_amount, net_paid, period_start, period_end, remittance_status, entity_id, created_at, cheque_numero, cheque_anulado")
       .eq("owner_id", ownerId)
       .eq("entity_id", entityId)
       .order("period_start", { ascending: false }),
@@ -100,6 +100,13 @@ export default async function AdminPagosPage({ params }: { params: { entityId: s
         volverLabel="← Facturación"
         ownerIdEfectivo={ownerId}
         adjuntosPorRetencion={adjuntosPorRetencion}
+        chequeConfigs={{
+          [entidad.id]: {
+            siguiente: entidad.cheque_siguiente_numero ?? 1001,
+            modo: entidad.cheque_modo === "blanco" ? "blanco" : "preimpreso",
+            micr: !!entidad.cheque_imprimir_micr,
+          },
+        }}
         modoAdmin
       />
     </>

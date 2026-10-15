@@ -40,7 +40,7 @@ export default async function PagosPage() {
 
   const { data: entities } = await supabase
     .from("business_entities")
-    .select("id, name, default_contractor_retention_pct")
+    .select("id, name, default_contractor_retention_pct, cheque_siguiente_numero, cheque_modo, cheque_imprimir_micr")
     .eq("owner_id", user.id)
     .eq("active", true);
 
@@ -69,7 +69,7 @@ export default async function PagosPage() {
     .order("name", { ascending: true });
   let retencionesQuery = supabase
     .from("vendor_retenciones")
-    .select("id, vendor_id, gross_amount, retention_pct, retention_amount, net_paid, period_start, period_end, remittance_status, entity_id, created_at")
+    .select("id, vendor_id, gross_amount, retention_pct, retention_amount, net_paid, period_start, period_end, remittance_status, entity_id, created_at, cheque_numero, cheque_anulado")
     .eq("owner_id", user.id)
     .order("period_start", { ascending: false });
 
@@ -113,6 +113,16 @@ export default async function PagosPage() {
       entidades={entities.map((e) => ({ id: e.id, name: e.name }))}
       retencionDefault={entidadActiva?.default_contractor_retention_pct ?? 10}
       adjuntosPorRetencion={adjuntosPorRetencion}
+      chequeConfigs={Object.fromEntries(
+        entities.map((e) => [
+          e.id,
+          {
+            siguiente: e.cheque_siguiente_numero ?? 1001,
+            modo: e.cheque_modo === "blanco" ? "blanco" : "preimpreso",
+            micr: !!e.cheque_imprimir_micr,
+          },
+        ])
+      )}
     />
   );
 }
