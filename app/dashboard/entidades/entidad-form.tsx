@@ -734,7 +734,7 @@ export default function EntidadForm({
           </div>
 
           <div className="flex gap-2">
-            <button className="vc-btn-primary !bg-transparent !text-muted border border-border flex-shrink-0 px-4" onClick={() => setTab("perfil")}>
+            <button className="vc-btn-back flex-shrink-0 px-4" onClick={() => setTab("perfil")}>
               ← Atrás
             </button>
             <button className="vc-btn-primary flex-1" onClick={() => setTab("facturas")}>
@@ -902,7 +902,7 @@ export default function EntidadForm({
           </div>
 
           <div className="flex gap-2">
-            <button className="vc-btn-primary !bg-transparent !text-muted border border-border flex-shrink-0 px-4" onClick={() => setTab("fiscal")}>
+            <button className="vc-btn-back flex-shrink-0 px-4" onClick={() => setTab("fiscal")}>
               ← Atrás
             </button>
             <button className="vc-btn-primary flex-1" disabled={guardando} onClick={guardar}>
