@@ -47,7 +47,7 @@ export default async function PortalClientePage({
   if (!TOKEN_RE.test(params.token)) return <Mensaje titulo="Enlace no válido" texto="Pídele a tu proveedor que te reenvíe el enlace." />;
 
   const supabase = createAdminClient();
-  const { data: cliente } = await supabase.from("clients").select("id, name").eq("portal_token", params.token).maybeSingle();
+  const { data: cliente } = await supabase.from("clients").select("id, name, owner_id").eq("portal_token", params.token).maybeSingle();
   if (!cliente) return <Mensaje titulo="Enlace no válido" texto="Pídele a tu proveedor que te reenvíe el enlace." />;
 
   const { data: filas } = await supabase
@@ -171,7 +171,19 @@ export default async function PortalClientePage({
         </div>
       )}
 
-      <p style={{ fontSize: 11, color: "#bbb", textAlign: "center", marginTop: 28 }}>Enviado a través de VICTOR CFO · victorcfo.com</p>
+      <div style={{ marginTop: 28, border: "1px solid #d9e3df", background: "#f3faf7", borderRadius: 12, padding: 16, textAlign: "center" }}>
+        <div style={{ fontWeight: 600, fontSize: 15 }}>¿Tienes un negocio? Cobra así de fácil.</div>
+        <div style={{ fontSize: 13, color: "#555", margin: "6px 0 12px" }}>
+          VICTOR CFO factura, cobra y te dice cómo van tus finanzas. Prueba gratis.
+        </div>
+        <a
+          href={`https://www.victorcfo.com/registro${cliente.owner_id ? `?ref=${cliente.owner_id}` : ""}`}
+          style={{ display: "inline-block", background: "#1D9E75", color: "#fff", padding: "8px 18px", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}
+        >
+          Conoce VICTOR CFO
+        </a>
+      </div>
+      <p style={{ fontSize: 11, color: "#bbb", textAlign: "center", marginTop: 16 }}>Enviado a través de VICTOR CFO · victorcfo.com</p>
     </main>
   );
 }
