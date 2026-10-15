@@ -554,8 +554,8 @@ export default function LandingPage() {
                 </div>
                 <div className={styles.addonDesc}>
                   $24.99/mes · registra tus pagos a contratistas con retención automática (10% / 6%), control
-                  mensual del depósito para que nunca se te pase la fecha, y exportación directa de la 480.6SP al
-                  cierre fiscal
+                  mensual del depósito para que nunca se te pase la fecha, exportación directa de la 480.6SP al
+                  cierre fiscal, archivo ACH para tu banco y cheques impresos con la retención ya registrada
                 </div>
               </div>
             </div>

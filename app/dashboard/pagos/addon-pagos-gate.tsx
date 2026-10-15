@@ -61,7 +61,8 @@ export default function AddonPagosGate({
         <p className="mb-4 text-sm text-muted">
           Registra tus pagos a contratistas con retención automática (10% / 6%), control mensual del depósito para
           que nunca se te pase la fecha, exportación directa de la 480.6SP al cierre fiscal, Certificado de Relevo
-          por contratista y archivo ACH/NACHA listo para subir al banco.
+          por contratista, archivo ACH/NACHA listo para subir al banco e impresión de cheques con número consecutivo
+          y la retención ya registrada.
         </p>
         {error && <p className="mb-3 text-xs text-red">{error}</p>}
         {puedeActivar ? (
