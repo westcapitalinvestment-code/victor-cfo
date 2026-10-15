@@ -53,12 +53,82 @@ type Vendor = {
 };
 
 type Retencion = {
+  id?: string;
   vendor_id: string;
+  gross_amount?: number;
+  retention_pct?: number;
   retention_amount: number;
+  net_paid?: number;
   remittance_status: "pendiente" | "remesado";
   period_start: string;
   period_end: string;
+  cheque_numero?: number | null;
+  cheque_fecha?: string | null;
+  cheque_anulado?: boolean | null;
 };
+
+// Pagos individuales a contratistas con número de cheque (15 oct 2026): el
+// contable los cuadra contra el estado de cuenta del banco.
+function PagosRegistrados({ retenciones, vendors }: { retenciones: Retencion[]; vendors: { id: string; name: string }[] }) {
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [soloCheques, setSoloCheques] = useState(false);
+  const nombre = new Map(vendors.map((v) => [v.id, v.name]));
+  const filas = retenciones
+    .filter((r) => (!desde || r.period_start >= desde) && (!hasta || r.period_start <= hasta) && (!soloCheques || r.cheque_numero != null))
+    .slice()
+    .sort((a, b) => (b.period_start ?? "").localeCompare(a.period_start ?? ""));
+  const total = filas.filter((r) => !r.cheque_anulado).reduce((s, r) => s + Number(r.net_paid ?? 0), 0);
+  return (
+    <div className="vc-card">
+      <p className="mb-2 text-xs uppercase tracking-wide text-muted">Pagos registrados</p>
+      <div className="mb-3 flex flex-wrap items-end gap-3 text-xs">
+        <label>
+          <span className="block text-muted">Desde</span>
+          <input type="date" className="vc-input" value={desde} onChange={(e) => setDesde(e.target.value)} />
+        </label>
+        <label>
+          <span className="block text-muted">Hasta</span>
+          <input type="date" className="vc-input" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+        </label>
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" checked={soloCheques} onChange={(e) => setSoloCheques(e.target.checked)} /> Solo con cheque
+        </label>
+        <span className="ml-auto text-muted">
+          {filas.length} pago(s) · neto <span className="font-medium text-text">{formatMoney(total)}</span>
+        </span>
+      </div>
+      {filas.length === 0 ? (
+        <p className="text-sm text-muted">No hay pagos en ese filtro.</p>
+      ) : (
+        <ul className="flex flex-col divide-y divide-border text-sm">
+          {filas.map((r, i) => (
+            <li key={r.id ?? i} className="flex items-center justify-between gap-2 py-2">
+              <div className="min-w-0">
+                <p className="truncate">{nombre.get(r.vendor_id) ?? "Contratista"}</p>
+                <p className="text-[11px] text-muted">
+                  {r.period_start} · Bruto {formatMoney(Number(r.gross_amount ?? 0))} · Ret. {formatMoney(Number(r.retention_amount ?? 0))}
+                  {r.retention_pct != null ? ` (${Number(r.retention_pct)}%)` : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {r.cheque_numero != null && (
+                  <Badge tone={r.cheque_anulado ? "red" : "grn"}>
+                    Cheque #{r.cheque_numero}
+                    {r.cheque_anulado ? " · anulado" : ""}
+                  </Badge>
+                )}
+                <span className={`font-medium ${r.cheque_anulado ? "text-muted line-through" : ""}`}>
+                  {formatMoney(Number(r.net_paid ?? 0))}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 type Validacion480 = {
   id: string;
@@ -821,6 +891,7 @@ export default function CpaTabs({
               </ul>
             )}
           </div>
+          <PagosRegistrados retenciones={retenciones} vendors={vendors} />
         </div>
       )}
 

@@ -117,7 +117,9 @@ export default async function CpaClientePage({
     vendorIds.length
       ? supabase
           .from("vendor_retenciones")
-          .select("vendor_id, retention_amount, remittance_status, period_start, period_end")
+          .select(
+            "id, vendor_id, gross_amount, retention_pct, retention_amount, net_paid, remittance_status, period_start, period_end, cheque_numero, cheque_fecha, cheque_anulado"
+          )
           .in("vendor_id", vendorIds)
       : Promise.resolve({ data: [] as never[] }),
     supabase
