@@ -36,6 +36,7 @@ export default function EditarDocumentoPage() {
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("Otro");
   const [fechaVencimiento, setFechaVencimiento] = useState("");
+  const [sinVencimiento, setSinVencimiento] = useState(false);
   const [compartirContador, setCompartirContador] = useState(false);
   const [esPersonal, setEsPersonal] = useState(true);
   const [fechaVencimientoOriginal, setFechaVencimientoOriginal] = useState("");
@@ -80,6 +81,7 @@ export default function EditarDocumentoPage() {
       setTipo(doc.tipo ?? "Otro");
       setFechaVencimiento(doc.fecha_vencimiento ?? "");
       setFechaVencimientoOriginal(doc.fecha_vencimiento ?? "");
+      setSinVencimiento(!doc.fecha_vencimiento);
       setCompartirContador(!!doc.compartir_contador);
       setEsPersonal(!doc.entity_id);
       if (!archivosError && archivos) setArchivosGuardados(archivos);
@@ -141,9 +143,9 @@ export default function EditarDocumentoPage() {
       .update({
         nombre,
         tipo,
-        fecha_vencimiento: fechaVencimiento || null,
-        compartir_contador: esPersonal ? compartirContador : false,
-        ...(cambioFecha ? { alerta_90: false, alerta_30: false, alerta_7: false } : {}),
+        fecha_vencimiento: sinVencimiento ? null : fechaVencimiento || null,
+        compartir_contador: compartirContador,
+        ...(cambioFecha && !sinVencimiento ? { alerta_90: false, alerta_30: false, alerta_7: false } : {}),
       })
       .eq("id", params.id);
 
@@ -237,11 +239,22 @@ export default function EditarDocumentoPage() {
             className="vc-input"
             type="date"
             value={fechaVencimiento}
+            disabled={sinVencimiento}
             onChange={(e) => setFechaVencimiento(e.target.value)}
           />
+          <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={sinVencimiento}
+              onChange={(e) => {
+                setSinVencimiento(e.target.checked);
+                if (e.target.checked) setFechaVencimiento("");
+              }}
+            />
+            <span>Sin fecha de vencimiento (no expira)</span>
+          </label>
         </div>
 
-        {esPersonal && (
         <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5">
           <input
             type="checkbox"
@@ -252,12 +265,12 @@ export default function EditarDocumentoPage() {
           <span className="text-xs">
             <span className="font-medium">Compartir con mi contable</span>
             <span className="block text-muted">
-              Solo lo verá si le compartiste tus finanzas personales. Déjalo apagado en documentos que no le interesan
-              (marbetes, seguros, tarjetas).
+              {esPersonal
+                ? "Solo lo verá si le compartiste tus finanzas personales. Déjalo apagado en documentos que no le interesan (marbetes, seguros, tarjetas)."
+                : "Tu contable verá este documento y podrá renovarlo o actualizarlo. Apágalo en lo que no quieres compartir."}
             </span>
           </span>
         </label>
-        )}
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Archivos</label>

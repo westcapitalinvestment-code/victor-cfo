@@ -21,6 +21,8 @@ export default function NuevoDocumentoNegocioForm({ entidadId }: { entidadId: st
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("Otro");
   const [fechaVencimiento, setFechaVencimiento] = useState("");
+  const [sinVencimiento, setSinVencimiento] = useState(false);
+  const [compartirContador, setCompartirContador] = useState(true);
   const [archivos, setArchivos] = useState<ArchivoPendiente[]>([]);
 
   function agregarArchivos(e: React.ChangeEvent<HTMLInputElement>) {
@@ -62,8 +64,9 @@ export default function NuevoDocumentoNegocioForm({ entidadId }: { entidadId: st
         entity_id: entidadId,
         nombre,
         tipo,
-        fecha_vencimiento: fechaVencimiento || null,
+        fecha_vencimiento: sinVencimiento ? null : fechaVencimiento || null,
         estado: "activo",
+        compartir_contador: compartirContador,
       })
       .select("id")
       .single();
@@ -127,8 +130,40 @@ export default function NuevoDocumentoNegocioForm({ entidadId }: { entidadId: st
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Fecha de vencimiento</label>
-          <input className="vc-input" type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} />
+          <input
+            className="vc-input"
+            type="date"
+            value={fechaVencimiento}
+            disabled={sinVencimiento}
+            onChange={(e) => setFechaVencimiento(e.target.value)}
+          />
+          <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={sinVencimiento}
+              onChange={(e) => {
+                setSinVencimiento(e.target.checked);
+                if (e.target.checked) setFechaVencimiento("");
+              }}
+            />
+            <span>Sin fecha de vencimiento (EIN, certificados que no expiran, etc.)</span>
+          </label>
         </div>
+
+        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={compartirContador}
+            onChange={(e) => setCompartirContador(e.target.checked)}
+          />
+          <span className="text-xs">
+            <span className="font-medium">Compartir con mi contable</span>
+            <span className="block text-muted">
+              Tu contable verá este documento y podrá renovarlo o actualizarlo. Apágalo en lo que no quieres compartir.
+            </span>
+          </span>
+        </label>
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Archivos (opcional)</label>

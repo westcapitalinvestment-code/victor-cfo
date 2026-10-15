@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     .select("id, nombre, tipo, fecha_vencimiento, estado, subido_por_contable, subido_por_email")
     .eq("owner_id", ownerId)
     .order("fecha_vencimiento", { ascending: true, nullsFirst: false });
-  q = entityId ? q.eq("entity_id", entityId) : q.is("entity_id", null).eq("compartir_contador", true);
+  q = (entityId ? q.eq("entity_id", entityId) : q.is("entity_id", null)).eq("compartir_contador", true);
   const { data: docs, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -81,6 +81,8 @@ export async function POST(req: NextRequest) {
   const tipo = String(form.get("tipo") ?? "Otro").trim() || "Otro";
   const fechaRaw = String(form.get("fechaVencimiento") ?? "").trim();
   const fechaVencimiento = /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw) ? fechaRaw : null;
+  const sinVencimiento = form.get("sinVencimiento") === "1";
+  const reemplazar = form.get("reemplazar") === "1";
   const etiquetaRaw = String(form.get("etiqueta") ?? "").trim();
   const etiqueta = etiquetaRaw || null;
   const archivos = form.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
@@ -107,30 +109,43 @@ export async function POST(req: NextRequest) {
   let docId = documentId;
   let docNombre = nombre;
   let renovado = false;
+  let archivosViejos: { id: string; r2_key: string }[] = [];
+  let fechaFinal: string | null = fechaVencimiento;
 
   if (docId) {
-    // Renovar un documento existente (del dueño o de un contable anterior).
+    // Editar / renovar un documento existente (del dueño o de un contable
+    // anterior) — solo si el dueño lo tiene compartido con su contable.
     const { data: doc } = await admin
       .from("documents")
       .select("id, nombre, owner_id, entity_id, compartir_contador")
       .eq("id", docId)
       .maybeSingle();
     const mismoAlcance = doc && doc.owner_id === ownerId && (doc.entity_id ?? null) === entityId;
-    const visible = doc && (entityId ? true : doc.compartir_contador === true);
-    if (!doc || !mismoAlcance || !visible) {
+    if (!doc || !mismoAlcance || doc.compartir_contador !== true) {
       return NextResponse.json({ error: "Documento no encontrado." }, { status: 404 });
     }
-    docNombre = doc.nombre;
+    docNombre = nombre || doc.nombre;
     renovado = true;
-    const { error: updErr } = await admin
-      .from("documents")
-      .update({
-        ...(fechaVencimiento ? { fecha_vencimiento: fechaVencimiento, alerta_90: false, alerta_30: false, alerta_7: false } : {}),
-        estado: "activo",
-        subido_por_contable: true,
-        subido_por_email: user.email,
-      })
-      .eq("id", docId);
+
+    if (reemplazar && archivos.length > 0) {
+      const { data: viejos } = await admin.from("document_files").select("id, r2_key").eq("document_id", docId);
+      archivosViejos = viejos ?? [];
+    }
+
+    const cambios: Record<string, unknown> = { estado: "activo" };
+    if (nombre) cambios.nombre = nombre;
+    if (form.get("tipo")) cambios.tipo = tipo;
+    if (sinVencimiento) {
+      cambios.fecha_vencimiento = null;
+      fechaFinal = null;
+    } else if (fechaVencimiento) {
+      Object.assign(cambios, { fecha_vencimiento: fechaVencimiento, alerta_90: false, alerta_30: false, alerta_7: false });
+    }
+    if (archivos.length > 0) {
+      cambios.subido_por_contable = true;
+      cambios.subido_por_email = user.email;
+    }
+    const { error: updErr } = await admin.from("documents").update(cambios).eq("id", docId);
     if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
   } else {
     const { data: nuevo, error: insErr } = await admin
@@ -140,9 +155,9 @@ export async function POST(req: NextRequest) {
         entity_id: entityId,
         nombre,
         tipo,
-        fecha_vencimiento: fechaVencimiento,
+        fecha_vencimiento: sinVencimiento ? null : fechaVencimiento,
         estado: "activo",
-        compartir_contador: entityId ? false : true,
+        compartir_contador: true,
         subido_por_contable: true,
         subido_por_email: user.email,
       })
@@ -167,6 +182,17 @@ export async function POST(req: NextRequest) {
     if (fErr) return NextResponse.json({ error: fErr.message }, { status: 500 });
   }
 
+  // "Reemplazar": ya con el archivo nuevo guardado, se quitan los anteriores
+  // (mismo documento, mismo campo — el dueño ve siempre una sola entrada).
+  for (const v of archivosViejos) {
+    try {
+      await borrarArchivoR2(v.r2_key);
+    } catch (err) {
+      console.error("Error borrando archivo viejo de R2:", err);
+    }
+    await admin.from("document_files").delete().eq("id", v.id);
+  }
+
   // Aviso al dueño (best-effort).
   try {
     const { data: contable } = await admin.from("users").select("full_name").eq("id", user.id).maybeSingle();
@@ -185,7 +211,7 @@ export async function POST(req: NextRequest) {
             contableNombre: quien,
             documentoNombre: docNombre,
             renovado,
-            fechaVencimiento,
+            fechaVencimiento: fechaFinal,
           })
         : Promise.resolve(),
     ]);

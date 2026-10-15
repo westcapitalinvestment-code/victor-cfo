@@ -26,6 +26,7 @@ export default function NuevoDocumentoPage() {
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("Otro");
   const [fechaVencimiento, setFechaVencimiento] = useState("");
+  const [sinVencimiento, setSinVencimiento] = useState(false);
   const [compartirContador, setCompartirContador] = useState(false);
   const [archivos, setArchivos] = useState<ArchivoPendiente[]>([]);
 
@@ -81,7 +82,7 @@ export default function NuevoDocumentoPage() {
         entity_id: null,
         nombre,
         tipo,
-        fecha_vencimiento: fechaVencimiento || null,
+        fecha_vencimiento: sinVencimiento ? null : fechaVencimiento || null,
         estado: "activo",
         compartir_contador: compartirContador,
       })
@@ -159,8 +160,20 @@ export default function NuevoDocumentoPage() {
             className="vc-input"
             type="date"
             value={fechaVencimiento}
+            disabled={sinVencimiento}
             onChange={(e) => setFechaVencimiento(e.target.value)}
           />
+          <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={sinVencimiento}
+              onChange={(e) => {
+                setSinVencimiento(e.target.checked);
+                if (e.target.checked) setFechaVencimiento("");
+              }}
+            />
+            <span>Sin fecha de vencimiento (no expira)</span>
+          </label>
         </div>
 
         <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5">

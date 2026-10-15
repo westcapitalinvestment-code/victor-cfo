@@ -58,11 +58,27 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("Otro");
   const [fecha, setFecha] = useState("");
+  const [sinVencNuevo, setSinVencNuevo] = useState(false);
   const archivoNuevoRef = useRef<HTMLInputElement>(null);
 
   const [renovando, setRenovando] = useState<string | null>(null);
+  const [nombreEd, setNombreEd] = useState("");
+  const [tipoEd, setTipoEd] = useState("Otro");
   const [fechaRenov, setFechaRenov] = useState("");
+  const [sinVencEd, setSinVencEd] = useState(false);
+  const [reemplazarEd, setReemplazarEd] = useState(false);
   const archivoRenovRef = useRef<HTMLInputElement>(null);
+
+  function abrirEdicion(d: Doc) {
+    setRenovando(d.id);
+    setNombreEd(d.nombre);
+    setTipoEd(d.tipo ?? "Otro");
+    setFechaRenov(d.fecha_vencimiento ?? "");
+    setSinVencEd(!d.fecha_vencimiento);
+    setReemplazarEd(false);
+    setError(null);
+    setOk(null);
+  }
 
   const cargar = useCallback(async () => {
     const qs = new URLSearchParams({ ownerId });
@@ -104,7 +120,8 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
     const fd = new FormData();
     fd.set("nombre", nombre);
     fd.set("tipo", tipo);
-    if (fecha) fd.set("fechaVencimiento", fecha);
+    if (sinVencNuevo) fd.set("sinVencimiento", "1");
+    else if (fecha) fd.set("fechaVencimiento", fecha);
     files.forEach((f) => fd.append("file", f));
     setSubiendo(true);
     const exito = await enviar(fd, "Documento subido. Se le avisó a tu cliente.");
@@ -113,6 +130,7 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
       setNombre("");
       setTipo("Otro");
       setFecha("");
+      setSinVencNuevo(false);
       setMostrarNuevo(false);
       if (archivoNuevoRef.current) archivoNuevoRef.current.value = "";
     }
@@ -121,16 +139,20 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
   async function renovar(e: React.FormEvent, docId: string) {
     e.preventDefault();
     const files = Array.from(archivoRenovRef.current?.files ?? []);
-    if (!fechaRenov && files.length === 0) {
-      setError("Pon la nueva fecha de vencimiento o adjunta el archivo renovado.");
+    if (!nombreEd.trim()) {
+      setError("El nombre no puede quedar vacío.");
       return;
     }
     const fd = new FormData();
     fd.set("documentId", docId);
-    if (fechaRenov) fd.set("fechaVencimiento", fechaRenov);
+    fd.set("nombre", nombreEd.trim());
+    fd.set("tipo", tipoEd);
+    if (sinVencEd) fd.set("sinVencimiento", "1");
+    else if (fechaRenov) fd.set("fechaVencimiento", fechaRenov);
+    if (reemplazarEd && files.length > 0) fd.set("reemplazar", "1");
     files.forEach((f) => fd.append("file", f));
     setSubiendo(true);
-    const exito = await enviar(fd, "Documento renovado. Se le avisó a tu cliente.");
+    const exito = await enviar(fd, "Documento actualizado. Se le avisó a tu cliente.");
     setSubiendo(false);
     if (exito) {
       setRenovando(null);
@@ -202,8 +224,19 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
               ))}
             </select>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Fecha de vencimiento (opcional)</label>
-              <input className="vc-input" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Fecha de vencimiento</label>
+              <input className="vc-input" type="date" value={fecha} disabled={sinVencNuevo} onChange={(e) => setFecha(e.target.value)} />
+              <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={sinVencNuevo}
+                  onChange={(e) => {
+                    setSinVencNuevo(e.target.checked);
+                    if (e.target.checked) setFecha("");
+                  }}
+                />
+                <span>Sin fecha de vencimiento</span>
+              </label>
             </div>
             <input ref={archivoNuevoRef} className="text-xs" type="file" multiple accept="image/*,application/pdf" required />
             <button type="submit" className="vc-btn-primary" disabled={subiendo}>
@@ -265,14 +298,44 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
                 <div className="mt-2">
                   {renovando === d.id ? (
                     <form onSubmit={(e) => renovar(e, d.id)} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                      <input className="vc-input" placeholder="Nombre" value={nombreEd} onChange={(e) => setNombreEd(e.target.value)} required />
+                      <select className="vc-input" value={tipoEd} onChange={(e) => setTipoEd(e.target.value)}>
+                        {TIPOS.map((t) => (
+                          <option key={t}>{t}</option>
+                        ))}
+                      </select>
                       <div>
-                        <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Nueva fecha de vencimiento</label>
-                        <input className="vc-input" type="date" value={fechaRenov} onChange={(e) => setFechaRenov(e.target.value)} />
+                        <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Fecha de vencimiento</label>
+                        <input
+                          className="vc-input"
+                          type="date"
+                          value={fechaRenov}
+                          disabled={sinVencEd}
+                          onChange={(e) => setFechaRenov(e.target.value)}
+                        />
+                        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={sinVencEd}
+                            onChange={(e) => {
+                              setSinVencEd(e.target.checked);
+                              if (e.target.checked) setFechaRenov("");
+                            }}
+                          />
+                          <span>Sin fecha de vencimiento</span>
+                        </label>
                       </div>
-                      <input ref={archivoRenovRef} className="text-xs" type="file" multiple accept="image/*,application/pdf" />
+                      <div>
+                        <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Subir archivo nuevo (opcional)</label>
+                        <input ref={archivoRenovRef} className="text-xs" type="file" multiple accept="image/*,application/pdf" />
+                        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+                          <input type="checkbox" checked={reemplazarEd} onChange={(e) => setReemplazarEd(e.target.checked)} />
+                          <span>Reemplazar los archivos anteriores (si no, el viejo se queda guardado)</span>
+                        </label>
+                      </div>
                       <div className="flex gap-2">
                         <button type="submit" className="vc-btn-primary" disabled={subiendo}>
-                          {subiendo ? "Guardando..." : "Guardar renovación"}
+                          {subiendo ? "Guardando..." : "Guardar cambios"}
                         </button>
                         <button type="button" className="text-xs text-muted" onClick={() => setRenovando(null)}>
                           Cancelar
@@ -283,15 +346,10 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
                     <button
                       type="button"
                       className="rounded-pill border border-border px-2.5 py-1 text-xs"
-                      onClick={() => {
-                        setRenovando(d.id);
-                        setFechaRenov("");
-                        setError(null);
-                        setOk(null);
-                      }}
+                      onClick={() => abrirEdicion(d)}
                     >
-                      <i className="ti ti-refresh mr-1" />
-                      Renovar
+                      <i className="ti ti-pencil mr-1" />
+                      Editar / renovar
                     </button>
                   )}
                 </div>
