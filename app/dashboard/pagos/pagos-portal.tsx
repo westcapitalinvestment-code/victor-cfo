@@ -1,5 +1,7 @@
 "use client";
 
+import Formularios480Dueno from "./formularios-480-dueno";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -378,7 +380,12 @@ export default function PagosPortal({
           ownerIdEfectivo={ownerIdEfectivo}
         />
       )}
-      {tab === "reportes" && <ReportesTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} vistaGlobal={vistaGlobal} />}
+      {tab === "reportes" && (
+        <>
+          <ReportesTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} vistaGlobal={vistaGlobal} />
+          <Formularios480Dueno entidadId={vistaGlobal ? null : entidadId} />
+        </>
+      )}
     </div>
   );
 }

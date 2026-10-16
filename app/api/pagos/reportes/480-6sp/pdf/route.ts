@@ -156,8 +156,8 @@ export async function GET(req: NextRequest) {
   // Columnas: Casilla | Contratista (SSN/EIN) | Tipo | Bruto | Retenido
   const xCasilla = margin;
   const xContratista = margin + 36;
-  const xTipo = width - margin - 190;
-  const xBruto = width - margin - 110;
+  const xTipo = width - margin - 240;
+  const xBruto = width - margin - 120;
   const xRetenido = width - margin;
   function filaEncabezadoTabla() {
     espacio(50);

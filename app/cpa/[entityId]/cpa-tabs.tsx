@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import BovedaCompartida from "../boveda-compartida";
+import Formularios480 from "../formularios-480";
 import type { EstadoResultados } from "@/lib/estado-resultados";
 import { MESES_CORTOS } from "@/lib/estado-resultados";
 
@@ -73,6 +74,7 @@ function PagosRegistrados({ retenciones, vendors }: { retenciones: Retencion[]; 
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [soloCheques, setSoloCheques] = useState(false);
+  const [abierto, setAbierto] = useState(false);
   const nombre = new Map(vendors.map((v) => [v.id, v.name]));
   const filas = retenciones
     .filter((r) => (!desde || r.period_start >= desde) && (!hasta || r.period_start <= hasta) && (!soloCheques || r.cheque_numero != null))
@@ -81,7 +83,19 @@ function PagosRegistrados({ retenciones, vendors }: { retenciones: Retencion[]; 
   const total = filas.filter((r) => !r.cheque_anulado).reduce((s, r) => s + Number(r.net_paid ?? 0), 0);
   return (
     <div className="vc-card">
-      <p className="mb-2 text-xs uppercase tracking-wide text-muted">Pagos registrados</p>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs uppercase tracking-wide text-muted">Pagos registrados</p>
+        <button type="button" className="vc-btn-back" onClick={() => setAbierto((v) => !v)}>
+          {abierto ? "Ocultar lista ▲" : `Desplegar lista (${filas.length}) ▼`}
+        </button>
+      </div>
+      {!abierto && (
+        <p className="text-xs text-muted">
+          {filas.length} pago(s) · neto <span className="font-medium text-text">{formatMoney(total)}</span>
+        </p>
+      )}
+      {abierto && (
+      <>
       <div className="mb-3 flex flex-wrap items-end gap-3 text-xs">
         <label>
           <span className="block text-muted">Desde</span>
@@ -125,6 +139,8 @@ function PagosRegistrados({ retenciones, vendors }: { retenciones: Retencion[]; 
             </li>
           ))}
         </ul>
+      )}
+      </>
       )}
     </div>
   );
@@ -891,6 +907,7 @@ export default function CpaTabs({
               </ul>
             )}
           </div>
+          <Formularios480 ownerId={ownerId} entityId={entityId} />
           <PagosRegistrados retenciones={retenciones} vendors={vendors} />
         </div>
       )}
