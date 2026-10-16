@@ -2366,3 +2366,38 @@ export async function sendSocioDocumentosEmail(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+
+// 16 oct 2026: envía al contratista su Modelo 480.6SP (PDF de una página).
+export async function sendFormulario480Email(params: {
+  toEmail: string;
+  nombre: string;
+  remitente: string;
+  anio: number;
+  pdf: Buffer;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  const nombre = escapeHtml(params.nombre);
+  const rem = escapeHtml(params.remitente);
+  const html = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <p>Hola ${nombre},</p>
+  <p><strong>${rem}</strong> te envía adjunto tu Modelo 480.6SP del año ${params.anio} (comprobante de pagos y retenciones). Guárdalo para tu planilla.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">Enviado con VICTOR CFO · <a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: params.toEmail,
+      subject: `Tu Modelo 480.6SP ${params.anio} — ${params.remitente}`,
+      text: `Hola ${params.nombre}, ${params.remitente} te envía adjunto tu Modelo 480.6SP del año ${params.anio}.`,
+      html,
+      attachments: [{ filename: `480.6SP-${params.anio}.pdf`, content: params.pdf }],
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}

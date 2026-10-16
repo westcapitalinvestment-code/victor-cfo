@@ -1,6 +1,7 @@
 "use client";
 
 import Formularios480Dueno from "./formularios-480-dueno";
+import Separador480 from "./separador-480";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -55,6 +56,8 @@ type Vendor = {
   // Migración 0119 (30 sept 2026): dirección postal, para enviarle al
   // contratista su copia del Modelo 480.6SP por correo.
   address?: string | null;
+  // Migración 0160: correo para enviarle su 480.6SP.
+  email?: string | null;
 };
 
 // Estado real del relevo de un contratista, comparado contra hoy (fecha de
@@ -383,6 +386,7 @@ export default function PagosPortal({
       {tab === "reportes" && (
         <>
           <ReportesTab vendors={vendors} retenciones={retenciones} entidadId={entidadId} vistaGlobal={vistaGlobal} />
+          <Separador480 entidadId={vistaGlobal ? null : entidadId} vendors={vendors} />
           <Formularios480Dueno entidadId={vistaGlobal ? null : entidadId} />
         </>
       )}
@@ -1571,6 +1575,7 @@ function ContratistasTab({
   // Migración 0119 (30 sept 2026, pedido de Joel): dirección postal, para
   // enviarle al contratista su copia del Modelo 480.6SP por correo.
   const [address, setAddress] = useState("");
+  const [emailV, setEmailV] = useState("");
   const [retentionType, setRetentionType] = useState<(typeof TIPOS_RETENCION)[number]["value"]>("480.6B");
   const [pct, setPct] = useState(String(retencionDefault));
   // Migración 0112 (30 sept 2026) — segundo eje del Modelo 480.6SP, junto a
@@ -1614,6 +1619,7 @@ function ContratistasTab({
     setName(v.name);
     setTaxId(v.tax_id ?? "");
     setAddress(v.address ?? "");
+    setEmailV(v.email ?? "");
     setRetentionType((v.retention_type as (typeof TIPOS_RETENCION)[number]["value"]) || "480.6B");
     setPct(String(v.default_retention_pct));
     setIsCorporation(v.is_corporation ?? false);
@@ -1735,6 +1741,7 @@ function ContratistasTab({
           name: name.trim(),
           tax_id: taxId.trim() || null,
           address: address.trim() || null,
+          email: emailV.trim() || null,
           vendor_type: "contratista_servicios",
           retention_type: retentionType,
           default_retention_pct: Number(pct || 0),
@@ -1742,7 +1749,7 @@ function ContratistasTab({
           active: true,
         })
         .select(
-          "id, name, tax_id, address, vendor_type, retention_type, default_retention_pct, is_corporation, active, entity_id"
+          "id, name, tax_id, address, email, vendor_type, retention_type, default_retention_pct, is_corporation, active, entity_id"
         )
         .single();
       setGuardando(false);
@@ -1764,6 +1771,7 @@ function ContratistasTab({
           name: name.trim(),
           tax_id: taxId.trim() || null,
           address: address.trim() || null,
+          email: emailV.trim() || null,
           retention_type: retentionType,
           default_retention_pct: Number(pct || 0),
           is_corporation: isCorporation,
@@ -1782,6 +1790,7 @@ function ContratistasTab({
                 name: name.trim(),
                 tax_id: taxId.trim() || null,
                 address: address.trim() || null,
+                email: emailV.trim() || null,
                 retention_type: retentionType,
                 default_retention_pct: Number(pct || 0),
                 is_corporation: isCorporation,
@@ -1888,6 +1897,13 @@ function ContratistasTab({
             placeholder="Dirección postal (para enviarle su 480.6SP)"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
+          />
+          <input
+            className="vc-input"
+            type="email"
+            placeholder="Correo del contratista (para enviarle su 480.6SP)"
+            value={emailV}
+            onChange={(e) => setEmailV(e.target.value)}
           />
           <div className="flex gap-2">
             <select
