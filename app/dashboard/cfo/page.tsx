@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { esFounder } from "@/lib/founder";
 import { saludoPorHora, fechaHoraLegiblePR, fechaHoyPR } from "@/lib/hora-pr";
 import { PRECIOS } from "@/lib/costo-ia";
@@ -399,6 +400,8 @@ export default async function CfoPage() {
           </div>
         </Colapsable>
       )}
+
+      <Link href="/dashboard/cfo/mercadeo" className="vc-card mb-3 block text-sm">Mercadeo por correo →</Link>
 
       <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
         {/* Gasto de IA por plan */}

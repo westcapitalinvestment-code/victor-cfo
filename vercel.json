@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/firma-gracia",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/mercadeo-envios",
+      "schedule": "15 14 * * 1-5"
     }
   ]
 }
