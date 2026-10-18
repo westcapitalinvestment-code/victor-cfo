@@ -18,6 +18,7 @@ export type UsuarioFila = {
   planStatus: string | null;
   creadoEn: string | null;
   gastoIaCentavos: number;
+  esContable?: boolean;
 };
 
 const ESTADO_LABEL: Record<string, { texto: string; clase: string }> = {
@@ -105,7 +106,9 @@ export default function UsuariosPanel({ usuarios, defaultAbierto = false }: { us
                 </thead>
                 <tbody>
                   {filtrados.map((u) => {
-                    const estado = ESTADO_LABEL[u.planStatus ?? ""] ?? { texto: u.planStatus ?? "—", clase: "text-muted" };
+                    const estado = u.esContable
+                      ? { texto: "Contable", clase: "text-muted" }
+                      : ESTADO_LABEL[u.planStatus ?? ""] ?? { texto: u.planStatus ?? "—", clase: "text-muted" };
                     const envio = estadoEnvio[u.id];
                     const esGratis = u.plan === "gratis";
                     return (
@@ -114,12 +117,12 @@ export default function UsuariosPanel({ usuarios, defaultAbierto = false }: { us
                           <p className="truncate">{u.nombre || "Sin nombre"}</p>
                           <p className="truncate text-[11px] text-muted">{u.email}</p>
                         </td>
-                        <td className="py-2 pr-2">{PLAN_LABEL[u.plan] ?? u.plan}</td>
+                        <td className="py-2 pr-2">{u.esContable ? "—" : PLAN_LABEL[u.plan] ?? u.plan}</td>
                         <td className={`py-2 pr-2 ${estado.clase}`}>{estado.texto}</td>
                         <td className="py-2 pr-2 text-muted">{fmtFecha(u.creadoEn)}</td>
                         <td className="py-2 pr-2 text-right">{fmt(u.gastoIaCentavos / 100)}</td>
                         <td className="py-2 text-right">
-                          {!esGratis && (
+                          {!esGratis && !u.esContable && (
                             <button
                               type="button"
                               onClick={() => reenviarBienvenida(u.id)}

@@ -57,6 +57,7 @@ export default async function CfoPage() {
     { data: logIa, error: errorLog },
     { data: creditosCompras },
     { data: creditosReferidos },
+    { data: miembrosCpa },
   ] = await Promise.all([
     admin
       .from("users")
@@ -82,9 +83,22 @@ export default async function CfoPage() {
     // como contra-ingreso. (El Programa de Socios — comisiones en efectivo —
     // se mudó a /dashboard/ventas el 13 oct 2026.)
     admin.from("referral_rewards").select("credit_cents, created_at"),
+    // Contables (18 oct 2026, pedido de Joel: "necesito separar los contables
+    // de los que compran realmente pq se me daña la estadística"). Toda cuenta
+    // nueva nace plan='core' + plan_status='incomplete', incluso la de un
+    // contable invitado, y eso inflaba usuarios por plan/nuevos del mes.
+    admin.from("account_members").select("member_email").eq("role", "cpa"),
   ]);
 
-  const todos = usuarios ?? [];
+  const todosConContables = usuarios ?? [];
+  // Un usuario es "contable" si fue invitado como CPA y NO está pagando su
+  // propio plan (si un contable también paga VICTOR, cuenta como cliente real).
+  const emailsCpa = new Set((miembrosCpa ?? []).map((m) => String(m.member_email).toLowerCase()));
+  const esContable = (u: { email: string | null; plan_status: string | null }) =>
+    !!u.email && emailsCpa.has(u.email.toLowerCase()) && u.plan_status !== "active" && u.plan_status !== "trialing";
+  const contables = todosConContables.filter(esContable);
+  // Todas las métricas de abajo usan SOLO usuarios reales (sin contables).
+  const todos = todosConContables.filter((u) => !esContable(u));
   const activos = todos.filter((u) => u.plan_status === "active");
   const nuevosEsteMes = todos.filter((u) => u.created_at && new Date(u.created_at) >= inicioMesPR);
   const canceladosEsteMes = todos.filter((u) => u.cancelled_at && new Date(u.cancelled_at) >= inicioMesPR);
@@ -263,6 +277,12 @@ export default async function CfoPage() {
         </div>
       )}
 
+      {contables.length > 0 && (
+        <p className="mb-2 text-[11px] text-muted">
+          {contables.length} contable{contables.length === 1 ? "" : "s"} no se cuenta{contables.length === 1 ? "" : "n"} en las estadísticas de abajo.
+        </p>
+      )}
+
       {/* Hero: MRR / usuarios activos / nuevos este mes */}
       <div className="vc-bal mb-3 grid grid-cols-3 gap-4">
         <div>
@@ -353,7 +373,8 @@ export default async function CfoPage() {
 
       {/* Usuarios — colapsable, con búsqueda por nombre/email */}
       <UsuariosPanel
-        usuarios={todos.map((u) => ({
+        usuarios={todosConContables.map((u) => ({
+          esContable: esContable(u),
           id: u.id,
           nombre: u.full_name ?? "",
           email: u.email,
