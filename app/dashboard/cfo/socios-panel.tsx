@@ -17,6 +17,37 @@ function waNumero(tel: string): string {
   return d.length === 10 ? `1${d}` : d;
 }
 
+// Fecha programada del próximo pago al vendedor: la fija el founder y la ve
+// el vendedor en su resumen (migración 0165).
+function FechaPagoSocio({ socioId, inicial }: { socioId: string; inicial: string | null }) {
+  const [fecha, setFecha] = useState(inicial ?? "");
+  const [estado, setEstado] = useState<"" | "guardando" | "ok" | "error">("");
+  async function guardar(valor: string) {
+    setFecha(valor);
+    setEstado("guardando");
+    const res = await fetch(`/api/socios/${socioId}/fecha-pago`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fecha: valor || null }),
+    });
+    setEstado(res.ok ? "ok" : "error");
+  }
+  return (
+    <div className="mt-1.5 flex items-center gap-2 text-[11px]">
+      <span className="text-muted">Próximo pago al vendedor:</span>
+      <input
+        type="date"
+        value={fecha}
+        onChange={(e) => guardar(e.target.value)}
+        className="rounded-lg border border-border px-1.5 py-0.5 text-[11px]"
+      />
+      {estado === "guardando" && <span className="text-muted">guardando…</span>}
+      {estado === "ok" && <span className="text-teal">guardado ✓</span>}
+      {estado === "error" && <span className="text-red">no se pudo guardar</span>}
+    </div>
+  );
+}
+
 export type SocioFila = {
   id: string;
   tipo: string;
@@ -35,6 +66,8 @@ export type SocioFila = {
   tieneResume: boolean;
   contratoAceptado: boolean;
   documentosCompletos: boolean;
+  // Fecha que el founder programó para el próximo pago (migración 0165)
+  proximaFechaPago?: string | null;
 };
 
 export type ComisionFila = {
@@ -371,6 +404,8 @@ export default function SociosPanel({
                           )}
                         </div>
                       </div>
+
+                      {s.tipo === "vendedor" && <FechaPagoSocio socioId={s.id} inicial={s.proximaFechaPago ?? null} />}
 
                       {/* Documentos (contrato + datos de pago): si faltan, link para mandarle
                           y botón de WhatsApp con el mensaje listo; si ya los llenó, muestra

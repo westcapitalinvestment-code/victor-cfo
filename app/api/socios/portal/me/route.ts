@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient();
 
-  const { data: socio } = await admin.from("socios").select("id, nombre, tipo, estado").eq("id", socioId).maybeSingle();
+  const { data: socio } = await admin.from("socios").select("id, nombre, tipo, estado, proxima_fecha_pago").eq("id", socioId).maybeSingle();
   if (!socio || socio.tipo !== "vendedor" || socio.estado !== "aprobado") {
     return NextResponse.json({ error: "Portal no disponible." }, { status: 403 });
   }
@@ -59,6 +59,12 @@ export async function GET(req: NextRequest) {
   // mensual, o a los 3 meses si es anual del modelo viejo). Va en bruto: la
   // retención 1062.03 se calcula recién cuando se libera.
   let totalTreintaEsperaCentavos = 0;
+  // Para cuadrar con el 480.6SP: bruto pendiente, retención de lo pendiente y
+  // retención acumulada del año (lo que el vendedor verá en su planilla).
+  let totalPendienteBrutoCentavos = 0;
+  let totalRetenidoPendienteCentavos = 0;
+  let totalRetenidoAnioCentavos = 0;
+  const anioActual = new Date().getFullYear();
 
   const filas = (clientes ?? []).map((cliente) => {
     const estadoVendedor = estadoPorCliente.get(cliente.id);
@@ -92,6 +98,15 @@ export async function GET(req: NextRequest) {
     totalCobradoCentavos += cobrado;
     totalPendienteCentavos += pendiente;
     totalRetenidoCentavos += retenido;
+    for (const c of propiasComisiones) {
+      if (c!.estado === "pendiente") {
+        totalPendienteBrutoCentavos += Number(c!.comision_centavos);
+        totalRetenidoPendienteCentavos += retencionPorComision.get(c!.id as string) ?? 0;
+      }
+      if (c!.estado !== "reversada" && c!.created_at && new Date(c!.created_at as string).getFullYear() === anioActual) {
+        totalRetenidoAnioCentavos += retencionPorComision.get(c!.id as string) ?? 0;
+      }
+    }
 
     const treintaEspera =
       estadoVendedor && estadoVendedor.treinta_estado === "pendiente" ? Number(estadoVendedor.treinta_centavos) : 0;
@@ -127,6 +142,11 @@ export async function GET(req: NextRequest) {
     totalPendienteCentavos,
     totalRetenidoCentavos,
     totalTreintaEsperaCentavos,
+    totalPendienteBrutoCentavos,
+    totalRetenidoPendienteCentavos,
+    totalRetenidoAnioCentavos,
+    anioRetencion: anioActual,
+    proximaFechaPago: (socio as { proxima_fecha_pago?: string | null }).proxima_fecha_pago ?? null,
     clientes: filas,
   });
 }

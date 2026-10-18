@@ -300,8 +300,6 @@ export default function SocioPortalPage() {
         <p className="py-8 text-center text-sm text-muted">Cargando...</p>
       ) : (
         <>
-          <ResumenVendedor datos={datos} />
-
           {/* Link personal + QR: para enseñarlo en persona o compartirlo */}
           <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">Tu link y tu QR</p>
           <div className="vc-card mb-4 flex flex-col items-center gap-2 text-center">
@@ -331,6 +329,9 @@ export default function SocioPortalPage() {
               )}
             </div>
           </div>
+
+          {/* Resumen desplegable: debajo del QR para que enseñarlo no pase por los números */}
+          <ResumenVendedor datos={datos} />
 
           <OficinasContables />
           <BonosOficinas />
