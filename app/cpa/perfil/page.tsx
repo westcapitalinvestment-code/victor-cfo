@@ -104,8 +104,8 @@ export default function PerfilOficinaPage() {
       <div className="mb-4 rounded-lg p-3.5 text-sm text-white" style={{ background: "#1B3A5C" }}>
         <p className="font-medium">Apareces en el directorio de contables de VICTOR</p>
         <p className="mt-1 text-xs text-white/80">
-          Los usuarios de VICTOR que buscan contable pueden encontrarte por pueblo y especialidad, ver tu página y contactarte.
-          Completa tu perfil para aparecer.
+          Los usuarios de VICTOR que buscan contable pueden encontrarte por pueblo y especialidad y contactarte directo. Tu
+          teléfono, correo, web y redes se muestran a los usuarios de VICTOR. Completa tu perfil para aparecer.
         </p>
       </div>
 
@@ -160,7 +160,7 @@ export default function PerfilOficinaPage() {
               />
             </label>
           </div>
-          <p className="text-[11px] text-muted">Email de contacto: {o.email} (el de tu cuenta).</p>
+          <p className="text-[11px] text-muted">Correo que se muestra: {o.email} (el de tu cuenta).</p>
 
           <label className="flex flex-col gap-1 text-[12px] font-medium">
             Página web

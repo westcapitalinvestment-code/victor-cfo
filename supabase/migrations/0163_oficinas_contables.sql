@@ -10,7 +10,9 @@
 --     visitada y su estado, sin quién ni los datos de contacto.
 --  2) Cuando el contable se registra en el portal, la ficha pasa a ser suya y
 --     aparece automáticamente en el directorio de contables para los clientes
---     de VICTOR que no tienen uno (cuando su perfil está completo).
+--     de VICTOR que no tienen uno (cuando su perfil está completo). El
+--     directorio muestra su contacto completo; el cliente decide por su cuenta
+--     cuándo compartir sus datos (invitando al contable desde su app).
 --  3) Que el vendedor pueda guardar sus prospectos (clientes) con estado de
 --     seguimiento (pendiente / visitado / interesado / demo hecha / rechazó) y
 --     filtrarlos.
@@ -86,23 +88,3 @@ RETURNS void AS $$
     )
     AND NOT EXISTS (SELECT 1 FROM public.oficinas_contables o2 WHERE o2.user_id = u.id);
 $$ LANGUAGE sql SECURITY DEFINER SET search_path = public;
-
--- ---- Solicitudes de contacto cliente -> contable --------------------------
-CREATE TABLE IF NOT EXISTS public.contable_solicitudes (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  oficina_id uuid NOT NULL REFERENCES public.oficinas_contables(id) ON DELETE CASCADE,
-  cliente_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  nombre_cliente text NOT NULL,
-  email_cliente text NOT NULL,
-  telefono_cliente text,
-  mensaje text,
-  autorizo_compartir boolean NOT NULL DEFAULT true,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS contable_solicitudes_oficina_idx ON public.contable_solicitudes (oficina_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS contable_solicitudes_cliente_idx ON public.contable_solicitudes (cliente_id, oficina_id, created_at DESC);
-
-ALTER TABLE public.contable_solicitudes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY contable_solicitudes_cliente_read ON public.contable_solicitudes
-  FOR SELECT USING (cliente_id = auth.uid());
--- (El contable no lee esta tabla directo: se entera por correo; las APIs usan service_role.)
