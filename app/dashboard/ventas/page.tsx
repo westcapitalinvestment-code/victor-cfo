@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { esFounder } from "@/lib/founder";
 import SociosPanel from "../cfo/socios-panel";
 import ContablesPanel from "./contables-panel";
+import BonosOficinasPanel from "./bonos-oficinas-panel";
 
 // Ventas (13 oct 2026, pedido de Joel: "sácalo de CFO y ponme Ventas como
 // penúltimo; ahí va todo lo que tenga que ver con ventas, socios y
@@ -161,6 +162,9 @@ export default async function VentasPage() {
         <Tarjeta titulo="Contables activados" valor={String(contablesFilas.length)} nota="VICTOR Accountant" />
         <Tarjeta titulo="Ingreso total ventas" valor={fmt(mrrVendedores + mrrContables)} nota="vendedores + contables / mes" />
       </div>
+
+      {/* Bonos de oficinas de contables (migración 0164) */}
+      <BonosOficinasPanel />
 
       {/* Programa de Socios: solicitudes, vendedores, comisiones, prospectos y pagos */}
       <SociosPanel

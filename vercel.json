@@ -55,6 +55,10 @@
     {
       "path": "/api/cron/mercadeo-envios",
       "schedule": "15 14 * * 1-5"
+    },
+    {
+      "path": "/api/cron/bonos-oficinas",
+      "schedule": "30 19 * * *"
     }
   ]
 }

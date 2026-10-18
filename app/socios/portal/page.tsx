@@ -9,6 +9,7 @@ import {
   type EstadoSeguimiento,
 } from "@/lib/oficinas-contables";
 import OficinasContables from "./oficinas-contables";
+import BonosOficinas from "./bonos-oficinas";
 
 const SITE_URL = "https://www.victorcfo.com";
 
@@ -344,6 +345,7 @@ export default function SocioPortalPage() {
           </div>
 
           <OficinasContables />
+          <BonosOficinas />
 
           {/* Prospectos: protege tu comisión si el cliente se registra después
               por la landing, y te deja dar seguimiento (llamar / WhatsApp). */}
