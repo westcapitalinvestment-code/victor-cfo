@@ -90,6 +90,26 @@ export function priceIdPara(plan: PlanId, ciclo: Ciclo, _esReferido: boolean = f
   return PRICE_ENV_VARS[plan]?.[ciclo] || null;
 }
 
+// Orden de los planes (de menor a mayor) para saber si un cambio es subida o
+// bajada. 18 oct 2026.
+export const PLAN_RANK: Record<PlanId, number> = { core: 0, pro: 1, proplus: 2 };
+
+// Dado un Price ID de Stripe, devuelve qué plan y ciclo representa (o null si
+// no es un precio de plan, ej. un addon). Es la fuente real: el plan se lee
+// del precio que Stripe está cobrando, no de la metadata de la suscripción,
+// que no cambia cuando alguien cambia de precio desde el portal de Stripe.
+export function planDesdePriceId(priceId: string): { plan: PlanId; ciclo: Ciclo } | null {
+  for (const plan of Object.keys(PRICE_ENV_VARS) as PlanId[]) {
+    for (const ciclo of ["mensual", "anual"] as Ciclo[]) {
+      if (PRICE_ENV_VARS[plan][ciclo] === priceId) return { plan, ciclo };
+    }
+  }
+  // Precio viejo de Core con descuento de referido: sigue siendo Core.
+  if (priceId === PRICE_ENV_VARS_CORE_REFERIDO.mensual) return { plan: "core", ciclo: "mensual" };
+  if (priceId === PRICE_ENV_VARS_CORE_REFERIDO.anual) return { plan: "core", ciclo: "anual" };
+  return null;
+}
+
 export function esPlanValido(valor: unknown): valor is PlanId {
   return valor === "core" || valor === "pro" || valor === "proplus";
 }

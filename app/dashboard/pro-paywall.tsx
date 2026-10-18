@@ -48,6 +48,23 @@ export default function ProPaywall() {
       return;
     }
 
+    // Ya tiene suscripción: se sube de plan dentro de la misma (sin doble cobro).
+    if (json?.code === "usar_cambiar_plan") {
+      const r2 = await fetch("/api/stripe/cambiar-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: "pro", ciclo: "mensual" }),
+      });
+      const j2 = await r2.json().catch(() => null);
+      if (r2.ok) {
+        window.location.reload();
+        return;
+      }
+      setLoading(false);
+      setError(j2?.error || "No se pudo cambiar de plan. Intenta de nuevo en un momento.");
+      return;
+    }
+
     setLoading(false);
     setError(json?.error || "No se pudo iniciar el pago. Intenta de nuevo en un momento.");
   }

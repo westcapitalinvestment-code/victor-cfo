@@ -41,9 +41,21 @@ export async function POST(req: NextRequest) {
 
   const { data: perfil } = await supabase
     .from("users")
-    .select("stripe_customer_id, referred_by, referido_por_socio_id")
+    .select("stripe_customer_id, referred_by, referido_por_socio_id, stripe_subscription_id, plan_status, billed_by_firma_id")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Cliente que ya tiene una suscripción activa (18 oct 2026): NO se crea otra
+  // — eso cobraba doble. Para subir o bajar de plan se usa
+  // /api/stripe/cambiar-plan, que cambia el precio dentro de la misma
+  // suscripción. (El cliente de una firma sin suscripción propia sí pasa: su
+  // checkout "asumir plan" crea su primera suscripción.)
+  if (perfil?.stripe_subscription_id && perfil.plan_status === "active" && !perfil.billed_by_firma_id) {
+    return NextResponse.json(
+      { error: "Ya tienes una suscripción activa. Cambia de plan desde Configuración.", code: "usar_cambiar_plan" },
+      { status: 409 }
+    );
+  }
 
   // Si lo trajo un socio, hay que saber de qué TIPO es antes de decidir el
   // trial — ver el bloque de abajo (2 oct 2026, migración 0135). Se lee con

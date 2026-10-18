@@ -10,6 +10,7 @@ import {
   priceIdAddonAdministrador,
   priceIdAddonEntidadAdicional,
   todosLosPriceIdsDePlanes,
+  planDesdePriceId,
 } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { limiteMensualIaCentavos } from "@/lib/limites-ia";
@@ -412,7 +413,14 @@ export async function POST(req: NextRequest) {
         if (!userId) break;
 
         const estado = subscription.status; // active | past_due | unpaid | canceled | trialing | ...
-        const plan = subscription.metadata?.plan;
+        // El plan se lee del PRECIO que Stripe está cobrando (18 oct 2026): la
+        // metadata no cambia cuando alguien cambia de precio desde el portal
+        // de Stripe o por una bajada programada, y la app quedaba mostrando el
+        // plan viejo. La metadata queda solo como respaldo.
+        const precioPlanActual = subscription.items.data
+          .map((it) => planDesdePriceId(it.price.id))
+          .find((p) => p !== null);
+        const plan = precioPlanActual?.plan ?? subscription.metadata?.plan;
 
         // Mapeamos los estados de Stripe a los 3 valores que ya usa el
         // resto de la app (active | incomplete | cancelled) en vez de

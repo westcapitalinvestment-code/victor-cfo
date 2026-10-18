@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import CambiarPlan from "./cambiar-plan";
 
 // Botón "Gestionar mi plan" en Config — abre el Customer Portal de Stripe,
 // donde el usuario puede cancelar su suscripción, cambiar su tarjeta o ver
@@ -192,6 +193,7 @@ export default function GestionarPlan({
         </>
       ) : (
         <>
+          <CambiarPlan />
           <p className="mb-3 text-xs text-muted">
             Cambia tu tarjeta, revisa tus recibos o cancela tu suscripción cuando quieras.
           </p>
