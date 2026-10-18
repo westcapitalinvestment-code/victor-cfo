@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import SubirABusiness from "../subir-a-business";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
@@ -874,6 +875,7 @@ function TecnicosTab({
             <button className="vc-btn-primary" style={{ width: "auto" }} disabled={activandoAddon} onClick={activarAddon}>
               {activandoAddon ? "Activando..." : "Activar addon"}
             </button>
+            <SubirABusiness compacto />
           </>
         ) : (
           <div className="flex items-center justify-between">

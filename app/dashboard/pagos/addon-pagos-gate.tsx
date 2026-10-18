@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import SubirABusiness from "../subir-a-business";
 
 // Pantalla de upsell del addon Pagos ($24.99/mes, migración 0134, 2 oct
 // 2026) — reemplaza TODO el portal de Pagos (contratistas, corrida de pago,
@@ -66,9 +67,12 @@ export default function AddonPagosGate({
         </p>
         {error && <p className="mb-3 text-xs text-red">{error}</p>}
         {puedeActivar ? (
-          <button className="vc-btn-primary" disabled={activando} onClick={activar}>
-            {activando ? "Activando..." : "Activar addon"}
-          </button>
+          <>
+            <button className="vc-btn-primary" disabled={activando} onClick={activar}>
+              {activando ? "Activando..." : "Activar addon"}
+            </button>
+            <SubirABusiness compacto />
+          </>
         ) : (
           <p className="text-xs text-muted">
             Este addon lo activa el dueño de la cuenta desde su Suscripción — pídele que lo active para poder

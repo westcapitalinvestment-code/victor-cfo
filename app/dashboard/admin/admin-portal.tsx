@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import SubirABusiness from "../subir-a-business";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -546,6 +547,8 @@ export default function AdminPortal({
             Cada admin recibe un email de invitación. Entra con su propio correo y contraseña — nunca con las
             tuyas. Secretaria $10/mes · Administrador $20/mes.
           </div>
+
+          <SubirABusiness compacto />
 
           <button className="vc-btn-primary w-full" disabled={guardando || cambios.size === 0} onClick={guardarConfiguracion}>
             {guardando ? "Guardando..." : guardado ? "Guardado ✓" : "Guardar configuración de admin"}
