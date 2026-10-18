@@ -9,6 +9,8 @@ import AlertasAgrupadas, { type AlertaCpa } from "./alertas-agrupadas";
 import CpaAccountMenu from "./cpa-account-menu";
 import CpaPersonalList, { type ClientePersonal } from "./cpa-personal-list";
 import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { perfilCompleto } from "@/lib/oficinas-contables";
 
 // Portal CPA — lista de clientes (pantalla "Clientes" del mockup
 // "VICTOR — Portal CPA.html"). RLS (business_entities_cpa_read,
@@ -44,6 +46,15 @@ export default async function CpaPortalPage() {
     nombreCpa = inviteAceptada?.cpa_name || null;
   }
   const primerNombre = (nombreCpa || user.email || "").split(" ")[0];
+
+  // ¿Ya completó su perfil del directorio de contables? (migración 0163). La
+  // tabla no tiene RLS para usuarios normales, así que se lee con service_role.
+  const { data: fichaOficina } = await createAdminClient()
+    .from("oficinas_contables")
+    .select("pueblo, especialidades, descripcion")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const perfilOficinaListo = !!fichaOficina && perfilCompleto(fichaOficina);
 
   const { data: entidades, error } = await supabase
     .from("business_entities")
@@ -305,6 +316,21 @@ export default async function CpaPortalPage() {
       <p className="mb-4 text-lg font-medium">
         {saludoPorHora(hoy)}, {primerNombre}
       </p>
+
+      {!perfilOficinaListo && (
+        <Link
+          href="/cpa/perfil"
+          className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-teal p-3.5 hover:opacity-90"
+        >
+          <div>
+            <p className="text-sm font-medium">Completa el perfil de tu oficina</p>
+            <p className="mt-0.5 text-xs text-muted">
+              Así apareces en el directorio de contables de VICTOR y los usuarios que buscan contable pueden encontrarte.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-teal px-3 py-1.5 text-xs font-medium text-white">Completar</span>
+        </Link>
+      )}
 
       {error && <p className="mb-3 text-xs text-red">No se pudieron cargar tus clientes: {error.message}</p>}
 
