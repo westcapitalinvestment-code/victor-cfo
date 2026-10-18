@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
 import CuentasManuales from "./cuentas-manuales";
+import DemoBancoModal from "./demo-banco-modal";
 import SubirEstado from "./subir-csv";
 import EstadosSubidosLista from "./estados-subidos";
 type CuentaPlaid = {
@@ -44,6 +45,7 @@ export default function CuentasPage() {
   const [sincronizando, setSincronizando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mostrandoDemo, setMostrandoDemo] = useState(false);
   // Rellenar el hueco de historial que Plaid no trajo (ej. BPPR solo da
   // ~45 días) — subir el estado de cuenta directo a una cuenta que YA
   // está conectada, igual que se puede hacer con una cuenta manual.
@@ -173,12 +175,6 @@ export default function CuentasPage() {
   async function pedirLinkToken(itemId?: string) {
     setError(null);
     setReconectandoItemId(itemId ?? null);
-    if (!itemId) {
-      const quiereAnoCompleto = window.confirm(
-        "Recomendado: traer todas las transacciones desde el 1 de enero de este año, así tienes todo listo para las planillas de abril.\n\nAceptar = año completo (recomendado). Cancelar = solo desde hoy en adelante."
-      );
-      setHistorialCompleto(quiereAnoCompleto);
-    }
     try {
       const res = await fetch("/api/plaid/create-link-token", {
         method: "POST",
@@ -190,6 +186,17 @@ export default function CuentasPage() {
         throw new Error(
           `${data?.error || "No se pudo iniciar la conexión."}${data?.detalle ? ` (${data.detalle})` : ""}${data?.ambiente ? ` [ambiente: ${data.ambiente}]` : ""}`
         );
+      // Cuenta demo: simulación local, sin Plaid ni PIN real.
+      if (data.demo) {
+        setMostrandoDemo(true);
+        return;
+      }
+      if (!itemId) {
+        const quiereAnoCompleto = window.confirm(
+          "Recomendado: traer todas las transacciones desde el 1 de enero de este año, así tienes todo listo para las planillas de abril.\n\nAceptar = año completo (recomendado). Cancelar = solo desde hoy en adelante."
+        );
+        setHistorialCompleto(quiereAnoCompleto);
+      }
       setLinkToken(data.linkToken);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar la conexión con Plaid.");
@@ -323,6 +330,16 @@ export default function CuentasPage() {
   const bancosVencidos = bancos.filter((b) => b.status !== "active");
   return (
     <div className="vc-shell">
+      {mostrandoDemo && (
+        <DemoBancoModal
+          onCerrar={() => setMostrandoDemo(false)}
+          onListo={async () => {
+            setMostrandoDemo(false);
+            setMensaje("Banco conectado (demostración) — cuentas de ejemplo.");
+            await cargarCuentas();
+          }}
+        />
+      )}
       <div className="mb-6">
         <Link href="/dashboard" className="vc-btn-back">
           ← Atrás

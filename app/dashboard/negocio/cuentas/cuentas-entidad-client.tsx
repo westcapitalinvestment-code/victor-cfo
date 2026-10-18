@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
 import { Sensitive } from "@/lib/privacy";
 import CuentasManuales from "../../cuentas/cuentas-manuales";
+import DemoBancoModal from "../../cuentas/demo-banco-modal";
 
 type CuentaPlaid = {
   id: string;
@@ -48,6 +49,7 @@ export default function CuentasEntidadClient({
   const [sincronizando, setSincronizando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mostrandoDemo, setMostrandoDemo] = useState(false);
 
   const recargarCuentas = useCallback(async () => {
     const { data } = await supabase
@@ -61,14 +63,19 @@ export default function CuentasEntidadClient({
 
   async function iniciarConexion() {
     setError(null);
-    const quiereAnoCompleto = window.confirm(
-      "Recomendado: traer todas las transacciones desde el 1 de enero de este año, así tienes todo listo para las planillas de abril.\n\nAceptar = año completo (recomendado). Cancelar = solo desde hoy en adelante."
-    );
-    setHistorialCompleto(quiereAnoCompleto);
     try {
       const res = await fetch("/api/plaid/create-link-token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo iniciar la conexión.");
+      // Cuenta demo: simulación local, sin Plaid ni PIN real.
+      if (data.demo) {
+        setMostrandoDemo(true);
+        return;
+      }
+      const quiereAnoCompleto = window.confirm(
+        "Recomendado: traer todas las transacciones desde el 1 de enero de este año, así tienes todo listo para las planillas de abril.\n\nAceptar = año completo (recomendado). Cancelar = solo desde hoy en adelante."
+      );
+      setHistorialCompleto(quiereAnoCompleto);
       setLinkToken(data.linkToken);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar la conexión con Plaid.");
@@ -134,6 +141,16 @@ export default function CuentasEntidadClient({
 
   return (
     <div>
+      {mostrandoDemo && (
+        <DemoBancoModal
+          onCerrar={() => setMostrandoDemo(false)}
+          onListo={async () => {
+            setMostrandoDemo(false);
+            setMensaje("Banco conectado (demostración) — cuentas de ejemplo.");
+            await recargarCuentas();
+          }}
+        />
+      )}
       {error && <p className="mb-3 text-xs text-red">{error}</p>}
       {mensaje && <p className="mb-3 text-xs text-teal">{mensaje}</p>}
 

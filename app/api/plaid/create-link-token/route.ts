@@ -19,13 +19,6 @@ import { Products, CountryCode } from "plaid";
 //     nunca se crea un Item duplicado al reconectar. (Plaid no permite
 //     mandar "products" cuando se usa access_token en Update Mode.)
 export async function POST(req: NextRequest) {
-  if (!plaidConfigurado()) {
-    return NextResponse.json(
-      { error: "Plaid no está configurado todavía (falta PLAID_CLIENT_ID / PLAID_SECRET en el servidor)." },
-      { status: 500 }
-    );
-  }
-
   const supabase = createClient();
   const {
     data: { user },
@@ -33,6 +26,21 @@ export async function POST(req: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+  }
+
+  // Cuenta de demostración (18 oct 2026): nunca se abre Plaid Link real — Plaid
+  // mandaría un código por SMS al celular de quien hace la demo. El frontend
+  // recibe demo:true y muestra una conexión simulada (demo-banco-modal.tsx).
+  const { data: perfilDemo } = await supabase.from("users").select("is_demo").eq("id", user.id).maybeSingle();
+  if (perfilDemo?.is_demo) {
+    return NextResponse.json({ demo: true });
+  }
+
+  if (!plaidConfigurado()) {
+    return NextResponse.json(
+      { error: "Plaid no está configurado todavía (falta PLAID_CLIENT_ID / PLAID_SECRET en el servidor)." },
+      { status: 500 }
+    );
   }
 
   const body = await req.json().catch(() => null);

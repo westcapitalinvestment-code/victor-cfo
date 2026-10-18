@@ -24,7 +24,11 @@ export async function POST() {
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   }
 
-  const { data: profile } = await supabase.from("users").select("plan").eq("id", user.id).maybeSingle();
+  const { data: profile } = await supabase.from("users").select("plan, is_demo").eq("id", user.id).maybeSingle();
+  // Cuenta demo: sus bancos son datos de ejemplo, no hay nada real que traer.
+  if (profile?.is_demo) {
+    return NextResponse.json({ ok: true, demo: true, nuevas: 0, modificadas: 0, duplicadas: 0 });
+  }
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
 
   const resultado = await sincronizarPlaidDeUsuario(supabase, user.id, esPro);

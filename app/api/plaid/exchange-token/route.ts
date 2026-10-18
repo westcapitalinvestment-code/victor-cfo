@@ -22,6 +22,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   }
 
+  // Cuenta demo: nunca se intercambian tokens reales (18 oct 2026).
+  const { data: perfilDemo } = await supabase.from("users").select("is_demo").eq("id", user.id).maybeSingle();
+  if (perfilDemo?.is_demo) {
+    return NextResponse.json({ error: "La cuenta de demostración no conecta bancos reales." }, { status: 403 });
+  }
+
   const body = await req.json().catch(() => null);
   const publicToken: string | undefined = body?.publicToken;
   const institutionId: string | null = body?.institutionId ?? null;
