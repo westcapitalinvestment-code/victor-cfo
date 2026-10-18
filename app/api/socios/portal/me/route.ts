@@ -55,6 +55,10 @@ export async function GET(req: NextRequest) {
   let totalCobradoCentavos = 0;
   let totalPendienteCentavos = 0;
   let totalRetenidoCentavos = 0;
+  // 30% que aún está "en espera" (se libera al 3er pago real del cliente
+  // mensual, o a los 3 meses si es anual del modelo viejo). Va en bruto: la
+  // retención 1062.03 se calcula recién cuando se libera.
+  let totalTreintaEsperaCentavos = 0;
 
   const filas = (clientes ?? []).map((cliente) => {
     const estadoVendedor = estadoPorCliente.get(cliente.id);
@@ -89,6 +93,17 @@ export async function GET(req: NextRequest) {
     totalPendienteCentavos += pendiente;
     totalRetenidoCentavos += retenido;
 
+    const treintaEspera =
+      estadoVendedor && estadoVendedor.treinta_estado === "pendiente" ? Number(estadoVendedor.treinta_centavos) : 0;
+    totalTreintaEsperaCentavos += treintaEspera;
+    // Fecha estimada de liberación: 3er pago mensual ≈ +2 meses; anual (modelo viejo) ≈ +3 meses.
+    let treintaLiberaEstimado: string | null = null;
+    if (treintaEspera > 0 && estadoVendedor?.primer_pago_at) {
+      const f = new Date(estadoVendedor.primer_pago_at);
+      f.setMonth(f.getMonth() + (estadoVendedor.ciclo === "anual" ? 3 : 2));
+      treintaLiberaEstimado = f.toISOString();
+    }
+
     return {
       id: cliente.id,
       nombre: cliente.full_name,
@@ -99,6 +114,9 @@ export async function GET(req: NextRequest) {
       cobradoCentavos: cobrado,
       pendienteCentavos: pendiente,
       retenidoCentavos: retenido,
+      treintaEsperaCentavos: treintaEspera,
+      treintaLiberaEstimado,
+      primerPagoAt: estadoVendedor?.primer_pago_at ?? null,
     };
   });
 
@@ -108,6 +126,7 @@ export async function GET(req: NextRequest) {
     totalCobradoCentavos,
     totalPendienteCentavos,
     totalRetenidoCentavos,
+    totalTreintaEsperaCentavos,
     clientes: filas,
   });
 }

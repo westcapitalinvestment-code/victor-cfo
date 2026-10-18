@@ -124,6 +124,8 @@ export default function OficinasContables() {
   const [fEstado, setFEstado] = useState<"todos" | EstadoSeguimiento>("todos");
   const [fPueblo, setFPueblo] = useState("");
   const [verOtras, setVerOtras] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [porContacto, setPorContacto] = useState<{ id: string; nombre: string; pueblo: string | null; status: StatusOficina; mia: boolean }[]>([]);
   const [expandida, setExpandida] = useState<string | null>(null);
 
   async function cargar() {
@@ -137,6 +139,23 @@ export default function OficinasContables() {
   useEffect(() => {
     cargar();
   }, []);
+
+  // Si lo que escribe parece un email o un teléfono, pregunta al servidor si
+  // otro vendedor ya registró esa oficina (sin mostrar su contacto).
+  useEffect(() => {
+    const q = busca.trim();
+    const pareceContacto = q.includes("@") || q.replace(/\D/g, "").length >= 10;
+    if (!pareceContacto) {
+      setPorContacto([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      const res = await fetch(`/api/socios/portal/oficinas?q=${encodeURIComponent(q)}`);
+      const json = await res.json().catch(() => null);
+      if (res.ok) setPorContacto(json.porContacto ?? []);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [busca]);
 
   // Aviso inmediato mientras escribe el nombre: ¿ya la visitó alguien?
   const coincidencias = useMemo(() => {
@@ -225,9 +244,15 @@ export default function OficinasContables() {
     if (res.ok) await cargar();
   }
 
+  const qNorm = normalizarNombre(busca);
+  const qTel = busca.replace(/\D/g, "");
+  const coincide = (...campos: (string | null | undefined)[]) =>
+    !qNorm || campos.some((c) => !!c && normalizarNombre(c).includes(qNorm)) || (qTel.length >= 4 && campos.some((c) => !!c && c.replace(/\D/g, "").includes(qTel)));
   const lista = (mias ?? [])
     .filter((m) => fEstado === "todos" || m.estado === fEstado)
-    .filter((m) => !fPueblo || m.pueblo === fPueblo);
+    .filter((m) => !fPueblo || m.pueblo === fPueblo)
+    .filter((m) => coincide(m.nombre, m.contactoNombre, m.email, m.telefono, m.pueblo, m.descripcion, m.notas));
+  const otrasFiltradas = otras.filter((o) => coincide(o.nombre, o.pueblo));
   const pueblosMios = Array.from(new Set((mias ?? []).map((m) => m.pueblo).filter((x): x is string => !!x))).sort();
 
   return (
@@ -376,6 +401,25 @@ export default function OficinasContables() {
         )}
       </div>
 
+      <input
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        placeholder="Buscar por nombre, oficina, email, teléfono o pueblo..."
+        className="mb-2 w-full rounded-lg border border-border p-2 text-sm"
+      />
+      {porContacto.length > 0 && (
+        <div className="vc-card mb-2 text-[12px]">
+          <p className="mb-1 font-medium text-amb">Ya está registrada</p>
+          {porContacto.map((c) => (
+            <p key={c.id} className="text-muted">
+              {c.nombre}
+              {c.pueblo ? ` · ${c.pueblo}` : ""} —{" "}
+              <span className={STATUS_COLOR[c.status]}>{c.mia ? "es tuya" : STATUS_OFICINA_LABEL[c.status]}</span>
+            </p>
+          ))}
+        </div>
+      )}
+
       {mias && mias.length > 0 && (
         <div className="mb-2 flex flex-col gap-2">
           <div className="flex flex-wrap gap-1.5">
@@ -509,6 +553,10 @@ export default function OficinasContables() {
         </div>
       )}
 
+      {busca.trim() && lista.length === 0 && otrasFiltradas.length === 0 && porContacto.length === 0 && (
+        <p className="mb-2 text-center text-[12px] text-muted">No hay oficinas que coincidan. Puedes registrarla.</p>
+      )}
+
       {otras.length > 0 && (
         <div className="vc-card">
           <button
@@ -516,12 +564,14 @@ export default function OficinasContables() {
             onClick={() => setVerOtras(!verOtras)}
             className="flex w-full items-center justify-between text-[12px] font-medium"
           >
-            <span>Oficinas de otros vendedores ({otras.length})</span>
-            <span className="text-muted">{verOtras ? "Ocultar" : "Ver"}</span>
+            <span>
+              Oficinas de otros vendedores ({busca.trim() ? `${otrasFiltradas.length} de ${otras.length}` : otras.length})
+            </span>
+            <span className="text-muted">{verOtras || busca.trim() ? "Ocultar" : "Ver"}</span>
           </button>
-          {verOtras && (
+          {(verOtras || busca.trim()) && (
             <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
-              {otras.map((o) => (
+              {otrasFiltradas.map((o) => (
                 <div key={o.id} className="flex items-start justify-between gap-2 text-[12px]">
                   <span className="min-w-0 truncate">
                     {o.nombre}

@@ -73,6 +73,31 @@ export async function GET(req: NextRequest) {
 
   await admin.rpc("sincronizar_oficinas_contables");
 
+  // Búsqueda por email o teléfono EXACTO: sirve para saber si una oficina ya
+  // está registrada por otro vendedor sin exponer su contacto (solo devuelve
+  // nombre, pueblo y status).
+  const q = (req.nextUrl.searchParams.get("q") ?? "").trim().toLowerCase().slice(0, 120);
+  let porContacto: { id: string; nombre: string; pueblo: string | null; status: StatusOficina; mia: boolean }[] = [];
+  if (q) {
+    const tel = q.includes("@") ? null : normalizarTelefono(q);
+    const consulta = q.includes("@")
+      ? admin.from("oficinas_contables").select(COLS).eq("email", q).limit(3)
+      : tel
+        ? admin.from("oficinas_contables").select(COLS).eq("telefono", tel).limit(3)
+        : null;
+    if (consulta) {
+      const { data: hallados } = await consulta;
+      const ahoraQ = Date.now();
+      porContacto = ((hallados ?? []) as Fila[]).map((f) => ({
+        id: f.id,
+        nombre: f.nombre,
+        pueblo: f.pueblo,
+        status: statusDe(f, ahoraQ),
+        mia: f.socio_id === socioId,
+      }));
+    }
+  }
+
   const { data, error } = await admin
     .from("oficinas_contables")
     .select(COLS)
@@ -117,7 +142,7 @@ export async function GET(req: NextRequest) {
     .filter((f) => f.socio_id !== socioId)
     .map((f) => ({ id: f.id, nombre: f.nombre, pueblo: f.pueblo, status: statusDe(f, ahora) }));
 
-  return NextResponse.json({ ok: true, mias, otras });
+  return NextResponse.json({ ok: true, mias, otras, porContacto });
 }
 
 function leerCampos(body: Record<string, unknown>) {

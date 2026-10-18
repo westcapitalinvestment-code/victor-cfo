@@ -10,6 +10,7 @@ import {
 } from "@/lib/oficinas-contables";
 import OficinasContables from "./oficinas-contables";
 import BonosOficinas from "./bonos-oficinas";
+import ResumenVendedor from "./resumen-vendedor";
 
 const SITE_URL = "https://www.victorcfo.com";
 
@@ -33,6 +34,8 @@ type ClienteFila = {
   cobradoCentavos: number;
   pendienteCentavos: number;
   retenidoCentavos: number;
+  treintaEsperaCentavos: number;
+  treintaLiberaEstimado: string | null;
 };
 
 const ESTADO_LABEL: Record<ClienteFila["estado"], { texto: string; color: string }> = {
@@ -92,6 +95,7 @@ export default function SocioPortalPage() {
     totalCobradoCentavos: number;
     totalPendienteCentavos: number;
     totalRetenidoCentavos: number;
+    totalTreintaEsperaCentavos: number;
     clientes: ClienteFila[];
   } | null>(null);
   const [prospectos, setProspectos] = useState<Prospecto[] | null>(null);
@@ -296,23 +300,7 @@ export default function SocioPortalPage() {
         <p className="py-8 text-center text-sm text-muted">Cargando...</p>
       ) : (
         <>
-          <div className="mb-2 flex gap-2">
-            <div className="vc-card flex-1 text-center">
-              <p className="text-[11px] text-muted">Ya cobrado</p>
-              <p className="text-lg font-semibold text-teal">{fmt(datos.totalCobradoCentavos)}</p>
-            </div>
-            <div className="vc-card flex-1 text-center">
-              <p className="text-[11px] text-muted">Pendiente</p>
-              <p className="text-lg font-semibold text-amb">{fmt(datos.totalPendienteCentavos)}</p>
-            </div>
-          </div>
-
-          {datos.totalRetenidoCentavos > 0 && (
-            <div className="vc-card mb-4 text-[11px] text-muted">
-              Se te retuvo <span className="font-medium text-muted">{fmt(datos.totalRetenidoCentavos)}</span> en total
-              (Sección 1062.03 de Hacienda) — los montos de arriba ya son netos, después de esa retención.
-            </div>
-          )}
+          <ResumenVendedor datos={datos} />
 
           {/* Link personal + QR: para enseñarlo en persona o compartirlo */}
           <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">Tu link y tu QR</p>
@@ -555,8 +543,8 @@ export default function SocioPortalPage() {
                       </div>
                       <span className={`shrink-0 text-[11px] font-medium ${estadoInfo.color}`}>{estadoInfo.texto}</span>
                     </div>
-                    {(c.cobradoCentavos > 0 || c.pendienteCentavos > 0) && (
-                      <div className="mt-2 flex gap-4 border-t border-border pt-2 text-[12px]">
+                    {(c.cobradoCentavos > 0 || c.pendienteCentavos > 0 || c.treintaEsperaCentavos > 0) && (
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-2 text-[12px]">
                         {c.cobradoCentavos > 0 && (
                           <span>
                             Cobrado: <span className="font-medium text-teal">{fmt(c.cobradoCentavos)}</span>
@@ -565,6 +553,12 @@ export default function SocioPortalPage() {
                         {c.pendienteCentavos > 0 && (
                           <span>
                             Pendiente: <span className="font-medium text-amb">{fmt(c.pendienteCentavos)}</span>
+                          </span>
+                        )}
+                        {c.treintaEsperaCentavos > 0 && (
+                          <span>
+                            30% en espera: <span className="font-medium text-amb">{fmt(c.treintaEsperaCentavos)}</span>
+                            {c.treintaLiberaEstimado ? <span className="text-muted"> · se libera ≈ {fmtFecha(c.treintaLiberaEstimado)}</span> : null}
                           </span>
                         )}
                       </div>
