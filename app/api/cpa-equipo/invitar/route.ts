@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendCpaEquipoInvitationEmail } from "@/lib/email";
+import { esCuentaDemo } from "@/lib/demo";
 
 // Un CPA líder (ej. Héctor) invita a un colega de su propio equipo (ej.
 // Josué) desde su portal — 2 oct 2026, decisión de Joel ("Opción B"): el
@@ -19,6 +20,11 @@ export async function POST(req: NextRequest) {
 
   if (!user || !user.email) {
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+  }
+
+  // Cuenta demo del CPA: no se manda correo real a nadie.
+  if (await esCuentaDemo(supabase, user.id)) {
+    return NextResponse.json({ invitationId: "demo", emailSent: true, demo: true });
   }
 
   const { count: clientesActivos } = await supabase

@@ -74,6 +74,11 @@ export default function FirmaAccountantPanel() {
       setErrorAccion(json?.error || "No se pudo liberar al cliente.");
       return;
     }
+    if (json?.demo) {
+      setClientes((prev) => prev.filter((x) => x.id !== c.id));
+      setSeatsActivos((n) => Math.max(0, n - 1));
+      return;
+    }
     await cargarClientes();
   }
 
@@ -90,6 +95,11 @@ export default function FirmaAccountantPanel() {
     setAccionEn(null);
     if (!res.ok) {
       setErrorAccion(json?.error || "No se pudo cancelar la invitación.");
+      return;
+    }
+    if (json?.demo) {
+      setPendientes((prev) => prev.filter((x) => x.id !== p.id));
+      setSeatsActivos((n) => Math.max(0, n - 1));
       return;
     }
     await cargarClientes();
@@ -156,10 +166,20 @@ export default function FirmaAccountantPanel() {
 
     setInvitando(false);
     setMostrarModal(false);
-    setExito(`Invitación enviada a ${email}.`);
+    if (json.demo) {
+      // Demo: no se envió nada; se muestra la invitación como pendiente solo en pantalla.
+      setPendientes((prev) => [
+        ...prev,
+        { id: `demo-${Date.now()}`, email, nombreNegocio: nombreNegocio || null, enviada: new Date().toISOString() },
+      ]);
+      setSeatsActivos((n) => n + 1);
+      setExito(`Invitación simulada a ${email} (demostración: no se envió ningún correo ni se cobró nada).`);
+    } else {
+      setExito(`Invitación enviada a ${email}.`);
+      cargarClientes();
+    }
     setEmail("");
     setNombreNegocio("");
-    cargarClientes();
   }
 
   if (cargando) return null;

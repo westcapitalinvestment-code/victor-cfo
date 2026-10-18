@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { contableAutenticado, fichaDelContable } from "@/lib/oficina-contable-server";
+import { createClient } from "@/lib/supabase/server";
+import { esCuentaDemo } from "@/lib/demo";
 import {
   ESPECIALIDADES,
   MUNICIPIOS_PR,
@@ -52,6 +54,14 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   const ctx = await contableAutenticado();
   if (!ctx) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  // Cuenta demo del CPA: no se publica nada en el directorio real.
+  const sb = createClient();
+  const {
+    data: { user: usuarioDemo },
+  } = await sb.auth.getUser();
+  if (usuarioDemo && (await esCuentaDemo(sb, usuarioDemo.id))) {
+    return NextResponse.json({ ok: true, demo: true });
+  }
   const ficha = await fichaDelContable(ctx);
   if (!ficha) return NextResponse.json({ error: "No se pudo cargar tu perfil." }, { status: 500 });
 

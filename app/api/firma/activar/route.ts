@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { esCuentaDemo } from "@/lib/demo";
 
 // Activa el flag es_firma_accountant en el usuario logueado — primer paso
 // del programa "Firma Accountant" (migración 0139, 4 oct 2026). A
@@ -29,6 +30,8 @@ export async function POST(req: NextRequest) {
   if (!registroComerciante) {
     return NextResponse.json({ error: "El Registro de Comerciante es obligatorio." }, { status: 400 });
   }
+
+  if (await esCuentaDemo(supabase, user.id)) return NextResponse.json({ ok: true, demo: true });
 
   const { error } = await supabase
     .from("users")

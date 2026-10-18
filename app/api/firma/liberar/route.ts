@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { liberarClienteDeFirma, DIAS_GRACIA_FIRMA } from "@/lib/firma-seats";
 import { sendFirmaClienteLiberadoEmail } from "@/lib/email";
+import { esCuentaDemo } from "@/lib/demo";
 
 // La firma libera a un cliente: deja de pagarle el plan (su seat se resta de
 // la factura wholesale al instante) y el cliente conserva Business y todos
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const clienteId: string | undefined = body?.clienteId;
   if (!clienteId) return NextResponse.json({ error: "Falta el cliente." }, { status: 400 });
+  if (await esCuentaDemo(supabase, user.id)) return NextResponse.json({ ok: true, demo: true });
 
   const admin = createAdminClient();
 

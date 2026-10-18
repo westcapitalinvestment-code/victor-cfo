@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sincronizarSeatsFirma } from "@/lib/firma-seats";
+import { esCuentaDemo } from "@/lib/demo";
 
 // La firma cancela una invitación todavía pendiente: el seat deja de
 // contarse y de cobrarse. Si el cliente ya aceptó, se usa "liberar".
@@ -15,6 +16,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const invitacionId: string | undefined = body?.invitacionId;
   if (!invitacionId) return NextResponse.json({ error: "Falta la invitación." }, { status: 400 });
+  if (await esCuentaDemo(supabase, user.id)) return NextResponse.json({ ok: true, demo: true });
 
   const admin = createAdminClient();
 

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe, priceIdWholesaleBusiness } from "@/lib/stripe";
 import { sendFirmaInvitationEmail } from "@/lib/email";
+import { esCuentaDemo } from "@/lib/demo";
 
 // Invita a un cliente nuevo bajo el plan Business wholesale de la Firma
 // (migración 0139, 4 oct 2026). Dos caminos, decididos por Joel:
@@ -34,6 +35,11 @@ export async function POST(req: NextRequest) {
 
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: "Escribe un email válido." }, { status: 400 });
+  }
+
+  // Cuenta demo del CPA: simulación, sin tocar Stripe ni mandar correos reales.
+  if (await esCuentaDemo(supabase, user.id)) {
+    return NextResponse.json({ ok: true, demo: true, email });
   }
 
   const { data: perfil } = await supabase
