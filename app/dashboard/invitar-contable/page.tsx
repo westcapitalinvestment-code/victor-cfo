@@ -143,6 +143,16 @@ export default function InvitarContablePage() {
         </p>
       </div>
 
+      <div className="vc-card mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">¿Todavía no tienes contable?</p>
+          <p className="text-[11px] text-muted">Mira los contables de VICTOR y escoge por pueblo y especialidad.</p>
+        </div>
+        <a href="/dashboard/contables" className="shrink-0 rounded-pill bg-teal px-3 py-1.5 text-xs font-medium text-white">
+          Buscar contable
+        </a>
+      </div>
+
       <div className="vc-card flex flex-col gap-3">
         {error && <p className="text-xs text-red">{error}</p>}
 

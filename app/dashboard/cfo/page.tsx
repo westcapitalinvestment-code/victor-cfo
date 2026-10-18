@@ -61,7 +61,7 @@ export default async function CfoPage() {
   ] = await Promise.all([
     admin
       .from("users")
-      .select("id, full_name, email, plan, plan_status, created_at, cancelled_at, cancellation_reason, cancellation_comment")
+      .select("id, full_name, email, plan, plan_status, es_contable, created_at, cancelled_at, cancellation_reason, cancellation_comment")
       .order("created_at", { ascending: false }),
     admin.from("uso_ia_mensual").select("owner_id, costo_centavos"),
     admin
@@ -94,8 +94,10 @@ export default async function CfoPage() {
   // Un usuario es "contable" si fue invitado como CPA y NO está pagando su
   // propio plan (si un contable también paga VICTOR, cuenta como cliente real).
   const emailsCpa = new Set((miembrosCpa ?? []).map((m) => String(m.member_email).toLowerCase()));
-  const esContable = (u: { email: string | null; plan_status: string | null }) =>
-    !!u.email && emailsCpa.has(u.email.toLowerCase()) && u.plan_status !== "active" && u.plan_status !== "trialing";
+  // También cuenta quien se registró por /registro/cpa (users.es_contable, migración 0162).
+  const esContable = (u: { email: string | null; plan_status: string | null; es_contable?: boolean | null }) =>
+    (!!u.es_contable || (!!u.email && emailsCpa.has(u.email.toLowerCase()))) &&
+    u.plan_status !== "active" && u.plan_status !== "trialing";
   const contables = todosConContables.filter(esContable);
   // Todas las métricas de abajo usan SOLO usuarios reales (sin contables).
   const todos = todosConContables.filter((u) => !esContable(u));

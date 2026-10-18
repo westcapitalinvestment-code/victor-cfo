@@ -1,6 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  ESTADOS_SEGUIMIENTO,
+  ESTADO_SEGUIMIENTO_LABEL,
+  ESTADO_SEGUIMIENTO_COLOR,
+  MUNICIPIOS_PR,
+  type EstadoSeguimiento,
+} from "@/lib/oficinas-contables";
+import OficinasContables from "./oficinas-contables";
 
 const SITE_URL = "https://www.victorcfo.com";
 
@@ -45,6 +53,8 @@ type Prospecto = {
   telefono: string | null;
   notas: string | null;
   estado: "vigente" | "convertido" | "vencido" | "otro_vendedor";
+  seguimiento: EstadoSeguimiento;
+  pueblo: string | null;
   diasRestantes: number | null;
   creadoEn: string;
   convertidoEn: string | null;
@@ -88,6 +98,12 @@ export default function SocioPortalPage() {
   const [pEmail, setPEmail] = useState("");
   const [pTelefono, setPTelefono] = useState("");
   const [pNotas, setPNotas] = useState("");
+  const [pSeguimiento, setPSeguimiento] = useState<EstadoSeguimiento>("pendiente");
+  const [pPueblo, setPPueblo] = useState("");
+  // Filtros de la lista de prospectos (seguimiento).
+  const [fSeg, setFSeg] = useState<"todos" | EstadoSeguimiento>("todos");
+  const [fPueblo, setFPueblo] = useState("");
+  const [fBusca, setFBusca] = useState("");
   const [pGuardando, setPGuardando] = useState(false);
   const [pError, setPError] = useState<string | null>(null);
   // Link personal + QR (13 oct 2026): el correo de aprobación puede caer en
@@ -175,7 +191,7 @@ export default function SocioPortalPage() {
     const res = await fetch("/api/socios/portal/prospectos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre: pNombre, email: pEmail, telefono: pTelefono, notas: pNotas }),
+      body: JSON.stringify({ nombre: pNombre, email: pEmail, telefono: pTelefono, notas: pNotas, seguimiento: pSeguimiento, pueblo: pPueblo }),
     });
     const json = await res.json().catch(() => null);
     setPGuardando(false);
@@ -187,7 +203,20 @@ export default function SocioPortalPage() {
     setPEmail("");
     setPTelefono("");
     setPNotas("");
+    setPSeguimiento("pendiente");
+    setPPueblo("");
     await cargarDatos();
+  }
+
+  async function cambiarSeguimiento(id: string, seguimiento: EstadoSeguimiento) {
+    // Actualiza en pantalla de una vez y confirma con el servidor.
+    setProspectos((prev) => (prev ? prev.map((p) => (p.id === id ? { ...p, seguimiento } : p)) : prev));
+    const res = await fetch("/api/socios/portal/prospectos", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, seguimiento }),
+    });
+    if (!res.ok) await cargarDatos();
   }
 
   async function borrarProspecto(id: string) {
@@ -314,6 +343,8 @@ export default function SocioPortalPage() {
             </div>
           </div>
 
+          <OficinasContables />
+
           {/* Prospectos: protege tu comisión si el cliente se registra después
               por la landing, y te deja dar seguimiento (llamar / WhatsApp). */}
           <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">
@@ -349,6 +380,31 @@ export default function SocioPortalPage() {
                 className="w-1/2 rounded-lg border border-border p-2 text-sm"
               />
             </div>
+            <div className="flex gap-2">
+              <select
+                value={pSeguimiento}
+                onChange={(e) => setPSeguimiento(e.target.value as EstadoSeguimiento)}
+                className="w-1/2 rounded-lg border border-border bg-transparent p-2 text-sm"
+              >
+                {ESTADOS_SEGUIMIENTO.map((e) => (
+                  <option key={e} value={e}>
+                    {ESTADO_SEGUIMIENTO_LABEL[e]}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={pPueblo}
+                onChange={(e) => setPPueblo(e.target.value)}
+                className="w-1/2 rounded-lg border border-border bg-transparent p-2 text-sm"
+              >
+                <option value="">Pueblo (opcional)</option>
+                {MUNICIPIOS_PR.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
             <input
               value={pNotas}
               onChange={(e) => setPNotas(e.target.value)}
@@ -361,8 +417,56 @@ export default function SocioPortalPage() {
           </form>
 
           {prospectos && prospectos.length > 0 && (
+            <div className="mb-2 flex flex-col gap-2">
+              <div className="flex flex-wrap gap-1.5">
+                {(["todos", ...ESTADOS_SEGUIMIENTO] as const).map((e) => {
+                  const n = e === "todos" ? prospectos.length : prospectos.filter((p) => p.seguimiento === e).length;
+                  return (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => setFSeg(e)}
+                      className={`rounded-pill border px-2.5 py-1 text-[11px] font-medium ${
+                        fSeg === e ? "border-teal bg-teal text-white" : "border-border text-muted"
+                      }`}
+                    >
+                      {e === "todos" ? "Todos" : ESTADO_SEGUIMIENTO_LABEL[e]} · {n}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={fPueblo}
+                  onChange={(e) => setFPueblo(e.target.value)}
+                  className="w-1/2 rounded-lg border border-border bg-transparent p-2 text-[12px]"
+                >
+                  <option value="">Todos los pueblos</option>
+                  {Array.from(new Set(prospectos.map((p) => p.pueblo).filter((x): x is string => !!x)))
+                    .sort()
+                    .map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                </select>
+                <input
+                  value={fBusca}
+                  onChange={(e) => setFBusca(e.target.value)}
+                  placeholder="Buscar nombre..."
+                  className="w-1/2 rounded-lg border border-border p-2 text-[12px]"
+                />
+              </div>
+            </div>
+          )}
+
+          {prospectos && prospectos.length > 0 && (
             <div className="mb-4 flex flex-col gap-2">
-              {prospectos.map((p) => {
+              {prospectos
+                .filter((p) => fSeg === "todos" || p.seguimiento === fSeg)
+                .filter((p) => !fPueblo || p.pueblo === fPueblo)
+                .filter((p) => !fBusca.trim() || p.nombre.toLowerCase().includes(fBusca.trim().toLowerCase()))
+                .map((p) => {
                 const info = PROSPECTO_ESTADO[p.estado];
                 return (
                   <div key={p.id} className="vc-card">
@@ -372,12 +476,27 @@ export default function SocioPortalPage() {
                         <p className="truncate text-[11px] text-muted">
                           {[p.email, p.telefono ? fmtTel(p.telefono) : null].filter(Boolean).join(" · ")}
                         </p>
+                        {p.pueblo && <p className="text-[11px] text-muted">{p.pueblo}</p>}
                         {p.notas && <p className="mt-0.5 text-[11px] text-muted">{p.notas}</p>}
                       </div>
                       <span className={`shrink-0 text-[11px] font-medium ${info.color}`}>
                         {info.texto}
                         {p.estado === "vigente" && p.diasRestantes !== null ? ` · ${p.diasRestantes} d` : ""}
                       </span>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
+                      <span className="text-[11px] text-muted">Seguimiento:</span>
+                      <select
+                        value={p.seguimiento}
+                        onChange={(e) => cambiarSeguimiento(p.id, e.target.value as EstadoSeguimiento)}
+                        className={`rounded-lg border border-border bg-transparent px-2 py-1 text-[12px] font-medium ${ESTADO_SEGUIMIENTO_COLOR[p.seguimiento]}`}
+                      >
+                        {ESTADOS_SEGUIMIENTO.map((e) => (
+                          <option key={e} value={e}>
+                            {ESTADO_SEGUIMIENTO_LABEL[e]}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     {p.estado === "vigente" && (
                       <div className="mt-2 flex flex-wrap gap-3 border-t border-border pt-2 text-[12px]">

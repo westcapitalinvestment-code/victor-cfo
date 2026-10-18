@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarSesionSocio, COOKIE_SESION_SOCIO } from "@/lib/socio-session";
+import { MUNICIPIOS_PR, esEstadoSeguimiento } from "@/lib/oficinas-contables";
 
 // Prospectos del vendedor (migración 0150, 13 oct 2026). El vendedor registra
 // a quien le presentó VICTOR (email y/o teléfono); si esa persona se registra
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await admin
     .from("socios_prospectos")
-    .select("id, nombre, email, telefono, notas, estado, expira_at, created_at, convertido_at")
+    .select("id, nombre, email, telefono, notas, estado, seguimiento, pueblo, seguimiento_at, expira_at, created_at, convertido_at")
     .eq("socio_id", socioId)
     .order("created_at", { ascending: false })
     .limit(300);
@@ -55,6 +56,9 @@ export async function GET(req: NextRequest) {
     notas: (p.notas as string | null) ?? null,
     // "otro_vendedor" se muestra neutral al vendedor: no se revela quién fue.
     estado: p.estado as "vigente" | "convertido" | "vencido" | "otro_vendedor",
+    // 0163: estado de seguimiento del vendedor (pendiente, visitado, ...).
+    seguimiento: (p.seguimiento as string) || "pendiente",
+    pueblo: (p.pueblo as string | null) ?? null,
     diasRestantes:
       p.estado === "vigente" ? Math.max(0, Math.ceil((new Date(p.expira_at as string).getTime() - ahora) / 86400000)) : null,
     creadoEn: p.created_at as string,
@@ -74,6 +78,9 @@ export async function POST(req: NextRequest) {
   const emailRaw = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   const telefonoRaw = typeof body?.telefono === "string" ? body.telefono.trim() : "";
   const notas = typeof body?.notas === "string" ? body.notas.trim().slice(0, 500) : "";
+  const seguimiento = esEstadoSeguimiento(body?.seguimiento) ? body.seguimiento : "pendiente";
+  const pueblo =
+    typeof body?.pueblo === "string" && (MUNICIPIOS_PR as readonly string[]).includes(body.pueblo) ? body.pueblo : null;
 
   if (nombre.length < 2) {
     return NextResponse.json({ error: "Escribe el nombre del prospecto." }, { status: 400 });
@@ -139,7 +146,7 @@ export async function POST(req: NextRequest) {
 
   const { data: nuevo, error } = await admin
     .from("socios_prospectos")
-    .insert({ socio_id: socioId, nombre, email, telefono, notas: notas || null })
+    .insert({ socio_id: socioId, nombre, email, telefono, notas: notas || null, seguimiento, pueblo })
     .select("id")
     .single();
 
@@ -152,6 +159,37 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, id: nuevo.id });
+}
+
+// Cambiar el estado de seguimiento / nota / pueblo de un prospecto propio
+// (0163). Funciona en cualquier estado de protección (también vencidos).
+export async function PATCH(req: NextRequest) {
+  const ctx = await socioDeSesion(req);
+  if (!ctx) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  const { admin, socioId } = ctx;
+
+  const body = await req.json().catch(() => null);
+  const id = typeof body?.id === "string" ? body.id : "";
+  if (!id) return NextResponse.json({ error: "Falta el id." }, { status: 400 });
+
+  const upd: Record<string, unknown> = {};
+  if (body.seguimiento !== undefined) {
+    if (!esEstadoSeguimiento(body.seguimiento)) return NextResponse.json({ error: "Estado inválido." }, { status: 400 });
+    upd.seguimiento = body.seguimiento;
+    upd.seguimiento_at = new Date().toISOString();
+  }
+  if (typeof body.notas === "string") upd.notas = body.notas.trim().slice(0, 500) || null;
+  if (body.pueblo !== undefined) {
+    if (body.pueblo && !(MUNICIPIOS_PR as readonly string[]).includes(body.pueblo)) {
+      return NextResponse.json({ error: "Pueblo inválido." }, { status: 400 });
+    }
+    upd.pueblo = body.pueblo || null;
+  }
+  if (Object.keys(upd).length === 0) return NextResponse.json({ error: "Nada que cambiar." }, { status: 400 });
+
+  const { error } = await admin.from("socios_prospectos").update(upd).eq("id", id).eq("socio_id", socioId);
+  if (error) return NextResponse.json({ error: "No se pudo guardar." }, { status: 500 });
+  return NextResponse.json({ ok: true });
 }
 
 // Borrar un prospecto vigente (por error de dedo, o porque ya no aplica).

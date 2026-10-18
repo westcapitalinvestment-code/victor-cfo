@@ -2401,3 +2401,53 @@ export async function sendFormulario480Email(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+// 18 oct 2026: aviso al contable cuando un cliente de VICTOR lo contacta desde
+// el directorio (migración 0163). El cliente autorizó compartir sus datos; el
+// reply-to es el correo del cliente para que el contable le responda directo.
+export async function sendSolicitudContableEmail(params: {
+  toEmail: string;
+  oficina: string;
+  clienteNombre: string;
+  clienteEmail: string;
+  clienteTelefono?: string | null;
+  mensaje?: string | null;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  const nombre = escapeHtml(params.clienteNombre);
+  const email = escapeHtml(params.clienteEmail);
+  const tel = params.clienteTelefono ? escapeHtml(params.clienteTelefono) : "";
+  const msg = params.mensaje ? escapeHtml(params.mensaje).replace(/\n/g, "<br/>") : "";
+  const texto =
+    `${params.clienteNombre} (${params.clienteEmail}${params.clienteTelefono ? ", " + params.clienteTelefono : ""}) ` +
+    `te contactó desde el directorio de contables de VICTOR CFO.` +
+    (params.mensaje ? `\n\nMensaje:\n${params.mensaje}` : "") +
+    `\n\nResponde a este correo para escribirle directamente.\n— VICTOR CFO · ${SITE_URL}`;
+  const html = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <p>Hola,</p>
+  <p><strong>${nombre}</strong>, usuario de VICTOR CFO, te contactó desde el directorio de contables porque busca contable y le interesa <strong>${escapeHtml(params.oficina)}</strong>.</p>
+  <table style="font-size: 14px; margin: 12px 0;">
+    <tr><td style="color:#666; padding-right:12px;">Correo</td><td>${email}</td></tr>
+    ${tel ? `<tr><td style="color:#666; padding-right:12px;">Teléfono</td><td>${tel}</td></tr>` : ""}
+  </table>
+  ${msg ? `<p style="background:#f5f5f5; border-radius:8px; padding:12px; font-size:14px;">${msg}</p>` : ""}
+  <p>Puedes responder a este correo para escribirle directamente. Si se quedan trabajando juntos, ${nombre} te puede invitar a su cuenta de VICTOR desde su app y verás lo que comparta contigo, sin costo para ninguno de los dos.</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+</div>`.trim();
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: params.toEmail,
+      replyTo: params.clienteEmail,
+      subject: `${params.clienteNombre} busca contable — te contactó desde VICTOR CFO`,
+      text: texto,
+      html,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
