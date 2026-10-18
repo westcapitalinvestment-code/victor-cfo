@@ -68,10 +68,14 @@ CREATE INDEX IF NOT EXISTS oficinas_contables_socio_idx ON public.oficinas_conta
 -- Solo service_role (APIs del portal del vendedor, portal CPA y directorio).
 ALTER TABLE public.oficinas_contables ENABLE ROW LEVEL SECURITY;
 
--- Une cada ficha con el contable ya registrado (mismo email) => "tiene el
--- portal". Idempotente; se llama desde las APIs antes de listar.
+-- 1) Une cada ficha con el contable ya registrado (mismo email) => "tiene el
+--    portal". 2) Crea una ficha para cada contable que aún no tiene (invitado
+--    por un cliente, registrado por /registro/cpa o Firma Accountant), para que
+--    los vendedores vean que esa oficina ya tiene el portal y no la repitan.
+--    Idempotente; se llama desde las APIs antes de listar.
 CREATE OR REPLACE FUNCTION public.sincronizar_oficinas_contables()
 RETURNS void AS $$
+BEGIN
   UPDATE public.oficinas_contables o
   SET user_id = u.id, updated_at = now()
   FROM public.users u
@@ -87,4 +91,33 @@ RETURNS void AS $$
       )
     )
     AND NOT EXISTS (SELECT 1 FROM public.oficinas_contables o2 WHERE o2.user_id = u.id);
-$$ LANGUAGE sql SECURITY DEFINER SET search_path = public;
+
+  INSERT INTO public.oficinas_contables (nombre, nombre_norm, email, user_id, estado, publicar)
+  SELECT
+    left(coalesce(nullif(trim(u.full_name), ''), split_part(u.email, '@', 1)), 140),
+    coalesce(
+      nullif(
+        lower(regexp_replace(
+          translate(coalesce(nullif(trim(u.full_name), ''), split_part(u.email, '@', 1)),
+                    'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN'),
+          '[^a-zA-Z0-9]', '', 'g')),
+        ''),
+      'oficina'),
+    lower(u.email),
+    u.id,
+    'visitado',
+    true
+  FROM public.users u
+  WHERE u.email IS NOT NULL
+    AND (
+      u.es_contable
+      OR u.es_firma_accountant
+      OR EXISTS (
+        SELECT 1 FROM public.account_members m
+        WHERE lower(m.member_email) = lower(u.email) AND m.role = 'cpa'
+      )
+    )
+    AND NOT EXISTS (SELECT 1 FROM public.oficinas_contables o WHERE o.user_id = u.id)
+    AND NOT EXISTS (SELECT 1 FROM public.oficinas_contables o WHERE o.email = lower(u.email));
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
