@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 // Atajo "Subir a Business" (18 oct 2026, pedido de Joel): quien está en Core o
-// Pro y entra a un addon (Técnicos, Pagos, Administrador/Secretaria) solo veía
+// Pro y entra a un addon (Técnicos, Pagos, Nómina, Administrador/Secretaria) solo veía
 // "Activar addon". Business ya incluye todos, así que aquí se le ofrece subir
 // de plan con un botón. Usa el mismo endpoint de cambio de plan (cobra hoy la
 // diferencia prorrateada y quita los addons que Business incluye). No se
@@ -35,7 +35,7 @@ export default function SubirABusiness({ compacto = false }: { compacto?: boolea
   async function subir() {
     if (
       !window.confirm(
-        "Vas a subir a Business. Se te cobra hoy la diferencia prorrateada por los días que quedan de tu ciclo y tienes acceso de inmediato. Los addons que Business ya incluye (Técnicos, Pagos, Administrador y Secretaria) dejan de cobrarse. ¿Continuar?",
+        "Vas a subir a Business. Se te cobra hoy la diferencia prorrateada por los días que quedan de tu ciclo y tienes acceso de inmediato. Los addons que Business ya incluye (Técnicos, Pagos, Nómina, Administrador y Secretaria) dejan de cobrarse. ¿Continuar?",
       )
     )
       return;
@@ -62,7 +62,7 @@ export default function SubirABusiness({ compacto = false }: { compacto?: boolea
     >
       <p className="text-sm font-medium">¿Vas a usar varios addons? Sube a Business · {precio}</p>
       <p className="mb-2 mt-0.5 text-xs text-muted">
-        Incluye Técnicos, Pagos, Administrador y Secretaria sin cobrarlos aparte. Se cobra solo la diferencia de tu plan actual.
+        Incluye Técnicos, Pagos, Nómina, Administrador y Secretaria sin cobrarlos aparte. Se cobra solo la diferencia de tu plan actual.
       </p>
       {error && <p className="mb-2 text-xs text-red">{error}</p>}
       <button className="vc-btn-primary" disabled={trabajando} onClick={subir}>

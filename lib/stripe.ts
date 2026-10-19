@@ -168,12 +168,11 @@ export function priceIdAddonNomina(): string | null {
   return process.env.STRIPE_PRICE_ADDON_NOMINA || null;
 }
 
-// ¿Business incluye Nómina sin cobrarla aparte? Hoy NO: Joel pidió Nómina como
-// addon de $24.99 y no dijo que Business la incluyera. Si se decide incluirla,
-// basta con cambiar esto a true (el gate de /dashboard/nomina y la ruta de
-// activación lo respetan) y agregar el Price de Nómina a la lista de addons que
-// se quitan al subir a Business en app/api/stripe/cambiar-plan/route.ts.
-export const NOMINA_INCLUIDA_EN_BUSINESS = false;
+// ¿Business incluye Nómina sin cobrarla aparte? SÍ (19 oct 2026, confirmado por
+// Joel: "incluido en la Business el módulo de Nómina"). Los planes Core/Pro la
+// activan como addon de $24.99. Al subir a Business se quita el item del addon
+// (app/api/stripe/cambiar-plan/route.ts) para que no se cobre dos veces.
+export const NOMINA_INCLUIDA_EN_BUSINESS = true;
 
 // Programa "Firma Accountant" — 4 oct 2026, migración 0139. Wholesale del
 // plan Business para contadores/billers que absorben la mensualidad en su

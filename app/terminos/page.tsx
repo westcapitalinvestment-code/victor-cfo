@@ -70,7 +70,7 @@ export default function TerminosServicioPage() {
       <h2 className="mb-2 mt-6 text-base font-semibold">5. Planes, pagos y addons</h2>
       <p className="mb-4">
         Ofrecemos un plan gratis y planes de pago (Core, Pro, Business, y próximamente Enterprise), con
-        precio mensual o anual según elijas, además de addons opcionales (por ejemplo, Técnicos, Pagos,
+        precio mensual o anual según elijas, además de addons opcionales (por ejemplo, Técnicos, Pagos, Nómina,
         entidades adicionales o créditos de IA). Los nuevos usuarios de planes de pago pueden recibir un
         período de prueba según se indique al momento del registro. Puedes cancelar tu suscripción en
         cualquier momento desde Configuración — la cancelación aplica al final del período ya pagado, sin

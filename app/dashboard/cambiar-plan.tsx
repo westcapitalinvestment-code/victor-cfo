@@ -21,7 +21,7 @@ const NOMBRE: Record<PlanId, string> = { core: "Core", pro: "Pro", proplus: "Bus
 const DESCRIPCION: Record<PlanId, string> = {
   core: "Finanzas personales",
   pro: "Tu negocio: facturación, cobros, técnicos y más",
-  proplus: "Todo incluido: técnicos, administrador, secretaria y pagos",
+  proplus: "Todo incluido: técnicos, administrador, secretaria, pagos y nómina",
 };
 const PRECIO: Record<PlanId, { mensual: string; anual?: string }> = {
   core: { mensual: "$14.99/mes", anual: "$164/año" },
@@ -54,7 +54,7 @@ export default function CambiarPlan() {
   async function cambiar(destino: PlanId) {
     const sube = ORDEN.indexOf(destino) > ORDEN.indexOf(actual);
     const msg = sube
-      ? `Vas a subir a ${NOMBRE[destino]}. Se te cobra hoy la diferencia prorrateada por los días que quedan de tu ciclo y tienes acceso de inmediato.${destino === "proplus" ? " Los addons que Business ya incluye (Técnicos, Pagos, Administrador y Secretaria) dejan de cobrarse." : ""} ¿Continuar?`
+      ? `Vas a subir a ${NOMBRE[destino]}. Se te cobra hoy la diferencia prorrateada por los días que quedan de tu ciclo y tienes acceso de inmediato.${destino === "proplus" ? " Los addons que Business ya incluye (Técnicos, Pagos, Nómina, Administrador y Secretaria) dejan de cobrarse." : ""} ¿Continuar?`
       : `Vas a bajar a ${NOMBRE[destino]}. Conservas ${NOMBRE[actual]} hasta que termine el ciclo que ya pagaste y después cambia, sin reembolsos ni créditos.${destino === "core" ? " Los addons de negocio dejarán de estar disponibles." : ""} ¿Continuar?`;
     if (!window.confirm(msg)) return;
     setTrabajando(destino);

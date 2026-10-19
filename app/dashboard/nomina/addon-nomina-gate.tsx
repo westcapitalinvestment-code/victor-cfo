@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import SubirABusiness from "../subir-a-business";
 import Link from "next/link";
 
 // Pantalla de upsell del addon Nómina ($24.99/mes, migración 0167, 19 oct
@@ -48,6 +49,7 @@ export default function AddonNominaGate({
       >
         <div className="mb-2 text-2xl">🧾</div>
         <p className="mb-1 text-base font-semibold">Add-on Nómina — $24.99/mes</p>
+        <p className="mb-2 text-xs text-teal">Incluido sin costo extra en el plan Business.</p>
         <p className="mb-4 text-sm text-muted">
           Calcula la nómina de tus empleados en Puerto Rico: retención de Hacienda, Seguro Social, Medicare y SINOT,
           el costo real para tu corporación (FICA patronal, SUTA, FUTA y provisión de CFSE), el recibo de cada
@@ -56,9 +58,12 @@ export default function AddonNominaGate({
         </p>
         {error && <p className="mb-3 text-xs text-red">{error}</p>}
         {puedeActivar ? (
-          <button className="vc-btn-primary" disabled={activando} onClick={activar}>
-            {activando ? "Activando..." : "Activar addon"}
-          </button>
+          <>
+            <button className="vc-btn-primary" disabled={activando} onClick={activar}>
+              {activando ? "Activando..." : "Activar addon"}
+            </button>
+            <SubirABusiness compacto />
+          </>
         ) : (
           <p className="text-xs text-muted">
             Este addon lo activa el dueño de la cuenta desde su Suscripción — pídele que lo active para poder

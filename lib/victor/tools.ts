@@ -10,6 +10,9 @@ import { claveCicloUso, progresoCicloUso } from "@/lib/ciclo-uso";
 import { limiteMensualIaCentavos, centavosAMicrotokens } from "@/lib/limites-ia";
 import { esFounder } from "@/lib/founder";
 import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
+import { NOMINA_INCLUIDA_EN_BUSINESS } from "@/lib/stripe";
+import { cargarParametros, cargarConfigEntidad } from "@/lib/nomina-server";
+import { calcularEmpleado, PERIODOS_POR_ANIO, type EmpleadoNomina, type Frecuencia } from "@/lib/nomina";
 
 // El texto real del banco (description_raw) casi nunca coincide palabra
 // por palabra con cómo el usuario describe una transacción en el chat —
@@ -1275,6 +1278,48 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
         },
       },
       required: ["tema"],
+    },
+  },
+  {
+    name: "resumen_nomina",
+    description:
+      "Módulo Nómina (addon $24.99/mes, incluido en Business) — trae lo que el dueño tiene en la nómina de empleados (W-2) de Puerto Rico: " +
+      "empleados activos, últimas corridas aprobadas, acumulado del año (bruto, retenciones, costo patronal) y montos de depósito de las " +
+      "corridas recientes (941-PR, 499 R-1B, DTRH, FUTA, provisión CFSE). OBLIGATORIO usarla cuando pregunte cuánto lleva pagado en nómina, " +
+      "cuántos empleados tiene, qué toca depositar o cómo va la nómina. NUNCA inventes montos de nómina. Si el módulo no está activo, lo dice. " +
+      "Recuerda que VICTOR solo CALCULA: no radica ni deposita, y las tasas marcadas 'por confirmar' son estimado hasta que el contable las valide.",
+    input_schema: {
+      type: "object",
+      properties: {
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio. Si se omite y hay varias, se consultan todas juntas.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "estimar_costo_empleado",
+    description:
+      "Calcula, SIN guardar nada, cuánto cobra neto y cuánto le cuesta al patrono un empleado HIPOTÉTICO en Puerto Rico con las mismas reglas del " +
+      "módulo Nómina (retención de Hacienda 499 R-4, Seguro Social, Medicare, SINOT, SUTA, FUTA, CFSE). Úsala para '¿cuánto me cuesta contratar " +
+      "a alguien a $X?'. Requiere el pago por periodo (salario) o la tarifa por hora, y la frecuencia. Es un estimado de UN periodo al inicio " +
+      "del año (sin acumulados previos); aclara que las tasas 'por confirmar' deben validarse con el contable. Requiere Nómina activa.",
+    input_schema: {
+      type: "object",
+      properties: {
+        entidad_nombre: { type: "string", description: "Entidad cuyas tasas SUTA/CFSE se usan. Si se omite se usan las de la primera entidad (o las predeterminadas)." },
+        frecuencia: { type: "string", enum: ["semanal", "bisemanal", "quincenal", "mensual"], description: "Frecuencia de pago." },
+        tipo_pago: { type: "string", enum: ["salario", "hora"], description: "'salario' = monto fijo por periodo; 'hora' = tarifa por hora." },
+        tarifa: { type: "number", description: "Salario por periodo (si salario) o tarifa por hora (si hora)." },
+        horas_regulares: { type: "number", description: "Horas regulares del periodo, solo si tipo_pago='hora'." },
+        horas_extra: { type: "number", description: "Horas extra del periodo (opcional)." },
+        estado_civil: { type: "string", enum: ["soltero", "casado_conjunto", "casado_separado"], description: "Por defecto soltero." },
+        exencion_personal: { type: "string", enum: ["completa", "compartida", "ninguna"], description: "Por defecto completa." },
+        dependientes: { type: "number", description: "Dependientes (opcional)." },
+      },
+      required: ["frecuencia", "tipo_pago", "tarifa"],
     },
   },
 ];
@@ -4242,6 +4287,142 @@ export async function executeVictorTool(
           (vencidas.length > 0
             ? `\n\nFacturas VENCIDAS (${vencidas.length}, de toda la cartera, no solo del periodo):\n${lineasVencidas.join("\n")}${vencidas.length > 10 ? `\n(+ ${vencidas.length - 10} más)` : ""}`
             : "\n\nNo hay facturas vencidas."),
+      };
+    }
+
+    case "resumen_nomina":
+    case "estimar_costo_empleado": {
+      // Módulo Nómina (19 oct 2026). Mismo gate que exigirNomina(): Pro/Business activo
+      // + addon activo (o Business, que lo incluye).
+      const { data: perfilNom } = await supabase
+        .from("users")
+        .select("plan, plan_status, addon_nomina_status")
+        .eq("id", ownerId)
+        .maybeSingle();
+      const esProNom = perfilNom?.plan === "pro" || perfilNom?.plan === "proplus";
+      const incluidoNom = perfilNom?.plan === "proplus" && NOMINA_INCLUIDA_EN_BUSINESS;
+      if (!esProNom || perfilNom?.plan_status !== "active" || (!incluidoNom && perfilNom?.addon_nomina_status !== "activo")) {
+        return {
+          ok: true,
+          message: "El módulo Nómina no está activo en esta cuenta. Es un addon de $24.99/mes para Pro (incluido en Business); se activa en el ícono Nómina del menú del negocio.",
+        };
+      }
+
+      const pistaNom = typeof input.entidad_nombre === "string" ? input.entidad_nombre.trim() : "";
+      let entidadesNom = (
+        (await supabase.from("business_entities").select("id, name").eq("owner_id", ownerId).eq("active", true).order("name", { ascending: true })).data ?? []
+      ) as { id: string; name: string }[];
+      if (pistaNom) {
+        const p = pistaNom.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+        const f = entidadesNom.filter((e) => e.name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes(p));
+        if (f.length === 0) return { ok: false, message: `No encontré una entidad que se parezca a "${pistaNom}".` };
+        entidadesNom = f;
+      }
+      if (entidadesNom.length === 0) return { ok: true, message: "No hay entidades de negocio activas, así que no hay nómina que consultar." };
+      const anioNom = Number(fechaHoyPR().slice(0, 4));
+
+      if (toolName === "resumen_nomina") {
+        const ids = entidadesNom.map((e) => e.id);
+        const nombreDe = new Map(entidadesNom.map((e) => [e.id, e.name]));
+        const { data: emps } = await supabase
+          .from("payroll_employees")
+          .select("entity_id, nombre, frecuencia, tipo_pago, tarifa, activo")
+          .eq("owner_id", ownerId)
+          .in("entity_id", ids)
+          .eq("activo", true);
+        const { data: corridas } = await supabase
+          .from("payroll_runs")
+          .select("entity_id, periodo_inicio, periodo_fin, fecha_pago, totales, depositos")
+          .eq("owner_id", ownerId)
+          .in("entity_id", ids)
+          .eq("estado", "aprobada")
+          .order("fecha_pago", { ascending: false })
+          .limit(50);
+        const m = (n: unknown) => `$${Number(n ?? 0).toFixed(2)}`;
+        const partes: string[] = [];
+        for (const e of entidadesNom) {
+          const es = (emps ?? []).filter((x) => x.entity_id === e.id);
+          const cs = (corridas ?? []).filter((x) => x.entity_id === e.id);
+          const delAnio = cs.filter((c) => String(c.fecha_pago).startsWith(String(anioNom)));
+          let bruto = 0, neto = 0, ret = 0, patr = 0;
+          for (const c of delAnio) {
+            const t = (c.totales ?? {}) as Record<string, number>;
+            bruto += Number(t.bruto ?? 0);
+            neto += Number(t.neto ?? 0);
+            ret += Number(t.retencionesEmpleado ?? 0);
+            patr += Number(t.contribucionesPatronales ?? 0);
+          }
+          const lineasEmp = es.map((x) => `  - ${x.nombre}: ${x.tipo_pago === "hora" ? `${m(x.tarifa)}/hora` : `${m(x.tarifa)}/periodo`}, ${x.frecuencia}`);
+          const lineasCor = cs.slice(0, 3).map((c) => {
+            const t = (c.totales ?? {}) as Record<string, number>;
+            const d = (c.depositos ?? {}) as Record<string, number>;
+            return (
+              `  - Pago ${c.fecha_pago} (periodo ${c.periodo_inicio} a ${c.periodo_fin}): bruto ${m(t.bruto)}, neto ${m(t.neto)}, costo total patrono ${m(t.costoTotalPatrono)}. ` +
+              `Depósitos: IRS 941-PR ${m(d.irs941)}, Hacienda 499 R-1B ${m(d.hacienda499R1B)}, DTRH ${m(d.dtrh)}, FUTA ${m(d.futa)}, provisión CFSE ${m(d.provisionCfse)}`
+            );
+          });
+          partes.push(
+            `${nombreDe.get(e.id)}: ${es.length} empleado(s) activo(s).` +
+              (lineasEmp.length ? `\n${lineasEmp.join("\n")}` : "") +
+              `\n  Acumulado ${anioNom} (${delAnio.length} corrida(s) aprobada(s)): bruto ${m(bruto)}, neto ${m(neto)}, retenciones del empleado ${m(ret)}, contribuciones patronales ${m(patr)}.` +
+              (lineasCor.length ? `\n  Últimas corridas:\n${lineasCor.join("\n")}` : "\n  Todavía no hay corridas aprobadas.")
+          );
+        }
+        return {
+          ok: true,
+          message:
+            `Nómina (VICTOR calcula; no radica ni deposita — los vencimientos y las tasas "por confirmar" deben validarse con el contable):\n\n${partes.join("\n\n")}`,
+        };
+      }
+
+      // estimar_costo_empleado
+      const frecNom = String(input.frecuencia ?? "");
+      if (!["semanal", "bisemanal", "quincenal", "mensual"].includes(frecNom)) return { ok: false, message: "Frecuencia inválida (semanal, bisemanal, quincenal o mensual)." };
+      const tipoNom = input.tipo_pago === "hora" ? "hora" : "salario";
+      const tarifaNom = Number(input.tarifa);
+      if (!Number.isFinite(tarifaNom) || tarifaNom <= 0) return { ok: false, message: "Necesito una tarifa mayor que cero." };
+      const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 0);
+      const cargados = await cargarParametros(supabase as any, anioNom);
+      const cfgNom = await cargarConfigEntidad(supabase as any, entidadesNom[0].id);
+      const emp: EmpleadoNomina = {
+        id: "hipotetico",
+        nombre: "Empleado hipotético",
+        frecuencia: frecNom as Frecuencia,
+        tipoPago: tipoNom,
+        tarifa: tarifaNom,
+        estadoCivil: ["casado_conjunto", "casado_separado"].includes(String(input.estado_civil)) ? (input.estado_civil as "casado_conjunto" | "casado_separado") : "soltero",
+        exencionPersonal: ["compartida", "ninguna"].includes(String(input.exencion_personal)) ? (input.exencion_personal as "compartida" | "ninguna") : "completa",
+        dependientes: Math.floor(num(input.dependientes)),
+        dependientesUniv: 0,
+        retencionAdicional: 0,
+        deduccionMedico: 0,
+        aporte401k: 0,
+        esChofer: false,
+      };
+      const lin = calcularEmpleado(
+        emp,
+        { horasRegulares: tipoNom === "hora" ? num(input.horas_regulares) : undefined, horasExtra: num(input.horas_extra) },
+        { bruto: 0, sinotBase: 0, sutaBase: 0, futaBase: 0 },
+        cargados.valores,
+        cargados.tramos,
+        cfgNom
+      );
+      const mm = (n: number) => `$${n.toFixed(2)}`;
+      const patronal = lin.ssPat + lin.medicarePat + lin.futa + lin.suta + lin.sinotPat + lin.cfse;
+      const periodos = PERIODOS_POR_ANIO[emp.frecuencia];
+      return {
+        ok: true,
+        message:
+          `Estimado de UN periodo ${frecNom} (${entidadesNom[0].name}, principio de año, sin acumulados previos; no se guardó nada):\n` +
+          `- Bruto: ${mm(lin.bruto)}\n` +
+          `- Retenciones al empleado: Seguro Social ${mm(lin.ssEmp)}, Medicare ${mm(lin.medicareEmp + lin.medicareAdic)}, Hacienda ${mm(lin.hacienda)}, SINOT ${mm(lin.sinotEmp)}\n` +
+          `- Neto que cobra: ${mm(lin.neto)}\n` +
+          `- Costo patronal adicional: FICA ${mm(lin.ssPat + lin.medicarePat)}, SUTA ${mm(lin.suta)}, FUTA ${mm(lin.futa)}, SINOT ${mm(lin.sinotPat)}, CFSE ${mm(lin.cfse)} = ${mm(patronal)}\n` +
+          `- Costo total para el patrono este periodo: ${mm(lin.bruto + patronal)} (aprox. ${mm((lin.bruto + patronal) * periodos)} al año; SUTA/FUTA/SINOT tienen tope anual, así que luego baja el costo patronal por periodo).\n` +
+          (cargados.porConfirmar.length > 0
+            ? `AVISO: estas tasas están "por confirmar" con el contable: ${cargados.porConfirmar.join(", ")}. Es un ESTIMADO.`
+            : "") +
+          (lin.advertencias.length ? `\nNotas: ${lin.advertencias.join(" ")}` : ""),
       };
     }
 

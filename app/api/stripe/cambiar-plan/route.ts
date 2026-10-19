@@ -11,6 +11,7 @@ import {
   todosLosPriceIdsDePlanes,
   priceIdAddonTecnicos,
   priceIdAddonPagos,
+  priceIdAddonNomina,
   priceIdAddonSecretaria,
   priceIdAddonAdministrador,
   priceIdAddonEntidadAdicional,
@@ -28,7 +29,7 @@ import {
 //    cambia el precio del item del plan en la misma suscripción y Stripe cobra
 //    al momento la diferencia prorrateada por los días que quedan del ciclo.
 //    Al pasar a Business se quitan los addons que Business ya incluye
-//    (Técnicos, Pagos, Secretaria, Administrador); "Entidad adicional" sí se
+//    (Técnicos, Pagos, Nómina, Secretaria, Administrador); "Entidad adicional" sí se
 //    queda porque Business no la incluye.
 //  - BAJAR de plan: al final del ciclo ya pagado, con una Subscription
 //    Schedule (no pierde lo que pagó, sin reembolsos ni créditos).
@@ -57,7 +58,7 @@ async function perfilDelUsuario() {
 
 function idsAddonsQueBusinessIncluye(): Set<string> {
   return new Set(
-    [priceIdAddonTecnicos(), priceIdAddonPagos(), priceIdAddonSecretaria(), priceIdAddonAdministrador()].filter(
+    [priceIdAddonTecnicos(), priceIdAddonPagos(), priceIdAddonNomina(), priceIdAddonSecretaria(), priceIdAddonAdministrador()].filter(
       (v): v is string => !!v
     )
   );
@@ -177,6 +178,8 @@ export async function POST(req: NextRequest) {
           addon_tecnicos_item_id: null,
           addon_pagos_status: "inactivo",
           addon_pagos_item_id: null,
+          addon_nomina_status: "inactivo",
+          addon_nomina_item_id: null,
           addon_admin_status: "inactivo",
           addon_admin_item_id: null,
           addon_administrador_status: "inactivo",
