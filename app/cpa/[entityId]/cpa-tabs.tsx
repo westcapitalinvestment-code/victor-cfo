@@ -431,7 +431,7 @@ export default function CpaTabs({
   return (
     <div>
       <div className="mb-4 flex gap-1 overflow-x-auto border-b border-border">
-        {TABS.filter((t) => t.id !== "nomina" || nomina.empleados.length > 0 || nomina.corridas.length > 0).map((t) => (
+        {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
