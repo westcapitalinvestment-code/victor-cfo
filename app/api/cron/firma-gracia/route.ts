@@ -17,6 +17,7 @@ const DIA_MS = 24 * 60 * 60 * 1000;
 const ETIQUETA_ADDON: Record<string, string> = {
   addon_tecnicos_status: "Técnicos",
   addon_pagos_status: "Pagos",
+  addon_nomina_status: "Nómina",
   addon_admin_status: "Secretaria",
   addon_administrador_status: "Administrador",
   addon_entidades_status: "Entidades adicionales",
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest) {
   const { data: enGracia, error: errGracia } = await supabase
     .from("users")
     .select(
-      "id, email, full_name, firma_gracia_hasta, firma_liberado_de_id, firma_gracia_ultimo_aviso_at, addon_tecnicos_status, addon_pagos_status, addon_admin_status, addon_administrador_status, addon_entidades_status"
+      "id, email, full_name, firma_gracia_hasta, firma_liberado_de_id, firma_gracia_ultimo_aviso_at, addon_tecnicos_status, addon_pagos_status, addon_nomina_status, addon_admin_status, addon_administrador_status, addon_entidades_status"
     )
     .not("firma_gracia_hasta", "is", null)
     .gte("firma_gracia_hasta", ahoraISO)

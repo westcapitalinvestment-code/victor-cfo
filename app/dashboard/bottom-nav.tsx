@@ -42,6 +42,8 @@ const TABS_NEGOCIO_INICIO = [
 const TABS_NEGOCIO = [
   { href: "/dashboard/facturacion", label: "Facturas", icon: "ti-file-invoice" },
   { href: "/dashboard/pagos", label: "Pagos", icon: "ti-cash" },
+  // Nómina (19 oct 2026, pedido de Joel): addon aparte al lado de Pagos.
+  { href: "/dashboard/nomina", label: "Nómina", icon: "ti-receipt-2" },
   { href: "/dashboard/admin", label: "Admin", icon: "ti-user-cog" },
   { href: "/dashboard/equipo", label: "Equipo", icon: "ti-users" },
 ];
@@ -91,6 +93,7 @@ export default function BottomNav({ esFounder = false }: { esFounder?: boolean }
     pathname.startsWith("/dashboard/clientes") ||
     pathname.startsWith("/dashboard/entidades") ||
     pathname.startsWith("/dashboard/pagos") ||
+    pathname.startsWith("/dashboard/nomina") ||
     pathname.startsWith("/dashboard/equipo") ||
     pathname.startsWith("/dashboard/admin");
   const tabsPrimerGrupo = enNegocio ? TABS_NEGOCIO_INICIO : TABS_PERSONAL;

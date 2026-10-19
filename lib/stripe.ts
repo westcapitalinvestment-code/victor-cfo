@@ -160,6 +160,21 @@ export function priceIdAddonPagos(): string | null {
   return process.env.STRIPE_PRICE_ADDON_PAGOS || null;
 }
 
+// Addon "Nómina" — 19 oct 2026, migración 0167, pedido de Joel: addon aparte
+// al lado de Pagos, $24.99/mes. Mismo patrón plano (un solo subscription
+// item, sin seats). Crear el Price en Stripe y poner STRIPE_PRICE_ADDON_NOMINA
+// en Vercel.
+export function priceIdAddonNomina(): string | null {
+  return process.env.STRIPE_PRICE_ADDON_NOMINA || null;
+}
+
+// ¿Business incluye Nómina sin cobrarla aparte? Hoy NO: Joel pidió Nómina como
+// addon de $24.99 y no dijo que Business la incluyera. Si se decide incluirla,
+// basta con cambiar esto a true (el gate de /dashboard/nomina y la ruta de
+// activación lo respetan) y agregar el Price de Nómina a la lista de addons que
+// se quitan al subir a Business en app/api/stripe/cambiar-plan/route.ts.
+export const NOMINA_INCLUIDA_EN_BUSINESS = false;
+
 // Programa "Firma Accountant" — 4 oct 2026, migración 0139. Wholesale del
 // plan Business para contadores/billers que absorben la mensualidad en su
 // iguala (mismo mecanismo que "bill my firm" de QuickBooks Online

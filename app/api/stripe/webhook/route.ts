@@ -6,6 +6,7 @@ import {
   esPlanValido,
   priceIdAddonTecnicos,
   priceIdAddonPagos,
+  priceIdAddonNomina,
   priceIdAddonSecretaria,
   priceIdAddonAdministrador,
   priceIdAddonEntidadAdicional,
@@ -266,6 +267,10 @@ export async function POST(req: NextRequest) {
                 statusCol: "addon_pagos_status",
                 itemIdCol: "addon_pagos_item_id",
               },
+              [priceIdAddonNomina() || "__none_nomina__"]: {
+                statusCol: "addon_nomina_status",
+                itemIdCol: "addon_nomina_item_id",
+              },
               [priceIdAddonSecretaria() || "__none_secretaria__"]: {
                 statusCol: "addon_admin_status",
                 itemIdCol: "addon_admin_item_id",
@@ -511,6 +516,14 @@ export async function POST(req: NextRequest) {
           datosActualizar.addon_pagos_item_id = itemAddonPagos ? itemAddonPagos.id : null;
         }
 
+        // Addon Nómina (19 oct 2026, migración 0167): mismo patrón plano que Pagos.
+        const addonNominaPriceId = priceIdAddonNomina();
+        if (addonNominaPriceId) {
+          const itemAddonNomina = subscription.items.data.find((it) => it.price.id === addonNominaPriceId);
+          datosActualizar.addon_nomina_status = itemAddonNomina ? "activo" : "inactivo";
+          datosActualizar.addon_nomina_item_id = itemAddonNomina ? itemAddonNomina.id : null;
+        }
+
         await supabase.from("users").update(datosActualizar).eq("id", userId);
         break;
       }
@@ -586,6 +599,9 @@ export async function POST(req: NextRequest) {
             // Mismo razonamiento para Pagos (2 oct 2026, migración 0134).
             addon_pagos_status: "inactivo",
             addon_pagos_item_id: null,
+            // Y para Nómina (19 oct 2026, migración 0167).
+            addon_nomina_status: "inactivo",
+            addon_nomina_item_id: null,
           })
           .eq("id", userId);
 
