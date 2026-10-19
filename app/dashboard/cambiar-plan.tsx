@@ -13,6 +13,7 @@ type Estado = {
   plan?: PlanId;
   ciclo?: "mensual" | "anual" | null;
   pendiente?: { plan: PlanId; ciclo: string; fecha: string } | null;
+  disponibles?: Partial<Record<PlanId, boolean>>;
 };
 
 const ORDEN: PlanId[] = ["core", "pro", "proplus"];
@@ -111,7 +112,7 @@ export default function CambiarPlan() {
       {error && <p className="mb-2 text-xs text-red">{error}</p>}
 
       <div className="flex flex-col gap-2">
-        {ORDEN.filter((p) => p !== actual).map((p) => {
+        {ORDEN.filter((p) => p !== actual && estado.disponibles?.[p] !== false).map((p) => {
           const sube = ORDEN.indexOf(p) > ORDEN.indexOf(actual);
           const precio = PRECIO[p][ciclo] ?? PRECIO[p].mensual;
           return (

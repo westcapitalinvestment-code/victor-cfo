@@ -9,7 +9,12 @@ import { useEffect, useState } from "react";
 // diferencia prorrateada y quita los addons que Business incluye). No se
 // muestra si no tiene suscripción propia, si ya es Business o si la paga una firma.
 export default function SubirABusiness({ compacto = false }: { compacto?: boolean }) {
-  const [info, setInfo] = useState<{ plan?: string; ciclo?: string | null; puedeCambiar?: boolean } | null>(null);
+  const [info, setInfo] = useState<{
+    plan?: string;
+    ciclo?: string | null;
+    puedeCambiar?: boolean;
+    disponibles?: { proplus?: boolean };
+  } | null>(null);
   const [trabajando, setTrabajando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,6 +26,8 @@ export default function SubirABusiness({ compacto = false }: { compacto?: boolea
   }, []);
 
   if (!info?.puedeCambiar || !info.plan || info.plan === "proplus") return null;
+  // Business sin Price en Stripe todavía: no se ofrece (evita un botón que falla).
+  if (info.disponibles && !info.disponibles.proplus) return null;
 
   const ciclo = info.ciclo === "anual" ? "anual" : "mensual";
   const precio = ciclo === "anual" ? "$1,099/año" : "$99.99/mes";

@@ -96,6 +96,13 @@ export async function GET() {
       plan: actual?.plan ?? perfil.plan,
       ciclo: actual?.ciclo ?? null,
       pendiente,
+      // Qué planes tienen Price configurado para el ciclo actual — si falta
+      // alguno (ej. Business todavía sin crear en Stripe), la UI no lo ofrece.
+      disponibles: {
+        core: !!priceIdPara("core", actual?.ciclo ?? "mensual"),
+        pro: !!priceIdPara("pro", actual?.ciclo ?? "mensual"),
+        proplus: !!priceIdPara("proplus", actual?.ciclo ?? "mensual"),
+      },
     });
   } catch (err) {
     return NextResponse.json({ ok: true, puedeCambiar: false, error: err instanceof Error ? err.message : null });

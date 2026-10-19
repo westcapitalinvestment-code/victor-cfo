@@ -15,7 +15,8 @@ import { useState } from "react";
 // Price de Pro en Stripe y ponga los STRIPE_PRICE_PRO_* en Vercel, basta
 // con cambiar esta constante a true para activar el cobro real — no hace
 // falta tocar nada más de este archivo.
-const PRO_DISPONIBLE = false;
+// 18 oct 2026: Joel confirmó que el Price de Pro ya existe en Stripe → activo.
+const PRO_DISPONIBLE = true;
 
 const FEATURES = [
   "Facturar clientes y cobrar en línea",
