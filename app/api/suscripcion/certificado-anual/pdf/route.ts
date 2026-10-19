@@ -18,7 +18,7 @@ import { formatMoney, formatFecha, slugificar } from "@/lib/format";
 // reales con lo que el cliente pagó de verdad (incluye prorrateos, cambios
 // de plan a mitad de año, etc.) viven ahí, no en una tabla nuestra.
 //
-// Datos fiscales de VICTOR CFO LLC como proveedor (ver #790): el EIN y el
+// Datos fiscales del proveedor, West Capital Ventures LLC (dueña de la marca VICTOR CFO; ver #790): el EIN y el
 // Registro de Comerciante de SURI se pegan en Vercel cuando Joel los tenga
 // a mano — mientras tanto el PDF sale igual, solo que sin esas dos líneas
 // (nunca inventamos un número fiscal).
@@ -138,8 +138,10 @@ export async function GET(req: NextRequest) {
   }
 
   // Encabezado
-  texto("VICTOR CFO LLC", margin, y, { f: bold, size: 18, color: teal });
-  y -= 20;
+  texto("VICTOR CFO", margin, y, { f: bold, size: 18, color: teal });
+  y -= 16;
+  texto("West Capital Ventures LLC", margin, y, { f: bold, size: 9.5, color: gris });
+  y -= 14;
   if (VICTOR_CFO_DIRECCION) {
     texto(VICTOR_CFO_DIRECCION, margin, y, { size: 8.5, color: gris });
     y -= 12;
@@ -162,7 +164,7 @@ export async function GET(req: NextRequest) {
   y -= 40;
 
   texto("Proveedor:", margin, y, { f: bold, size: 10 });
-  texto("VICTOR CFO — software de administración financiera", margin + 80, y, { size: 10 });
+  texto("West Capital Ventures LLC (VICTOR CFO — software de administración financiera)", margin + 80, y, { size: 10 });
   y -= 18;
   texto("Cliente:", margin, y, { f: bold, size: 10 });
   texto(nombreTitular, margin + 80, y, { size: 10 });
@@ -202,7 +204,7 @@ export async function GET(req: NextRequest) {
   y -= 40;
 
   texto(
-    "Este certificado consolida los pagos reales procesados por Stripe a nombre de VICTOR CFO LLC",
+    "Este certificado consolida los pagos reales procesados por Stripe a nombre de West Capital Ventures LLC (VICTOR CFO)",
     margin,
     y,
     { size: 8.5, color: gris }
