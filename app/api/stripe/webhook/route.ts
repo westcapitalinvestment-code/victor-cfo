@@ -980,8 +980,7 @@ async function procesarCreditoReferido(
 //         en sí mismo (si cancela, no vuelve a cobrar hasta el año
 //         siguiente, así que no hace falta retener nada).
 //     Ver procesarComisionVendedor abajo y migración 0135 para el detalle
-//     completo. Solo aplica a Pro/Business — un vendedor únicamente
-//     refiere negocios a esos dos planes, nunca a Core.
+//     completo. Pro/Business = % del plan; Core = fijo $15.00.
 const COMISION_SOCIO_CORE_CENTAVOS = 700; // $7.00
 const COMISION_SOCIO_PRO_CENTAVOS = 2_500; // $25.00
 // Modelo de vendedor vigente desde el 2 oct 2026 (migración 0135) — ver
@@ -990,6 +989,8 @@ const COMISION_SOCIO_PRO_CENTAVOS = 2_500; // $25.00
 // único (20%, nunca se divide).
 const PORCENTAJE_SETENTA_VENDEDOR = 0.7;
 const PORCENTAJE_ANUAL_VENDEDOR = 0.2;
+// Core (desde 19 oct 2026): comisión fija por cliente, sin importar el ciclo.
+const COMISION_VENDEDOR_CORE_CENTAVOS = 1_500; // $15.00
 
 // Retención Sección 1062.03 sobre las comisiones del vendedor (migración
 // 0138, 3 oct 2026, pedido de Joel al armar el equipo de ventas) — mismo
@@ -1059,7 +1060,10 @@ async function procesarComisionVendedor(
   invoice: Stripe.Invoice
 ) {
   const socioId = socio.id;
-  if (referido.plan !== "pro" && referido.plan !== "proplus") return;
+  if (referido.plan !== "core" && referido.plan !== "pro" && referido.plan !== "proplus") return;
+  // Core: comisión FIJA de $15.00 por cliente (mensual 70/30 = $10.50 + $4.50;
+  // anual = $15.00 de una vez). Pro/Business siguen con el % de siempre.
+  const esCore = referido.plan === "core";
 
   const { data: estadoCliente } = await admin
     .from("socios_vendedor_clientes")
@@ -1090,7 +1094,7 @@ async function procesarComisionVendedor(
 
     if (intervalo === "year") {
       // Anual: 20% de una vez, nada queda pendiente — nace ya 'liberada'.
-      const comisionCentavos = Math.round(montoBase * PORCENTAJE_ANUAL_VENDEDOR);
+      const comisionCentavos = esCore ? COMISION_VENDEDOR_CORE_CENTAVOS : Math.round(montoBase * PORCENTAJE_ANUAL_VENDEDOR);
 
       const { error: errorFila } = await admin.from("socios_vendedor_clientes").insert({
         socio_id: socioId,
@@ -1133,10 +1137,11 @@ async function procesarComisionVendedor(
     }
 
     // Mensual: 70% ahora, 30% queda pendiente para el 3er pago real.
-    const setentaCentavos = Math.round(montoBase * PORCENTAJE_SETENTA_VENDEDOR);
+    const baseComision = esCore ? COMISION_VENDEDOR_CORE_CENTAVOS : montoBase;
+    const setentaCentavos = Math.round(baseComision * PORCENTAJE_SETENTA_VENDEDOR);
     // Resta, no round(30%) — así setenta+treinta siempre suma EXACTO el
     // precio mensual, sin perder ni ganar un centavo por redondeo doble.
-    const treintaCentavos = montoBase - setentaCentavos;
+    const treintaCentavos = baseComision - setentaCentavos;
 
     const { error: errorFila } = await admin.from("socios_vendedor_clientes").insert({
       socio_id: socioId,
