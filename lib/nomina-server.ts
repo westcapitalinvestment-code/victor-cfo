@@ -38,7 +38,7 @@ export async function exigirNomina(
     .maybeSingle();
   const esPro = perfil?.plan === "pro" || perfil?.plan === "proplus";
   const incluido = perfil?.plan === "proplus" && NOMINA_INCLUIDA_EN_BUSINESS;
-  if (!esPro || perfil?.plan_status !== "active" || (!incluido && perfil?.addon_nomina_status !== "activo")) {
+  if (!esPro || (!incluido && perfil?.addon_nomina_status !== "activo")) {
     return { error: NextResponse.json({ error: "Necesitas el addon Nómina activo." }, { status: 403 }) };
   }
   return { userId: user.id };

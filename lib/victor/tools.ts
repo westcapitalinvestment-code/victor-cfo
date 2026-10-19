@@ -4301,7 +4301,7 @@ export async function executeVictorTool(
         .maybeSingle();
       const esProNom = perfilNom?.plan === "pro" || perfilNom?.plan === "proplus";
       const incluidoNom = perfilNom?.plan === "proplus" && NOMINA_INCLUIDA_EN_BUSINESS;
-      if (!esProNom || perfilNom?.plan_status !== "active" || (!incluidoNom && perfilNom?.addon_nomina_status !== "activo")) {
+      if (!esProNom || (!incluidoNom && perfilNom?.addon_nomina_status !== "activo")) {
         return {
           ok: true,
           message: "El módulo Nómina no está activo en esta cuenta. Es un addon de $24.99/mes para Pro (incluido en Business); se activa en el ícono Nómina del menú del negocio.",
