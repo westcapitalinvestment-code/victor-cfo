@@ -195,7 +195,7 @@ export default function Topbar({
               <div className="flex items-center gap-1.5">
                 <span className="vc-logo-name">VICTOR</span>
                 <span className={`vc-plan-badge ${esPro ? "pro" : esGratis ? "gratis" : ""}`}>
-                  {esPro ? "Pro" : esGratis ? "Free" : "Core"}
+                  {plan === "proplus" ? "Business" : esPro ? "Pro" : esGratis ? "Free" : "Core"}
                 </span>
               </div>
               {nombreCorto && <div className="text-[11px] text-muted">{nombreCorto}</div>}
