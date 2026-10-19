@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import BovedaCompartida from "../boveda-compartida";
+import NominaCpa, { type NominaEmpleado, type NominaCorrida, type NominaLinea, type NominaConfig } from "../nomina-cpa";
 import Formularios480 from "../formularios-480";
 import type { EstadoResultados } from "@/lib/estado-resultados";
 import { MESES_CORTOS } from "@/lib/estado-resultados";
@@ -194,6 +195,7 @@ type Auditoria = {
 const TABS = [
   { id: "facturas", label: "Facturación", icon: "ti-file-invoice" },
   { id: "retenciones", label: "Pagos", icon: "ti-file-percent" },
+  { id: "nomina", label: "Nómina", icon: "ti-receipt-2" },
   { id: "resultados", label: "Resultados", icon: "ti-chart-bar" },
   { id: "ivu", label: "IVU", icon: "ti-receipt-tax" },
   { id: "recibos", label: "Recibos", icon: "ti-camera" },
@@ -383,6 +385,7 @@ export default function CpaTabs({
   resumenPos,
   tienePos,
   retenciones,
+  nomina,
   entityId,
   ownerId,
 }: {
@@ -414,6 +417,7 @@ export default function CpaTabs({
   resumenPos: ResumenPos;
   tienePos: boolean;
   retenciones: Retencion[];
+  nomina: { empleados: NominaEmpleado[]; corridas: NominaCorrida[]; lineas: NominaLinea[]; config: NominaConfig };
   entityId: string;
   ownerId: string;
 }) {
@@ -427,7 +431,7 @@ export default function CpaTabs({
   return (
     <div>
       <div className="mb-4 flex gap-1 overflow-x-auto border-b border-border">
-        {TABS.map((t) => (
+        {TABS.filter((t) => t.id !== "nomina" || nomina.empleados.length > 0 || nomina.corridas.length > 0).map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -742,6 +746,10 @@ export default function CpaTabs({
             </>
           )}
         </div>
+      )}
+
+      {tab === "nomina" && (
+        <NominaCpa empleados={nomina.empleados} corridas={nomina.corridas} lineas={nomina.lineas} config={nomina.config} anio={anioResultados} />
       )}
 
       {tab === "boveda" && <BovedaCompartida ownerId={ownerId} entityId={entityId} />}

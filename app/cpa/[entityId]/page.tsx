@@ -345,6 +345,33 @@ export default async function CpaClientePage({
 
   alertasEntidad.sort((a, b) => (a.tono === b.tono ? 0 : a.tono === "red" ? -1 : 1));
 
+
+  // Nómina del cliente (19 oct 2026): solo lectura. RLS (0169) deja pasar al
+  // contable activo; si el cliente no usa Nómina las listas llegan vacías y el
+  // tab no se muestra.
+  const [{ data: nomEmpleados }, { data: nomCorridas }, { data: nomConfig }] = await Promise.all([
+    supabase
+      .from("payroll_employees")
+      .select("id, nombre, ssn_ultimos4, frecuencia, tipo_pago, tarifa, estado_civil, exencion_personal, dependientes, activo")
+      .eq("entity_id", entityId)
+      .order("nombre", { ascending: true }),
+    supabase
+      .from("payroll_runs")
+      .select("id, frecuencia, periodo_inicio, periodo_fin, fecha_pago, totales, depositos, asiento, advertencias")
+      .eq("entity_id", entityId)
+      .eq("anio", anioResultados)
+      .eq("estado", "aprobada")
+      .order("fecha_pago", { ascending: false }),
+    supabase.from("payroll_entity_config").select("suta_tasa, cfse_tasa, cfse_poliza, futa_aplica").eq("entity_id", entityId).maybeSingle(),
+  ]);
+  const idsCorridas = (nomCorridas ?? []).map((c) => c.id);
+  const { data: nomLineas } = idsCorridas.length
+    ? await supabase
+        .from("payroll_run_lines")
+        .select("run_id, employee_id, bruto, neto, ss_emp, medicare_emp, medicare_adic, hacienda, sinot_emp, choferil, otras_deducciones, ss_pat, medicare_pat, futa, suta, sinot_pat, cfse")
+        .in("run_id", idsCorridas)
+    : { data: [] };
+
   return (
     <div className="vc-shell">
       <div className="mb-4 flex items-center justify-between">
@@ -401,6 +428,12 @@ export default async function CpaClientePage({
         resumenPos={resumenPos}
         tienePos={tienePos}
         retenciones={retenciones ?? []}
+        nomina={{
+          empleados: (nomEmpleados ?? []) as never[],
+          corridas: (nomCorridas ?? []) as never[],
+          lineas: (nomLineas ?? []) as never[],
+          config: (nomConfig ?? null) as never,
+        }}
         entityId={entityId}
         ownerId={entidad.owner_id}
       />

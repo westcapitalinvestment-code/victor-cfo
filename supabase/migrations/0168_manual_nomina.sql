@@ -30,6 +30,8 @@ IMPORTANTE — NÚMEROS POR CONFIRMAR: varias tasas y reglas (SINOT, choferil, e
 
 LO QUE VICTOR PUEDE CONSULTAR POR EL USUARIO: la herramienta resumen_nomina trae empleados, últimas corridas, acumulado del año y los depósitos pendientes; estimar_costo_empleado calcula, sin guardar nada, cuánto cuesta y cuánto cobra neto un empleado hipotético (ej. "¿cuánto me cuesta contratar a alguien a $2,000 quincenal?"). NUNCA inventes montos de nómina: usa esas herramientas.
 
+CONTABLE: el contable invitado del usuario ve la Nómina en su portal (pestaña "Nómina" de la entidad, solo lectura): empleados (solo últimos 4 del SSN), corridas aprobadas con depósitos y asiento, acumulado del año por empleado y tasas. Las corridas sin aprobar no se ven. Requiere la migración 0169.
+
 NÓMINA EXTERNA (ADP, Paychex, el contable): sigue funcionando. Si el usuario ya paga la nómina por un servicio externo, no necesita este módulo; VICTOR categoriza esos pagos del banco como siempre. Este módulo es para quien quiere calcular y llevar la nómina dentro de VICTOR.
 
 CÓMO ACTIVARLO: en el menú del negocio, ícono "Nómina" → botón "Activar addon". Si el plan es Business ya está activo sin costo. En la cuenta demo el módulo viene activado con empleados de ejemplo.$md$
