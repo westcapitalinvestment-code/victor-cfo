@@ -980,7 +980,7 @@ async function procesarCreditoReferido(
 //         en sí mismo (si cancela, no vuelve a cobrar hasta el año
 //         siguiente, así que no hace falta retener nada).
 //     Ver procesarComisionVendedor abajo y migración 0135 para el detalle
-//     completo. Pro/Business = % del plan; Core = fijo $15.00.
+//     completo. Pro/Business = % del plan; Core mensual = fijo $15.00, Core anual = 20%.
 const COMISION_SOCIO_CORE_CENTAVOS = 700; // $7.00
 const COMISION_SOCIO_PRO_CENTAVOS = 2_500; // $25.00
 // Modelo de vendedor vigente desde el 2 oct 2026 (migración 0135) — ver
@@ -989,7 +989,7 @@ const COMISION_SOCIO_PRO_CENTAVOS = 2_500; // $25.00
 // único (20%, nunca se divide).
 const PORCENTAJE_SETENTA_VENDEDOR = 0.7;
 const PORCENTAJE_ANUAL_VENDEDOR = 0.2;
-// Core (desde 19 oct 2026): comisión fija por cliente, sin importar el ciclo.
+// Core mensual (desde 19 oct 2026): comisión fija. El anual usa el 20% normal.
 const COMISION_VENDEDOR_CORE_CENTAVOS = 1_500; // $15.00
 
 // Retención Sección 1062.03 sobre las comisiones del vendedor (migración
@@ -1061,8 +1061,8 @@ async function procesarComisionVendedor(
 ) {
   const socioId = socio.id;
   if (referido.plan !== "core" && referido.plan !== "pro" && referido.plan !== "proplus") return;
-  // Core: comisión FIJA de $15.00 por cliente (mensual 70/30 = $10.50 + $4.50;
-  // anual = $15.00 de una vez). Pro/Business siguen con el % de siempre.
+  // Core MENSUAL: comisión fija de $15.00 (70/30 = $10.50 + $4.50). Core ANUAL: 20%
+  // como los demás planes. Pro/Business siguen con el % de siempre.
   const esCore = referido.plan === "core";
 
   const { data: estadoCliente } = await admin
@@ -1094,7 +1094,7 @@ async function procesarComisionVendedor(
 
     if (intervalo === "year") {
       // Anual: 20% de una vez, nada queda pendiente — nace ya 'liberada'.
-      const comisionCentavos = esCore ? COMISION_VENDEDOR_CORE_CENTAVOS : Math.round(montoBase * PORCENTAJE_ANUAL_VENDEDOR);
+      const comisionCentavos = Math.round(montoBase * PORCENTAJE_ANUAL_VENDEDOR); // Core anual también 20%
 
       const { error: errorFila } = await admin.from("socios_vendedor_clientes").insert({
         socio_id: socioId,
