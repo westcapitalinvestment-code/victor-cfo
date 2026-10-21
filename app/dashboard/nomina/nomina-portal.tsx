@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { formatFecha, formatMoney } from "@/lib/format";
+import ImportarHoras from "./importar-horas";
 
 // Portal de Nómina (19 oct 2026). Cuatro pestañas: Corrida (calcular y guardar),
 // Empleados, Historial y Tasas. Todos los números los calcula el servidor
@@ -532,6 +533,32 @@ function CorridaTab({
           </Campo>
         </div>
       </div>
+
+      {delPeriodo.length > 0 && (
+        <ImportarHoras
+          empleados={delPeriodo.map((e) => ({ id: e.id, nombre: e.nombre, tipo_pago: e.tipo_pago }))}
+          inicio={inicio}
+          fin={fin}
+          onAplicar={(horas) => {
+            setResultado(null);
+            setEntradas((p) => {
+              const sig = { ...p };
+              for (const e of delPeriodo) {
+                const h = horas[e.id];
+                if (!h) continue;
+                const base = p[e.id] ?? { incluir: true, horasRegulares: "", horasExtra: "", comisiones: "", bonos: "", otrasDeducciones: "" };
+                sig[e.id] = {
+                  ...base,
+                  incluir: true,
+                  horasRegulares: e.tipo_pago === "hora" ? String(h.regulares) : base.horasRegulares,
+                  horasExtra: String(h.extra),
+                };
+              }
+              return sig;
+            });
+          }}
+        />
+      )}
 
       {delPeriodo.length === 0 ? (
         <div className="vc-card text-sm text-muted">No tienes empleados con pago {FREC_LABEL[frecuencia].toLowerCase()}.</div>
