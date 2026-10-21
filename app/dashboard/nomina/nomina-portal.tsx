@@ -274,14 +274,11 @@ export default function NominaPortal({
           <Link href="/dashboard" className="vc-btn-back">
             ← Atrás
           </Link>
-          <Link href="/dashboard/pagos" className="text-xs font-medium text-teal hover:opacity-80">
-            Ir a Pagos
-          </Link>
         </div>
       )}
 
       <div className="mb-4 rounded-2xl border border-teal bg-teal/[.04] p-3.5">
-        <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-lg font-medium">Nómina</p>
             <p className="text-xs text-muted">
@@ -289,7 +286,7 @@ export default function NominaPortal({
             </p>
           </div>
           {entidades.length > 1 && (
-            <select className="vc-input max-w-[180px]" value={entityId} onChange={(e) => setEntityId(e.target.value)}>
+            <select className="vc-input w-full sm:w-auto sm:min-w-[260px] sm:max-w-[360px]" value={entityId} onChange={(e) => setEntityId(e.target.value)}>
               {entidades.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.name}
