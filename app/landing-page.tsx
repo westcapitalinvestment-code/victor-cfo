@@ -23,6 +23,7 @@ export default function LandingPage() {
           <a href="#">Inicio</a>
           <a href="#como-funciona">Cómo funciona</a>
           <a href="#victor">VICTOR</a>
+          <a href="#quien-hace-que">Nómina</a>
           <a href="#confianza">Confianza</a>
           <a href="#precios">Precios</a>
           {/* Nav cambiado de "Embajadores" a "Vendedores" (pedido de Joel,
@@ -408,9 +409,14 @@ export default function LandingPage() {
             <div className={styles.trustHead}>
               <span className={styles.trustLogo}>Nómina externa</span>
             </div>
-            <p className={styles.trustDesc}>ADP, Paychex, o tu contable, si prefieres que otro radique por ti.</p>
+            <p className={styles.trustDesc}>Si prefieres ADP, Paychex o tu contable, ellos procesan y VICTOR igual te ordena todo.</p>
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-              {["Paga a tus empleados cada período", "Radica W-2/941-PR y hace los depósitos de nómina", "Procesa el pago y los beneficios que contrates con ellos"].map(
+              {[
+                "Ellos pagan a tus empleados y radican W-2/941-PR y los depósitos",
+                "VICTOR categoriza el débito de nómina y lo concilia con tu banco",
+                "VICTOR separa sueldos, retenciones y costo patronal en tus reportes",
+                "VICTOR entrega todo listo para tu CPA, sin caja de recibos",
+              ].map(
                 (t) => (
                   <li key={t} style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: "0.35rem" }}>
                     ✓ {t}
