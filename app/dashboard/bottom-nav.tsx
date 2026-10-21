@@ -11,9 +11,9 @@ import { usePathname } from "next/navigation";
 // de negocio, en vez de esconder la sección por completo.
 const TABS_PERSONAL = [
   { href: "/dashboard", label: "Inicio", icon: "ti-home" },
-  { href: "/dashboard/gastos", label: "Transacciones", icon: "ti-chart-bar" },
   { href: "/dashboard/metas", label: "Metas", icon: "ti-target" },
   { href: "/dashboard/documentos", label: "Bóveda", icon: "ti-file-text" },
+  { href: "/dashboard/gastos", label: "Transacciones", icon: "ti-chart-bar" },
   { href: "/dashboard/cuentas", label: "Cuentas", icon: "ti-credit-card" },
 ];
 
@@ -25,9 +25,9 @@ const TABS_PERSONAL = [
 // en la URL, así que estos hrefs no cambian por entidad.
 const TABS_NEGOCIO_INICIO = [
   { href: "/dashboard/negocio", label: "Inicio", icon: "ti-home" },
-  { href: "/dashboard/negocio/gastos", label: "Transacciones", icon: "ti-chart-bar" },
   { href: "/dashboard/negocio/metas", label: "Metas", icon: "ti-target" },
   { href: "/dashboard/negocio/documentos", label: "Bóveda", icon: "ti-file-text" },
+  { href: "/dashboard/negocio/gastos", label: "Transacciones", icon: "ti-chart-bar" },
   { href: "/dashboard/negocio/cuentas", label: "Cuentas", icon: "ti-credit-card" },
 ];
 
