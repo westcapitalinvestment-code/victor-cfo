@@ -6,6 +6,7 @@ import { formatFecha, formatMoney } from "@/lib/format";
 import ImportarHoras from "./importar-horas";
 import LicenciasTab from "./licencias-tab";
 import { LicenciasEnCorrida } from "./licencias-extra";
+import BonoProductividad, { type ReglaProd } from "./bono-productividad";
 import ReportesTab from "./reportes-tab";
 import BonoNavidad from "./bono-navidad";
 
@@ -151,6 +152,10 @@ interface Config {
   enf_meses_espera?: number | null;
   enf_tope?: number | null;
   horas_por_dia?: number | null;
+  bono_tipos?: string[] | null;
+  prod_pct?: number | null;
+  prod_meta?: number | null;
+  prod_tope?: number | null;
 }
 
 const FREC_LABEL: Record<Frecuencia, string> = {
@@ -224,7 +229,7 @@ export default function NominaPortal({
       return;
     }
     const entradas: Record<string, EntradaUI> = {};
-    for (const l of j.lineas as { employee_id: string; entrada: Record<string, number> }[]) {
+    for (const l of j.lineas as { employee_id: string; entrada: Record<string, number | string> }[]) {
       const e = l.entrada ?? {};
       const t = (v: unknown) => (Number(v) ? String(v) : "");
       entradas[l.employee_id] = {
@@ -233,6 +238,7 @@ export default function NominaPortal({
         horasExtra: t(e.horasExtra),
         comisiones: t(e.comisiones),
         bonos: t(e.bonos),
+        bonoTipo: typeof e.bonoTipo === "string" ? e.bonoTipo : "",
         otrasDeducciones: t(e.otrasDeducciones),
       };
     }
@@ -396,8 +402,11 @@ interface EntradaUI {
   horasExtra: string;
   comisiones: string;
   bonos: string;
+  bonoTipo?: string;
   otrasDeducciones: string;
 }
+
+const TIPOS_BONO_DEFECTO = ["Productividad", "Desempeño", "Referido", "Asistencia", "Retención", "Navidad", "Otro"];
 
 function CorridaTab({
   entityId,
@@ -424,6 +433,25 @@ function CorridaTab({
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [trabajando, setTrabajando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tiposBono, setTiposBono] = useState<string[]>(TIPOS_BONO_DEFECTO);
+  const [reglaProd, setReglaProd] = useState<ReglaProd>({ pct: null, meta: null, tope: null });
+
+  // Tipos de bono y regla de productividad que el patrono configuró en Tasas.
+  useEffect(() => {
+    fetch(`/api/nomina/config?entityId=${entityId}`)
+      .then((r) => r.json())
+      .then((j) => {
+        const c = j?.config;
+        if (!c) return;
+        if (Array.isArray(c.bono_tipos) && c.bono_tipos.length > 0) setTiposBono(c.bono_tipos as string[]);
+        setReglaProd({
+          pct: c.prod_pct != null ? Number(c.prod_pct) : null,
+          meta: c.prod_meta != null ? Number(c.prod_meta) : null,
+          tope: c.prod_tope != null ? Number(c.prod_tope) : null,
+        });
+      })
+      .catch(() => {});
+  }, [entityId]);
 
   // Al entrar en modo edición se cargan las entradas de la corrida guardada.
   useEffect(() => {
@@ -463,6 +491,7 @@ function CorridaTab({
             horasExtra: Number(x.horasExtra) || 0,
             comisiones: Number(x.comisiones) || 0,
             bonos: Number(x.bonos) || 0,
+            bonoTipo: Number(x.bonos) > 0 ? x.bonoTipo || undefined : undefined,
             otrasDeducciones: Number(x.otrasDeducciones) || 0,
           };
         }),
@@ -616,7 +645,29 @@ function CorridaTab({
                 const m = montos[e.id];
                 if (!m) continue;
                 const base = p[e.id] ?? { incluir: true, horasRegulares: "", horasExtra: "", comisiones: "", bonos: "", otrasDeducciones: "" };
-                sig[e.id] = { ...base, incluir: true, bonos: String(m) };
+                sig[e.id] = { ...base, incluir: true, bonos: String(m), bonoTipo: "Navidad" };
+              }
+              return sig;
+            });
+          }}
+        />
+      )}
+
+      {delPeriodo.length > 0 && (
+        <BonoProductividad
+          empleados={delPeriodo.map((e) => ({ id: e.id, nombre: e.nombre }))}
+          regla={reglaProd}
+          onAplicar={(montos) => {
+            setResultado(null);
+            setEntradas((p) => {
+              const sig = { ...p };
+              for (const e of delPeriodo) {
+                const m = montos[e.id];
+                if (!m) continue;
+                const base = p[e.id] ?? { incluir: true, horasRegulares: "", horasExtra: "", comisiones: "", bonos: "", otrasDeducciones: "" };
+                // Si ya había un bono (ej. Navidad), se suma y el tipo queda sin especificar.
+                const previo = Number(base.bonos) || 0;
+                sig[e.id] = { ...base, incluir: true, bonos: String(Math.round((previo + m) * 100) / 100), bonoTipo: previo > 0 ? "" : "Productividad" };
               }
               return sig;
             });
@@ -654,6 +705,14 @@ function CorridaTab({
                   <Campo label="Bonos ($)">
                     <input type="number" min="0" step="0.01" className="vc-input" value={x.bonos} onChange={(ev) => cambiar(e.id, { bonos: ev.target.value })} />
                   </Campo>
+                  {Number(x.bonos) > 0 && (
+                    <Campo label="Tipo de bono">
+                      <select className="vc-input" value={x.bonoTipo ?? ""} onChange={(ev) => cambiar(e.id, { bonoTipo: ev.target.value })}>
+                        <option value="">Sin tipo</option>
+                        {tiposBono.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </Campo>
+                  )}
                   <Campo label="Otras deducciones ($)">
                     <input type="number" min="0" step="0.01" className="vc-input" value={x.otrasDeducciones} onChange={(ev) => cambiar(e.id, { otrasDeducciones: ev.target.value })} />
                   </Campo>
@@ -798,6 +857,9 @@ function Recibo({ l }: { l: LineaCalc }) {
     <div className="vc-card">
       <p className="mb-1 text-sm font-medium">{l.nombre}</p>
       <Fila a="Salario bruto" b={formatMoney(l.bruto)} />
+      {l.desglose.bonos > 0 && (
+        <Fila a={`Incluye bono${(l as unknown as { entrada?: { bonoTipo?: string } }).entrada?.bonoTipo ? ` de ${(l as unknown as { entrada?: { bonoTipo?: string } }).entrada?.bonoTipo}` : ""}`} b={formatMoney(l.desglose.bonos)} />
+      )}
       <Fila a="Seguro Social (6.2%)" b={`− ${formatMoney(l.ssEmp)}`} />
       <Fila a="Medicare (1.45%)" b={`− ${formatMoney(l.medicareEmp)}`} />
       {l.medicareAdic > 0 && <Fila a="Medicare adicional (0.9%)" b={`− ${formatMoney(l.medicareAdic)}`} />}
@@ -1418,12 +1480,20 @@ function TasasTab({
   const [bonoPago, setBonoPago] = useState("");
   const [lic, setLic] = useState<Record<string, string>>({});
   const setL = (k: string, v: string) => setLic((p) => ({ ...p, [k]: v }));
+  const [bon, setBon] = useState<Record<string, string>>({});
+  const setB = (k: string, v: string) => setBon((p) => ({ ...p, [k]: v }));
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const ks = ["vac_dias_mes", "vac_meses_espera", "vac_tope", "enf_dias_mes", "enf_meses_espera", "enf_tope", "horas_por_dia"] as const;
     setLic(Object.fromEntries(ks.map((k) => [k, config?.[k] != null ? String(config[k]) : ""])));
+    setBon({
+      bono_tipos: Array.isArray(config?.bono_tipos) ? (config!.bono_tipos as string[]).join(", ") : "",
+      prod_pct: config?.prod_pct != null ? String(+(Number(config.prod_pct) * 100).toFixed(4)) : "",
+      prod_meta: config?.prod_meta != null ? String(config.prod_meta) : "",
+      prod_tope: config?.prod_tope != null ? String(config.prod_tope) : "",
+    });
     setSuta(config?.suta_tasa != null ? String(+(Number(config.suta_tasa) * 100).toFixed(4)) : "");
     setCfse(config?.cfse_tasa != null ? String(+(Number(config.cfse_tasa) * 100).toFixed(4)) : "");
     setPoliza(config?.cfse_poliza ?? "");
@@ -1447,6 +1517,7 @@ function TasasTab({
       body: JSON.stringify({ entityId, suta_pct: suta, cfse_pct: cfse, cfse_poliza: poliza, cfse_codigo_riesgo: codigo, futa_aplica: futa,
         bono_activo: bonoActivo, bono_pct: bonoPct, bono_tope: bonoTope, bono_horas_min: bonoHoras, bono_inicio: bonoIni, bono_fin: bonoFin, bono_fecha_pago: bonoPago,
         ...lic,
+        ...bon,
       }),
     });
     const j = await r.json().catch(() => null);
@@ -1567,6 +1638,21 @@ function TasasTab({
             <Campo label="Período hasta (MM-DD)">
               <input className="vc-input" placeholder="09-30" value={bonoFin} onChange={(e) => setBonoFin(e.target.value)} />
             </Campo>
+          </div>
+        </div>
+        <div className="mt-2 border-t border-border pt-3">
+          <p className="mb-1 text-sm font-medium">Otros bonos</p>
+          <p className="mb-2 text-[11px] text-muted">
+            Escribe los tipos de bono que usas, separados por coma (ej. Productividad, Desempeño, Referido). Si lo dejas vacío se usa una lista sugerida. Para el bono de productividad puedes
+            dejar que VICTOR lo calcule: porcentaje del resultado de cada empleado, con meta mínima y tope opcionales. Sin porcentaje, escribes el monto a mano.
+          </p>
+          <Campo label="Tipos de bono (separados por coma)">
+            <input className="vc-input" placeholder="Productividad, Desempeño, Referido, Asistencia" value={bon.bono_tipos ?? ""} onChange={(e) => setB("bono_tipos", e.target.value)} />
+          </Campo>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <Campo label="Productividad: % del resultado"><input className="vc-input" type="number" min="0" max="100" step="0.01" value={bon.prod_pct ?? ""} onChange={(e) => setB("prod_pct", e.target.value)} /></Campo>
+            <Campo label="Meta mínima ($)"><input className="vc-input" type="number" min="0" step="0.01" value={bon.prod_meta ?? ""} onChange={(e) => setB("prod_meta", e.target.value)} /></Campo>
+            <Campo label="Tope por empleado ($)"><input className="vc-input" type="number" min="0" step="0.01" value={bon.prod_tope ?? ""} onChange={(e) => setB("prod_tope", e.target.value)} /></Campo>
           </div>
         </div>
         <div className="mt-2 border-t border-border pt-3">

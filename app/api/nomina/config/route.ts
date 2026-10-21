@@ -77,6 +77,20 @@ export async function PUT(req: NextRequest) {
   if ([bPct, bTope, bHoras, bIni, bFin, bPago].includes("mal")) {
     return NextResponse.json({ error: "Revisa los valores del Bono de Navidad (porcentaje, monto, horas y fechas MM-DD)." }, { status: 400 });
   }
+  // Tipos de bono (lista con nombre) y regla de productividad
+  if (body.bono_tipos !== undefined) {
+    const lista = (Array.isArray(body.bono_tipos) ? body.bono_tipos : String(body.bono_tipos ?? "").split(","))
+      .map((t: unknown) => String(t ?? "").trim().slice(0, 40))
+      .filter(Boolean)
+      .slice(0, 12);
+    fila.bono_tipos = lista.length > 0 ? lista : null;
+  }
+  for (const [k, max, esPct] of [["prod_pct", 100, true], ["prod_meta", 100_000_000, false], ["prod_tope", 1_000_000, false]] as [string, number, boolean][]) {
+    if (body[k] === undefined) continue;
+    const v = numOpc(body[k], max);
+    if (v === "mal") return NextResponse.json({ error: "Revisa los valores del bono de productividad." }, { status: 400 });
+    fila[k] = v === null ? null : esPct ? v / 100 : v;
+  }
   // Vacaciones / enfermedad (vacío = sugerencia por defecto)
   const camposLic: [string, number][] = [
     ["vac_dias_mes", 10], ["vac_meses_espera", 60], ["vac_tope", 365],

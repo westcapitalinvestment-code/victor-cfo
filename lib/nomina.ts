@@ -113,6 +113,7 @@ export interface EntradaPeriodo {
   fechaPago?: string; // YYYY-MM-DD; se usa para calcular la edad del empleado
   comisiones?: number;
   bonos?: number;
+  bonoTipo?: string; // etiqueta informativa del bono (Productividad, Navidad...); no afecta el cálculo
   otrosIngresos?: number;
   otrasDeducciones?: number;
 }

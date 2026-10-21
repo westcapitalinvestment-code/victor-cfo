@@ -382,6 +382,7 @@ export async function calcularCorrida(
       fechaPago: e.fechaPago,
       comisiones: num(l.comisiones),
       bonos: num(l.bonos),
+      bonoTipo: String((l as unknown as { bonoTipo?: unknown }).bonoTipo ?? "").trim().slice(0, 40) || undefined,
       otrosIngresos: num(l.otrosIngresos),
       otrasDeducciones: num(l.otrasDeducciones),
     };

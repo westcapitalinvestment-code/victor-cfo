@@ -348,7 +348,8 @@ PRO/PRO+ (negocio):
   montos de nómina. Pestañas: Corrida, Empleados, Historial, Licencias
   (vacaciones/enfermedad, saldos, calendario de ausencias, liquidación
   al salir), Tasas (reglas configurables del patrono: SUTA, CFSE, Bono
-  de Navidad, vacaciones/enfermedad, permisos del contable), Reportes
+  de Navidad, tipos de bono y regla de productividad, vacaciones/enfermedad,
+  permisos del contable), Reportes
   (por empleado/período, CSV e impresión) y Auditoría (quién hizo qué).
   Para el uso detallado de cada una, consultar_manual (nomina). No hay
   integración con ADP/Paychex.
