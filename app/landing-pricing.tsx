@@ -145,6 +145,7 @@ export default function LandingPricing() {
                 <li>Reportes listos para tu CPA</li>
                 <li>Invita a tu secretaria, administrador o técnicos de campo (add-on)</li>
                 <li>Conecta entidades de negocio adicionales (add-on)</li>
+                <li>Nómina de Puerto Rico (add-on, $24.99/mes) — retenciones, costo patronal, recibos y depósitos; tu contable también puede correrla desde su portal</li>
               </>
             )}
           </ul>
@@ -170,7 +171,7 @@ export default function LandingPricing() {
             <li>Todo lo del Pro</li>
             <li>Registro de pagos a contratistas incluido — retención automática (10% / 6%), control del depósito mensual y exportación directa de la 480.6SP</li>
             <li>Pagos por archivo ACH o cheques impresos con la retención ya registrada — tu contable lo ve en su portal</li>
-            <li>Nómina de Puerto Rico incluida — retenciones, costo patronal, recibos, depósitos y asiento contable por corrida</li>
+            <li>Nómina de Puerto Rico incluida por tiempo limitado (primeros 100 clientes Business) — retenciones, costo patronal, recibos, depósitos y asiento contable por corrida. Después es un add-on de $24.99/mes</li>
             <li>Secretaria o Administrador incluido (1 acceso)</li>
             <li>Hasta 3 técnicos de tu equipo incluidos</li>
           </ul>
