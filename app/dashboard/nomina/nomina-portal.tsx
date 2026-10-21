@@ -31,7 +31,9 @@ interface Empleado {
   estado_civil: "soltero" | "casado_conjunto" | "casado_separado";
   exencion_personal: "completa" | "compartida" | "ninguna";
   dependientes: number;
-  dependientes_univ: number;
+  allowances_deduccion: number;
+  veterano: boolean;
+  deduccion_especial: boolean;
   retencion_adicional: number;
   deduccion_medico: number;
   aporte_401k: number;
@@ -626,7 +628,9 @@ const VACIO = {
   estado_civil: "soltero",
   exencion_personal: "completa",
   dependientes: "0",
-  dependientes_univ: "0",
+  allowances_deduccion: "0",
+  veterano: false,
+  deduccion_especial: false,
   retencion_adicional: "0",
   deduccion_medico: "0",
   aporte_401k: "0",
@@ -670,7 +674,9 @@ function EmpleadosTab({
       estado_civil: e.estado_civil,
       exencion_personal: e.exencion_personal,
       dependientes: String(e.dependientes),
-      dependientes_univ: String(e.dependientes_univ),
+      allowances_deduccion: String(e.allowances_deduccion ?? 0),
+      veterano: !!e.veterano,
+      deduccion_especial: !!e.deduccion_especial,
       retencion_adicional: String(e.retencion_adicional),
       deduccion_medico: String(e.deduccion_medico),
       aporte_401k: String(e.aporte_401k),
@@ -698,7 +704,9 @@ function EmpleadosTab({
       estado_civil: f.estado_civil,
       exencion_personal: f.exencion_personal,
       dependientes: Number(f.dependientes) || 0,
-      dependientes_univ: Number(f.dependientes_univ) || 0,
+      allowances_deduccion: Number(f.allowances_deduccion) || 0,
+      veterano: f.veterano,
+      deduccion_especial: f.deduccion_especial,
       retencion_adicional: Number(f.retencion_adicional) || 0,
       deduccion_medico: Number(f.deduccion_medico) || 0,
       aporte_401k: Number(f.aporte_401k) || 0,
@@ -782,12 +790,18 @@ function EmpleadosTab({
               <option value="ninguna">Ninguna</option>
             </select>
           </Campo>
-          <Campo label="Dependientes">
-            <input className="vc-input" type="number" min="0" value={f.dependientes} onChange={(e) => set("dependientes", e.target.value)} />
+          <Campo label="Dependientes (Sección B; custodia compartida = 0.5)">
+            <input className="vc-input" type="number" min="0" step="0.5" value={f.dependientes} onChange={(e) => set("dependientes", e.target.value)} />
           </Campo>
-          <Campo label="Dependientes universitarios">
-            <input className="vc-input" type="number" min="0" value={f.dependientes_univ} onChange={(e) => set("dependientes_univ", e.target.value)} />
+          <Campo label="Allowances por deducciones (Sección C)">
+            <input className="vc-input" type="number" min="0" value={f.allowances_deduccion} onChange={(e) => set("allowances_deduccion", e.target.value)} />
           </Campo>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.veterano} onChange={(e) => set("veterano", e.target.checked)} /> Veterano (+3 allowances)
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.deduccion_especial} onChange={(e) => set("deduccion_especial", e.target.checked)} /> Elige deducción especial
+          </label>
           <Campo label="Retención adicional por periodo ($)">
             <input className="vc-input" type="number" min="0" step="0.01" value={f.retencion_adicional} onChange={(e) => set("retencion_adicional", e.target.value)} />
           </Campo>

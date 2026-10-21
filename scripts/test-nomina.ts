@@ -29,13 +29,11 @@ const params: ParamsNomina = {
   suta_tasa_default: 0.0165,
   choferil_semanal: 0.5,
   ot_multiplo: 1.5,
-  exencion_personal: 5000,
-  exencion_compartida: 2500,
+  exencion_personal: 3500,
+  exencion_compartida: 1750,
   dependiente_regular: 2500,
-  dependiente_univ: 1250,
-  deduccion_fija_soltero: 0,
-  deduccion_fija_casado_conjunto: 0,
-  deduccion_fija_casado_separado: 0,
+  deduccion_allowance: 500,
+  veterano_allowances: 3,
 };
 // Tramos PR individuo (mismos de la migración 0144)
 const tramos = [
@@ -55,13 +53,36 @@ const base: EmpleadoNomina = {
   estadoCivil: "soltero",
   exencionPersonal: "completa",
   dependientes: 0,
-  dependientesUniv: 0,
+  allowancesDeduccion: 0,
+  veterano: false,
+  deduccionEspecial: false,
   retencionAdicional: 0,
   deduccionMedico: 0,
   aporte401k: 0,
   esChofer: false,
 };
 const cfg = { sutaTasa: 0.02, cfseTasa: 0.025, futaAplica: true };
+
+// 0) Fórmula de Hacienda de la tabla del CPA (Héctor)
+{
+  // $2,000 quincenal = 48,000/año. 2 dependientes (5,000) + 2 allowances (1,000) + veterano (+3 = 1,500)
+  // + deducción especial (anual > 36,500 -> 0). Base: 48,000 - 3,500 - 0 - 5,000 - 2,500 = 37,000
+  //  -> 1120 + (37000-25000)*.14 = 1120 + 1680 = 2800 -> /24 = 116.67
+  const e = { ...base, dependientes: 2, allowancesDeduccion: 2, veterano: true, deduccionEspecial: true };
+  const l = calcularEmpleado(e, {}, ACUMULADOS_CERO, params, tramos, cfg);
+  assert.equal(l.hacienda, 116.67);
+  // Custodia compartida cuenta 0.5: 1 dependiente y medio = 3,750
+  const h = calcularEmpleado({ ...base, dependientes: 1.5 }, {}, ACUMULADOS_CERO, params, tramos, cfg);
+  // 48,000 - 3,500 - 3,750 = 40,750 -> 1120 + (40750-25000)*.14 = 1120 + 2205 = 3325 -> /24 = 138.54
+  assert.equal(h.hacienda, 138.54);
+  // Deducción especial según escala: salario anual 30,000 (1,250 quincenal) -> especial 1,000
+  const a = calcularEmpleado({ ...base, tarifa: 1250, deduccionEspecial: true }, {}, ACUMULADOS_CERO, params, tramos, cfg);
+  // 30,000 - 3,500 - 1,000 = 25,500 -> 1120 + 500*.14 = 1190 -> /24 = 49.58
+  assert.equal(a.hacienda, 49.58);
+  // Retención adicional fija se suma
+  const x = calcularEmpleado({ ...base, retencionAdicional: 10 }, {}, ACUMULADOS_CERO, params, tramos, cfg);
+  assert.equal(x.hacienda, 184.17);
+}
 
 // 1) Caso base: $2,000 quincenal, soltero, exención completa
 {
@@ -70,11 +91,11 @@ const cfg = { sutaTasa: 0.02, cfseTasa: 0.025, futaAplica: true };
   assert.equal(l.ssEmp, 124); // 6.2%
   assert.equal(l.medicareEmp, 29); // 1.45%
   assert.equal(l.medicareAdic, 0);
-  // Anual 48,000 - 5,000 = 43,000 -> 0 + (25000-9000)*.07 + (41500-25000)*.14 + (43000-41500)*.25
-  //   = 1120 + 2310 + 375 = 3805 -> /24 = 158.5416... -> 158.54
-  assert.equal(l.hacienda, 158.54);
+  // Anual 48,000 - 3,500 = 44,500 -> 0 + (25000-9000)*.07 + (41500-25000)*.14 + (44500-41500)*.25
+  //   = 1120 + 2310 + 750 = 4180 -> /24 = 174.1666... -> 174.17
+  assert.equal(l.hacienda, 174.17);
   assert.equal(l.sinotEmp, 6); // 0.3% de 2000
-  assert.equal(l.neto, 2000 - 124 - 29 - 158.54 - 6);
+  assert.equal(l.neto, r(2000 - 124 - 29 - 174.17 - 6));
   assert.equal(l.ssPat, 124);
   assert.equal(l.medicarePat, 29);
   assert.equal(l.futa, 12); // 0.6% de 2000 (< 7000)

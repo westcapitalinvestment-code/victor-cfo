@@ -49,11 +49,27 @@ export const CLAVES_REQUERIDAS = [
   "exencion_personal",
   "exencion_compartida",
   "dependiente_regular",
-  "dependiente_univ",
-  "deduccion_fija_soltero",
-  "deduccion_fija_casado_conjunto",
-  "deduccion_fija_casado_separado",
+  "deduccion_allowance",
+  "veterano_allowances",
 ] as const;
+
+// Deducción especial (499 R-4.1): solo si el empleado la elige. Escala por
+// salario anual, tomada de la tabla de nómina del CPA (Héctor, oct 2026):
+// anual > 0 → 2,500; > 20,000 → 2,000; > 24,500 → 1,500; > 28,500 → 1,000;
+// > 32,500 → 500; > 36,500 → 0.
+export const ESCALA_DEDUCCION_ESPECIAL: [number, number][] = [
+  [0, 2500],
+  [20000, 2000],
+  [24500, 1500],
+  [28500, 1000],
+  [32500, 500],
+  [36500, 0],
+];
+export function deduccionEspecial(anual: number): number {
+  let n = 0;
+  for (const [umbral, valor] of ESCALA_DEDUCCION_ESPECIAL) if (anual > umbral) n = valor;
+  return n;
+}
 
 export type ParamsNomina = Record<string, number>;
 
@@ -65,8 +81,10 @@ export interface EmpleadoNomina {
   tarifa: number; // salario: por periodo; hora: por hora
   estadoCivil: "soltero" | "casado_conjunto" | "casado_separado";
   exencionPersonal: "completa" | "compartida" | "ninguna";
-  dependientes: number;
-  dependientesUniv: number;
+  dependientes: number; // custodia compartida cuenta 0.5
+  allowancesDeduccion: number; // Sección C del 499 R-4.1 (cada uno = $500)
+  veterano: boolean; // suma 3 allowances por deducciones
+  deduccionEspecial: boolean; // elige la deducción especial (escala por salario)
   retencionAdicional: number;
   deduccionMedico: number; // por periodo
   aporte401k: number; // por periodo
@@ -191,19 +209,16 @@ export function calcularEmpleado(
       : emp.exencionPersonal === "compartida"
         ? params.exencion_compartida
         : 0;
-  const deduccionFija =
-    emp.estadoCivil === "soltero"
-      ? params.deduccion_fija_soltero
-      : emp.estadoCivil === "casado_conjunto"
-        ? params.deduccion_fija_casado_conjunto
-        : params.deduccion_fija_casado_separado;
-  const deps = emp.dependientes * params.dependiente_regular + emp.dependientesUniv * params.dependiente_univ;
+  const deps = emp.dependientes * params.dependiente_regular;
+  const allowances = (emp.allowancesDeduccion + (emp.veterano ? params.veterano_allowances : 0)) * params.deduccion_allowance;
   // El aporte al 401(k) de PR (Sec. 1081.01) reduce la base de la retención de ingresos.
   const anualizado = pos(bruto - emp.aporte401k) * n;
-  const baseTributable = pos(anualizado - exencion - deduccionFija - deps);
+  const especial = emp.deduccionEspecial ? deduccionEspecial(anualizado) : 0;
+  // Fórmula de la tabla del CPA: anual − exención − especial − dependientes×2,500 − allowances×500 → tramos → ÷ periodos − retención adicional fija.
+  const baseTributable = pos(anualizado - exencion - especial - deps - allowances);
   const contribAnual = impuestoPorTramos(baseTributable, tramosPR);
   const hacienda = r2(contribAnual / n + emp.retencionAdicional);
-  adv.push("Retención de Hacienda por método porcentual con los tramos configurados; no incluye el factor de ajuste gradual. Validar contra la tabla oficial de SURI.");
+  adv.push("Retención de Hacienda según la fórmula de la tabla del CPA (exención, dependientes, allowances) sobre los tramos de PR configurados; falta confirmar que esos tramos coinciden con la TABLE de su sistema y el factor de ajuste gradual.");
 
   // --- SINOT (empleado y patrono) con tope anual ---
   const baseSinot = r2(pos(Math.min(bruto, params.sinot_tope - ytd.sinotBase)));

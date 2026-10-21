@@ -108,7 +108,9 @@ export function filaAEmpleado(f: Fila): EmpleadoNomina {
     estadoCivil: f.estado_civil as EmpleadoNomina["estadoCivil"],
     exencionPersonal: f.exencion_personal as EmpleadoNomina["exencionPersonal"],
     dependientes: Number(f.dependientes),
-    dependientesUniv: Number(f.dependientes_univ),
+    allowancesDeduccion: Number(f.allowances_deduccion ?? 0),
+    veterano: !!f.veterano,
+    deduccionEspecial: !!f.deduccion_especial,
     retencionAdicional: Number(f.retencion_adicional),
     deduccionMedico: Number(f.deduccion_medico),
     aporte401k: Number(f.aporte_401k),
@@ -152,9 +154,11 @@ export function limpiarEmpleado(b: Fila, parcial = false): { datos?: Fila; error
     if (!EXENCIONES.includes(String(b.exencion_personal))) return { error: "Exención personal inválida." };
     d.exencion_personal = b.exencion_personal;
   }
-  for (const k of ["dependientes", "dependientes_univ"]) {
-    if (b[k] !== undefined) d[k] = Math.floor(num(b[k]));
-  }
+  // Dependientes: custodia compartida cuenta 0.5 → se redondea al medio más cercano.
+  if (b.dependientes !== undefined) d.dependientes = Math.round(num(b.dependientes) * 2) / 2;
+  if (b.allowances_deduccion !== undefined) d.allowances_deduccion = Math.floor(num(b.allowances_deduccion));
+  if (b.veterano !== undefined) d.veterano = !!b.veterano;
+  if (b.deduccion_especial !== undefined) d.deduccion_especial = !!b.deduccion_especial;
   for (const k of ["retencion_adicional", "deduccion_medico", "aporte_401k"]) {
     if (b[k] !== undefined) d[k] = num(b[k]);
   }
