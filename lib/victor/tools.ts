@@ -1321,6 +1321,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
         allowances_deduccion: { type: "number", description: "Allowances por deducciones, Sección C del 499 R-4.1 (opcional; cada uno = $500)." },
         veterano: { type: "boolean", description: "Si es veterano (suma 3 allowances por deducciones)." },
         deduccion_especial: { type: "boolean", description: "Si el empleado elige la deducción especial." },
+        joven_exento: { type: "boolean", description: "Si el empleado tiene 26 años o menos (primeros $40,000 de salario exentos de retención de Hacienda)." },
       },
       required: ["frecuencia", "tipo_pago", "tarifa"],
     },
@@ -4403,6 +4404,8 @@ export async function executeVictorTool(
         deduccionMedico: 0,
         aporte401k: 0,
         esChofer: false,
+        exentoSinot: false,
+        jovenExento: input.joven_exento === true,
       };
       const lin = calcularEmpleado(
         emp,

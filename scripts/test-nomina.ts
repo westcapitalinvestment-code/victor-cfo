@@ -60,6 +60,8 @@ const base: EmpleadoNomina = {
   deduccionMedico: 0,
   aporte401k: 0,
   esChofer: false,
+  exentoSinot: false,
+  jovenExento: false,
 };
 const cfg = { sutaTasa: 0.02, cfseTasa: 0.025, futaAplica: true };
 
@@ -154,6 +156,32 @@ const cfg = { sutaTasa: 0.02, cfseTasa: 0.025, futaAplica: true };
   const l = calcularEmpleado({ ...base, esChofer: true }, {}, ACUMULADOS_CERO, params, tramos, cfg);
   assert.equal(l.choferil, 1.08);
   assert.ok(l.advertencias.some((a) => a.includes("chofer")));
+  // CPA: el chofer no paga SINOT
+  assert.equal(l.sinotEmp, 0);
+  assert.equal(l.sinotPat, 0);
+}
+
+// 7b) Doméstico/agrícola: sin SINOT ni choferil
+{
+  const l = calcularEmpleado({ ...base, exentoSinot: true }, {}, ACUMULADOS_CERO, params, tramos, cfg);
+  assert.equal(l.sinotEmp, 0);
+  assert.equal(l.sinotPat, 0);
+  assert.equal(l.choferil, 0);
+}
+
+// 7c) Joven ≤26: primeros $40,000 exentos de retención de Hacienda; FICA sí aplica
+{
+  const j = { ...base, jovenExento: true };
+  const l = calcularEmpleado(j, {}, ACUMULADOS_CERO, params, tramos, cfg);
+  assert.equal(l.hacienda, 0);
+  assert.ok(l.ssEmp > 0 && l.medicareEmp > 0);
+  // cruza el tope: ytd 39,000 + bruto 2,000 → solo 1,000 gravable
+  const c = calcularEmpleado(j, {}, { ...ACUMULADOS_CERO, bruto: 39000 }, params, tramos, cfg);
+  const normal = calcularEmpleado(base, {}, { ...ACUMULADOS_CERO, bruto: 39000 }, params, tramos, cfg);
+  assert.ok(c.hacienda < normal.hacienda);
+  // ya pasó los 40,000: igual que un empleado normal
+  const p = calcularEmpleado(j, {}, { ...ACUMULADOS_CERO, bruto: 45000 }, params, tramos, cfg);
+  assert.equal(p.hacienda, normal.hacienda);
 }
 
 // 8) Sin tasa SUTA/CFSE configuradas: usa default y avisa

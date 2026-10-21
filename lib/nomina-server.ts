@@ -115,6 +115,8 @@ export function filaAEmpleado(f: Fila): EmpleadoNomina {
     deduccionMedico: Number(f.deduccion_medico),
     aporte401k: Number(f.aporte_401k),
     esChofer: !!f.es_chofer,
+    exentoSinot: !!f.exento_sinot,
+    jovenExento: !!f.joven_exento,
   };
 }
 
@@ -163,6 +165,8 @@ export function limpiarEmpleado(b: Fila, parcial = false): { datos?: Fila; error
     if (b[k] !== undefined) d[k] = num(b[k]);
   }
   if (b.es_chofer !== undefined) d.es_chofer = !!b.es_chofer;
+  if (b.exento_sinot !== undefined) d.exento_sinot = !!b.exento_sinot;
+  if (b.joven_exento !== undefined) d.joven_exento = !!b.joven_exento;
   if (b.activo !== undefined) d.activo = !!b.activo;
   if (b.fecha_ingreso !== undefined) d.fecha_ingreso = b.fecha_ingreso ? String(b.fecha_ingreso).slice(0, 10) : null;
   if (b.ytd_inicial !== undefined) {

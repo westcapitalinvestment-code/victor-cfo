@@ -89,7 +89,12 @@ export interface EmpleadoNomina {
   deduccionMedico: number; // por periodo
   aporte401k: number; // por periodo
   esChofer: boolean;
+  exentoSinot: boolean; // doméstico / agrícola: no aplica SINOT (confirmado por el CPA)
+  jovenExento: boolean; // 26 años o menos: primeros $40,000 de salario exentos de retención de Hacienda
 }
+
+// CPA (oct. 2026): los primeros $40,000 de salario están exentos de contribución sobre ingresos hasta los 26 años.
+export const EXENCION_JOVEN_TOPE = 40000;
 
 export interface EntradaPeriodo {
   horasRegulares?: number; // solo tipoPago = hora
@@ -212,16 +217,22 @@ export function calcularEmpleado(
   const deps = emp.dependientes * params.dependiente_regular;
   const allowances = (emp.allowancesDeduccion + (emp.veterano ? params.veterano_allowances : 0)) * params.deduccion_allowance;
   // El aporte al 401(k) de PR (Sec. 1081.01) reduce la base de la retención de ingresos.
-  const anualizado = pos(bruto - emp.aporte401k) * n;
+  // Empleado joven (≤26): los primeros $40,000 del año no se retienen.
+  const exentoJoven = emp.jovenExento ? Math.min(bruto, pos(EXENCION_JOVEN_TOPE - ytd.bruto)) : 0;
+  if (emp.jovenExento) adv.push(`Empleado joven (≤26 años): primeros $${EXENCION_JOVEN_TOPE.toLocaleString("en-US")} de salario exentos de retención de Hacienda; Seguro Social y Medicare sí aplican. Exento este periodo: $${r2(exentoJoven).toFixed(2)}.`);
+  const anualizado = pos(bruto - exentoJoven - emp.aporte401k) * n;
   const especial = emp.deduccionEspecial ? deduccionEspecial(anualizado) : 0;
   // Fórmula de la tabla del CPA: anual − exención − especial − dependientes×2,500 − allowances×500 → tramos → ÷ periodos − retención adicional fija.
   const baseTributable = pos(anualizado - exencion - especial - deps - allowances);
   const contribAnual = impuestoPorTramos(baseTributable, tramosPR);
-  const hacienda = r2(contribAnual / n + emp.retencionAdicional);
+  const hacienda = r2(anualizado === 0 ? emp.retencionAdicional : contribAnual / n + emp.retencionAdicional);
   adv.push("Retención de Hacienda según la fórmula de la tabla del CPA (exención, dependientes, allowances) sobre los tramos de PR configurados; falta confirmar que esos tramos coinciden con la TABLE de su sistema y el factor de ajuste gradual.");
 
   // --- SINOT (empleado y patrono) con tope anual ---
-  const baseSinot = r2(pos(Math.min(bruto, params.sinot_tope - ytd.sinotBase)));
+  // CPA: el chofer (cubierto por Seguro Choferil) no paga SINOT, y el cubierto por SINOT no paga choferil; domésticos y agrícolas tampoco.
+  const sinotAplica = !emp.esChofer && !emp.exentoSinot;
+  if (!sinotAplica) adv.push("SINOT no aplica a este empleado (chofer, doméstico o agrícola).");
+  const baseSinot = sinotAplica ? r2(pos(Math.min(bruto, params.sinot_tope - ytd.sinotBase))) : 0;
   const sinotEmp = r2(baseSinot * params.sinot_emp_tasa);
   const sinotPat = r2(baseSinot * params.sinot_pat_tasa);
 
@@ -229,7 +240,7 @@ export function calcularEmpleado(
   let choferil = 0;
   if (emp.esChofer) {
     choferil = r2((params.choferil_semanal * 52) / n);
-    adv.push("Empleado marcado como chofer: se descuenta la tarifa de choferil, pero NO se modelan las reglas especiales de Seguro Social/SINOT para choferes. Revisar con el contable.");
+    adv.push("Empleado marcado como chofer: se descuenta el Seguro Choferil y no se aplica SINOT. Pendiente confirmar la aportación patronal de choferil y las reglas de Seguro Social para choferes.");
   }
 
   // --- Patrono: FUTA / SUTA / CFSE ---

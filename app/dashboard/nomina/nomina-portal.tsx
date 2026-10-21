@@ -38,6 +38,8 @@ interface Empleado {
   deduccion_medico: number;
   aporte_401k: number;
   es_chofer: boolean;
+  exento_sinot?: boolean;
+  joven_exento?: boolean;
   ytd_inicial: { bruto?: number; sinot_base?: number; suta_base?: number; futa_base?: number } | null;
   ytd_inicial_anio: number | null;
   activo: boolean;
@@ -635,6 +637,8 @@ const VACIO = {
   deduccion_medico: "0",
   aporte_401k: "0",
   es_chofer: false,
+  exento_sinot: false,
+  joven_exento: false,
   ytd_bruto: "",
   ytd_sinot: "",
   ytd_suta: "",
@@ -681,6 +685,8 @@ function EmpleadosTab({
       deduccion_medico: String(e.deduccion_medico),
       aporte_401k: String(e.aporte_401k),
       es_chofer: e.es_chofer,
+      exento_sinot: !!e.exento_sinot,
+      joven_exento: !!e.joven_exento,
       ytd_bruto: e.ytd_inicial?.bruto ? String(e.ytd_inicial.bruto) : "",
       ytd_sinot: e.ytd_inicial?.sinot_base ? String(e.ytd_inicial.sinot_base) : "",
       ytd_suta: e.ytd_inicial?.suta_base ? String(e.ytd_inicial.suta_base) : "",
@@ -711,6 +717,8 @@ function EmpleadosTab({
       deduccion_medico: Number(f.deduccion_medico) || 0,
       aporte_401k: Number(f.aporte_401k) || 0,
       es_chofer: f.es_chofer,
+      exento_sinot: f.exento_sinot,
+      joven_exento: f.joven_exento,
       ytd_inicial: {
         bruto: Number(f.ytd_bruto) || 0,
         sinot_base: Number(f.ytd_sinot) || 0,
@@ -818,7 +826,15 @@ function EmpleadosTab({
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={f.es_chofer} onChange={(e) => set("es_chofer", e.target.checked)} />
-          Cubierto por el Seguro de Choferes
+          Cubierto por el Seguro de Choferes (no paga SINOT)
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={f.exento_sinot} onChange={(e) => set("exento_sinot", e.target.checked)} />
+          Exento de SINOT (doméstico o agrícola)
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={f.joven_exento} onChange={(e) => set("joven_exento", e.target.checked)} />
+          26 años o menos (primeros $40,000 exentos de retención de Hacienda)
         </label>
 
         <p className="mt-2 text-xs font-medium text-muted">Acumulado de {anio} antes de usar VICTOR (opcional)</p>
