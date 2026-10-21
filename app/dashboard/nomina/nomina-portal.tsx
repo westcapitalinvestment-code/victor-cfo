@@ -6,6 +6,7 @@ import { formatFecha, formatMoney } from "@/lib/format";
 import ImportarHoras from "./importar-horas";
 import LicenciasTab from "./licencias-tab";
 import { LicenciasEnCorrida } from "./licencias-extra";
+import { abrirTalonarios } from "./talonarios";
 import BonoProductividad, { type ReglaProd } from "./bono-productividad";
 import ReportesTab from "./reportes-tab";
 import BonoNavidad from "./bono-navidad";
@@ -852,10 +853,17 @@ function AsientoTabla({ asiento }: { asiento: LineaAsiento[] }) {
   );
 }
 
-function Recibo({ l }: { l: LineaCalc }) {
+function Recibo({ l, onTalonario }: { l: LineaCalc; onTalonario?: () => void }) {
   return (
     <div className="vc-card">
-      <p className="mb-1 text-sm font-medium">{l.nombre}</p>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-sm font-medium">{l.nombre}</p>
+        {onTalonario && (
+          <button className="text-xs font-medium text-teal" onClick={onTalonario}>
+            Talonario (imprimir/PDF)
+          </button>
+        )}
+      </div>
       <Fila a="Salario bruto" b={formatMoney(l.bruto)} />
       {l.desglose.bonos > 0 && (
         <Fila a={`Incluye bono${(l as unknown as { entrada?: { bonoTipo?: string } }).entrada?.bonoTipo ? ` de ${(l as unknown as { entrada?: { bonoTipo?: string } }).entrada?.bonoTipo}` : ""}`} b={formatMoney(l.desglose.bonos)} />
@@ -1278,8 +1286,27 @@ function HistorialTab({
                     </div>
                     <AsientoTabla asiento={detalle.asiento} />
                   </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium">Recibos / talonarios</p>
+                    <button
+                      className="vc-btn-primary"
+                      onClick={async () => {
+                        const e = await abrirTalonarios(c.id);
+                        if (e) window.alert(e);
+                      }}
+                    >
+                      Talonarios de la corrida (imprimir/PDF)
+                    </button>
+                  </div>
                   {detalle.lineas.map((l) => (
-                    <Recibo key={l.id} l={l.detalle} />
+                    <Recibo
+                      key={l.id}
+                      l={l.detalle}
+                      onTalonario={async () => {
+                        const e = await abrirTalonarios(c.id, l.detalle.employeeId);
+                        if (e) window.alert(e);
+                      }}
+                    />
                   ))}
                 </>
               )}
