@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Calendario, Liquidacion } from "./licencias-extra";
 
 // Vacaciones y enfermedad (21 oct 2026): saldos por empleado con las reglas que el
 // patrono configura en Tasas, y registro de días tomados / ajustes (saldo inicial).
@@ -22,7 +23,7 @@ interface Emp {
 interface Mov {
   id: string;
   employee_id: string;
-  tipo: "vacaciones" | "enfermedad";
+  tipo: "vacaciones" | "enfermedad" | "ausencia";
   movimiento: "tomado" | "ajuste";
   fecha: string;
   dias: number;
@@ -45,7 +46,7 @@ export default function LicenciasTab({ entityId }: { entityId: string }) {
   const [datos, setDatos] = useState<Resp | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [empId, setEmpId] = useState("");
-  const [tipo, setTipo] = useState<"vacaciones" | "enfermedad">("vacaciones");
+  const [tipo, setTipo] = useState<"vacaciones" | "enfermedad" | "ausencia">("vacaciones");
   const [movimiento, setMovimiento] = useState<"tomado" | "ajuste">("tomado");
   const [dias, setDias] = useState("");
   const [fch, setFch] = useState(hoyISO());
@@ -162,14 +163,15 @@ export default function LicenciasTab({ entityId }: { entityId: string }) {
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted">Tipo</span>
-            <select className="vc-input" value={tipo} onChange={(e) => setTipo(e.target.value as "vacaciones" | "enfermedad")}>
+            <select className="vc-input" value={tipo} onChange={(e) => setTipo(e.target.value as "vacaciones" | "enfermedad" | "ausencia")}>
               <option value="vacaciones">Vacaciones</option>
               <option value="enfermedad">Enfermedad</option>
+              <option value="ausencia">Ausencia sin paga</option>
             </select>
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted">Movimiento</span>
-            <select className="vc-input" value={movimiento} onChange={(e) => setMovimiento(e.target.value as "tomado" | "ajuste")}>
+            <select className="vc-input" value={tipo === "ausencia" ? "tomado" : movimiento} disabled={tipo === "ausencia"} onChange={(e) => setMovimiento(e.target.value as "tomado" | "ajuste")}>
               <option value="tomado">Días tomados (resta)</option>
               <option value="ajuste">Ajuste / saldo inicial (suma)</option>
             </select>
@@ -194,6 +196,9 @@ export default function LicenciasTab({ entityId }: { entityId: string }) {
         </button>
       </div>
 
+      {datos && <Calendario movimientos={datos.movimientos} nombre={nombre} />}
+      {datos && datos.empleados.length > 0 && <Liquidacion entityId={entityId} empleados={datos.empleados} onBaja={cargar} />}
+
       {datos && datos.movimientos.length > 0 && (
         <div className="vc-card">
           <p className="mb-2 text-sm font-medium">Movimientos</p>
@@ -207,7 +212,7 @@ export default function LicenciasTab({ entityId }: { entityId: string }) {
                       {nombre(m.employee_id)}
                       {m.nota && <span className="block text-[10px] text-muted">{m.nota}</span>}
                     </td>
-                    <td className="pr-2">{m.tipo === "vacaciones" ? "Vacaciones" : "Enfermedad"}</td>
+                    <td className="pr-2">{m.tipo === "vacaciones" ? "Vacaciones" : m.tipo === "enfermedad" ? "Enfermedad" : "Ausencia sin paga"}</td>
                     <td className="whitespace-nowrap pr-2 text-right tabular-nums">
                       {m.movimiento === "ajuste" ? "+" : "−"}
                       {m.dias} d

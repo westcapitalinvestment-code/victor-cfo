@@ -37,8 +37,17 @@ export function reglasLic(cfg: Record<string, unknown> | null): ReglasLic {
   };
 }
 
+const PERIODOS: Record<string, number> = { semanal: 52, bisemanal: 26, quincenal: 24, mensual: 12 };
+
+// Pago de un día: por hora = tarifa × horas por día; salario = tarifa × períodos/año ÷ 260 días.
+export function tarifaDiaria(emp: { tipo_pago: string; tarifa: number; frecuencia: string }, horasPorDia: number): number {
+  const t = Number(emp.tarifa) || 0;
+  const d = emp.tipo_pago === "hora" ? t * horasPorDia : (t * (PERIODOS[emp.frecuencia] ?? 26)) / 260;
+  return Math.round(d * 100) / 100;
+}
+
 export interface MovLic {
-  tipo: "vacaciones" | "enfermedad";
+  tipo: "vacaciones" | "enfermedad" | "ausencia";
   movimiento: "tomado" | "ajuste";
   dias: number;
 }
@@ -50,7 +59,7 @@ export interface SaldoTipo {
   saldo: number;
 }
 
-export function mesesTrabajados(fechaIngreso: string | null, hoy = new Date()): number | null {
+export function mesesTrabajados(fechaIngreso: string | null, hoy: Date = new Date()): number | null {
   if (!fechaIngreso) return null;
   const f = new Date(fechaIngreso + "T00:00:00");
   if (Number.isNaN(f.getTime())) return null;

@@ -60,8 +60,8 @@ export async function POST(req: NextRequest) {
   const { g } = a;
 
   const employeeId = String(body.employeeId ?? "");
-  const tipo = body.tipo === "enfermedad" ? "enfermedad" : body.tipo === "vacaciones" ? "vacaciones" : null;
-  const movimiento = body.movimiento === "ajuste" ? "ajuste" : "tomado";
+  const tipo = ["enfermedad", "vacaciones", "ausencia"].includes(body.tipo) ? (body.tipo as string) : null;
+  const movimiento = body.movimiento === "ajuste" && tipo !== "ausencia" ? "ajuste" : "tomado";
   const dias = Number(body.dias);
   const fecha = String(body.fecha ?? "");
   if (!employeeId || !tipo || !(dias > 0 && dias <= 365) || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {

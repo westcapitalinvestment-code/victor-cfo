@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatFecha, formatMoney } from "@/lib/format";
 import ImportarHoras from "./importar-horas";
 import LicenciasTab from "./licencias-tab";
+import { LicenciasEnCorrida } from "./licencias-extra";
 import ReportesTab from "./reportes-tab";
 import BonoNavidad from "./bono-navidad";
 
@@ -571,6 +572,27 @@ function CorridaTab({
                   horasRegulares: e.tipo_pago === "hora" ? String(h.regulares) : base.horasRegulares,
                   horasExtra: String(h.extra),
                 };
+              }
+              return sig;
+            });
+          }}
+        />
+      )}
+
+      {delPeriodo.length > 0 && (
+        <LicenciasEnCorrida
+          entityId={entityId}
+          inicio={inicio}
+          fin={fin}
+          onAplicar={(horas) => {
+            setResultado(null);
+            setEntradas((p) => {
+              const sig = { ...p };
+              for (const e of delPeriodo) {
+                const h = horas[e.id];
+                if (!h || e.tipo_pago !== "hora") continue;
+                const base = p[e.id] ?? { incluir: true, horasRegulares: "", horasExtra: "", comisiones: "", bonos: "", otrasDeducciones: "" };
+                sig[e.id] = { ...base, incluir: true, horasRegulares: String((Number(base.horasRegulares) || 0) + h) };
               }
               return sig;
             });
