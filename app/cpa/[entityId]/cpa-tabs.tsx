@@ -431,6 +431,8 @@ export default function CpaTabs({
   ownerId: string;
 }) {
   const [tab, setTab] = useState<TabId>("facturas");
+  const [nominaOperarAbierto, setNominaOperarAbierto] = useState(false);
+  const [nominaResumenAbierto, setNominaResumenAbierto] = useState(true);
   const hoyISO = new Date().toISOString().slice(0, 10);
   const MESES_ES_LARGO = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -760,15 +762,49 @@ export default function CpaTabs({
       {tab === "nomina" && (
         <div className="flex flex-col gap-4">
           {nomina.puedeOperar && (
-            <NominaPortal
-              modoContable
-              entidades={[{ id: entityId, name: nomina.entidadNombre }]}
-              entidadInicialId={entityId}
-              parametros={nomina.parametros}
-              anio={anioResultados}
-            />
+            <div className="vc-card">
+              <button
+                type="button"
+                onClick={() => setNominaOperarAbierto((v) => !v)}
+                className="flex w-full items-center justify-between text-left"
+                aria-expanded={nominaOperarAbierto}
+              >
+                <span className="text-sm font-semibold text-blue">
+                  {nominaOperarAbierto ? "−" : "+"} Correr nómina (calcular, empleados, historial, tasas, auditoría)
+                </span>
+                <span className="text-xs text-muted">{nominaOperarAbierto ? "Ocultar" : "Desplegar"}</span>
+              </button>
+              {nominaOperarAbierto && (
+                <div className="mt-3">
+                  <NominaPortal
+                    modoContable
+                    entidades={[{ id: entityId, name: nomina.entidadNombre }]}
+                    entidadInicialId={entityId}
+                    parametros={nomina.parametros}
+                    anio={anioResultados}
+                  />
+                </div>
+              )}
+            </div>
           )}
-          <NominaCpa empleados={nomina.empleados} corridas={nomina.corridas} lineas={nomina.lineas} config={nomina.config} anio={anioResultados} puedeOperar={nomina.puedeOperar} />
+          <div className="vc-card">
+            <button
+              type="button"
+              onClick={() => setNominaResumenAbierto((v) => !v)}
+              className="flex w-full items-center justify-between text-left"
+              aria-expanded={nominaResumenAbierto}
+            >
+              <span className="text-sm font-semibold text-blue">
+                {nominaResumenAbierto ? "−" : "+"} Resumen de nómina del año
+              </span>
+              <span className="text-xs text-muted">{nominaResumenAbierto ? "Ocultar" : "Desplegar"}</span>
+            </button>
+            {nominaResumenAbierto && (
+              <div className="mt-3">
+                <NominaCpa empleados={nomina.empleados} corridas={nomina.corridas} lineas={nomina.lineas} config={nomina.config} anio={anioResultados} puedeOperar={nomina.puedeOperar} />
+              </div>
+            )}
+          </div>
         </div>
       )}
 
