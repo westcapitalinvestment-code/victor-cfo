@@ -18,7 +18,7 @@ export interface ParamFila {
 }
 
 type Frecuencia = "semanal" | "bisemanal" | "quincenal" | "mensual";
-type TabId = "corrida" | "empleados" | "historial" | "tasas";
+type TabId = "corrida" | "empleados" | "historial" | "tasas" | "auditoria";
 
 interface Empleado {
   id: string;
@@ -261,6 +261,7 @@ export default function NominaPortal({
     { id: "empleados", label: "Empleados", icon: "ti-users" },
     { id: "historial", label: "Historial", icon: "ti-history" },
     { id: "tasas", label: "Tasas", icon: "ti-percentage" },
+    { id: "auditoria", label: "Auditoría", icon: "ti-shield-check" },
   ];
 
   return (
@@ -354,6 +355,7 @@ export default function NominaPortal({
           )}
           {tab === "empleados" && <EmpleadosTab entityId={entityId} empleados={empleados} anio={anio} onCambio={recargar} />}
           {tab === "historial" && <HistorialTab entityId={entityId} corridas={corridas} modoContable={modoContable} apruebaDirecto={!!config?.cpa_aprueba_directo} onCambio={recargar} onEditar={editarCorrida} />}
+          {tab === "auditoria" && <AuditoriaTab entityId={entityId} />}
           {tab === "tasas" && <TasasTab entityId={entityId} config={config} parametros={parametros} anio={anio} modoContable={modoContable} onGuardado={recargar} />}
         </>
       )}
@@ -1066,10 +1068,7 @@ function HistorialTab({
 
   if (corridas.length === 0)
     return (
-      <div className="flex flex-col gap-3">
-        <p className="text-sm text-muted">Todavía no hay corridas guardadas.</p>
-        <BitacoraCard entityId={entityId} />
-      </div>
+      <p className="text-sm text-muted">Todavía no hay corridas guardadas.</p>
     );
 
   return (
@@ -1155,15 +1154,76 @@ function HistorialTab({
           )}
         </div>
       ))}
-      <BitacoraCard entityId={entityId} />
     </div>
   );
 }
 
-function BitacoraCard({ entityId }: { entityId: string }) {
-  const [filas, setFilas] = useState<{ id: string; actor_email: string | null; actor_rol: string; accion: string; created_at: string }[] | null>(null);
+const CAMPO_ETIQ: Record<string, string> = {
+  nombre: "nombre",
+  tarifa: "salario/tarifa",
+  tipo_pago: "tipo de pago",
+  frecuencia: "frecuencia",
+  estado_civil: "estado civil",
+  exencion_personal: "exención personal",
+  dependientes: "dependientes",
+  allowances_deduccion: "allowances",
+  veterano: "veterano",
+  deduccion_especial: "deducción especial",
+  retencion_adicional: "retención adicional",
+  deduccion_medico: "plan médico",
+  aporte_401k: "401(k)",
+  es_chofer: "chofer",
+  exento_sinot: "exento de SINOT",
+  joven_exento: "26 años o menos",
+  fecha_nacimiento: "fecha de nacimiento",
+  fecha_ingreso: "fecha de ingreso",
+  activo: "activo",
+  email: "correo",
+  ssn_ultimos4: "SSN (últimos 4)",
+  ytd_inicial: "acumulado inicial",
+  ytd_inicial_anio: "año del acumulado",
+};
+
+const ACCION_ETIQ: Record<string, string> = {
+  empleado_creado: "Creó un empleado",
+  empleado_editado: "Editó un empleado",
+  empleado_desactivado: "Desactivó un empleado",
+  empleado_eliminado: "Eliminó un empleado",
+  corrida_aprobada: "Guardó y aprobó una corrida",
+  corrida_enviada_a_aprobacion: "Envió una corrida para aprobación",
+  corrida_aprobada_por_dueno: "El dueño aprobó una corrida",
+  corrida_rechazada_por_dueno: "El dueño rechazó una corrida",
+  corrida_editada: "Corrigió una corrida",
+  corrida_eliminada: "Eliminó una corrida",
+  tasas_actualizadas: "Actualizó las tasas",
+  permisos_contable_cambiados: "Cambió los permisos del contable",
+};
+
+function detalleAuditoria(accion: string, d: Record<string, unknown>): string {
+  const v = (x: unknown) => (x === null || x === undefined || x === "" ? "—" : typeof x === "boolean" ? (x ? "sí" : "no") : typeof x === "object" ? JSON.stringify(x) : String(x));
+  const partes: string[] = [];
+  if (d.empleado) partes.push(String(d.empleado));
+  if (d.periodo) partes.push(`periodo ${String(d.periodo).replace(" a ", " – ")}`);
+  if (d.bruto !== undefined) partes.push(`bruto ${formatMoney(Number(d.bruto))}`);
+  if (accion === "permisos_contable_cambiados") {
+    partes.push(`contable puede operar: ${v(d.cpa_puede_nomina)}; aprobación directa: ${v(d.cpa_aprueba_directo)}`);
+  }
+  const cambios = d.cambios as Record<string, [unknown, unknown]> | undefined;
+  if (cambios) {
+    const lista = Object.entries(cambios).map(([k, [a, b]]) => `${CAMPO_ETIQ[k] ?? k}: ${v(a)} → ${v(b)}`);
+    if (lista.length) partes.push(lista.join("; "));
+  }
+  return partes.join(" · ");
+}
+
+// Auditoría: quién hizo qué en la nómina de esta entidad (dueño y contable la ven).
+function AuditoriaTab({ entityId }: { entityId: string }) {
+  type Fila = { id: string; actor_email: string | null; actor_rol: string; accion: string; detalle: Record<string, unknown> | null; created_at: string };
+  const [filas, setFilas] = useState<Fila[] | null>(null);
+  const [quien, setQuien] = useState<"todos" | "dueno" | "contable">("todos");
   useEffect(() => {
     let vivo = true;
+    setFilas(null);
     fetch(`/api/nomina/auditoria?entityId=${entityId}`)
       .then((r) => r.json())
       .then((j) => vivo && setFilas(j.filas ?? []))
@@ -1172,32 +1232,44 @@ function BitacoraCard({ entityId }: { entityId: string }) {
       vivo = false;
     };
   }, [entityId]);
-  const ETIQ: Record<string, string> = {
-    empleado_creado: "Creó un empleado",
-    empleado_editado: "Editó un empleado",
-    empleado_desactivado: "Desactivó un empleado",
-    empleado_eliminado: "Eliminó un empleado",
-    corrida_aprobada: "Aprobó una corrida",
-    corrida_enviada_a_aprobacion: "Envió una corrida para aprobación",
-    corrida_aprobada_por_dueno: "El dueño aprobó una corrida",
-    corrida_rechazada_por_dueno: "El dueño rechazó una corrida",
-    corrida_eliminada: "Eliminó una corrida",
-    tasas_actualizadas: "Actualizó las tasas",
-    permisos_contable_cambiados: "Cambió los permisos del contable",
-  };
-  if (!filas || filas.length === 0) return null;
+
+  if (!filas) return <p className="text-sm text-muted">Cargando...</p>;
+  const visibles = filas.filter((f) => quien === "todos" || f.actor_rol === quien);
   return (
-    <div className="vc-card">
-      <p className="mb-2 text-sm font-medium">Actividad reciente</p>
-      <div className="flex flex-col divide-y divide-border text-xs">
-        {filas.map((f) => (
-          <p key={f.id} className="flex justify-between gap-2 py-1.5">
-            <span>
-              {ETIQ[f.accion] ?? f.accion} <span className="text-muted">· {f.actor_rol === "contable" ? "contable" : "dueño"} {f.actor_email ?? ""}</span>
-            </span>
-            <span className="whitespace-nowrap text-muted">{new Date(f.created_at).toLocaleString("es-PR", { dateStyle: "short", timeStyle: "short" })}</span>
-          </p>
-        ))}
+    <div className="flex flex-col gap-3">
+      <div className="vc-card">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-sm font-medium">Auditoría de la nómina</p>
+          <select className="vc-input max-w-[150px]" value={quien} onChange={(e) => setQuien(e.target.value as "todos" | "dueno" | "contable")}>
+            <option value="todos">Todos</option>
+            <option value="dueno">Solo el dueño</option>
+            <option value="contable">Solo el contable</option>
+          </select>
+        </div>
+        <p className="mb-2 text-[11px] text-muted">Quién hizo cada cambio y cuándo. Lo ven el dueño y el contable.</p>
+        {visibles.length === 0 ? (
+          <p className="text-xs text-muted">Todavía no hay actividad registrada.</p>
+        ) : (
+          <div className="flex flex-col divide-y divide-border text-xs">
+            {visibles.map((f) => {
+              const det = detalleAuditoria(f.accion, f.detalle ?? {});
+              return (
+                <div key={f.id} className="py-2">
+                  <p className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">{ACCION_ETIQ[f.accion] ?? f.accion}</span>
+                    <span className="whitespace-nowrap text-muted">
+                      {new Date(f.created_at).toLocaleString("es-PR", { dateStyle: "short", timeStyle: "short" })}
+                    </span>
+                  </p>
+                  <p className="text-muted">
+                    {f.actor_rol === "contable" ? "Contable" : "Dueño"} · {f.actor_email ?? "—"}
+                  </p>
+                  {det && <p className="mt-0.5 break-words">{det}</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

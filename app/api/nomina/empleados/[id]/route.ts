@@ -11,6 +11,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   if (!body) return NextResponse.json({ error: "Cuerpo inválido." }, { status: 400 });
   const { datos, error: errVal } = limpiarEmpleado(body, true);
   if (errVal || !datos) return NextResponse.json({ error: errVal }, { status: 400 });
+  // Para la bitácora: qué campos cambiaron (antes → después).
+  const { data: antes } = await g.db.from("payroll_employees").select("*").eq("id", params.id).eq("owner_id", g.userId).maybeSingle();
   const { data, error } = await g.db
     .from("payroll_employees")
     .update(datos)
@@ -20,7 +22,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Empleado no encontrado." }, { status: 404 });
-  await registrarNomina(g, entityId, "empleado_editado", { empleado: data.nombre });
+  const cambios: Record<string, [unknown, unknown]> = {};
+  for (const k of Object.keys(datos)) {
+    const a = (antes as Record<string, unknown> | null)?.[k];
+    const b = (data as Record<string, unknown>)[k];
+    if (JSON.stringify(a) !== JSON.stringify(b)) cambios[k] = [a ?? null, b ?? null];
+  }
+  await registrarNomina(g, entityId, "empleado_editado", { empleado: data.nombre, cambios });
   return NextResponse.json({ ok: true, empleado: data });
 }
 
