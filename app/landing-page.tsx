@@ -399,17 +399,17 @@ export default function LandingPage() {
           (trustGrid/trustCard) — no se tocó landing.module.css. */}
       <div className={styles.section} id="quien-hace-que" style={{ paddingTop: 0 }}>
         <div className={styles.sectionLabel}>// quién hace qué</div>
-        <h2 className={styles.sectionTitle}>Tres roles. Cero confusión.</h2>
+        <h2 className={styles.sectionTitle}>Tu nómina, de dos maneras.</h2>
         <p className={styles.sectionSub}>
-          VICTOR CFO no reemplaza a tu contable — calcula tu nómina y organiza todo correctamente en el medio, para
-          que quien radica y deposita trabaje más rápido con menos papeleo.
+          Ya sea que tu nómina la corra alguien más o que quieras que VICTOR la corra, VICTOR trabaja contigo y con tu
+          contable — nunca lo reemplaza.
         </p>
         <div className={styles.trustGrid}>
           <div className={styles.trustCard}>
             <div className={styles.trustHead}>
-              <span className={styles.trustLogo}>Nómina externa</span>
+              <span className={styles.trustLogo}>1. Ya tengo nómina externa</span>
             </div>
-            <p className={styles.trustDesc}>Si tu contable o un servicio externo corre tu nómina, VICTOR igual te ordena todo.</p>
+            <p className={styles.trustDesc}>Tu contable o un servicio externo sigue corriendo tu nómina. VICTOR no la toca, pero te la ordena.</p>
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
               {[
                 "Ellos pagan a tus empleados y radican W-2/941-PR y los depósitos",
@@ -427,16 +427,16 @@ export default function LandingPage() {
           </div>
           <div className={styles.trustCard} style={{ borderColor: "var(--teal)" }}>
             <div className={styles.trustHead}>
-              <span className={styles.trustLogo}>VICTOR CFO</span>
+              <span className={styles.trustLogo}>2. Quiero que VICTOR la corra</span>
             </div>
-            <p className={styles.trustDesc}>Lo que pasa todos los días, entre nómina y planilla.</p>
+            <p className={styles.trustDesc}>No tienes nómina externa y quieres que VICTOR la calcule por ti.</p>
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
               {[
-                "Calcula tu nómina: retenciones, costo patronal, recibos, montos y fechas de depósito y asiento contable",
-                "Categoriza cada transacción (incluido el débito de nómina)",
-                "Rastrea retención, IVU y certificados vigentes",
-                "Avisa riesgos (480 faltantes, CBA, límites) antes de que sean sorpresa",
-                "Entrega reportes listos para tu CPA — no una caja de recibos",
+                "Calcula cada corrida: retenciones, costo patronal, recibo de cada empleado y asiento contable",
+                "Te dice cuánto depositar y la fecha estimada",
+                "Maneja horas extra, comisiones, bonos, vacaciones, enfermedad y liquidación al salir",
+                "Reportes por empleado y por período, con historial de quién hizo qué",
+                "Tu contable puede correrla desde su portal, si tú lo autorizas",
               ].map((t) => (
                 <li key={t} style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: "0.35rem" }}>
                   ✓ {t}
@@ -446,11 +446,11 @@ export default function LandingPage() {
           </div>
           <div className={styles.trustCard}>
             <div className={styles.trustHead}>
-              <span className={styles.trustLogo}>Tu CPA</span>
+              <span className={styles.trustLogo}>En ambos casos: tu CPA</span>
             </div>
             <p className={styles.trustDesc}>El profesional con licencia que firma al final.</p>
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-              {["Radica tu planilla formalmente, a tiempo", "Toma las decisiones de juicio profesional", "Puede correr tu nómina desde su portal, si tú lo autorizas", "Confirma los cálculos finales con los números que VICTOR ya le organizó"].map(
+              {["Radica tu planilla y los depósitos, a tiempo", "Toma las decisiones de juicio profesional", "Confirma los cálculos finales con los números que VICTOR ya le organizó"].map(
                 (t) => (
                   <li key={t} style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: "0.35rem" }}>
                     ✓ {t}
