@@ -90,7 +90,18 @@ export interface EmpleadoNomina {
   aporte401k: number; // por periodo
   esChofer: boolean;
   exentoSinot: boolean; // doméstico / agrícola: no aplica SINOT (confirmado por el CPA)
-  jovenExento: boolean; // 26 años o menos: primeros $40,000 de salario exentos de retención de Hacienda
+  jovenExento: boolean; // marca manual (solo se usa si no hay fecha de nacimiento)
+  fechaNacimiento?: string | null; // YYYY-MM-DD; si existe, la exención joven se decide por la edad al día del pago
+}
+
+// Edad máxima (inclusive) para la exención joven. Por confirmar con el CPA: ¿edad al día del pago o durante el año?
+export const EDAD_MAX_JOVEN = 26;
+export function edadEn(fechaNac: string, fecha: string): number {
+  const [ny, nm, nd] = fechaNac.slice(0, 10).split("-").map(Number);
+  const [fy, fm, fd] = fecha.slice(0, 10).split("-").map(Number);
+  let edad = fy - ny;
+  if (fm < nm || (fm === nm && fd < nd)) edad--;
+  return edad;
 }
 
 // CPA (oct. 2026): los primeros $40,000 de salario están exentos de contribución sobre ingresos hasta los 26 años.
@@ -99,6 +110,7 @@ export const EXENCION_JOVEN_TOPE = 40000;
 export interface EntradaPeriodo {
   horasRegulares?: number; // solo tipoPago = hora
   horasExtra?: number;
+  fechaPago?: string; // YYYY-MM-DD; se usa para calcular la edad del empleado
   comisiones?: number;
   bonos?: number;
   otrosIngresos?: number;
@@ -218,8 +230,10 @@ export function calcularEmpleado(
   const allowances = (emp.allowancesDeduccion + (emp.veterano ? params.veterano_allowances : 0)) * params.deduccion_allowance;
   // El aporte al 401(k) de PR (Sec. 1081.01) reduce la base de la retención de ingresos.
   // Empleado joven (≤26): los primeros $40,000 del año no se retienen.
-  const exentoJoven = emp.jovenExento ? Math.min(bruto, pos(EXENCION_JOVEN_TOPE - ytd.bruto)) : 0;
-  if (emp.jovenExento) adv.push(`Empleado joven (≤26 años): primeros $${EXENCION_JOVEN_TOPE.toLocaleString("en-US")} de salario exentos de retención de Hacienda; Seguro Social y Medicare sí aplican. Exento este periodo: $${r2(exentoJoven).toFixed(2)}.`);
+  const fechaRef = entrada.fechaPago ?? new Date().toISOString().slice(0, 10);
+  const esJoven = emp.fechaNacimiento ? edadEn(emp.fechaNacimiento, fechaRef) <= EDAD_MAX_JOVEN : emp.jovenExento;
+  const exentoJoven = esJoven ? Math.min(bruto, pos(EXENCION_JOVEN_TOPE - ytd.bruto)) : 0;
+  if (esJoven) adv.push(`Empleado joven (≤26 años): primeros $${EXENCION_JOVEN_TOPE.toLocaleString("en-US")} de salario exentos de retención de Hacienda; Seguro Social y Medicare sí aplican. Exento este periodo: $${r2(exentoJoven).toFixed(2)}.`);
   const anualizado = pos(bruto - exentoJoven - emp.aporte401k) * n;
   const especial = emp.deduccionEspecial ? deduccionEspecial(anualizado) : 0;
   // Fórmula de la tabla del CPA: anual − exención − especial − dependientes×2,500 − allowances×500 → tramos → ÷ periodos − retención adicional fija.

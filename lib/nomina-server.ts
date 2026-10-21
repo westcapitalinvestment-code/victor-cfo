@@ -117,6 +117,7 @@ export function filaAEmpleado(f: Fila): EmpleadoNomina {
     esChofer: !!f.es_chofer,
     exentoSinot: !!f.exento_sinot,
     jovenExento: !!f.joven_exento,
+    fechaNacimiento: f.fecha_nacimiento ? String(f.fecha_nacimiento).slice(0, 10) : null,
   };
 }
 
@@ -167,6 +168,11 @@ export function limpiarEmpleado(b: Fila, parcial = false): { datos?: Fila; error
   if (b.es_chofer !== undefined) d.es_chofer = !!b.es_chofer;
   if (b.exento_sinot !== undefined) d.exento_sinot = !!b.exento_sinot;
   if (b.joven_exento !== undefined) d.joven_exento = !!b.joven_exento;
+  if (b.fecha_nacimiento !== undefined) {
+    const fn = b.fecha_nacimiento ? String(b.fecha_nacimiento).slice(0, 10) : null;
+    if (fn && !/^\d{4}-\d{2}-\d{2}$/.test(fn)) return { error: "Fecha de nacimiento inválida." };
+    d.fecha_nacimiento = fn;
+  }
   if (b.activo !== undefined) d.activo = !!b.activo;
   if (b.fecha_ingreso !== undefined) d.fecha_ingreso = b.fecha_ingreso ? String(b.fecha_ingreso).slice(0, 10) : null;
   if (b.ytd_inicial !== undefined) {
@@ -264,6 +270,7 @@ export async function calcularCorrida(
     const entrada: EntradaPeriodo = {
       horasRegulares: num(l.horasRegulares),
       horasExtra: num(l.horasExtra),
+      fechaPago: e.fechaPago,
       comisiones: num(l.comisiones),
       bonos: num(l.bonos),
       otrosIngresos: num(l.otrosIngresos),

@@ -40,6 +40,7 @@ interface Empleado {
   es_chofer: boolean;
   exento_sinot?: boolean;
   joven_exento?: boolean;
+  fecha_nacimiento?: string | null;
   ytd_inicial: { bruto?: number; sinot_base?: number; suta_base?: number; futa_base?: number } | null;
   ytd_inicial_anio: number | null;
   activo: boolean;
@@ -639,6 +640,7 @@ const VACIO = {
   es_chofer: false,
   exento_sinot: false,
   joven_exento: false,
+  fecha_nacimiento: "",
   ytd_bruto: "",
   ytd_sinot: "",
   ytd_suta: "",
@@ -687,6 +689,7 @@ function EmpleadosTab({
       es_chofer: e.es_chofer,
       exento_sinot: !!e.exento_sinot,
       joven_exento: !!e.joven_exento,
+      fecha_nacimiento: e.fecha_nacimiento ? String(e.fecha_nacimiento).slice(0, 10) : "",
       ytd_bruto: e.ytd_inicial?.bruto ? String(e.ytd_inicial.bruto) : "",
       ytd_sinot: e.ytd_inicial?.sinot_base ? String(e.ytd_inicial.sinot_base) : "",
       ytd_suta: e.ytd_inicial?.suta_base ? String(e.ytd_inicial.suta_base) : "",
@@ -719,6 +722,7 @@ function EmpleadosTab({
       es_chofer: f.es_chofer,
       exento_sinot: f.exento_sinot,
       joven_exento: f.joven_exento,
+      fecha_nacimiento: f.fecha_nacimiento || null,
       ytd_inicial: {
         bruto: Number(f.ytd_bruto) || 0,
         sinot_base: Number(f.ytd_sinot) || 0,
@@ -832,10 +836,15 @@ function EmpleadosTab({
           <input type="checkbox" checked={f.exento_sinot} onChange={(e) => set("exento_sinot", e.target.checked)} />
           Exento de SINOT (doméstico o agrícola)
         </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={f.joven_exento} onChange={(e) => set("joven_exento", e.target.checked)} />
-          26 años o menos (primeros $40,000 exentos de retención de Hacienda)
-        </label>
+        <Campo label="Fecha de nacimiento (para la exención de 26 años o menos)">
+          <input className="vc-input" type="date" value={f.fecha_nacimiento} onChange={(e) => set("fecha_nacimiento", e.target.value)} />
+        </Campo>
+        {!f.fecha_nacimiento && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.joven_exento} onChange={(e) => set("joven_exento", e.target.checked)} />
+            Sin fecha de nacimiento: marcar manualmente 26 años o menos
+          </label>
+        )}
 
         <p className="mt-2 text-xs font-medium text-muted">Acumulado de {anio} antes de usar VICTOR (opcional)</p>
         <p className="text-[11px] text-muted">Si el empleado ya cobró este año, escribe lo acumulado para que los topes (Seguro Social, SUTA, FUTA, SINOT) cuenten bien.</p>

@@ -4,3 +4,6 @@
 ALTER TABLE payroll_employees
   ADD COLUMN IF NOT EXISTS exento_sinot boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS joven_exento boolean NOT NULL DEFAULT false;
+
+-- Fecha de nacimiento: la exención de 26 años o menos se decide por la edad al día del pago.
+ALTER TABLE payroll_employees ADD COLUMN IF NOT EXISTS fecha_nacimiento date;

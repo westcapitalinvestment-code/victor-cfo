@@ -184,6 +184,18 @@ const cfg = { sutaTasa: 0.02, cfseTasa: 0.025, futaAplica: true };
   assert.equal(p.hacienda, normal.hacienda);
 }
 
+// 7d) Joven por fecha de nacimiento: exento hasta el 26 (inclusive) y deja de serlo después
+{
+  const mk = (nac: string) => calcularEmpleado({ ...base, fechaNacimiento: nac }, { fechaPago: "2026-10-15" }, ACUMULADOS_CERO, params, tramos, cfg);
+  assert.equal(mk("2000-10-16").hacienda, 0); // 25 años (cumple 26 mañana)
+  assert.equal(mk("2000-10-15").hacienda, 0); // cumple 26 hoy
+  assert.equal(mk("1999-10-16").hacienda, 0); // 26 años
+  assert.ok(mk("1999-10-15").hacienda > 0); // cumple 27 hoy: ya no aplica
+  // con fecha de nacimiento la casilla manual se ignora
+  const x = calcularEmpleado({ ...base, jovenExento: true, fechaNacimiento: "1980-01-01" }, { fechaPago: "2026-10-15" }, ACUMULADOS_CERO, params, tramos, cfg);
+  assert.ok(x.hacienda > 0);
+}
+
 // 8) Sin tasa SUTA/CFSE configuradas: usa default y avisa
 {
   const l = calcularEmpleado(base, {}, ACUMULADOS_CERO, params, tramos, { sutaTasa: null, cfseTasa: null, futaAplica: true });
