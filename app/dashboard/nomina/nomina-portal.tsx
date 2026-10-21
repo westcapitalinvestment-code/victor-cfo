@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { formatFecha, formatMoney } from "@/lib/format";
 import ImportarHoras from "./importar-horas";
+import ReportesTab from "./reportes-tab";
 
 // Portal de Nómina (19 oct 2026). Cuatro pestañas: Corrida (calcular y guardar),
 // Empleados, Historial y Tasas. Todos los números los calcula el servidor
@@ -19,7 +20,7 @@ export interface ParamFila {
 }
 
 type Frecuencia = "semanal" | "bisemanal" | "quincenal" | "mensual";
-type TabId = "corrida" | "empleados" | "historial" | "tasas" | "auditoria";
+type TabId = "corrida" | "empleados" | "historial" | "tasas" | "reportes" | "auditoria";
 
 interface Empleado {
   id: string;
@@ -262,6 +263,7 @@ export default function NominaPortal({
     { id: "empleados", label: "Empleados", icon: "ti-users" },
     { id: "historial", label: "Historial", icon: "ti-history" },
     { id: "tasas", label: "Tasas", icon: "ti-percentage" },
+    { id: "reportes", label: "Reportes", icon: "ti-file-analytics" },
     { id: "auditoria", label: "Auditoría", icon: "ti-shield-check" },
   ];
 
@@ -356,6 +358,7 @@ export default function NominaPortal({
           )}
           {tab === "empleados" && <EmpleadosTab entityId={entityId} empleados={empleados} anio={anio} onCambio={recargar} />}
           {tab === "historial" && <HistorialTab entityId={entityId} corridas={corridas} modoContable={modoContable} apruebaDirecto={!!config?.cpa_aprueba_directo} onCambio={recargar} onEditar={editarCorrida} />}
+          {tab === "reportes" && <ReportesTab entityId={entityId} />}
           {tab === "auditoria" && <AuditoriaTab entityId={entityId} />}
           {tab === "tasas" && <TasasTab entityId={entityId} config={config} parametros={parametros} anio={anio} modoContable={modoContable} onGuardado={recargar} />}
         </>
