@@ -400,18 +400,17 @@ export default function LandingPage() {
         <div className={styles.sectionLabel}>// quién hace qué</div>
         <h2 className={styles.sectionTitle}>Tres roles. Cero confusión.</h2>
         <p className={styles.sectionSub}>
-          VICTOR CFO no reemplaza a tu procesador de nómina ni a tu contable — se encarga de la parte que hoy nadie
-          hace bien: organizar y categorizar todo correctamente en el medio, para que los otros dos trabajen más
-          rápido con menos papeleo.
+          VICTOR CFO no reemplaza a tu contable — calcula tu nómina y organiza todo correctamente en el medio, para
+          que quien radica y deposita trabaje más rápido con menos papeleo.
         </p>
         <div className={styles.trustGrid}>
           <div className={styles.trustCard}>
             <div className={styles.trustHead}>
               <span className={styles.trustLogo}>Nómina externa</span>
             </div>
-            <p className={styles.trustDesc}>ADP, Paychex, o tu contable corriendo la nómina a mano.</p>
+            <p className={styles.trustDesc}>ADP, Paychex, o tu contable, si prefieres que otro radique por ti.</p>
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-              {["Paga a tus empleados cada período", "Radica W-2/941-PR y los depósitos de nómina", "Calcula FICA, desempleo y beneficios"].map(
+              {["Paga a tus empleados cada período", "Radica W-2/941-PR y hace los depósitos de nómina", "Procesa el pago y los beneficios que contrates con ellos"].map(
                 (t) => (
                   <li key={t} style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: "0.35rem" }}>
                     ✓ {t}
@@ -427,6 +426,7 @@ export default function LandingPage() {
             <p className={styles.trustDesc}>Lo que pasa todos los días, entre nómina y planilla.</p>
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
               {[
+                "Calcula tu nómina: retenciones, costo patronal, recibos, montos y fechas de depósito y asiento contable",
                 "Categoriza cada transacción (incluido el débito de nómina)",
                 "Rastrea retención, IVU y certificados vigentes",
                 "Avisa riesgos (480 faltantes, CBA, límites) antes de que sean sorpresa",
@@ -444,7 +444,7 @@ export default function LandingPage() {
             </div>
             <p className={styles.trustDesc}>El profesional con licencia que firma al final.</p>
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-              {["Radica tu planilla formalmente, a tiempo", "Toma las decisiones de juicio profesional", "Confirma los cálculos finales con los números que VICTOR ya le organizó"].map(
+              {["Radica tu planilla formalmente, a tiempo", "Toma las decisiones de juicio profesional", "Puede correr tu nómina desde su portal, si tú lo autorizas", "Confirma los cálculos finales con los números que VICTOR ya le organizó"].map(
                 (t) => (
                   <li key={t} style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: "0.35rem" }}>
                     ✓ {t}
@@ -455,7 +455,7 @@ export default function LandingPage() {
           </div>
         </div>
         <p className="mt-4" style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
-          VICTOR CFO nunca radica tu planilla ni corre tu nómina — y nunca reemplaza el juicio profesional de tu CPA.
+          VICTOR CFO calcula tu nómina, pero nunca radica tu planilla, hace los depósitos ni paga a tus empleados — y nunca reemplaza el juicio profesional de tu CPA.
         </p>
       </div>
 

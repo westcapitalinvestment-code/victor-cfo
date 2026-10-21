@@ -12,7 +12,7 @@ import styles from "./landing.module.css";
 // Joel/VIP Medical/WCV). Avanza solo cada 4.5s como una demo; se detiene
 // si el usuario hace clic en una pestaña.
 
-type TabId = "inicio" | "victor" | "facturacion" | "gastos";
+type TabId = "inicio" | "victor" | "facturacion" | "nomina" | "gastos";
 
 // El tab se llama "Transacciones" (no "Gastos") porque la lista mezcla
 // gastos e ingresos — mismo nombre que usa la app real desde el rename
@@ -21,6 +21,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "inicio", label: "Inicio", icon: "🏠" },
   { id: "victor", label: "Chat con VICTOR", icon: "💬" },
   { id: "facturacion", label: "Facturación", icon: "🧾" },
+  { id: "nomina", label: "Nómina", icon: "👥" },
   { id: "gastos", label: "Transacciones", icon: "💳" },
 ];
 
@@ -72,6 +73,7 @@ export default function LandingProductTour() {
           {active === "inicio" && <TourInicio />}
           {active === "victor" && <TourVictor />}
           {active === "facturacion" && <TourFacturacion />}
+          {active === "nomina" && <TourNomina />}
           {active === "gastos" && <TourGastos />}
         </div>
       </div>
@@ -198,6 +200,58 @@ function TourFacturacion() {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// Ejemplo ilustrativo (cifras ficticias calculadas con el motor real,
+// lib/nomina.ts): quincena de 2 empleados. VICTOR calcula; no radica ni deposita.
+function TourNomina() {
+  const rows = [
+    { name: "María Torres", init: "MT", color: "#0F6E56", info: "Salario · bruto $1,800.00", neto: "$1,524.48" },
+    { name: "Luis Rivera", init: "LR", color: "#534AB7", info: "80 h + 6 h extra · bruto $1,246.00", neto: "$1,092.08" },
+  ];
+  return (
+    <div className={styles.tourScreen}>
+      <div className={styles.tourScreenHead}>
+        <div className={styles.tourGreeting}>Nómina</div>
+        <div className={styles.tourSubtle}>Quincena 1–15 · ejemplo</div>
+      </div>
+      <div className={styles.tourMiniGrid}>
+        <div className={styles.tourMiniCard}>
+          <div className={styles.tourSubtle}>Bruto</div>
+          <div className={styles.tourMiniNum}>$3,046</div>
+        </div>
+        <div className={styles.tourMiniCard}>
+          <div className={styles.tourSubtle}>Neto a pagar</div>
+          <div className={styles.tourMiniNum}>$2,617</div>
+        </div>
+        <div className={styles.tourMiniCard}>
+          <div className={styles.tourSubtle}>Costo patronal</div>
+          <div className={styles.tourMiniNum}>$341</div>
+        </div>
+      </div>
+      <div className={styles.tourList}>
+        {rows.map((r) => (
+          <div key={r.name} className={styles.tourListRow}>
+            <div className={styles.tourAvatar} style={{ background: r.color }}>{r.init}</div>
+            <div className={styles.tourListInfo}>
+              <div className={styles.tourListName}>{r.name}</div>
+              <div className={styles.tourSubtle}>{r.info}</div>
+            </div>
+            <div className={styles.tourListRight}>
+              <span className={styles.tourAmountWhite}>{r.neto}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className={styles.tourAlert}>
+        <span>🧾</span>
+        <div>
+          <strong>Retenciones: $429.44 · recibos y asiento listos</strong>
+          <div className={styles.tourSubtle}>VICTOR calcula; tu contable o procesador radica y deposita</div>
+        </div>
       </div>
     </div>
   );
