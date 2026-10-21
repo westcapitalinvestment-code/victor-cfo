@@ -233,7 +233,7 @@ export function calcularEmpleado(
   const fechaRef = entrada.fechaPago ?? new Date().toISOString().slice(0, 10);
   const esJoven = emp.fechaNacimiento ? edadEn(emp.fechaNacimiento, fechaRef) <= EDAD_MAX_JOVEN : emp.jovenExento;
   const exentoJoven = esJoven ? Math.min(bruto, pos(EXENCION_JOVEN_TOPE - ytd.bruto)) : 0;
-  if (esJoven) adv.push(`Empleado joven (≤26 años): primeros $${EXENCION_JOVEN_TOPE.toLocaleString("en-US")} de salario exentos de retención de Hacienda; Seguro Social y Medicare sí aplican. Exento este periodo: $${r2(exentoJoven).toFixed(2)}.`);
+  if (esJoven) adv.push(`${emp.nombre}: empleado joven (≤26 años), primeros $${EXENCION_JOVEN_TOPE.toLocaleString("en-US")} de salario exentos de retención de Hacienda; Seguro Social y Medicare sí aplican. Exento este periodo: $${r2(exentoJoven).toFixed(2)}.`);
   const anualizado = pos(bruto - exentoJoven - emp.aporte401k) * n;
   const especial = emp.deduccionEspecial ? deduccionEspecial(anualizado) : 0;
   // Fórmula de la tabla del CPA: anual − exención − especial − dependientes×2,500 − allowances×500 → tramos → ÷ periodos − retención adicional fija.
@@ -245,7 +245,7 @@ export function calcularEmpleado(
   // --- SINOT (empleado y patrono) con tope anual ---
   // CPA: el chofer (cubierto por Seguro Choferil) no paga SINOT, y el cubierto por SINOT no paga choferil; domésticos y agrícolas tampoco.
   const sinotAplica = !emp.esChofer && !emp.exentoSinot;
-  if (!sinotAplica) adv.push("SINOT no aplica a este empleado (chofer, doméstico o agrícola).");
+  if (!sinotAplica) adv.push(`${emp.nombre}: SINOT no aplica (chofer, doméstico o agrícola).`);
   const baseSinot = sinotAplica ? r2(pos(Math.min(bruto, params.sinot_tope - ytd.sinotBase))) : 0;
   const sinotEmp = r2(baseSinot * params.sinot_emp_tasa);
   const sinotPat = r2(baseSinot * params.sinot_pat_tasa);
@@ -254,7 +254,7 @@ export function calcularEmpleado(
   let choferil = 0;
   if (emp.esChofer) {
     choferil = r2((params.choferil_semanal * 52) / n);
-    adv.push("Empleado marcado como chofer: se descuenta el Seguro Choferil y no se aplica SINOT. Pendiente confirmar la aportación patronal de choferil y las reglas de Seguro Social para choferes.");
+    adv.push(`${emp.nombre}: marcado como chofer, se descuenta el Seguro Choferil y no se aplica SINOT. Pendiente confirmar la aportación patronal de choferil y las reglas de Seguro Social para choferes.`);
   }
 
   // --- Patrono: FUTA / SUTA / CFSE ---
