@@ -770,7 +770,7 @@ export default function CpaTabs({
                 aria-expanded={nominaOperarAbierto}
               >
                 <span className="text-sm font-semibold text-blue">
-                  {nominaOperarAbierto ? "−" : "+"} Correr nómina (calcular, empleados, historial, tasas, auditoría)
+                  Realizar nómina {nominaOperarAbierto ? "−" : "+"}
                 </span>
                 <span className="text-xs text-muted">{nominaOperarAbierto ? "Ocultar" : "Desplegar"}</span>
               </button>
@@ -795,7 +795,7 @@ export default function CpaTabs({
               aria-expanded={nominaResumenAbierto}
             >
               <span className="text-sm font-semibold text-blue">
-                {nominaResumenAbierto ? "−" : "+"} Resumen de nómina del año
+                Resumen de nómina del año {nominaResumenAbierto ? "−" : "+"}
               </span>
               <span className="text-xs text-muted">{nominaResumenAbierto ? "Ocultar" : "Desplegar"}</span>
             </button>
