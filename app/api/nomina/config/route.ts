@@ -77,6 +77,19 @@ export async function PUT(req: NextRequest) {
   if ([bPct, bTope, bHoras, bIni, bFin, bPago].includes("mal")) {
     return NextResponse.json({ error: "Revisa los valores del Bono de Navidad (porcentaje, monto, horas y fechas MM-DD)." }, { status: 400 });
   }
+  // Vacaciones / enfermedad (vacío = sugerencia por defecto)
+  const camposLic: [string, number][] = [
+    ["vac_dias_mes", 10], ["vac_meses_espera", 60], ["vac_tope", 365],
+    ["enf_dias_mes", 10], ["enf_meses_espera", 60], ["enf_tope", 365], ["horas_por_dia", 24],
+  ];
+  for (const [k, max] of camposLic) {
+    if (body[k] === undefined) continue;
+    const v = numOpc(body[k], max);
+    if (v === "mal" || (k === "horas_por_dia" && v === 0)) {
+      return NextResponse.json({ error: "Revisa los valores de vacaciones y enfermedad." }, { status: 400 });
+    }
+    fila[k] = k.endsWith("meses_espera") && v !== null ? Math.round(v) : v;
+  }
   if (bPct !== undefined) fila.bono_pct = bPct === null ? null : (bPct as number) / 100;
   if (bTope !== undefined) fila.bono_tope = bTope;
   if (bHoras !== undefined) fila.bono_horas_min = bHoras;

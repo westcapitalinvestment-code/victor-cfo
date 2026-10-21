@@ -239,6 +239,8 @@ const ACCIONES: Record<string, string> = {
   nomina_corrida_rechazada_por_dueno: "Nómina: el dueño rechazó una corrida",
   nomina_corrida_editada: "Nómina: corrida corregida",
   nomina_corrida_eliminada: "Nómina: corrida eliminada",
+  nomina_licencia_registrada: "Registró vacaciones/enfermedad",
+  nomina_licencia_eliminada: "Eliminó vacaciones/enfermedad",
   nomina_tasas_actualizadas: "Nómina: tasas actualizadas",
   nomina_permisos_contable_cambiados: "Nómina: permisos del contable cambiados",
 };

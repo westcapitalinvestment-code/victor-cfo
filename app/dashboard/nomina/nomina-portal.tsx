@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { formatFecha, formatMoney } from "@/lib/format";
 import ImportarHoras from "./importar-horas";
+import LicenciasTab from "./licencias-tab";
 import ReportesTab from "./reportes-tab";
 import BonoNavidad from "./bono-navidad";
 
@@ -21,7 +22,7 @@ export interface ParamFila {
 }
 
 type Frecuencia = "semanal" | "bisemanal" | "quincenal" | "mensual";
-type TabId = "corrida" | "empleados" | "historial" | "tasas" | "reportes" | "auditoria";
+type TabId = "corrida" | "empleados" | "historial" | "tasas" | "licencias" | "reportes" | "auditoria";
 
 interface Empleado {
   id: string;
@@ -142,6 +143,13 @@ interface Config {
   bono_inicio?: string | null;
   bono_fin?: string | null;
   bono_fecha_pago?: string | null;
+  vac_dias_mes?: number | null;
+  vac_meses_espera?: number | null;
+  vac_tope?: number | null;
+  enf_dias_mes?: number | null;
+  enf_meses_espera?: number | null;
+  enf_tope?: number | null;
+  horas_por_dia?: number | null;
 }
 
 const FREC_LABEL: Record<Frecuencia, string> = {
@@ -271,6 +279,7 @@ export default function NominaPortal({
     { id: "empleados", label: "Empleados", icon: "ti-users" },
     { id: "historial", label: "Historial", icon: "ti-history" },
     { id: "tasas", label: "Tasas", icon: "ti-percentage" },
+    { id: "licencias", label: "Licencias", icon: "ti-beach" },
     { id: "reportes", label: "Reportes", icon: "ti-file-analytics" },
     { id: "auditoria", label: "Auditoría", icon: "ti-shield-check" },
   ];
@@ -363,6 +372,7 @@ export default function NominaPortal({
           )}
           {tab === "empleados" && <EmpleadosTab entityId={entityId} empleados={empleados} anio={anio} onCambio={recargar} />}
           {tab === "historial" && <HistorialTab entityId={entityId} corridas={corridas} modoContable={modoContable} apruebaDirecto={!!config?.cpa_aprueba_directo} onCambio={recargar} onEditar={editarCorrida} />}
+          {tab === "licencias" && <LicenciasTab entityId={entityId} />}
           {tab === "reportes" && <ReportesTab entityId={entityId} />}
           {tab === "auditoria" && <AuditoriaTab entityId={entityId} />}
           {tab === "tasas" && <TasasTab entityId={entityId} config={config} parametros={parametros} anio={anio} modoContable={modoContable} onGuardado={recargar} />}
@@ -1252,6 +1262,8 @@ const ACCION_ETIQ: Record<string, string> = {
   corrida_eliminada: "Eliminó una corrida",
   tasas_actualizadas: "Actualizó las tasas",
   permisos_contable_cambiados: "Cambió los permisos del contable",
+  licencia_registrada: "Registró vacaciones/enfermedad",
+  licencia_eliminada: "Eliminó un registro de vacaciones/enfermedad",
 };
 
 function detalleAuditoria(accion: string, d: Record<string, unknown>): string {
@@ -1378,10 +1390,14 @@ function TasasTab({
   const [bonoIni, setBonoIni] = useState("");
   const [bonoFin, setBonoFin] = useState("");
   const [bonoPago, setBonoPago] = useState("");
+  const [lic, setLic] = useState<Record<string, string>>({});
+  const setL = (k: string, v: string) => setLic((p) => ({ ...p, [k]: v }));
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const ks = ["vac_dias_mes", "vac_meses_espera", "vac_tope", "enf_dias_mes", "enf_meses_espera", "enf_tope", "horas_por_dia"] as const;
+    setLic(Object.fromEntries(ks.map((k) => [k, config?.[k] != null ? String(config[k]) : ""])));
     setSuta(config?.suta_tasa != null ? String(+(Number(config.suta_tasa) * 100).toFixed(4)) : "");
     setCfse(config?.cfse_tasa != null ? String(+(Number(config.cfse_tasa) * 100).toFixed(4)) : "");
     setPoliza(config?.cfse_poliza ?? "");
@@ -1404,6 +1420,7 @@ function TasasTab({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ entityId, suta_pct: suta, cfse_pct: cfse, cfse_poliza: poliza, cfse_codigo_riesgo: codigo, futa_aplica: futa,
         bono_activo: bonoActivo, bono_pct: bonoPct, bono_tope: bonoTope, bono_horas_min: bonoHoras, bono_inicio: bonoIni, bono_fin: bonoFin, bono_fecha_pago: bonoPago,
+        ...lic,
       }),
     });
     const j = await r.json().catch(() => null);
@@ -1524,6 +1541,22 @@ function TasasTab({
             <Campo label="Período hasta (MM-DD)">
               <input className="vc-input" placeholder="09-30" value={bonoFin} onChange={(e) => setBonoFin(e.target.value)} />
             </Campo>
+          </div>
+        </div>
+        <div className="mt-2 border-t border-border pt-3">
+          <p className="mb-1 text-sm font-medium">Vacaciones y enfermedad</p>
+          <p className="mb-2 text-[11px] text-muted">
+            Escribe cuántos días se acumulan por mes trabajado, cuántos meses esperar antes de acumular y el máximo que se puede acumular. Si dejas un campo vacío, VICTOR usa una
+            sugerencia (vacaciones 1.25 días/mes, tope 30; enfermedad 1 día/mes, tope 15; 8 horas por día) marcada «por confirmar» con tu contable.
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <Campo label="Vacaciones: días/mes"><input className="vc-input" type="number" min="0" step="0.01" value={lic.vac_dias_mes ?? ""} onChange={(e) => setL("vac_dias_mes", e.target.value)} /></Campo>
+            <Campo label="Espera (meses)"><input className="vc-input" type="number" min="0" step="1" value={lic.vac_meses_espera ?? ""} onChange={(e) => setL("vac_meses_espera", e.target.value)} /></Campo>
+            <Campo label="Tope (días)"><input className="vc-input" type="number" min="0" step="1" value={lic.vac_tope ?? ""} onChange={(e) => setL("vac_tope", e.target.value)} /></Campo>
+            <Campo label="Enfermedad: días/mes"><input className="vc-input" type="number" min="0" step="0.01" value={lic.enf_dias_mes ?? ""} onChange={(e) => setL("enf_dias_mes", e.target.value)} /></Campo>
+            <Campo label="Espera (meses)"><input className="vc-input" type="number" min="0" step="1" value={lic.enf_meses_espera ?? ""} onChange={(e) => setL("enf_meses_espera", e.target.value)} /></Campo>
+            <Campo label="Tope (días)"><input className="vc-input" type="number" min="0" step="1" value={lic.enf_tope ?? ""} onChange={(e) => setL("enf_tope", e.target.value)} /></Campo>
+            <Campo label="Horas por día"><input className="vc-input" type="number" min="0" step="0.5" value={lic.horas_por_dia ?? ""} onChange={(e) => setL("horas_por_dia", e.target.value)} /></Campo>
           </div>
         </div>
         {error && <p className="text-xs text-red">{error}</p>}
