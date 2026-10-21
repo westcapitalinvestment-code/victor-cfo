@@ -313,24 +313,28 @@ export default function NominaPortal({
             </select>
           )}
         </div>
-        <div className="flex" style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 4, gap: 3 }}>
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className="flex flex-1 flex-col items-center gap-0.5"
-              style={{
-                padding: "9px 4px",
-                fontSize: 11,
-                fontWeight: 500,
-                color: tab === t.id ? "#1D9E75" : "var(--muted)",
-                borderBottom: tab === t.id ? "2px solid #1D9E75" : "2px solid transparent",
-                background: "none",
-              }}
-            >
-              <i className={`ti ${t.icon}`} style={{ fontSize: 17 }} />
-              {t.label}
-            </button>
+        <div className="flex flex-col" style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 4, gap: 3 }}>
+          {[TABS.slice(0, 4), TABS.slice(4)].map((fila, i) => (
+            <div key={i} className="flex" style={{ gap: 3 }}>
+              {fila.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className="flex flex-1 flex-col items-center gap-0.5"
+                  style={{
+                    padding: "9px 4px",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    color: tab === t.id ? "#1D9E75" : "var(--muted)",
+                    borderBottom: tab === t.id ? "2px solid #1D9E75" : "2px solid transparent",
+                    background: "none",
+                  }}
+                >
+                  <i className={`ti ${t.icon}`} style={{ fontSize: 17 }} />
+                  {t.label}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       </div>

@@ -409,11 +409,11 @@ export default function LandingPage() {
             <div className={styles.trustHead}>
               <span className={styles.trustLogo}>Nómina externa</span>
             </div>
-            <p className={styles.trustDesc}>Si prefieres ADP, Paychex o tu contable, ellos procesan y VICTOR igual te ordena todo.</p>
+            <p className={styles.trustDesc}>Si tu contable o un servicio externo corre tu nómina, VICTOR igual te ordena todo.</p>
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
               {[
                 "Ellos pagan a tus empleados y radican W-2/941-PR y los depósitos",
-                "VICTOR categoriza el débito de nómina y lo concilia con tu banco",
+                "VICTOR ve el débito de nómina en tu banco, lo categoriza y lo concilia",
                 "VICTOR separa sueldos, retenciones y costo patronal en tus reportes",
                 "VICTOR entrega todo listo para tu CPA, sin caja de recibos",
               ].map(
