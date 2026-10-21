@@ -147,6 +147,27 @@ export default async function CpaClientePage({
       .limit(500),
   ]);
 
+  // La bitácora de Nómina vive en otra tabla (payroll_audit_log); se mezcla aquí para
+  // que el contable vea en un solo historial lo que hizo el dueño (y él mismo).
+  const { data: auditoriaNomina } = await supabase
+    .from("payroll_audit_log")
+    .select("id, actor_rol, actor_email, accion, detalle, created_at")
+    .eq("entity_id", entityId)
+    .order("created_at", { ascending: false })
+    .limit(500);
+  const auditoriaCompleta = [
+    ...(auditoria ?? []),
+    ...(auditoriaNomina ?? []).map((n) => ({
+      id: `nomina-${n.id}`,
+      actor_role: n.actor_rol === "dueno" ? "owner" : n.actor_rol === "contable" ? "cpa" : String(n.actor_rol ?? ""),
+      actor_email: n.actor_email as string | null,
+      action: `nomina_${n.accion}`,
+      target_table: "payroll",
+      changes: n.detalle,
+      created_at: n.created_at as string,
+    })),
+  ].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+
   // Estado de Resultados (1 oct 2026, pedido de Joel: "hay que activarlo
   // para que pueda ver esos reportes" — reactivación de Invita a tu contable
   // junto con darle al Portal CPA contenido real que mostrar). Misma función
@@ -439,7 +460,7 @@ export default async function CpaClientePage({
         depositoMensual={depositoMensual}
         clientesExentos={clientesExentos ?? []}
         estimados={estimados ?? []}
-        auditoria={auditoria ?? []}
+        auditoria={auditoriaCompleta}
         estadoResultados={er}
         anioResultados={anioResultados}
         desgloseIvuPropinas={desgloseIvuPropinas}

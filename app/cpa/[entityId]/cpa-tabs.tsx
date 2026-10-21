@@ -229,6 +229,18 @@ const ACCIONES: Record<string, string> = {
   archivo_agregado: "Archivo agregado",
   archivo_eliminado: "Archivo eliminado",
   category_override: "Categoría corregida",
+  nomina_empleado_creado: "Nómina: empleado creado",
+  nomina_empleado_editado: "Nómina: empleado editado",
+  nomina_empleado_desactivado: "Nómina: empleado desactivado",
+  nomina_empleado_eliminado: "Nómina: empleado eliminado",
+  nomina_corrida_aprobada: "Nómina: corrida guardada y aprobada",
+  nomina_corrida_enviada_a_aprobacion: "Nómina: corrida enviada a aprobación",
+  nomina_corrida_aprobada_por_dueno: "Nómina: el dueño aprobó una corrida",
+  nomina_corrida_rechazada_por_dueno: "Nómina: el dueño rechazó una corrida",
+  nomina_corrida_editada: "Nómina: corrida corregida",
+  nomina_corrida_eliminada: "Nómina: corrida eliminada",
+  nomina_tasas_actualizadas: "Nómina: tasas actualizadas",
+  nomina_permisos_contable_cambiados: "Nómina: permisos del contable cambiados",
 };
 
 const ROLES: Record<string, string> = { owner: "Dueño", admin: "Admin / secretaria", cpa: "Contable", system: "Sistema" };
@@ -241,6 +253,15 @@ function fechaCorta(f: unknown): string {
 
 function detalleAuditoria(a: Auditoria): string {
   const c = (a.changes ?? {}) as Record<string, unknown>;
+  if (a.action.startsWith("nomina_")) {
+    const p: string[] = [];
+    if (c.empleado) p.push(String(c.empleado));
+    if (c.periodo) p.push(`periodo ${String(c.periodo).replace(" a ", " – ")}`);
+    if (c.bruto !== undefined) p.push(`bruto $${Number(c.bruto).toFixed(2)}`);
+    if (a.action === "nomina_permisos_contable_cambiados")
+      p.push(`contable puede operar: ${c.cpa_puede_nomina ? "sí" : "no"}; aprobación directa: ${c.cpa_aprueba_directo ? "sí" : "no"}`);
+    return p.join(" · ");
+  }
   const doc = typeof c.documento === "string" ? c.documento : null;
   if (a.action === "documento_renovado")
     return `${doc ?? "Documento"}: vencimiento ${fechaCorta(c.fecha_anterior)} → ${fechaCorta(c.fecha_nueva)}`;
