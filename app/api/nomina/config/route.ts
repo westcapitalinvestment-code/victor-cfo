@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { entidadDelUsuario, exigirNomina } from "@/lib/nomina-server";
+import { actorNomina, registrarNomina } from "@/lib/nomina-server";
 
 // Tasas propias de la entidad: SUTA (la asigna el DTRH), CFSE (por póliza) y si
 // aplica FUTA. Las tasas generales (FICA, SINOT, topes) viven en payroll_params.
 export async function GET(req: NextRequest) {
   const supabase = createClient();
-  const g = await exigirNomina(supabase);
-  if ("error" in g) return g.error;
   const entityId = req.nextUrl.searchParams.get("entityId") ?? "";
-  if (!(await entidadDelUsuario(supabase, g.userId, entityId))) {
-    return NextResponse.json({ error: "Entidad no encontrada." }, { status: 404 });
-  }
-  const { data } = await supabase.from("payroll_entity_config").select("*").eq("entity_id", entityId).maybeSingle();
+  const a = await actorNomina(supabase, entityId);
+  if ("error" in a) return a.error;
+  const { g } = a;
+  const { data } = await g.db.from("payroll_entity_config").select("*").eq("entity_id", entityId).maybeSingle();
   return NextResponse.json({ ok: true, config: data ?? null });
 }
 
@@ -26,13 +24,16 @@ const tasa = (v: unknown, max: number): number | null | undefined => {
 
 export async function PUT(req: NextRequest) {
   const supabase = createClient();
-  const g = await exigirNomina(supabase);
-  if ("error" in g) return g.error;
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Cuerpo inválido." }, { status: 400 });
   const entityId = String(body.entityId ?? "");
-  if (!(await entidadDelUsuario(supabase, g.userId, entityId))) {
-    return NextResponse.json({ error: "Entidad no encontrada." }, { status: 404 });
+  const a = await actorNomina(supabase, entityId);
+  if ("error" in a) return a.error;
+  const { g } = a;
+  // Los interruptores del contable los decide SOLO el dueño.
+  const tocaInterruptores = body.cpa_puede_nomina !== undefined || body.cpa_aprueba_directo !== undefined;
+  if (tocaInterruptores && g.actor !== "dueno") {
+    return NextResponse.json({ error: "Solo el dueño puede cambiar los permisos del contable." }, { status: 403 });
   }
   let sutaTasa: number | null | undefined;
   let cfseTasa: number | null | undefined;
@@ -51,7 +52,14 @@ export async function PUT(req: NextRequest) {
   if (body.cfse_poliza !== undefined) fila.cfse_poliza = String(body.cfse_poliza ?? "").slice(0, 60) || null;
   if (body.cfse_codigo_riesgo !== undefined) fila.cfse_codigo_riesgo = String(body.cfse_codigo_riesgo ?? "").slice(0, 60) || null;
   if (body.futa_aplica !== undefined) fila.futa_aplica = !!body.futa_aplica;
-  const { data, error } = await supabase.from("payroll_entity_config").upsert(fila, { onConflict: "entity_id" }).select("*").single();
+  if (body.cpa_puede_nomina !== undefined) fila.cpa_puede_nomina = !!body.cpa_puede_nomina;
+  if (body.cpa_aprueba_directo !== undefined) fila.cpa_aprueba_directo = !!body.cpa_aprueba_directo;
+  // Sin permiso para operar no tiene sentido "aprobar directo".
+  if (fila.cpa_puede_nomina === false) fila.cpa_aprueba_directo = false;
+  const { data, error } = await g.db.from("payroll_entity_config").upsert(fila, { onConflict: "entity_id" }).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await registrarNomina(g, entityId, tocaInterruptores ? "permisos_contable_cambiados" : "tasas_actualizadas", {
+    ...(tocaInterruptores ? { cpa_puede_nomina: data.cpa_puede_nomina, cpa_aprueba_directo: data.cpa_aprueba_directo } : {}),
+  });
   return NextResponse.json({ ok: true, config: data });
 }

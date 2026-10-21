@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import BovedaCompartida from "../boveda-compartida";
 import NominaCpa, { type NominaEmpleado, type NominaCorrida, type NominaLinea, type NominaConfig } from "../nomina-cpa";
+import NominaPortal, { type ParamFila as NominaParam } from "@/app/dashboard/nomina/nomina-portal";
 import Formularios480 from "../formularios-480";
 import type { EstadoResultados } from "@/lib/estado-resultados";
 import { MESES_CORTOS } from "@/lib/estado-resultados";
@@ -417,7 +418,15 @@ export default function CpaTabs({
   resumenPos: ResumenPos;
   tienePos: boolean;
   retenciones: Retencion[];
-  nomina: { empleados: NominaEmpleado[]; corridas: NominaCorrida[]; lineas: NominaLinea[]; config: NominaConfig };
+  nomina: {
+    empleados: NominaEmpleado[];
+    corridas: NominaCorrida[];
+    lineas: NominaLinea[];
+    config: NominaConfig;
+    puedeOperar: boolean;
+    parametros: NominaParam[];
+    entidadNombre: string;
+  };
   entityId: string;
   ownerId: string;
 }) {
@@ -749,7 +758,18 @@ export default function CpaTabs({
       )}
 
       {tab === "nomina" && (
-        <NominaCpa empleados={nomina.empleados} corridas={nomina.corridas} lineas={nomina.lineas} config={nomina.config} anio={anioResultados} />
+        <div className="flex flex-col gap-4">
+          {nomina.puedeOperar && (
+            <NominaPortal
+              modoContable
+              entidades={[{ id: entityId, name: nomina.entidadNombre }]}
+              entidadInicialId={entityId}
+              parametros={nomina.parametros}
+              anio={anioResultados}
+            />
+          )}
+          <NominaCpa empleados={nomina.empleados} corridas={nomina.corridas} lineas={nomina.lineas} config={nomina.config} anio={anioResultados} puedeOperar={nomina.puedeOperar} />
+        </div>
       )}
 
       {tab === "boveda" && <BovedaCompartida ownerId={ownerId} entityId={entityId} />}

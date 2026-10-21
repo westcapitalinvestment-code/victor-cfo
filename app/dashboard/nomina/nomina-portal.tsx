@@ -109,6 +109,10 @@ interface Corrida {
   fecha_pago: string;
   totales: Resumen["totales"];
   depositos: Resumen["depositos"] & { trimestre?: string; vence?: string };
+  estado?: string; // 'aprobada' | 'pendiente' (la dejó el contable y espera al dueño)
+  creada_por?: string | null;
+  creada_por_rol?: string | null;
+  aprobada_por?: string | null;
 }
 
 interface Config {
@@ -117,6 +121,8 @@ interface Config {
   cfse_poliza: string | null;
   cfse_codigo_riesgo: string | null;
   futa_aplica: boolean;
+  cpa_puede_nomina?: boolean;
+  cpa_aprueba_directo?: boolean;
 }
 
 const FREC_LABEL: Record<Frecuencia, string> = {
@@ -163,11 +169,13 @@ export default function NominaPortal({
   entidadInicialId,
   parametros,
   anio,
+  modoContable = false,
 }: {
   entidades: { id: string; name: string }[];
   entidadInicialId: string;
   parametros: ParamFila[];
   anio: number;
+  modoContable?: boolean; // true = lo usa el contable desde su portal (con permiso del dueño)
 }) {
   const [entityId, setEntityId] = useState(entidadInicialId);
   const [tab, setTab] = useState<TabId>("corrida");
@@ -202,6 +210,8 @@ export default function NominaPortal({
   }, [recargar]);
 
   const porConfirmar = parametros.filter((p) => p.por_confirmar);
+  // El contable sin "aprobación directa" deja la corrida pendiente de la autorización del dueño.
+  const enviaAAprobacion = modoContable && !config?.cpa_aprueba_directo;
 
   const TABS: { id: TabId; label: string; icon: string }[] = [
     { id: "corrida", label: "Corrida", icon: "ti-calculator" },
@@ -212,20 +222,24 @@ export default function NominaPortal({
 
   return (
     <div className="vc-shell">
-      <div className="mb-4 flex items-center justify-between">
-        <Link href="/dashboard" className="vc-btn-back">
-          ← Atrás
-        </Link>
-        <Link href="/dashboard/pagos" className="text-xs font-medium text-teal hover:opacity-80">
-          Ir a Pagos
-        </Link>
-      </div>
+      {!modoContable && (
+        <div className="mb-4 flex items-center justify-between">
+          <Link href="/dashboard" className="vc-btn-back">
+            ← Atrás
+          </Link>
+          <Link href="/dashboard/pagos" className="text-xs font-medium text-teal hover:opacity-80">
+            Ir a Pagos
+          </Link>
+        </div>
+      )}
 
       <div className="mb-4 rounded-2xl border border-teal bg-teal/[.04] p-3.5">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div>
             <p className="text-lg font-medium">Nómina</p>
-            <p className="text-xs text-muted">Puerto Rico · VICTOR calcula, tú radicas y depositas</p>
+            <p className="text-xs text-muted">
+              {modoContable ? "Puerto Rico · lo estás operando como contable de este cliente" : "Puerto Rico · VICTOR calcula, tú radicas y depositas"}
+            </p>
           </div>
           {entidades.length > 1 && (
             <select className="vc-input max-w-[180px]" value={entityId} onChange={(e) => setEntityId(e.target.value)}>
@@ -276,8 +290,13 @@ export default function NominaPortal({
             <CorridaTab
               entityId={entityId}
               empleados={empleados.filter((e) => e.activo)}
+              enviaAAprobacion={enviaAAprobacion}
               onGuardada={() => {
-                setAviso("Corrida guardada. Ya cuenta para los acumulados del año.");
+                setAviso(
+                  enviaAAprobacion
+                    ? "Corrida enviada. Queda pendiente hasta que el dueño la autorice; todavía no cuenta para los acumulados."
+                    : "Corrida guardada. Ya cuenta para los acumulados del año."
+                );
                 recargar();
                 setTab("historial");
               }}
@@ -285,8 +304,8 @@ export default function NominaPortal({
             />
           )}
           {tab === "empleados" && <EmpleadosTab entityId={entityId} empleados={empleados} anio={anio} onCambio={recargar} />}
-          {tab === "historial" && <HistorialTab corridas={corridas} onCambio={recargar} />}
-          {tab === "tasas" && <TasasTab entityId={entityId} config={config} parametros={parametros} anio={anio} onGuardado={recargar} />}
+          {tab === "historial" && <HistorialTab entityId={entityId} corridas={corridas} modoContable={modoContable} apruebaDirecto={!!config?.cpa_aprueba_directo} onCambio={recargar} />}
+          {tab === "tasas" && <TasasTab entityId={entityId} config={config} parametros={parametros} anio={anio} modoContable={modoContable} onGuardado={recargar} />}
         </>
       )}
     </div>
@@ -310,11 +329,13 @@ function CorridaTab({
   empleados,
   onGuardada,
   onIrEmpleados,
+  enviaAAprobacion = false,
 }: {
   entityId: string;
   empleados: Empleado[];
   onGuardada: () => void;
   onIrEmpleados: () => void;
+  enviaAAprobacion?: boolean;
 }) {
   const [frecuencia, setFrecuencia] = useState<Frecuencia>("quincenal");
   const [inicio, setInicio] = useState(hoyISO());
@@ -376,7 +397,10 @@ function CorridaTab({
   }
 
   async function guardar() {
-    if (!window.confirm("¿Guardar esta corrida? Cuenta para los acumulados del año (topes de Seguro Social, SUTA, etc.).")) return;
+    const msg = enviaAAprobacion
+      ? "¿Enviar esta corrida al dueño? Queda pendiente de su autorización y todavía no cuenta para los acumulados."
+      : "¿Guardar esta corrida? Cuenta para los acumulados del año (topes de Seguro Social, SUTA, etc.).";
+    if (!window.confirm(msg)) return;
     setTrabajando(true);
     setError(null);
     const r = await fetch("/api/nomina/corridas", {
@@ -474,7 +498,7 @@ function CorridaTab({
         {trabajando ? "Calculando..." : "Calcular nómina"}
       </button>
 
-      {resultado && <ResultadoCorrida r={resultado} etiqueta={`${inicio}_${fin}`} onGuardar={guardar} guardando={trabajando} />}
+      {resultado && <ResultadoCorrida r={resultado} etiqueta={`${inicio}_${fin}`} onGuardar={guardar} guardando={trabajando} enviaAAprobacion={enviaAAprobacion} />}
     </div>
   );
 }
@@ -484,11 +508,13 @@ function ResultadoCorrida({
   etiqueta,
   onGuardar,
   guardando,
+  enviaAAprobacion = false,
 }: {
   r: Resultado;
   etiqueta: string;
   onGuardar: () => void;
   guardando: boolean;
+  enviaAAprobacion?: boolean;
 }) {
   const t = r.resumen.totales;
   const d = r.resumen.depositos;
@@ -551,7 +577,7 @@ function ResultadoCorrida({
       )}
 
       <button className="vc-btn-primary" disabled={guardando || !r.asientoCuadra} onClick={onGuardar}>
-        {guardando ? "Guardando..." : "Aprobar y guardar corrida"}
+        {guardando ? "Guardando..." : enviaAAprobacion ? "Enviar corrida al dueño para aprobación" : "Aprobar y guardar corrida"}
       </button>
     </div>
   );
@@ -907,7 +933,19 @@ function EmpleadosTab({
 // ---------------------------------------------------------------------------
 // Historial
 // ---------------------------------------------------------------------------
-function HistorialTab({ corridas, onCambio }: { corridas: Corrida[]; onCambio: () => void }) {
+function HistorialTab({
+  entityId,
+  corridas,
+  modoContable,
+  apruebaDirecto,
+  onCambio,
+}: {
+  entityId: string;
+  corridas: Corrida[];
+  modoContable: boolean;
+  apruebaDirecto: boolean;
+  onCambio: () => void;
+}) {
   const [abierta, setAbierta] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<{ asiento: LineaAsiento[]; lineas: { id: string; detalle: LineaCalc }[] } | null>(null);
 
@@ -925,12 +963,32 @@ function HistorialTab({ corridas, onCambio }: { corridas: Corrida[]; onCambio: (
 
   async function borrar(id: string) {
     if (!window.confirm("¿Eliminar esta corrida? Los acumulados del año vuelven a como estaban antes de ella.")) return;
-    await fetch(`/api/nomina/corridas/${id}`, { method: "DELETE" });
+    const r = await fetch(`/api/nomina/corridas/${id}`, { method: "DELETE" });
+    if (!r.ok) window.alert((await r.json().catch(() => null))?.error ?? "No se pudo eliminar.");
     setAbierta(null);
     onCambio();
   }
 
-  if (corridas.length === 0) return <p className="text-sm text-muted">Todavía no hay corridas guardadas.</p>;
+  async function decidir(id: string, accion: "aprobar" | "rechazar") {
+    const msg = accion === "aprobar" ? "¿Aprobar esta corrida? Desde ahora cuenta para los acumulados del año." : "¿Rechazar y eliminar esta corrida pendiente?";
+    if (!window.confirm(msg)) return;
+    const r = await fetch(`/api/nomina/corridas/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accion }),
+    });
+    if (!r.ok) window.alert((await r.json().catch(() => null))?.error ?? "No se pudo completar.");
+    setAbierta(null);
+    onCambio();
+  }
+
+  if (corridas.length === 0)
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted">Todavía no hay corridas guardadas.</p>
+        <BitacoraCard entityId={entityId} />
+      </div>
+    );
 
   return (
     <div className="flex flex-col gap-3">
@@ -945,6 +1003,14 @@ function HistorialTab({ corridas, onCambio }: { corridas: Corrida[]; onCambio: (
               <p className="text-sm font-medium">
                 {formatFecha(c.periodo_inicio)} – {formatFecha(c.periodo_fin)} · {FREC_LABEL[c.frecuencia]}
               </p>
+              {c.estado === "pendiente" && (
+                <p className="mt-0.5 inline-block rounded-full bg-amb/15 px-2 py-0.5 text-[11px] font-medium text-amb">
+                  Pendiente de aprobación del dueño{c.creada_por ? ` · la envió ${c.creada_por}` : ""}
+                </p>
+              )}
+              {c.estado !== "pendiente" && c.creada_por_rol === "contable" && (
+                <p className="text-[11px] text-muted">Preparada por el contable ({c.creada_por}){c.aprobada_por && c.aprobada_por !== c.creada_por ? ` · aprobada por ${c.aprobada_por}` : ""}</p>
+              )}
               <p className="text-xs text-muted">
                 Pago {formatFecha(c.fecha_pago)} · Bruto {formatMoney(Number(c.totales?.bruto ?? 0))} · Neto {formatMoney(Number(c.totales?.neto ?? 0))}
               </p>
@@ -983,13 +1049,69 @@ function HistorialTab({ corridas, onCambio }: { corridas: Corrida[]; onCambio: (
                   ))}
                 </>
               )}
-              <button className="self-start text-xs text-red" onClick={() => borrar(c.id)}>
-                Eliminar corrida
-              </button>
+              {c.estado === "pendiente" && !modoContable && (
+                <div className="flex gap-2">
+                  <button className="vc-btn-primary" onClick={() => decidir(c.id, "aprobar")}>
+                    Aprobar corrida
+                  </button>
+                  <button className="rounded-lg border border-red px-3 py-2 text-xs font-medium text-red" onClick={() => decidir(c.id, "rechazar")}>
+                    Rechazar
+                  </button>
+                </div>
+              )}
+              {(!modoContable || c.estado === "pendiente" || apruebaDirecto) && (
+                <button className="self-start text-xs text-red" onClick={() => borrar(c.id)}>
+                  Eliminar corrida
+                </button>
+              )}
             </div>
           )}
         </div>
       ))}
+      <BitacoraCard entityId={entityId} />
+    </div>
+  );
+}
+
+function BitacoraCard({ entityId }: { entityId: string }) {
+  const [filas, setFilas] = useState<{ id: string; actor_email: string | null; actor_rol: string; accion: string; created_at: string }[] | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    fetch(`/api/nomina/auditoria?entityId=${entityId}`)
+      .then((r) => r.json())
+      .then((j) => vivo && setFilas(j.filas ?? []))
+      .catch(() => vivo && setFilas([]));
+    return () => {
+      vivo = false;
+    };
+  }, [entityId]);
+  const ETIQ: Record<string, string> = {
+    empleado_creado: "Creó un empleado",
+    empleado_editado: "Editó un empleado",
+    empleado_desactivado: "Desactivó un empleado",
+    empleado_eliminado: "Eliminó un empleado",
+    corrida_aprobada: "Aprobó una corrida",
+    corrida_enviada_a_aprobacion: "Envió una corrida para aprobación",
+    corrida_aprobada_por_dueno: "El dueño aprobó una corrida",
+    corrida_rechazada_por_dueno: "El dueño rechazó una corrida",
+    corrida_eliminada: "Eliminó una corrida",
+    tasas_actualizadas: "Actualizó las tasas",
+    permisos_contable_cambiados: "Cambió los permisos del contable",
+  };
+  if (!filas || filas.length === 0) return null;
+  return (
+    <div className="vc-card">
+      <p className="mb-2 text-sm font-medium">Actividad reciente</p>
+      <div className="flex flex-col divide-y divide-border text-xs">
+        {filas.map((f) => (
+          <p key={f.id} className="flex justify-between gap-2 py-1.5">
+            <span>
+              {ETIQ[f.accion] ?? f.accion} <span className="text-muted">· {f.actor_rol === "contable" ? "contable" : "dueño"} {f.actor_email ?? ""}</span>
+            </span>
+            <span className="whitespace-nowrap text-muted">{new Date(f.created_at).toLocaleString("es-PR", { dateStyle: "short", timeStyle: "short" })}</span>
+          </p>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1002,12 +1124,14 @@ function TasasTab({
   config,
   parametros,
   anio,
+  modoContable = false,
   onGuardado,
 }: {
   entityId: string;
   config: Config | null;
   parametros: ParamFila[];
   anio: number;
+  modoContable?: boolean;
   onGuardado: () => void;
 }) {
   const [suta, setSuta] = useState("");
@@ -1046,8 +1170,63 @@ function TasasTab({
   const formato = (p: ParamFila) =>
     p.valor > 0 && p.valor < 1 ? `${+(p.valor * 100).toFixed(4)}%` : p.valor >= 1000 ? formatMoney(p.valor, 0) : String(p.valor);
 
+  async function cambiarPermiso(campo: "cpa_puede_nomina" | "cpa_aprueba_directo", valor: boolean) {
+    setMsg(null);
+    setError(null);
+    const r = await fetch("/api/nomina/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entityId, [campo]: valor }),
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) {
+      setError(j?.error ?? "No se pudo guardar el permiso.");
+      return;
+    }
+    onGuardado();
+  }
+
   return (
     <div className="flex flex-col gap-3">
+      {!modoContable ? (
+        <div className="vc-card flex flex-col gap-2">
+          <p className="text-sm font-medium">Tu contable y la nómina</p>
+          <p className="text-[11px] text-muted">Tú decides si tu contable puede trabajar la nómina de esta entidad desde su portal.</p>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={!!config?.cpa_puede_nomina}
+              onChange={(e) => cambiarPermiso("cpa_puede_nomina", e.target.checked)}
+            />
+            <span>
+              Permitir que mi contable corra la nómina
+              <span className="block text-[11px] text-muted">Podrá crear y editar empleados y generar corridas. Todo queda registrado con su nombre.</span>
+            </span>
+          </label>
+          <label className={`flex items-start gap-2 text-sm ${config?.cpa_puede_nomina ? "" : "opacity-50"}`}>
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              disabled={!config?.cpa_puede_nomina}
+              checked={!!config?.cpa_aprueba_directo}
+              onChange={(e) => cambiarPermiso("cpa_aprueba_directo", e.target.checked)}
+            />
+            <span>
+              Sus corridas quedan aprobadas sin mi autorización
+              <span className="block text-[11px] text-muted">
+                Apagado: cada corrida que tire el contable queda pendiente hasta que tú la apruebes en el Historial.
+              </span>
+            </span>
+          </label>
+        </div>
+      ) : (
+        <div className="vc-card text-xs text-muted">
+          {config?.cpa_aprueba_directo
+            ? "El dueño te permite aprobar las corridas directamente."
+            : "Las corridas que generes quedan pendientes hasta que el dueño las apruebe."}
+        </div>
+      )}
       <div className="vc-card flex flex-col gap-2">
         <p className="text-sm font-medium">Tasas de esta entidad</p>
         <div className="grid grid-cols-2 gap-2">

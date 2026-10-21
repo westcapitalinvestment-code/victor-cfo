@@ -5,6 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { NOMINA_INCLUIDA_EN_BUSINESS } from "./stripe";
+import { createAdminClient } from "./supabase/admin";
 import type { Tramo } from "./impuestos-estimados";
 import {
   PERIODOS_POR_ANIO,
@@ -24,6 +25,18 @@ import {
 } from "./nomina";
 
 // --- Gate: usuario autenticado + addon Nómina activo -----------------------
+// ¿El dueño tiene Nómina (Business, o Pro con el addon)? `db` lee la fila users.
+async function duenoTieneNomina(db: SupabaseClient, ownerId: string): Promise<boolean> {
+  const { data: perfil } = await db
+    .from("users")
+    .select("plan, plan_status, addon_nomina_status")
+    .eq("id", ownerId)
+    .maybeSingle();
+  const esPro = perfil?.plan === "pro" || perfil?.plan === "proplus";
+  const incluido = perfil?.plan === "proplus" && NOMINA_INCLUIDA_EN_BUSINESS;
+  return esPro && (incluido || perfil?.addon_nomina_status === "activo");
+}
+
 export async function exigirNomina(
   supabase: SupabaseClient
 ): Promise<{ userId: string } | { error: NextResponse }> {
@@ -31,17 +44,100 @@ export async function exigirNomina(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: NextResponse.json({ error: "No autenticado." }, { status: 401 }) };
-  const { data: perfil } = await supabase
-    .from("users")
-    .select("plan, plan_status, addon_nomina_status")
-    .eq("id", user.id)
-    .maybeSingle();
-  const esPro = perfil?.plan === "pro" || perfil?.plan === "proplus";
-  const incluido = perfil?.plan === "proplus" && NOMINA_INCLUIDA_EN_BUSINESS;
-  if (!esPro || (!incluido && perfil?.addon_nomina_status !== "activo")) {
+  if (!(await duenoTieneNomina(supabase, user.id))) {
     return { error: NextResponse.json({ error: "Necesitas el addon Nómina activo." }, { status: 403 }) };
   }
   return { userId: user.id };
+}
+
+// --- Quién opera la nómina: el dueño o su contable (migración 0172) -----------
+// El dueño trabaja con su propia sesión (RLS). El contable solo opera si es
+// contable activo del dueño Y el dueño encendió "cpa_puede_nomina" para esa
+// entidad; en ese caso las escrituras van por el cliente de servicio, con
+// owner_id SIEMPRE el del dueño (nunca el del contable).
+export interface ActorNomina {
+  userId: string; // owner_id con el que se leen/escriben las filas
+  db: SupabaseClient;
+  actor: "dueno" | "contable";
+  email: string;
+  apruebaDirecto: boolean; // dueño: siempre true; contable: según el interruptor
+}
+
+export async function actorNomina(
+  supabase: SupabaseClient,
+  entityId: string
+): Promise<{ g: ActorNomina } | { error: NextResponse }> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: NextResponse.json({ error: "No autenticado." }, { status: 401 }) };
+  const email = user.email ?? "";
+  if (!entityId) return { error: NextResponse.json({ error: "Entidad no encontrada." }, { status: 404 }) };
+
+  // 1) ¿Es el dueño de la entidad?
+  if (await entidadDelUsuario(supabase, user.id, entityId)) {
+    if (!(await duenoTieneNomina(supabase, user.id))) {
+      return { error: NextResponse.json({ error: "Necesitas el addon Nómina activo." }, { status: 403 }) };
+    }
+    return { g: { userId: user.id, db: supabase, actor: "dueno", email, apruebaDirecto: true } };
+  }
+
+  // 2) ¿Es un contable autorizado por el dueño?
+  const admin = createAdminClient();
+  const { data: ent } = await admin.from("business_entities").select("owner_id").eq("id", entityId).maybeSingle();
+  if (!ent?.owner_id) return { error: NextResponse.json({ error: "Entidad no encontrada." }, { status: 404 }) };
+  const { data: miembro } = await admin
+    .from("account_members")
+    .select("id")
+    .eq("owner_id", ent.owner_id)
+    .eq("member_email", email)
+    .eq("role", "cpa")
+    .eq("active", true)
+    .limit(1)
+    .maybeSingle();
+  if (!miembro) return { error: NextResponse.json({ error: "Entidad no encontrada." }, { status: 404 }) };
+  const { data: cfg } = await admin
+    .from("payroll_entity_config")
+    .select("cpa_puede_nomina, cpa_aprueba_directo")
+    .eq("entity_id", entityId)
+    .maybeSingle();
+  if (!cfg?.cpa_puede_nomina) {
+    return { error: NextResponse.json({ error: "El dueño no ha autorizado que el contable corra la nómina de esta entidad." }, { status: 403 }) };
+  }
+  if (!(await duenoTieneNomina(admin, ent.owner_id))) {
+    return { error: NextResponse.json({ error: "El dueño no tiene el módulo Nómina activo." }, { status: 403 }) };
+  }
+  return { g: { userId: ent.owner_id, db: admin, actor: "contable", email, apruebaDirecto: !!cfg.cpa_aprueba_directo } };
+}
+
+// Para rutas /[id]: averigua la entidad de la fila y luego autoriza como arriba.
+export async function actorNominaPorFila(
+  supabase: SupabaseClient,
+  tabla: "payroll_employees" | "payroll_runs",
+  id: string
+): Promise<{ g: ActorNomina; entityId: string } | { error: NextResponse }> {
+  const admin = createAdminClient();
+  const { data: fila } = await admin.from(tabla).select("entity_id").eq("id", id).maybeSingle();
+  if (!fila?.entity_id) return { error: NextResponse.json({ error: "No encontrado." }, { status: 404 }) };
+  const r = await actorNomina(supabase, String(fila.entity_id));
+  if ("error" in r) return r;
+  return { g: r.g, entityId: String(fila.entity_id) };
+}
+
+// Bitácora (mejor esfuerzo: un fallo aquí nunca bloquea la operación).
+export async function registrarNomina(g: ActorNomina, entityId: string, accion: string, detalle: Record<string, unknown> = {}) {
+  try {
+    await createAdminClient().from("payroll_audit_log").insert({
+      owner_id: g.userId,
+      entity_id: entityId,
+      actor_email: g.email,
+      actor_rol: g.actor,
+      accion,
+      detalle,
+    });
+  } catch {
+    /* sin bitácora no se detiene la nómina */
+  }
 }
 
 // ¿La entidad es del usuario? (RLS ya lo garantiza, pero damos un 404 claro)
@@ -240,12 +336,23 @@ export async function calcularCorrida(
 
   const config = await cargarConfigEntidad(supabase, e.entityId);
 
-  const { data: previas } = await supabase
-    .from("payroll_run_lines")
-    .select("employee_id, bruto, base_sinot, base_suta, base_futa")
+  // Solo cuentan las corridas APROBADAS (las pendientes del contable no suman al acumulado).
+  const { data: aprobadas } = await supabase
+    .from("payroll_runs")
+    .select("id")
     .eq("owner_id", userId)
     .eq("anio", anio)
-    .in("employee_id", ids);
+    .eq("estado", "aprobada");
+  const idsAprobadas = (aprobadas ?? []).map((r) => String(r.id));
+  const { data: previas } = idsAprobadas.length
+    ? await supabase
+        .from("payroll_run_lines")
+        .select("employee_id, bruto, base_sinot, base_suta, base_futa")
+        .eq("owner_id", userId)
+        .eq("anio", anio)
+        .in("run_id", idsAprobadas)
+        .in("employee_id", ids)
+    : { data: [] as { employee_id: string; bruto: number; base_sinot: number; base_suta: number; base_futa: number }[] };
 
   const lineas: (LineaNomina & { entrada: EntradaPeriodo })[] = [];
   for (const l of e.lineas) {

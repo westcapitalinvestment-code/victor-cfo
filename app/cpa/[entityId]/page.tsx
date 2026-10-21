@@ -362,8 +362,26 @@ export default async function CpaClientePage({
       .eq("anio", anioResultados)
       .eq("estado", "aprobada")
       .order("fecha_pago", { ascending: false }),
-    supabase.from("payroll_entity_config").select("suta_tasa, cfse_tasa, cfse_poliza, futa_aplica").eq("entity_id", entityId).maybeSingle(),
+    supabase.from("payroll_entity_config").select("suta_tasa, cfse_tasa, cfse_poliza, futa_aplica, cpa_puede_nomina, cpa_aprueba_directo").eq("entity_id", entityId).maybeSingle(),
   ]);
+  // Si el dueño autorizó al contable a correr la nómina, se le muestra la pantalla
+  // completa de Nómina; necesita los parámetros vigentes (pestaña Tasas).
+  const puedeOperarNomina = !!(nomConfig as { cpa_puede_nomina?: boolean } | null)?.cpa_puede_nomina;
+  let parametrosNomina: { jurisdiccion: string; anio: number; clave: string; valor: number; descripcion: string | null; fuente: string | null; por_confirmar: boolean }[] = [];
+  if (puedeOperarNomina) {
+    const { data: filasParam } = await supabase
+      .from("payroll_params")
+      .select("jurisdiccion, anio, clave, valor, descripcion, fuente, por_confirmar")
+      .lte("anio", anioResultados)
+      .order("jurisdiccion", { ascending: true })
+      .order("clave", { ascending: true });
+    const mejor = new Map<string, (typeof parametrosNomina)[number]>();
+    for (const f of (filasParam ?? []) as typeof parametrosNomina) {
+      const prev = mejor.get(f.clave);
+      if (!prev || f.anio > prev.anio) mejor.set(f.clave, f);
+    }
+    parametrosNomina = Array.from(mejor.values());
+  }
   const idsCorridas = (nomCorridas ?? []).map((c) => c.id);
   const { data: nomLineas } = idsCorridas.length
     ? await supabase
@@ -433,6 +451,9 @@ export default async function CpaClientePage({
           corridas: (nomCorridas ?? []) as never[],
           lineas: (nomLineas ?? []) as never[],
           config: (nomConfig ?? null) as never,
+          puedeOperar: puedeOperarNomina,
+          parametros: parametrosNomina as never[],
+          entidadNombre: entidad.name,
         }}
         entityId={entityId}
         ownerId={entidad.owner_id}

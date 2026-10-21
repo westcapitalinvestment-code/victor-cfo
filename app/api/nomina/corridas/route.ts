@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { calcularCorrida, entidadDelUsuario, exigirNomina, type EntradaCorrida } from "@/lib/nomina-server";
+import { actorNomina, calcularCorrida, registrarNomina, type EntradaCorrida } from "@/lib/nomina-server";
 
 export async function GET(req: NextRequest) {
   const supabase = createClient();
-  const g = await exigirNomina(supabase);
-  if ("error" in g) return g.error;
   const entityId = req.nextUrl.searchParams.get("entityId") ?? "";
-  if (!(await entidadDelUsuario(supabase, g.userId, entityId))) {
-    return NextResponse.json({ error: "Entidad no encontrada." }, { status: 404 });
-  }
-  const { data, error } = await supabase
+  const a = await actorNomina(supabase, entityId);
+  if ("error" in a) return a.error;
+  const { g } = a;
+  const { data, error } = await g.db
     .from("payroll_runs")
-    .select("id, anio, frecuencia, periodo_inicio, periodo_fin, fecha_pago, estado, totales, depositos, created_at")
+    .select("id, anio, frecuencia, periodo_inicio, periodo_fin, fecha_pago, estado, totales, depositos, created_at, creada_por, creada_por_rol, aprobada_por, aprobada_en")
     .eq("owner_id", g.userId)
     .eq("entity_id", entityId)
     .order("fecha_pago", { ascending: false })
@@ -25,13 +23,16 @@ export async function GET(req: NextRequest) {
 // una foto de las tasas usadas para poder auditarla después.
 export async function POST(req: NextRequest) {
   const supabase = createClient();
-  const g = await exigirNomina(supabase);
-  if ("error" in g) return g.error;
   const body = (await req.json().catch(() => null)) as EntradaCorrida | null;
   if (!body) return NextResponse.json({ error: "Cuerpo inválido." }, { status: 400 });
+  const a = await actorNomina(supabase, String(body.entityId ?? ""));
+  if ("error" in a) return a.error;
+  const { g } = a;
+  // Contable sin permiso de aprobar directo → la corrida queda pendiente del dueño.
+  const estadoNuevo = g.actor === "contable" && !g.apruebaDirecto ? "pendiente" : "aprobada";
 
   // Evita guardar dos veces el mismo periodo (duplicaría los acumulados del año).
-  const { data: dup } = await supabase
+  const { data: dup } = await g.db
     .from("payroll_runs")
     .select("id")
     .eq("owner_id", g.userId)
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   let r: Awaited<ReturnType<typeof calcularCorrida>>;
   try {
-    r = await calcularCorrida(supabase, g.userId, body);
+    r = await calcularCorrida(g.db, g.userId, body);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "No se pudo calcular la nómina." }, { status: 500 });
   }
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
   const res = r.resultado;
   if (!res.asientoCuadra) return NextResponse.json({ error: "El asiento contable no cuadra; no se guardó la corrida." }, { status: 500 });
 
-  const { data: run, error } = await supabase
+  const { data: run, error } = await g.db
     .from("payroll_runs")
     .insert({
       owner_id: g.userId,
@@ -67,7 +68,11 @@ export async function POST(req: NextRequest) {
       periodo_inicio: body.periodoInicio,
       periodo_fin: body.periodoFin,
       fecha_pago: body.fechaPago,
-      estado: "aprobada",
+      estado: estadoNuevo,
+      creada_por: g.email,
+      creada_por_rol: g.actor === "contable" ? "contable" : "dueno",
+      aprobada_por: estadoNuevo === "aprobada" ? g.email : null,
+      aprobada_en: estadoNuevo === "aprobada" ? new Date().toISOString() : null,
       totales: res.resumen.totales,
       depositos: { ...res.resumen.depositos, ...res.vencimiento },
       asiento: res.resumen.asiento,
@@ -106,10 +111,15 @@ export async function POST(req: NextRequest) {
     base_sinot: l.baseSinot,
     detalle: l,
   }));
-  const { error: errLineas } = await supabase.from("payroll_run_lines").insert(filas);
+  const { error: errLineas } = await g.db.from("payroll_run_lines").insert(filas);
   if (errLineas) {
-    await supabase.from("payroll_runs").delete().eq("id", run.id); // no dejar una corrida a medias
+    await g.db.from("payroll_runs").delete().eq("id", run.id); // no dejar una corrida a medias
     return NextResponse.json({ error: errLineas.message }, { status: 500 });
   }
-  return NextResponse.json({ ok: true, id: run.id });
+  await registrarNomina(g, body.entityId, estadoNuevo === "pendiente" ? "corrida_enviada_a_aprobacion" : "corrida_aprobada", {
+    run_id: run.id,
+    periodo: `${body.periodoInicio} a ${body.periodoFin}`,
+    bruto: res.resumen.totales.bruto,
+  });
+  return NextResponse.json({ ok: true, id: run.id, estado: estadoNuevo });
 }

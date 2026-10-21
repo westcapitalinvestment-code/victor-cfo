@@ -49,7 +49,14 @@ export type NominaCorrida = {
   asiento: { cuenta: string; debito: number; credito: number }[] | null;
   advertencias: string[] | null;
 };
-export type NominaConfig = { suta_tasa: number | null; cfse_tasa: number | null; cfse_poliza: string | null; futa_aplica: boolean } | null;
+export type NominaConfig = {
+  suta_tasa: number | null;
+  cfse_tasa: number | null;
+  cfse_poliza: string | null;
+  futa_aplica: boolean;
+  cpa_puede_nomina?: boolean;
+  cpa_aprueba_directo?: boolean;
+} | null;
 
 const n = (v: unknown) => Number(v ?? 0);
 const fecha = (f: string) => {
@@ -63,12 +70,14 @@ export default function NominaCpa({
   lineas,
   config,
   anio,
+  puedeOperar = false,
 }: {
   empleados: NominaEmpleado[];
   corridas: NominaCorrida[];
   lineas: NominaLinea[];
   config: NominaConfig;
   anio: number;
+  puedeOperar?: boolean;
 }) {
   const [abierta, setAbierta] = useState<string | null>(null);
   const nombre = new Map(empleados.map((e) => [e.id, e.nombre]));
@@ -92,7 +101,10 @@ export default function NominaCpa({
     <div className="flex flex-col gap-3">
       <div className="vc-card border-amb/30 bg-amb/5">
         <p className="text-xs text-muted">
-          Solo lectura. VICTOR calcula la nómina con las tasas configuradas; no radica planillas ni deposita. Las tasas marcadas
+          {puedeOperar
+            ? "Resumen del año (solo lectura) de las corridas aprobadas. "
+            : "Solo lectura: el dueño no ha activado que usted corra la nómina desde aquí. "}
+          VICTOR calcula la nómina con las tasas configuradas; no radica planillas ni deposita. Las tasas marcadas
           “por confirmar” (SINOT, choferil, exenciones del 499 R-4, SUTA por defecto, FUTA) son estimado hasta que usted las valide, y la
           retención de Hacienda debe cotejarse con la tabla oficial de SURI.
         </p>
