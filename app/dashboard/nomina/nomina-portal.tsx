@@ -279,8 +279,8 @@ export default function NominaPortal({
     { id: "corrida", label: "Corrida", icon: "ti-calculator" },
     { id: "empleados", label: "Empleados", icon: "ti-users" },
     { id: "historial", label: "Historial", icon: "ti-history" },
-    { id: "tasas", label: "Tasas", icon: "ti-percentage" },
     { id: "licencias", label: "Licencias", icon: "ti-beach" },
+    { id: "tasas", label: "Tasas", icon: "ti-percentage" },
     { id: "reportes", label: "Reportes", icon: "ti-file-analytics" },
     { id: "auditoria", label: "Auditoría", icon: "ti-shield-check" },
   ];
