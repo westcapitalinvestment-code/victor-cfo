@@ -125,18 +125,18 @@ export default function NominaCpa({
                     type="button"
                     onClick={() => setAbierta(open ? null : c.id)}
                     aria-expanded={open}
-                    className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-blue-50"
+                    className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-bg"
                   >
                     <span className="flex items-center gap-2 text-sm">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold leading-none text-white">{open ? "−" : "+"}</span>
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue text-sm font-semibold leading-none text-white">{open ? "−" : "+"}</span>
                       <span>
-                        <span className="font-medium text-blue-700">Pago {fecha(c.fecha_pago)}</span>{" "}
+                        <span className="font-medium text-blue underline underline-offset-2">Pago {fecha(c.fecha_pago)}</span>{" "}
                         <span className="text-xs text-muted">({fecha(c.periodo_inicio)} – {fecha(c.periodo_fin)}, {c.frecuencia})</span>
                       </span>
                     </span>
                     <span className="flex items-center gap-2">
                       <span className="text-sm font-medium">{formatMoney(n(t.bruto))}</span>
-                      <span className="text-xs text-blue-700">{open ? "Ocultar detalle" : "Ver detalle"}</span>
+                      <span className="text-xs font-medium text-blue underline underline-offset-2">{open ? "Ocultar detalle" : "Ver detalle"}</span>
                     </span>
                   </button>
                   {open && (

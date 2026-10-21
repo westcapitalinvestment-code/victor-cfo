@@ -936,10 +936,10 @@ function HistorialTab({ corridas, onCambio }: { corridas: Corrida[]; onCambio: (
     <div className="flex flex-col gap-3">
       {corridas.map((c) => (
         <div key={c.id} className="vc-card">
-          <button className="flex w-full items-start justify-between gap-3 rounded-md text-left transition-colors hover:bg-blue-50" onClick={() => abrir(c.id)} aria-expanded={abierta === c.id}>
+          <button className="flex w-full items-start justify-between gap-3 rounded-md text-left transition-colors hover:bg-bg" onClick={() => abrir(c.id)} aria-expanded={abierta === c.id}>
             <div>
-              <p className="mb-0.5 flex items-center gap-1.5 text-xs font-medium text-blue-700">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-xs leading-none text-white">{abierta === c.id ? "−" : "+"}</span>
+              <p className="mb-0.5 flex items-center gap-1.5 text-xs font-medium text-blue">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue text-xs leading-none text-white">{abierta === c.id ? "−" : "+"}</span>
                 {abierta === c.id ? "Ocultar detalle" : "Ver detalle"}
               </p>
               <p className="text-sm font-medium">
