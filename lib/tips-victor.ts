@@ -53,7 +53,7 @@ export const TIPS_VICTOR: TipVictor[] = [
       "Los vencimientos se olvidan justo cuando más molestan. Anota la fecha de vencimiento de tus documentos importantes y activa un aviso antes, no el mismo día.",
       "Guarda una foto de cada uno: el día que lo necesites en una gestión, lo tendrás en el celular.",
     ],
-    accion: { texto: "Guardar un documento en la Bóveda", path: "/dashboard/documentos/nuevo" },
+    accion: { texto: "Guardar un documento en Documentos", path: "/dashboard/documentos/nuevo" },
   },
   {
     asunto: "Tip de VICTOR: separa lo personal de lo del negocio",

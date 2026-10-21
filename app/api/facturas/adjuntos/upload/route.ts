@@ -5,7 +5,7 @@ import { subirArchivoR2 } from "@/lib/r2";
 
 // Sube UN archivo de "Evidencia del trabajo" (reporte/foto) de una factura
 // a Cloudflare R2 y crea su fila en invoice_attachments — calcado de
-// /api/documentos/upload, mismo patrón de la Bóveda.
+// /api/documentos/upload, mismo patrón de Documentos.
 const TAMANO_MAX_BYTES = 15 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {

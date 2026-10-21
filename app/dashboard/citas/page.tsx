@@ -4,7 +4,7 @@ import Link from "next/link";
 
 // Lista de Citas — vive fuera del bottom nav (mismo patrón que
 // /dashboard/clientes), se llega desde la tarjeta "Próxima cita" del Inicio
-// o desde el link dentro de Bóveda. A diferencia de documentos/page.tsx no
+// o desde el link dentro de Documentos. A diferencia de documentos/page.tsx no
 // hay archivos adjuntos ni tipo de renovación — solo fecha, hora y costo
 // estimado. Las citas ya marcadas "hecha" se muestran al final, tachadas,
 // en vez de desaparecer — conservan el historial (ej. cuánto costó al
@@ -36,7 +36,7 @@ export default async function CitasPage() {
         </Link>
       </div>
 
-      {/* Mismo par de tabs que en Bóveda, con Citas activo aquí. */}
+      {/* Mismo par de tabs que en Documentos, con Citas activo aquí. */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Link
           href="/dashboard/documentos"

@@ -7,7 +7,7 @@ import { sendWelcomeEmail } from "@/lib/email";
 // Reenvío manual del correo de bienvenida (21 sept 2026, pedido de Joel: los
 // primeros usuarios Core/Pro reales se registraron ANTES de que
 // termináramos de personalizar el copy — nombre, escalonado, Citas,
-// Metas/Bóveda, cierre con soporte@victorcfo.com — así que su correo
+// Metas/Documentos, cierre con soporte@victorcfo.com — así que su correo
 // automático salió con la versión vieja o genérica). Este botón vive en el
 // panel de Usuarios del Dashboard de Operaciones y deja mandarlo de nuevo
 // con la copy actual, sin tener que tocar Stripe ni re-disparar el webhook.

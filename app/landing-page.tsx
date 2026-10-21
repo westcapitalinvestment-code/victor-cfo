@@ -269,7 +269,7 @@ export default function LandingPage() {
             </div>
             <div className={styles.victorFeature}>
               <div className={styles.victorFeatureIcon}>🔒</div>
-              <div className={styles.victorFeatureTitle}>Bóveda de documentos</div>
+              <div className={styles.victorFeatureTitle}>Documentos</div>
               <div className={styles.victorFeatureDesc}>Sube cualquier documento — yo lo leo, categorizo y recuerdo por ti.</div>
             </div>
             <div className={styles.victorFeature}>
@@ -545,7 +545,7 @@ export default function LandingPage() {
                 </div>
                 <div className={styles.addonDesc}>
                   $10/mes Secretaria — acceso para llevar los números · $20/mes Administrador — acceso ampliado a
-                  Pagos, Metas, Bóveda y Cuentas (solo lectura)
+                  Pagos, Metas, Documentos y Cuentas (solo lectura)
                 </div>
               </div>
             </div>

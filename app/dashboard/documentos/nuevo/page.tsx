@@ -7,7 +7,7 @@ import { camaraNativaDisponible, tomarFotoNativa } from "@/lib/capacitor-camera"
 
 type ArchivoPendiente = { localId: string; file: File; etiqueta: string };
 
-// Bóveda Inteligente — guarda la metadata (nombre, tipo, fecha de
+// Documentos Inteligentes — guarda la metadata (nombre, tipo, fecha de
 // vencimiento) y, si el usuario los sube, los archivos reales (fotos o
 // PDFs) en Cloudflare R2. Los archivos son opcionales y pueden ser
 // VARIOS por documento (ej. frente/atrás de una licencia, o varias

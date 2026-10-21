@@ -24,7 +24,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "resumen", label: "Resumen", icon: "ti-chart-bar" },
   { id: "categorias", label: "Por categoría", icon: "ti-category" },
   { id: "impuestos", label: "Impuestos", icon: "ti-receipt-tax" },
-  { id: "boveda", label: "Bóveda", icon: "ti-folder" },
+  { id: "boveda", label: "Documentos", icon: "ti-folder" },
   { id: "reportes", label: "Reportes", icon: "ti-download" },
 ];
 
@@ -154,7 +154,7 @@ export default async function CpaPersonalPage({
   // ---- Impuestos
   const estimado = tab === "impuestos" ? await obtenerEstimadoImpuestos(supabase, ownerId, null, hoyStr) : null;
 
-  // ---- Bóveda: la carga/subida/renovación vive en <BovedaCompartida /> (/api/cpa/boveda).
+  // ---- Documentos: la carga/subida/renovación vive en <BovedaCompartida /> (/api/cpa/boveda).
 
   // ---- Alertas (qué debe / qué falta, en concreto)
   type AlertaP = { tono: "red" | "amb"; titulo: string; detalle: string };

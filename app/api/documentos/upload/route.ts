@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { subirArchivoR2 } from "@/lib/r2";
 
-// Sube UN archivo de la Bóveda a Cloudflare R2 y crea su fila en
+// Sube UN archivo de Documentos a Cloudflare R2 y crea su fila en
 // document_files (owner_id, document_id, r2_key, etiqueta opcional). Se
 // llama una vez por cada foto/PDF que el usuario adjunte — un documento
 // puede tener 0, 1 o varios archivos (ej. frente/atrás de una licencia,
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   // Confirma que el documento existe y que quien llama tiene acceso —
   // SIN forzar owner_id = user.id, porque un admin/secretaria nivel
-  // Administrador (migración 0056) puede subir documentos a la Bóveda del
+  // Administrador (migración 0056) puede subir documentos a Documentos del
   // DUEÑO, con su propio user.id distinto al owner_id real. RLS ya decide
   // si esta fila es visible (dueño o admin autorizado) — aquí solo se lee
   // el owner_id VERDADERO del documento para guardar el archivo bajo el

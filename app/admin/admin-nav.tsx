@@ -11,7 +11,7 @@ const SECCIONES = [
   { id: "facturacion", label: "Facturación", icon: "ti-file-invoice" },
   { id: "pagos", label: "Pagos", icon: "ti-cash" },
   { id: "metas", label: "Metas", icon: "ti-target" },
-  { id: "boveda", label: "Bóveda", icon: "ti-folder" },
+  { id: "boveda", label: "Documentos", icon: "ti-folder" },
   { id: "cuentas", label: "Cuentas", icon: "ti-building-bank" },
 ] as const;
 

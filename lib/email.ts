@@ -45,7 +45,7 @@ function escapeHtml(texto: string): string {
     .replace(/"/g, "&quot;");
 }
 
-// Aviso al dueño cuando su contable sube o renueva un documento en la Bóveda
+// Aviso al dueño cuando su contable sube o renueva un documento en Documentos
 // compartida (15 oct 2026).
 export async function sendDocumentoDeContableEmail(params: {
   toEmail: string;
@@ -65,7 +65,7 @@ export async function sendDocumentoDeContableEmail(params: {
   const doc = escapeHtml(params.documentoNombre);
 
   const textoPlano =
-    `Tu contable ${params.contableNombre} ${accion} "${params.documentoNombre}" en tu Bóveda de VICTOR.${venceTxt}\n\n` +
+    `Tu contable ${params.contableNombre} ${accion} "${params.documentoNombre}" en tus Documentos de VICTOR.${venceTxt}\n\n` +
     `Míralo aquí: ${link}\n\n` +
     `— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}`;
 
@@ -75,8 +75,8 @@ export async function sendDocumentoDeContableEmail(params: {
     <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
     <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
   </div>
-  <p>Tu contable <strong>${nombre}</strong> ${accion} <strong>${doc}</strong> en tu Bóveda.${escapeHtml(venceTxt)}</p>
-  <p style="text-align: center; margin: 24px 0;"><a href="${link}" style="background: #0F766E; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">Ver mi Bóveda</a></p>
+  <p>Tu contable <strong>${nombre}</strong> ${accion} <strong>${doc}</strong> en tus Documentos.${escapeHtml(venceTxt)}</p>
+  <p style="text-align: center; margin: 24px 0;"><a href="${link}" style="background: #0F766E; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">Ver mi Documentos</a></p>
   <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
   <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
 </div>`.trim();
@@ -85,7 +85,7 @@ export async function sendDocumentoDeContableEmail(params: {
     const { error } = await resend.emails.send({
       from: FROM,
       to: params.toEmail,
-      subject: `Tu contable ${accion} un documento en tu Bóveda`,
+      subject: `Tu contable ${accion} un documento en tus Documentos`,
       text: textoPlano,
       html: htmlCorreo,
     });
@@ -746,10 +746,10 @@ export async function sendWelcomeEmail(params: {
     ["Conecta tus bancos y tarjetas", "Así VICTOR empieza a ver tus gastos e ingresos automáticamente, sin que tengas que anotar nada a mano. La conexión la maneja Plaid directo con tu banco — el mismo sistema que usan Venmo, Chime, American Express y Robinhood — así que VICTOR nunca ve ni guarda tu contraseña, solo recibe tus transacciones. Aquí en Puerto Rico, Plaid conecta bien bancos locales como BPPR, FirstBank, Oriental y Mercury, algo que QuickBooks Online no siempre logra. Si prefieres no conectar el banco todavía, también puedes subir tus estados de cuenta (CSV o PDF) y categorizamos igual."],
     ["VICTOR aprende de ti", "Al principio te va a preguntar para categorizar bien tus gastos — mientras más lo uses, más te va a conocer, y más lo va a hacer solo."],
     ["Usa Citas como tu asistente diario", "Agenda tus compromisos ahí y VICTOR te los recuerda, para que no se te olvide nada importante."],
-    ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en la Bóveda guardar pólizas, contratos o cualquier documento importante."],
+    ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en Documentos guardar pólizas, contratos o cualquier documento importante."],
   ];
 
-  // Pro lleva TODO lo de Core (aprende de ti, Citas, Metas/Bóveda) más lo
+  // Pro lleva TODO lo de Core (aprende de ti, Citas, Metas/Documentos) más lo
   // propio de negocio (21 sept 2026, pedido de Joel: "añádele a Pro lo que
   // le falta de Core más lo de Pro") — un usuario Pro también tiene lado
   // personal, así que no pierde esos pasos por pagar el plan más caro.
@@ -761,7 +761,7 @@ export async function sendWelcomeEmail(params: {
     ],
     ["VICTOR aprende de ti", "Al principio te va a preguntar para categorizar bien tus gastos — mientras más lo uses, más te va a conocer, y más lo va a hacer solo. También le puedes pedir que te cree una factura o te explique tus números, de negocio o personales, siempre disponible abajo a la derecha."],
     ["Usa Citas como tu asistente diario", "Agenda tus compromisos ahí y VICTOR te los recuerda, para que no se te olvide nada importante."],
-    ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en la Bóveda guardar pólizas, contratos o cualquier documento importante."],
+    ["Pon tus Metas y guarda documentos", "En Metas puedes trackear para qué estás ahorrando, y en Documentos guardar pólizas, contratos o cualquier documento importante."],
     // Sin mencionar "invita a tu contable" todavía (21 sept 2026, pedido de
     // Joel: aún no está listo para promoverlo — falta reunirse con su
     // contable para definir cómo quiere que funcione ese flujo antes de
@@ -1363,14 +1363,14 @@ export async function sendNurtureFeaturesGratisEmail(params: {
   //
   // Ojo con no prometer de más (mismo ajuste que sendWelcomeGratisEmail):
   // en plan gratis no hay chat con VICTOR, así que nada de "dile a VICTOR"
-  // ni "VICTOR te lo recuerda" — Citas y Bóveda SÍ mandan recordatorio por
+  // ni "VICTOR te lo recuerda" — Citas y Documentos SÍ mandan recordatorio por
   // notificación push (el cron no distingue plan, ver
   // app/api/cron/notificaciones-push), pero eso es la app avisando, no
   // VICTOR conversando contigo.
   const pasos: [string, string][] = [
     ["Pon tu primera Meta", "Crea una Meta desde el dashboard y anota cuánto quieres ahorrar — así ves tu progreso organizado, sin llevar la cuenta a mano."],
     ["Agenda algo en Citas", "Un pago pendiente, una cita médica, lo que sea — actívale las notificaciones y te llega un aviso antes de la fecha."],
-    ["Guarda un documento en la Bóveda", "Sube una póliza, un contrato o el marbete del carro — todo en un solo lugar, con notificación antes de que venza."],
+    ["Guarda un documento en Documentos", "Sube una póliza, un contrato o el marbete del carro — todo en un solo lugar, con notificación antes de que venza."],
   ];
 
   const textoPlano =

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Bóveda compartida del contable (15 oct 2026). Lista los documentos del
+// Documentos compartidos del contable (15 oct 2026). Lista los documentos del
 // cliente (personales compartidos o de la entidad), muestra qué está vencido
 // o por vencer, y deja subir documentos nuevos o renovar uno existente
 // (nueva fecha + archivo). Cada subida/renovación avisa al dueño por push y
@@ -86,7 +86,7 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
     const res = await fetch(`/api/cpa/boveda?${qs.toString()}`);
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setError(json.error ?? "No se pudo cargar la Bóveda.");
+      setError(json.error ?? "No se pudo cargar Documentos.");
       setDocs([]);
       return;
     }

@@ -4,7 +4,7 @@ import { sendAdminInvitationEmail } from "@/lib/email";
 
 // Los 5 toggles "vienen todos encendidos" cuando el dueño elige el nivel
 // Administrador ($20/mes) — no tiene caso ofrecerle apagar un toggle
-// individual a alguien que ya tiene Pagos/Metas/Bóveda/Cuentas completos.
+// individual a alguien que ya tiene Pagos/Metas/Documentos/Cuentas completos.
 // Se fuerza aquí, en el servidor, y no se confía en lo que mande el cliente
 // (defensa en profundidad — igual que se valida entityId contra el owner).
 const PERMISOS_ADMINISTRADOR_TOTAL: Record<string, boolean> = {
@@ -23,7 +23,7 @@ const PERMISOS_ADMINISTRADOR_TOTAL: Record<string, boolean> = {
 // se copian a account_members.permissions cuando acepte.
 //
 // admin_tier (migración 0056, 2 sept 2026): 'secretaria' ($10/mes, alcance
-// original) o 'administrador' ($20/mes, además Pagos/Metas/Bóveda/Cuentas —
+// original) o 'administrador' ($20/mes, además Pagos/Metas/Documentos/Cuentas —
 // ver 0056 para las políticas RLS que dependen de este valor).
 export async function POST(req: NextRequest) {
   const supabase = createClient();

@@ -7,9 +7,9 @@ import { contablePuedeUsarBoveda, entidadEsDelDueno } from "@/lib/cpa-boveda";
 import { notificarOwner } from "@/lib/push";
 import { sendDocumentoDeContableEmail } from "@/lib/email";
 
-// Bóveda compartida con el contable (15 oct 2026). El contable lista, sube,
+// Documentos compartidos con el contable (15 oct 2026). El contable lista, sube,
 // renueva (nueva fecha de vencimiento + archivo) y borra SUS propios archivos
-// en la Bóveda de un cliente. Todo va con service role después de comprobar
+// en Documentos de un cliente. Todo va con service role después de comprobar
 // el permiso con contablePuedeUsarBoveda — un contable no tiene RLS de
 // escritura sobre documents/document_files.
 //
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   if (!ownerId) return NextResponse.json({ error: "Falta ownerId." }, { status: 400 });
 
   if (!(await contablePuedeUsarBoveda({ email: user.email, ownerId, entityId }))) {
-    return NextResponse.json({ error: "Sin acceso a esta Bóveda." }, { status: 403 });
+    return NextResponse.json({ error: "Sin acceso a estos Documentos." }, { status: 403 });
   }
 
   const admin = createAdminClient();
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!(await contablePuedeUsarBoveda({ email: user.email, ownerId, entityId }))) {
-    return NextResponse.json({ error: "Sin acceso a esta Bóveda." }, { status: 403 });
+    return NextResponse.json({ error: "Sin acceso a estos Documentos." }, { status: 403 });
   }
   if (entityId && !(await entidadEsDelDueno(entityId, ownerId))) {
     return NextResponse.json({ error: "Entidad inválida." }, { status: 400 });
@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
     try {
       await subirArchivoR2(key, Buffer.from(await file.arrayBuffer()), file.type || "application/octet-stream");
     } catch (err) {
-      console.error("Error subiendo a R2 (bóveda contable):", err);
+      console.error("Error subiendo a R2 (documentos contables):", err);
       return NextResponse.json({ error: "No se pudo subir un archivo. Intenta de nuevo." }, { status: 500 });
     }
     const { error: fErr } = await admin
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
     const accion = renovado ? "renovó" : "subió";
     await Promise.allSettled([
       notificarOwner(ownerId, {
-        title: "Tu contable actualizó tu Bóveda",
+        title: "Tu contable actualizó tus Documentos",
         body: `${quien} ${accion} "${docNombre}".`,
         url: entityId ? "/dashboard/negocio/documentos" : "/dashboard/documentos",
       }),
@@ -262,7 +262,7 @@ export async function DELETE(req: NextRequest) {
   try {
     await borrarArchivoR2(archivo.r2_key);
   } catch (err) {
-    console.error("Error borrando de R2 (bóveda contable):", err);
+    console.error("Error borrando de R2 (documentos contables):", err);
   }
   await admin.from("document_files").delete().eq("id", fileId);
   return NextResponse.json({ ok: true });

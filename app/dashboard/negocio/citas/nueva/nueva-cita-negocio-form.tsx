@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 
 // Igual que app/dashboard/citas/nueva/page.tsx pero con entity_id fijo (la
 // entidad activa, resuelta server-side) — sin placeholders de ejemplo, misma
-// regla que ya aplica en Metas/Bóveda de negocio (1 sept 2026).
+// regla que ya aplica en Metas/Documentos de negocio (1 sept 2026).
 export default function NuevaCitaNegocioForm({ entidadId }: { entidadId: string }) {
   const router = useRouter();
   const supabase = createClient();

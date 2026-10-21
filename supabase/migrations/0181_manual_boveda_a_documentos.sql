@@ -1,0 +1,5 @@
+-- 0181: renombrar "Bóveda" a "Documentos" en el manual de VICTOR (21 oct 2026,
+-- pedido de Joel: "Bóveda" en PR solo se usa para el banco). Idempotente.
+UPDATE manual_articulos
+SET contenido = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(contenido, $a$Bóveda de documentos$a$, $b$Documentos$b$), $a$Bóveda Inteligente$a$, $b$Documentos Inteligentes$b$), $a$BÓVEDA$a$, $b$DOCUMENTOS$b$), $a$Bóveda compartida$a$, $b$Documentos compartidos$b$), $a$Bóveda de recibos$a$, $b$Recibos$b$), $a$Bóveda personal$a$, $b$Documentos personales$b$), $a$Bóveda de negocio$a$, $b$Documentos de negocio$b$), $a$de la Bóveda$a$, $b$de Documentos$b$), $a$en la Bóveda$a$, $b$en Documentos$b$), $a$a la Bóveda$a$, $b$a Documentos$b$), $a$la Bóveda$a$, $b$Documentos$b$), $a$tu Bóveda$a$, $b$tus Documentos$b$), $a$su Bóveda$a$, $b$sus Documentos$b$), $a$esta Bóveda$a$, $b$estos Documentos$b$), $a$en Bóveda$a$, $b$en Documentos$b$), $a$bóveda contable$a$, $b$documentos contables$b$), $a$Bóveda$a$, $b$Documentos$b$)
+WHERE contenido ~ '(Bóveda|BÓVEDA|bóveda)';

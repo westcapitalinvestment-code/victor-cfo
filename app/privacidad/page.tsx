@@ -31,7 +31,7 @@ export default function PoliticaPrivacidadPage() {
         </li>
         <li className="mb-1">
           <strong>Documentos y archivos:</strong> los documentos, fotos, certificados y adjuntos que subes
-          (por ejemplo, la Bóveda, evidencia de pagos, certificados de relevo o de registro de comerciante,
+          (por ejemplo, Documentos, evidencia de pagos, certificados de relevo o de registro de comerciante,
           logos).
         </li>
         <li className="mb-1">

@@ -30,7 +30,7 @@ export type OwnerEfectivo = {
   permisos: Record<string, boolean>;
   // Nivel de acceso (migración 0056, 2 sept 2026): 'secretaria' = alcance
   // original (Facturas/Clientes + los 5 toggles); 'administrador' = además
-  // Pagos, Metas, Bóveda y Cuentas (solo lectura) — ver 0056 para el detalle
+  // Pagos, Metas, Documentos y Cuentas (solo lectura) — ver 0056 para el detalle
   // de qué políticas RLS dependen de este valor.
   adminTier: AdminTier;
 };

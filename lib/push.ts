@@ -122,7 +122,7 @@ export async function notificarFounder(payload: PayloadNotificacion): Promise<vo
 }
 
 // Avisar por push (PWA + app nativa) a un dueño de cuenta concreto — lo usa
-// la Bóveda compartida para decirle "tu contable subió/renovó un documento".
+// la Documentos compartidos para decirle "tu contable subió/renovó un documento".
 // Best-effort: nunca lanza.
 export async function notificarOwner(ownerId: string, payload: PayloadNotificacion): Promise<void> {
   try {

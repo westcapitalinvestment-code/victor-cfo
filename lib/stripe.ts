@@ -138,7 +138,7 @@ export function priceIdAddonSecretaria(): string | null {
 
 // Addon "Administrador" — 2 sept 2026, nivel ampliado ($20.00/mes POR SEAT,
 // migración 0056): además de todo lo de Secretaria, incluye Pagos, Metas,
-// Bóveda y Cuentas (solo lectura). Es un SEGUNDO subscription item aparte
+// Documentos y Cuentas (solo lectura). Es un SEGUNDO subscription item aparte
 // del de Secretaria — un dueño puede tener seats de ambos niveles a la vez.
 export function priceIdAddonAdministrador(): string | null {
   return process.env.STRIPE_PRICE_ADDON_ADMINISTRADOR || null;

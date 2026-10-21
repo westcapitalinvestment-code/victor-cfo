@@ -12,21 +12,21 @@ import { usePathname } from "next/navigation";
 const TABS_PERSONAL = [
   { href: "/dashboard", label: "Inicio", icon: "ti-home" },
   { href: "/dashboard/metas", label: "Metas", icon: "ti-target" },
-  { href: "/dashboard/documentos", label: "Bóveda", icon: "ti-file-text" },
+  { href: "/dashboard/documentos", label: "Documentos", icon: "ti-file-text" },
   { href: "/dashboard/gastos", label: "Transacciones", icon: "ti-chart-bar" },
   { href: "/dashboard/cuentas", label: "Cuentas", icon: "ti-credit-card" },
 ];
 
 // Mismos 5 íconos pero apuntando a las versiones de negocio (1 sept 2026) —
 // se usan en vez de TABS_PERSONAL cuando ya estás navegando dentro de
-// /dashboard/negocio/..., para que Inicio/Gastos/Metas/Bóveda/Cuentas se
+// /dashboard/negocio/..., para que Inicio/Gastos/Metas/Documentos/Cuentas se
 // queden en el contexto de la entidad activa en vez de regresarte a
 // Personal. La entidad misma vive en la cookie (lib/entidad-activa.ts), no
 // en la URL, así que estos hrefs no cambian por entidad.
 const TABS_NEGOCIO_INICIO = [
   { href: "/dashboard/negocio", label: "Inicio", icon: "ti-home" },
   { href: "/dashboard/negocio/metas", label: "Metas", icon: "ti-target" },
-  { href: "/dashboard/negocio/documentos", label: "Bóveda", icon: "ti-file-text" },
+  { href: "/dashboard/negocio/documentos", label: "Documentos", icon: "ti-file-text" },
   { href: "/dashboard/negocio/gastos", label: "Transacciones", icon: "ti-chart-bar" },
   { href: "/dashboard/negocio/cuentas", label: "Cuentas", icon: "ti-credit-card" },
 ];
@@ -84,7 +84,7 @@ export default function BottomNav({ esFounder = false }: { esFounder?: boolean }
   // cuelgan de /dashboard/negocio. 7 sept 2026, bug reportado por Joel:
   // esta comprobación solo miraba /dashboard/negocio, así que en Facturas,
   // Pagos o Equipo el primer grupo de íconos (Inicio/Transacciones/Metas/
-  // Bóveda/Cuentas) se quedaba mostrando las versiones de PERSONAL — el
+  // Documentos/Cuentas) se quedaba mostrando las versiones de PERSONAL — el
   // usuario tocaba "Inicio" desde Pagos y caía en el Home Personal en vez
   // del de Negocio.
   const enNegocio =

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 // se muestra como el numerito rojo sobre el ícono de la app instalada
 // (Badging API). Dos fuentes, las mismas que ya usa VICTOR/el dashboard:
 // transacciones sin categorizar (todas, no solo un lote) + documentos que
-// vencen en 7 días o menos (lo mismo que la Bóveda pinta en rojo — si
+// vencen en 7 días o menos (lo mismo que Documentos pinta en rojo — si
 // contáramos también los de 30/90 días el número saldría inflado y dejaría
 // de sentirse "urgente", que es el punto del badge).
 export async function GET() {

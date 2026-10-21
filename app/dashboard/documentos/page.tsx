@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
-// "Bóveda" del mockup — lista de documentos con su fecha de vencimiento.
+// "Documentos" del mockup — lista de documentos con su fecha de vencimiento.
 // Cada documento puede tener varios archivos adjuntos (document_files) —
 // aquí solo mostramos cuántos tiene, sin ambigüedad de "cuál ver"; para
 // ver/agregar/borrar archivos individuales se entra a Editar.
@@ -31,7 +31,7 @@ export default async function DocumentosPage() {
   return (
     <div className="vc-shell">
       <div className="mb-3 flex items-center justify-between">
-        <h1 className="text-lg font-medium">Bóveda</h1>
+        <h1 className="text-lg font-medium">Documentos</h1>
         <Link href="/dashboard/documentos/nuevo" className="text-xs font-medium text-teal hover:opacity-80">
           + Nuevo
         </Link>

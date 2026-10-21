@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
-// Permiso del contable sobre la Bóveda de un cliente (15 oct 2026).
+// Permiso del contable sobre Documentos de un cliente (15 oct 2026).
 //
 // - Personal (entityId = null): requiere una fila account_members activa
 //   role='cpa' con share_personal = true.

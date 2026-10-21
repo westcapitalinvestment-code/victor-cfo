@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 
-// Bóveda de negocio — mismo componente visual que Bóveda personal
+// Documentos de negocio — mismo componente visual que Documentos personales
 // (app/dashboard/documentos/page.tsx), filtrado por la entidad activa.
 export default async function DocumentosNegocioPage() {
   const supabase = createClient();
@@ -37,7 +37,7 @@ export default async function DocumentosNegocioPage() {
     return (
       <div className="vc-shell">
         <div className="vc-card text-center">
-          <p className="text-sm text-muted">Elige una entidad específica en el selector de arriba para ver su Bóveda.</p>
+          <p className="text-sm text-muted">Elige una entidad específica en el selector de arriba para ver sus Documentos.</p>
         </div>
       </div>
     );
@@ -64,7 +64,7 @@ export default async function DocumentosNegocioPage() {
     <div className="vc-shell">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-medium">Bóveda</h1>
+          <h1 className="text-lg font-medium">Documentos</h1>
           <p className="text-xs text-muted">{entidadActiva?.name}</p>
         </div>
         <Link href="/dashboard/negocio/documentos/nuevo" className="text-xs font-medium text-teal hover:opacity-80">
@@ -72,7 +72,7 @@ export default async function DocumentosNegocioPage() {
         </Link>
       </div>
 
-      {/* Mismo par de tabs que Bóveda personal, con Documentos activo aquí. */}
+      {/* Mismo par de tabs que Documentos personales, con Documentos activo aquí. */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="rounded-pill border border-teal px-3 py-1.5 text-xs font-medium text-teal">Documentos</span>
         <Link

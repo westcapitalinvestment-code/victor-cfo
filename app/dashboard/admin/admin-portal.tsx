@@ -54,7 +54,7 @@ const PERMISOS_ADICIONALES: { key: string; label: string }[] = [
 // un Dr que su esposa es la adm y lleva todo el negocio... como se trabaja
 // eso?") — $20/mes en vez de $10. Trae los 5 toggles de arriba siempre
 // encendidos (por eso no se muestran como editables para este nivel) MÁS
-// acceso a Pagos, Metas, Bóveda y Cuentas (solo ver balances) — nunca
+// acceso a Pagos, Metas, Documentos y Cuentas (solo ver balances) — nunca
 // finanzas personales, en ningún nivel.
 const PERMISOS_ADMINISTRADOR_TOTAL: Record<string, boolean> = {
   ver_ingresos_mes: true,
@@ -66,11 +66,11 @@ const PERMISOS_ADMINISTRADOR_TOTAL: Record<string, boolean> = {
 
 const NIVELES: { id: AdminTier; label: string; precio: string; descripcion: string }[] = [
   { id: "secretaria", label: "Secretaria", precio: "$10/mes", descripcion: "Facturación y clientes" },
-  { id: "administrador", label: "Administrador", precio: "$20/mes", descripcion: "Todo — Pagos, Metas, Bóveda, Cuentas" },
+  { id: "administrador", label: "Administrador", precio: "$20/mes", descripcion: "Todo — Pagos, Metas, Documentos, Cuentas" },
 ];
 
 const ACCESO_BASE = ["Clientes", "Crear facturas", "Registrar cobros", "Ver pendientes"];
-const ACCESO_ADMINISTRADOR = ["Pagos a contratistas", "Metas de negocio", "Bóveda de documentos", "Cuentas (ver balances)"];
+const ACCESO_ADMINISTRADOR = ["Pagos a contratistas", "Metas de negocio", "Documentos", "Cuentas (ver balances)"];
 
 function iniciales(nombre: string | null, email: string): string {
   const base = nombre?.trim() || email;

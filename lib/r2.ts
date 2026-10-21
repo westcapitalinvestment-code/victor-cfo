@@ -3,7 +3,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Cloudflare R2 es compatible con la API de S3 — por eso usamos el SDK de
 // AWS pero apuntando al endpoint de R2 en vez de a AWS. Aquí vive la
-// Bóveda (documents): pólizas, permisos, contratos, licencias.
+// Documentos (documents): pólizas, permisos, contratos, licencias.
 //
 // Mismo patrón de cliente perezoso (lazy singleton) que lib/stripe.ts: si
 // se construye el cliente al cargar el módulo, Next.js lo intenta durante

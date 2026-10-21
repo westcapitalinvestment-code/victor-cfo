@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 // Formularios 480.6SP que el contable subió desde su portal (16 oct 2026).
-// Viven como documentos de la Bóveda (tipo "480.6SP", subido_por_contable), y
+// Viven como documentos de Documentos (tipo "480.6SP", subido_por_contable), y
 // aquí el dueño los ve junto a Reportes de Pagos. La RLS limita a sus
 // documentos; ?entityId= filtra por entidad (sin él, todas las suyas).
 export async function GET(req: NextRequest) {

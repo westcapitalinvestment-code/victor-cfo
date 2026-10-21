@@ -12,7 +12,7 @@ type ArchivoPendiente = { localId: string; file: File; etiqueta: string };
 // archivos (Cloudflare R2) individualmente — un documento puede tener
 // varios (ej. frente/atrás de una licencia), cada uno con su etiqueta.
 //
-// Compartida entre Bóveda personal y Bóveda de negocio (1 sept 2026) — ver
+// Compartida entre Documentos personales y Documentos de negocio (1 sept 2026) — ver
 // el mismo comentario sobre ?volver= en metas/[id]/editar/page.tsx.
 function volverDestino(): string {
   if (typeof window === "undefined") return "/dashboard/documentos";

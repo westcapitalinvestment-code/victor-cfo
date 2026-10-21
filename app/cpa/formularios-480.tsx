@@ -13,7 +13,7 @@ type Doc = {
 
 // Subir las 480.6SP al cliente (16 oct 2026, pedido de Joel): el contable
 // sube el PDF desde Pagos y le llega al dueño (aparece en su Reportes de
-// Pagos y en su Bóveda, con push + correo). Reusa /api/cpa/boveda.
+// Pagos y en sus Documentos, con push + correo). Reusa /api/cpa/boveda.
 export default function Formularios480({ ownerId, entityId }: { ownerId: string; entityId: string | null }) {
   const [docs, setDocs] = useState<Doc[] | null>(null);
   const [miEmail, setMiEmail] = useState("");

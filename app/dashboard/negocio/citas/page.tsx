@@ -69,7 +69,7 @@ export default async function CitasNegocioPage() {
         </Link>
       </div>
 
-      {/* Mismo par de tabs que Bóveda personal, con Citas activo aquí. */}
+      {/* Mismo par de tabs que Documentos personales, con Citas activo aquí. */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Link
           href="/dashboard/negocio/documentos"

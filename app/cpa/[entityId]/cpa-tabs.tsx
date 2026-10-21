@@ -200,7 +200,7 @@ const TABS = [
   { id: "resultados", label: "Resultados", icon: "ti-chart-bar" },
   { id: "ivu", label: "IVU", icon: "ti-receipt-tax" },
   { id: "recibos", label: "Recibos", icon: "ti-camera" },
-  { id: "boveda", label: "Bóveda", icon: "ti-folder" },
+  { id: "boveda", label: "Documentos", icon: "ti-folder" },
   { id: "estimados", label: "Estimados", icon: "ti-calendar-dollar" },
   { id: "auditoria", label: "Auditoría", icon: "ti-history" },
 ] as const;
@@ -836,7 +836,7 @@ export default function CpaTabs({
       {tab === "recibos" && (
         <div className="vc-card">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs uppercase tracking-wide text-muted">Bóveda de recibos</p>
+            <p className="text-xs uppercase tracking-wide text-muted">Recibos</p>
             <Badge tone="amb">{recibos.filter((r) => r.estado === "pendiente").length} pendientes</Badge>
           </div>
           {recibos.length === 0 ? (

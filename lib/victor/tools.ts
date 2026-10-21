@@ -137,7 +137,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
   {
     name: "crear_documento",
     description:
-      "Guarda un documento con su fecha de vencimiento en la Bóveda del usuario — esto es lo que genera las " +
+      "Guarda un documento con su fecha de vencimiento en Documentos del usuario — esto es lo que genera las " +
       "alertas (90/30/7 días antes de vencer) en su Inicio. Úsalo cuando el usuario mencione una licencia, " +
       "permiso, seguro, contrato, o cualquier cosa con fecha de vencimiento que quiera que le recuerdes.",
     input_schema: {
@@ -406,10 +406,10 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
   {
     name: "revisar_documentos_por_vencer",
     description:
-      "Trae la lista real de documentos de la Bóveda del usuario que están por vencer o ya vencieron — " +
+      "Trae la lista real de documentos de Documentos del usuario que están por vencer o ya vencieron — " +
       "licencias, marbete, pólizas, permisos, certificaciones, etc. Úsala SIEMPRE en el saludo proactivo " +
       "diario (junto con revisar_gastos_sin_categorizar), y también cuando el usuario pregunte qué le " +
-      "falta renovar, qué está por vencer, o algo sobre un documento específico de su Bóveda.",
+      "falta renovar, qué está por vencer, o algo sobre un documento específico de sus Documentos.",
     input_schema: {
       type: "object",
       properties: {
@@ -421,7 +421,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
   {
     name: "actualizar_documento",
     description:
-      "Actualiza un documento existente de la Bóveda del usuario — úsala cuando diga que ya renovó, pagó, o " +
+      "Actualiza un documento existente de Documentos del usuario — úsala cuando diga que ya renovó, pagó, o " +
       "tramitó algo que ya estaba guardado (ej. 'ya renové el marbete, vence el 15 de marzo' o 'ya pagué la " +
       "póliza, la nueva vence en un año'). Busca el documento por nombre — si hay más de una coincidencia, " +
       "pregúntale al usuario cuál es antes de actualizar. Si cambias la fecha de vencimiento, el ciclo de " +
@@ -440,9 +440,9 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
   {
     name: "eliminar_documento",
     description:
-      "Elimina un documento de la Bóveda del usuario — úsala cuando ya no aplica (ej. 'vendí el carro, borra " +
+      "Elimina un documento de Documentos del usuario — úsala cuando ya no aplica (ej. 'vendí el carro, borra " +
       "el marbete' o 'cancelé esa póliza'). Es IRREVERSIBLE, así que SIEMPRE confirma con el usuario primero " +
-      "en el chat (algo como '¿seguro que quieres que borre \"Marbete Toyota 2019\" de tu Bóveda?') y solo " +
+      "en el chat (algo como '¿seguro que quieres que borre \"Marbete Toyota 2019\" de tus Documentos?') y solo " +
       "llama esta herramienta después de que confirme que sí. Nunca la llames en el mismo turno donde el " +
       "usuario apenas lo menciona por primera vez.",
     input_schema: {
@@ -457,7 +457,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     name: "crear_cita",
     description:
       "Anota una cita puntual del usuario (médica, dental, trámite, reunión, cualquier evento con fecha y " +
-      "hora) — vive en /dashboard/citas, dentro de la sección de Bóveda, y genera avisos automáticos un día " +
+      "hora) — vive en /dashboard/citas, dentro de la sección de Documentos, y genera avisos automáticos un día " +
       "antes y el mismo día. Úsala cuando el usuario diga cosas como 'anótame una cita con...' o 'tengo turno " +
       "el...'. Si menciona un costo aproximado (ej. una cita médica que puede requerir efectivo), pídeselo si " +
       "no lo dio y guárdalo en costo_estimado — con eso puedes, en este mismo turno, cruzarlo contra su " +
@@ -557,7 +557,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "junto a las conectadas, y su balance cuenta en el panorama financiero del usuario igual que las demás. " +
       "Úsala cuando el usuario pida añadir/registrar una cuenta, tarjeta, préstamo o inversión que no tiene " +
       "conectada por banco — NUNCA uses crear_documento para esto, aunque el nombre se parezca a algo que " +
-      "podría ir en la Bóveda (documentos son para papeles con fecha de vencimiento — licencias, pólizas, " +
+      "podría ir en Documentos (documentos son para papeles con fecha de vencimiento — licencias, pólizas, " +
       "permisos — no para dinero real que debe aparecer en Cuentas y en el balance total).",
     input_schema: {
       type: "object",
@@ -1235,7 +1235,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "Busca en el manual de usuario real de VICTOR CFO (guardado en la base de datos, se actualiza con " +
       "cada feature nueva) cómo funciona una parte de la app que no domines con certeza — sobre todo módulos " +
       "menos comunes como Admin/Secretaria, Equipo (técnicos), Facturación, Pagos, Reportes/Hacienda, " +
-      "Transacciones, Cuentas, Metas, Bóveda, etc. Úsala ANTES de contestar cualquier pregunta sobre estos " +
+      "Transacciones, Cuentas, Metas, Documentos, etc. Úsala ANTES de contestar cualquier pregunta sobre estos " +
       "módulos — no solo 'cómo uso el botón X', también preguntas de concepto ('¿qué es Admin/Secretaria?', " +
       "'¿cómo funciona Equipo?', '¿quién lo usa?'), y preguntas cortas o en jerga ('adm/secre', 'cobros', " +
       "'boveda'). Si no estás 100% seguro del flujo exacto (nombres de botones, costos de addons, permisos) " +
@@ -2009,7 +2009,7 @@ export async function executeVictorTool(
       });
 
       if (error) return { ok: false, message: `No se pudo guardar el documento: ${error.message}` };
-      return { ok: true, message: `Documento "${nombre}" guardado en la Bóveda${fechaVencimiento ? `, vence ${fechaVencimiento}` : ""}.` };
+      return { ok: true, message: `Documento "${nombre}" guardado en Documentos${fechaVencimiento ? `, vence ${fechaVencimiento}` : ""}.` };
     }
 
     case "categorizar_transaccion": {
@@ -2932,7 +2932,7 @@ export async function executeVictorTool(
         .lte("fecha_vencimiento", limite)
         .order("fecha_vencimiento", { ascending: true });
 
-      if (error) return { ok: false, message: `No se pudo revisar los documentos de la Bóveda: ${error.message}` };
+      if (error) return { ok: false, message: `No se pudo revisar los documentos de Documentos: ${error.message}` };
       if (!docs || docs.length === 0) {
         return { ok: true, message: `No hay documentos venciendo en los próximos ${diasVentana} días.` };
       }
@@ -2972,7 +2972,7 @@ export async function executeVictorTool(
 
       if (buscarError) return { ok: false, message: `No se pudo buscar el documento: ${buscarError.message}` };
       if (!candidatos || candidatos.length === 0) {
-        return { ok: false, message: `No encontré ningún documento parecido a "${nombreBuscado}" en la Bóveda.` };
+        return { ok: false, message: `No encontré ningún documento parecido a "${nombreBuscado}" en Documentos.` };
       }
       if (candidatos.length > 1) {
         return {
@@ -3019,7 +3019,7 @@ export async function executeVictorTool(
 
       if (buscarError) return { ok: false, message: `No se pudo buscar el documento: ${buscarError.message}` };
       if (!candidatos || candidatos.length === 0) {
-        return { ok: false, message: `No encontré ningún documento parecido a "${nombreBuscado}" en la Bóveda.` };
+        return { ok: false, message: `No encontré ningún documento parecido a "${nombreBuscado}" en Documentos.` };
       }
       if (candidatos.length > 1) {
         return {
@@ -3032,7 +3032,7 @@ export async function executeVictorTool(
       const { error: deleteError } = await supabase.from("documents").delete().eq("id", doc.id);
       if (deleteError) return { ok: false, message: `No se pudo eliminar el documento: ${deleteError.message}` };
 
-      return { ok: true, message: `Eliminé "${doc.nombre}" de la Bóveda.` };
+      return { ok: true, message: `Eliminé "${doc.nombre}" de Documentos.` };
     }
 
     case "crear_cita": {

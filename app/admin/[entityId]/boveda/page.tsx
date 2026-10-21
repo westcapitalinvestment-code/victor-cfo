@@ -4,7 +4,7 @@ import Link from "next/link";
 import { resolverOwnerEfectivo } from "@/lib/owner-efectivo";
 import AdminNav from "@/app/admin/admin-nav";
 
-// Bóveda de negocio — exclusivo del nivel Administrador. Alcance v1: lista +
+// Documentos de negocio — exclusivo del nivel Administrador. Alcance v1: lista +
 // subir, sin editar/borrar (la pantalla de editar compartida asume dueño —
 // ver la misma nota en metas/page.tsx).
 export default async function AdminBovedaPage({ params }: { params: { entityId: string } }) {
@@ -42,7 +42,7 @@ export default async function AdminBovedaPage({ params }: { params: { entityId: 
       <AdminNav entityId={entityId} activo="boveda" />
       <div className="vc-shell">
         <div className="mb-3 flex items-center justify-between">
-          <h1 className="text-lg font-medium">Bóveda</h1>
+          <h1 className="text-lg font-medium">Documentos</h1>
           <Link href={`/admin/${entityId}/boveda/nuevo`} className="text-xs font-medium text-teal hover:opacity-80">
             + Nuevo
           </Link>

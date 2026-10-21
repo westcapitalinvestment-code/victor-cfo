@@ -27,7 +27,7 @@ import { fbqTrack } from "@/lib/fbpixel";
 // ahora sirve DOS caminos, decididos por Joel — (1) alguien pagando de una
 // vez (precio normal, con 30 días gratis si vino con un link ?ref=<uuid> de
 // otro usuario), o (2) "Empezar gratis (limitada)" sin pasar por Stripe
-// para nada — acceso completo a Bóveda/Metas/Citas/CSV, pero sin conectar
+// para nada — acceso completo a Documentos/Metas/Citas/CSV, pero sin conectar
 // banco ni hablar con VICTOR hasta que suba de plan.
 //
 // Rediseño de 3 tarjetas (26 sept 2026, pedido de Joel viendo el registro
@@ -386,7 +386,7 @@ function RegistroForm() {
             <p className="font-semibold text-text">Gratis</p>
             <p className="text-muted">
               Tú organizas: sube tus estados de cuenta (CSV/Excel) y categoriza tus gastos, guarda documentos en la
-              Bóveda, anota tus Citas y pon Metas. Sin conectar banco ni hablar con VICTOR.
+              Documentos, anota tus Citas y pon Metas. Sin conectar banco ni hablar con VICTOR.
             </p>
           </div>
           <div>
@@ -484,7 +484,7 @@ function RegistroForm() {
                   <p className="text-lg font-semibold text-text">Gratis</p>
                   <p className="text-3xl font-bold text-teal">$0</p>
                   <ul className="flex flex-1 flex-col gap-1.5 text-left text-xs">
-                    <li className="text-text">✓ Bóveda de documentos</li>
+                    <li className="text-text">✓ Documentos</li>
                     <li className="text-text">✓ Metas y Citas</li>
                     <li className="text-text">✓ Categorizar por CSV/Excel</li>
                     <li className="text-muted">✕ Sin banco conectado</li>
@@ -530,7 +530,7 @@ function RegistroForm() {
                     <li className="text-text">✓ Banco conectado (Plaid)</li>
                     <li className="text-text">✓ VICTOR, tu asesor por chat, 24/7</li>
                     <li className="text-text">✓ Categorización automática</li>
-                    <li className="text-text">✓ Metas, Bóveda y Citas</li>
+                    <li className="text-text">✓ Metas, Documentos y Citas</li>
                     <li className="text-text">✓ Reportes listos para Hacienda</li>
                   </ul>
                   <p className="text-xs text-muted">{finePrint("core")}</p>
