@@ -292,6 +292,7 @@ export interface EntradaCorrida {
   periodoFin: string;
   fechaPago: string;
   lineas: ({ employeeId: string } & EntradaPeriodo)[];
+  runId?: string; // al EDITAR una corrida: esa corrida no cuenta en los acumulados previos
 }
 
 export interface ResultadoCorrida {
@@ -343,7 +344,7 @@ export async function calcularCorrida(
     .eq("owner_id", userId)
     .eq("anio", anio)
     .eq("estado", "aprobada");
-  const idsAprobadas = (aprobadas ?? []).map((r) => String(r.id));
+  const idsAprobadas = (aprobadas ?? []).map((r) => String(r.id)).filter((id) => id !== (e.runId ?? ""));
   const { data: previas } = idsAprobadas.length
     ? await supabase
         .from("payroll_run_lines")
@@ -399,6 +400,38 @@ export async function calcularCorrida(
       asientoCuadra: asientoCuadra(resumen.asiento),
     },
   };
+}
+
+// Filas de payroll_run_lines a partir del resultado de una corrida.
+export function filasDeLineas(res: ResultadoCorrida, runId: string, ownerId: string, entityId: string) {
+  return res.lineas.map((l) => ({
+    run_id: runId,
+    owner_id: ownerId,
+    entity_id: entityId,
+    employee_id: l.employeeId,
+    anio: res.anio,
+    entrada: l.entrada,
+    bruto: l.bruto,
+    neto: l.neto,
+    ss_emp: l.ssEmp,
+    medicare_emp: l.medicareEmp,
+    medicare_adic: l.medicareAdic,
+    hacienda: l.hacienda,
+    sinot_emp: l.sinotEmp,
+    choferil: l.choferil,
+    otras_deducciones: l.deduccionMedico + l.aporte401k + l.otrasDeducciones,
+    ss_pat: l.ssPat,
+    medicare_pat: l.medicarePat,
+    futa: l.futa,
+    suta: l.suta,
+    sinot_pat: l.sinotPat,
+    cfse: l.cfse,
+    base_ss: l.baseSs,
+    base_suta: l.baseSuta,
+    base_futa: l.baseFuta,
+    base_sinot: l.baseSinot,
+    detalle: l,
+  }));
 }
 
 export { PERIODOS_POR_ANIO };

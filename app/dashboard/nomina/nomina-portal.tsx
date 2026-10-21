@@ -115,6 +115,15 @@ interface Corrida {
   aprobada_por?: string | null;
 }
 
+interface Edicion {
+  id: string;
+  frecuencia: Frecuencia;
+  inicio: string;
+  fin: string;
+  fechaPago: string;
+  entradas: Record<string, EntradaUI>;
+}
+
 interface Config {
   suta_tasa: number | null;
   cfse_tasa: number | null;
@@ -185,6 +194,40 @@ export default function NominaPortal({
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [edicion, setEdicion] = useState<Edicion | null>(null);
+
+  // Corregir una corrida guardada: carga sus entradas y abre el formulario de Corrida en modo edición.
+  async function editarCorrida(id: string) {
+    setError(null);
+    const j = await fetch(`/api/nomina/corridas/${id}`).then((r) => r.json()).catch(() => null);
+    if (!j?.ok) {
+      setError(j?.error ?? "No se pudo abrir la corrida.");
+      return;
+    }
+    const entradas: Record<string, EntradaUI> = {};
+    for (const l of j.lineas as { employee_id: string; entrada: Record<string, number> }[]) {
+      const e = l.entrada ?? {};
+      const t = (v: unknown) => (Number(v) ? String(v) : "");
+      entradas[l.employee_id] = {
+        incluir: true,
+        horasRegulares: t(e.horasRegulares),
+        horasExtra: t(e.horasExtra),
+        comisiones: t(e.comisiones),
+        bonos: t(e.bonos),
+        otrasDeducciones: t(e.otrasDeducciones),
+      };
+    }
+    setEdicion({
+      id,
+      frecuencia: j.corrida.frecuencia,
+      inicio: String(j.corrida.periodo_inicio).slice(0, 10),
+      fin: String(j.corrida.periodo_fin).slice(0, 10),
+      fechaPago: String(j.corrida.fecha_pago).slice(0, 10),
+      entradas,
+    });
+    setAviso(null);
+    setTab("corrida");
+  }
 
   const recargar = useCallback(async () => {
     setCargando(true);
@@ -289,11 +332,17 @@ export default function NominaPortal({
           {tab === "corrida" && (
             <CorridaTab
               entityId={entityId}
-              empleados={empleados.filter((e) => e.activo)}
+              empleados={empleados.filter((e) => e.activo || (edicion && edicion.entradas[e.id]))}
               enviaAAprobacion={enviaAAprobacion}
+              edicion={edicion}
+              onCancelarEdicion={() => setEdicion(null)}
               onGuardada={() => {
+                const editada = !!edicion;
+                setEdicion(null);
                 setAviso(
-                  enviaAAprobacion
+                  editada
+                    ? "Corrida corregida. Los números ya están actualizados."
+                    : enviaAAprobacion
                     ? "Corrida enviada. Queda pendiente hasta que el dueño la autorice; todavía no cuenta para los acumulados."
                     : "Corrida guardada. Ya cuenta para los acumulados del año."
                 );
@@ -304,7 +353,7 @@ export default function NominaPortal({
             />
           )}
           {tab === "empleados" && <EmpleadosTab entityId={entityId} empleados={empleados} anio={anio} onCambio={recargar} />}
-          {tab === "historial" && <HistorialTab entityId={entityId} corridas={corridas} modoContable={modoContable} apruebaDirecto={!!config?.cpa_aprueba_directo} onCambio={recargar} />}
+          {tab === "historial" && <HistorialTab entityId={entityId} corridas={corridas} modoContable={modoContable} apruebaDirecto={!!config?.cpa_aprueba_directo} onCambio={recargar} onEditar={editarCorrida} />}
           {tab === "tasas" && <TasasTab entityId={entityId} config={config} parametros={parametros} anio={anio} modoContable={modoContable} onGuardado={recargar} />}
         </>
       )}
@@ -330,12 +379,16 @@ function CorridaTab({
   onGuardada,
   onIrEmpleados,
   enviaAAprobacion = false,
+  edicion = null,
+  onCancelarEdicion,
 }: {
   entityId: string;
   empleados: Empleado[];
   onGuardada: () => void;
   onIrEmpleados: () => void;
   enviaAAprobacion?: boolean;
+  edicion?: Edicion | null;
+  onCancelarEdicion?: () => void;
 }) {
   const [frecuencia, setFrecuencia] = useState<Frecuencia>("quincenal");
   const [inicio, setInicio] = useState(hoyISO());
@@ -345,6 +398,17 @@ function CorridaTab({
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [trabajando, setTrabajando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Al entrar en modo edición se cargan las entradas de la corrida guardada.
+  useEffect(() => {
+    if (!edicion) return;
+    setFrecuencia(edicion.frecuencia);
+    setInicio(edicion.inicio);
+    setFin(edicion.fin);
+    setFechaPago(edicion.fechaPago);
+    setEntradas(edicion.entradas);
+    setResultado(null);
+  }, [edicion]);
 
   const delPeriodo = useMemo(() => empleados.filter((e) => e.frecuencia === frecuencia), [empleados, frecuencia]);
 
@@ -358,6 +422,7 @@ function CorridaTab({
   function cuerpo() {
     return {
       entityId,
+      runId: edicion?.id,
       frecuencia,
       periodoInicio: inicio,
       periodoFin: fin,
@@ -397,14 +462,16 @@ function CorridaTab({
   }
 
   async function guardar() {
-    const msg = enviaAAprobacion
+    const msg = edicion
+      ? "¿Guardar los cambios de esta corrida? Se recalcula y reemplaza la anterior. Las corridas posteriores del año no se recalculan."
+      : enviaAAprobacion
       ? "¿Enviar esta corrida al dueño? Queda pendiente de su autorización y todavía no cuenta para los acumulados."
       : "¿Guardar esta corrida? Cuenta para los acumulados del año (topes de Seguro Social, SUTA, etc.).";
     if (!window.confirm(msg)) return;
     setTrabajando(true);
     setError(null);
-    const r = await fetch("/api/nomina/corridas", {
-      method: "POST",
+    const r = await fetch(edicion ? `/api/nomina/corridas/${edicion.id}` : "/api/nomina/corridas", {
+      method: edicion ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cuerpo()),
     });
@@ -431,6 +498,17 @@ function CorridaTab({
 
   return (
     <div className="flex flex-col gap-3">
+      {edicion && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-amb bg-amb/[.08] px-3 py-2 text-xs">
+          <span>
+            <strong>Corrigiendo una corrida guardada</strong> ({formatFecha(edicion.inicio)} – {formatFecha(edicion.fin)}). Cambia lo que haga falta,
+            calcula y guarda: reemplaza a la anterior.
+          </span>
+          <button className="whitespace-nowrap font-medium text-blue underline underline-offset-2" onClick={onCancelarEdicion}>
+            Cancelar
+          </button>
+        </div>
+      )}
       <div className="vc-card">
         <p className="mb-2 text-sm font-medium">Periodo de pago</p>
         <div className="grid grid-cols-2 gap-2">
@@ -498,7 +576,7 @@ function CorridaTab({
         {trabajando ? "Calculando..." : "Calcular nómina"}
       </button>
 
-      {resultado && <ResultadoCorrida r={resultado} etiqueta={`${inicio}_${fin}`} onGuardar={guardar} guardando={trabajando} enviaAAprobacion={enviaAAprobacion} />}
+      {resultado && <ResultadoCorrida r={resultado} etiqueta={`${inicio}_${fin}`} onGuardar={guardar} guardando={trabajando} enviaAAprobacion={enviaAAprobacion} editando={!!edicion} />}
     </div>
   );
 }
@@ -509,12 +587,14 @@ function ResultadoCorrida({
   onGuardar,
   guardando,
   enviaAAprobacion = false,
+  editando = false,
 }: {
   r: Resultado;
   etiqueta: string;
   onGuardar: () => void;
   guardando: boolean;
   enviaAAprobacion?: boolean;
+  editando?: boolean;
 }) {
   const t = r.resumen.totales;
   const d = r.resumen.depositos;
@@ -577,7 +657,7 @@ function ResultadoCorrida({
       )}
 
       <button className="vc-btn-primary" disabled={guardando || !r.asientoCuadra} onClick={onGuardar}>
-        {guardando ? "Guardando..." : enviaAAprobacion ? "Enviar corrida al dueño para aprobación" : "Aprobar y guardar corrida"}
+        {guardando ? "Guardando..." : editando ? "Guardar cambios de la corrida" : enviaAAprobacion ? "Enviar corrida al dueño para aprobación" : "Aprobar y guardar corrida"}
       </button>
     </div>
   );
@@ -939,12 +1019,14 @@ function HistorialTab({
   modoContable,
   apruebaDirecto,
   onCambio,
+  onEditar,
 }: {
   entityId: string;
   corridas: Corrida[];
   modoContable: boolean;
   apruebaDirecto: boolean;
   onCambio: () => void;
+  onEditar: (id: string) => void;
 }) {
   const [abierta, setAbierta] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<{ asiento: LineaAsiento[]; lineas: { id: string; detalle: LineaCalc }[] } | null>(null);
@@ -1060,9 +1142,14 @@ function HistorialTab({
                 </div>
               )}
               {(!modoContable || c.estado === "pendiente" || apruebaDirecto) && (
-                <button className="self-start text-xs text-red" onClick={() => borrar(c.id)}>
-                  Eliminar corrida
-                </button>
+                <div className="flex items-center gap-4">
+                  <button className="text-xs font-medium text-blue underline underline-offset-2" onClick={() => onEditar(c.id)}>
+                    Corregir corrida
+                  </button>
+                  <button className="text-xs text-red" onClick={() => borrar(c.id)}>
+                    Eliminar corrida
+                  </button>
+                </div>
               )}
             </div>
           )}
