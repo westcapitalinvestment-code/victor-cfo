@@ -10,7 +10,7 @@ import { claveCicloUso, progresoCicloUso } from "@/lib/ciclo-uso";
 import { limiteMensualIaCentavos, centavosAMicrotokens } from "@/lib/limites-ia";
 import { esFounder } from "@/lib/founder";
 import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
-import { NOMINA_INCLUIDA_EN_BUSINESS } from "@/lib/stripe";
+import { nominaIncluidaEnPlan } from "@/lib/stripe";
 import { cargarParametros, cargarConfigEntidad } from "@/lib/nomina-server";
 import { calcularEmpleado, PERIODOS_POR_ANIO, type EmpleadoNomina, type Frecuencia } from "@/lib/nomina";
 
@@ -4300,15 +4300,15 @@ export async function executeVictorTool(
       // + addon activo (o Business, que lo incluye).
       const { data: perfilNom } = await supabase
         .from("users")
-        .select("plan, plan_status, addon_nomina_status")
+        .select("plan, plan_status, addon_nomina_status, nomina_fundador")
         .eq("id", ownerId)
         .maybeSingle();
       const esProNom = perfilNom?.plan === "pro" || perfilNom?.plan === "proplus";
-      const incluidoNom = perfilNom?.plan === "proplus" && NOMINA_INCLUIDA_EN_BUSINESS;
+      const incluidoNom = nominaIncluidaEnPlan(perfilNom);
       if (!esProNom || (!incluidoNom && perfilNom?.addon_nomina_status !== "activo")) {
         return {
           ok: true,
-          message: "El módulo Nómina no está activo en esta cuenta. Es un addon de $24.99/mes para Pro (incluido en Business); se activa en el ícono Nómina del menú del negocio.",
+          message: "El módulo Nómina no está activo en esta cuenta. Es un addon de $24.99/mes (incluido en Business solo para los primeros 100 clientes Business); se activa en el ícono Nómina del menú del negocio.",
         };
       }
 

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getStripe, priceIdAddonNomina, NOMINA_INCLUIDA_EN_BUSINESS } from "@/lib/stripe";
+import { getStripe, priceIdAddonNomina, nominaIncluidaEnPlan } from "@/lib/stripe";
 import { iniciarCheckoutAddonCliente } from "@/lib/addon-checkout-cliente";
 
 // Activa el addon Nómina ($24.99/mes, migración 0167, 19 oct 2026): añade un
 // subscription item a la suscripción que el usuario ya tiene — mismo patrón
 // exacto que /api/stripe/addon-pagos/activar. Un cliente de Firma Accountant
 // sin suscripción propia va a un Checkout solo para este addon (ver
-// lib/addon-checkout-cliente.ts). Business NO lo incluye salvo que se active
-// NOMINA_INCLUIDA_EN_BUSINESS en lib/stripe.ts.
+// lib/addon-checkout-cliente.ts). Business solo lo incluye para los primeros
+// 100 clientes ("fundadores", users.nomina_fundador); los demás lo activan aquí.
 export async function POST(req: NextRequest) {
   const supabase = createClient();
   const {
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const { data: perfil } = await supabase
     .from("users")
-    .select("plan, plan_status, stripe_customer_id, stripe_subscription_id, addon_nomina_status")
+    .select("plan, plan_status, stripe_customer_id, stripe_subscription_id, addon_nomina_status, nomina_fundador")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   if (perfil.plan_status !== "active") {
     return NextResponse.json({ error: "Necesitas un plan activo para activar addons." }, { status: 400 });
   }
-  if (perfil.plan === "proplus" && NOMINA_INCLUIDA_EN_BUSINESS) {
+  if (nominaIncluidaEnPlan(perfil)) {
     return NextResponse.json({ ok: true, incluido: true });
   }
   if (!perfil.stripe_subscription_id) {

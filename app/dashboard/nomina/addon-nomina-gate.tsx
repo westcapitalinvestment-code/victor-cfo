@@ -49,7 +49,7 @@ export default function AddonNominaGate({
       >
         <div className="mb-2 text-2xl">🧾</div>
         <p className="mb-1 text-base font-semibold">Add-on Nómina — $24.99/mes</p>
-        <p className="mb-2 text-xs text-teal">Incluido sin costo extra en el plan Business.</p>
+        <p className="mb-2 text-xs text-teal">Incluido sin costo extra para los primeros 100 clientes Business. Tu contable siempre puede correr la nómina desde su portal.</p>
         <p className="mb-4 text-sm text-muted">
           Calcula la nómina de tus empleados en Puerto Rico: retención de Hacienda, Seguro Social, Medicare y SINOT,
           el costo real para tu corporación (FICA patronal, SUTA, FUTA y provisión de CFSE), el recibo de cada

@@ -7,7 +7,7 @@ import { actorNomina, registrarNomina } from "@/lib/nomina-server";
 export async function GET(req: NextRequest) {
   const supabase = createClient();
   const entityId = req.nextUrl.searchParams.get("entityId") ?? "";
-  const a = await actorNomina(supabase, entityId);
+  const a = await actorNomina(supabase, entityId, { soloPermisos: true });
   if ("error" in a) return a.error;
   const { g } = a;
   const { data } = await g.db.from("payroll_entity_config").select("*").eq("entity_id", entityId).maybeSingle();
@@ -27,7 +27,10 @@ export async function PUT(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Cuerpo inválido." }, { status: 400 });
   const entityId = String(body.entityId ?? "");
-  const a = await actorNomina(supabase, entityId);
+  // Un dueño sin Nómina activa puede igual autorizar a su contable (el contable
+  // siempre tiene Nómina); en ese caso el cuerpo solo trae los interruptores.
+  const soloPermisos = Object.keys(body).every((k) => ["entityId", "cpa_puede_nomina", "cpa_aprueba_directo"].includes(k));
+  const a = await actorNomina(supabase, entityId, { soloPermisos });
   if ("error" in a) return a.error;
   const { g } = a;
   // Los interruptores del contable los decide SOLO el dueño.

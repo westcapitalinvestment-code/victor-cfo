@@ -1248,17 +1248,22 @@ function AuditoriaTab({ entityId }: { entityId: string }) {
   type Fila = { id: string; actor_email: string | null; actor_rol: string; accion: string; detalle: Record<string, unknown> | null; created_at: string };
   const [filas, setFilas] = useState<Fila[] | null>(null);
   const [quien, setQuien] = useState<"todos" | "dueno" | "contable">("todos");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
   useEffect(() => {
     let vivo = true;
     setFilas(null);
-    fetch(`/api/nomina/auditoria?entityId=${entityId}`)
+    const qs = new URLSearchParams({ entityId });
+    if (desde) qs.set("desde", desde);
+    if (hasta) qs.set("hasta", hasta);
+    fetch(`/api/nomina/auditoria?${qs.toString()}`)
       .then((r) => r.json())
       .then((j) => vivo && setFilas(j.filas ?? []))
       .catch(() => vivo && setFilas([]));
     return () => {
       vivo = false;
     };
-  }, [entityId]);
+  }, [entityId, desde, hasta]);
 
   if (!filas) return <p className="text-sm text-muted">Cargando...</p>;
   const visibles = filas.filter((f) => quien === "todos" || f.actor_rol === quien);
@@ -1274,6 +1279,19 @@ function AuditoriaTab({ entityId }: { entityId: string }) {
           </select>
         </div>
         <p className="mb-2 text-[11px] text-muted">Quién hizo cada cambio y cuándo. Lo ven el dueño y el contable.</p>
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <Campo label="Desde">
+            <input type="date" className="vc-input" value={desde} max={hasta || undefined} onChange={(e) => setDesde(e.target.value)} />
+          </Campo>
+          <Campo label="Hasta">
+            <input type="date" className="vc-input" value={hasta} min={desde || undefined} onChange={(e) => setHasta(e.target.value)} />
+          </Campo>
+          {(desde || hasta) && (
+            <button type="button" className="col-span-2 text-left text-xs font-medium text-blue underline underline-offset-2" onClick={() => { setDesde(""); setHasta(""); }}>
+              Quitar filtro de fechas
+            </button>
+          )}
+        </div>
         {visibles.length === 0 ? (
           <p className="text-xs text-muted">Todavía no hay actividad registrada.</p>
         ) : (

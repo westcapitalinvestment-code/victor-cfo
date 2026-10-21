@@ -5,7 +5,8 @@ import ProPaywall from "../pro-paywall";
 import AddonNominaGate from "./addon-nomina-gate";
 import NominaPortal, { type ParamFila } from "./nomina-portal";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
-import { NOMINA_INCLUIDA_EN_BUSINESS } from "@/lib/stripe";
+import { nominaIncluidaEnPlan } from "@/lib/stripe";
+import PermisoContable from "./permiso-contable";
 
 // Módulo Nómina (19 oct 2026, pedido de Joel): addon aparte de $24.99/mes al
 // lado de Pagos. VICTOR CALCULA la nómina de Puerto Rico (retenciones del
@@ -18,12 +19,34 @@ export default async function NominaPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase.from("users").select("plan, addon_nomina_status").eq("id", user.id).maybeSingle();
+  const { data: profile } = await supabase.from("users").select("plan, addon_nomina_status, nomina_fundador").eq("id", user.id).maybeSingle();
   const esPro = profile?.plan === "pro" || profile?.plan === "proplus";
   if (!esPro) return <ProPaywall />;
-  const incluido = profile?.plan === "proplus" && NOMINA_INCLUIDA_EN_BUSINESS;
+  const incluido = nominaIncluidaEnPlan(profile);
   if (!incluido && profile?.addon_nomina_status !== "activo") {
-    return <AddonNominaGate puedeActivar volverHref="/dashboard" />;
+    // Sin Nómina propia, el dueño igual puede dejar que su contable la corra
+    // (el contable siempre tiene Nómina).
+    const { data: ents } = await supabase
+      .from("business_entities")
+      .select("id, name")
+      .eq("owner_id", user.id)
+      .eq("active", true)
+      .order("name", { ascending: true });
+    const ids = (ents ?? []).map((e) => e.id as string);
+    const { data: cfgs } = ids.length
+      ? await supabase.from("payroll_entity_config").select("entity_id, cpa_puede_nomina, cpa_aprueba_directo").in("entity_id", ids)
+      : { data: [] as { entity_id: string; cpa_puede_nomina: boolean | null; cpa_aprueba_directo: boolean | null }[] };
+    return (
+      <>
+        <AddonNominaGate puedeActivar volverHref="/dashboard" />
+        <PermisoContable
+          entidades={(ents ?? []).map((e) => {
+            const c = (cfgs ?? []).find((x) => x.entity_id === e.id);
+            return { id: e.id as string, name: e.name as string, puede: !!c?.cpa_puede_nomina, directo: !!c?.cpa_aprueba_directo };
+          })}
+        />
+      </>
+    );
   }
 
   const { data: entities } = await supabase

@@ -168,11 +168,19 @@ export function priceIdAddonNomina(): string | null {
   return process.env.STRIPE_PRICE_ADDON_NOMINA || null;
 }
 
-// ¿Business incluye Nómina sin cobrarla aparte? SÍ (19 oct 2026, confirmado por
-// Joel: "incluido en la Business el módulo de Nómina"). Los planes Core/Pro la
-// activan como addon de $24.99. Al subir a Business se quita el item del addon
-// (app/api/stripe/cambiar-plan/route.ts) para que no se cobre dos veces.
-export const NOMINA_INCLUIDA_EN_BUSINESS = true;
+// Nómina en Business (21 oct 2026, decisión de Joel): incluida SIN costo solo para
+// los primeros NOMINA_FUNDADORES_MAX clientes Business ("fundadores", marcados
+// por el trigger de la migración 0174 en users.nomina_fundador). Después es el
+// addon de $24.99/mes también para Business. Los contables siempre pueden operar
+// la nómina de sus clientes (ver actorNomina en lib/nomina-server.ts).
+// NOMINA_INCLUIDA_EN_BUSINESS = true volvería a incluirla para todos.
+export const NOMINA_FUNDADORES_MAX = 100;
+export const NOMINA_INCLUIDA_EN_BUSINESS = false;
+
+// ¿Esta cuenta tiene la nómina incluida en su plan (sin addon)?
+export function nominaIncluidaEnPlan(p: { plan?: string | null; nomina_fundador?: boolean | null } | null | undefined): boolean {
+  return p?.plan === "proplus" && (NOMINA_INCLUIDA_EN_BUSINESS || !!p?.nomina_fundador);
+}
 
 // Programa "Firma Accountant" — 4 oct 2026, migración 0139. Wholesale del
 // plan Business para contadores/billers que absorben la mensualidad en su

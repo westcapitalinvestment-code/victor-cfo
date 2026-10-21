@@ -16,6 +16,8 @@ import {
   priceIdAddonAdministrador,
   priceIdAddonEntidadAdicional,
   PLAN_RANK,
+  NOMINA_FUNDADORES_MAX,
+  NOMINA_INCLUIDA_EN_BUSINESS,
   type PlanId,
   type Ciclo,
 } from "@/lib/stripe";
@@ -56,9 +58,20 @@ async function perfilDelUsuario() {
   return { user, perfil: (perfil as PerfilCambio | null) ?? null };
 }
 
-function idsAddonsQueBusinessIncluye(): Set<string> {
+// Nómina solo se incluye en Business para los primeros NOMINA_FUNDADORES_MAX
+// clientes (users.nomina_fundador, migración 0174). Después sigue siendo addon.
+async function nominaSeraIncluida(userId: string): Promise<boolean> {
+  if (NOMINA_INCLUIDA_EN_BUSINESS) return true;
+  const admin = createAdminClient();
+  const { data: u } = await admin.from("users").select("nomina_fundador").eq("id", userId).maybeSingle();
+  if (u?.nomina_fundador) return true;
+  const { count } = await admin.from("users").select("id", { count: "exact", head: true }).eq("nomina_fundador", true);
+  return (count ?? 0) < NOMINA_FUNDADORES_MAX;
+}
+
+function idsAddonsQueBusinessIncluye(nominaIncluida: boolean): Set<string> {
   return new Set(
-    [priceIdAddonTecnicos(), priceIdAddonPagos(), priceIdAddonNomina(), priceIdAddonSecretaria(), priceIdAddonAdministrador()].filter(
+    [priceIdAddonTecnicos(), priceIdAddonPagos(), nominaIncluida ? priceIdAddonNomina() : null, priceIdAddonSecretaria(), priceIdAddonAdministrador()].filter(
       (v): v is string => !!v
     )
   );
@@ -158,7 +171,8 @@ export async function POST(req: NextRequest) {
     const esSubida = PLAN_RANK[planNuevo] > PLAN_RANK[actual.plan];
 
     if (esSubida) {
-      const idsQuitar = planNuevo === "proplus" ? idsAddonsQueBusinessIncluye() : new Set<string>();
+      const nominaIncl = planNuevo === "proplus" ? await nominaSeraIncluida(user.id) : false;
+      const idsQuitar = planNuevo === "proplus" ? idsAddonsQueBusinessIncluye(nominaIncl) : new Set<string>();
       const items: Stripe.SubscriptionUpdateParams.Item[] = [{ id: itemPlan.id, price: nuevoPriceId }];
       for (const it of sub.items.data) {
         if (idsQuitar.has(it.price.id)) items.push({ id: it.id, deleted: true });
@@ -178,8 +192,7 @@ export async function POST(req: NextRequest) {
           addon_tecnicos_item_id: null,
           addon_pagos_status: "inactivo",
           addon_pagos_item_id: null,
-          addon_nomina_status: "inactivo",
-          addon_nomina_item_id: null,
+          ...(nominaIncl ? { addon_nomina_status: "inactivo", addon_nomina_item_id: null } : {}),
           addon_admin_status: "inactivo",
           addon_admin_item_id: null,
           addon_administrador_status: "inactivo",

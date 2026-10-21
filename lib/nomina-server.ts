@@ -4,7 +4,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { NOMINA_INCLUIDA_EN_BUSINESS } from "./stripe";
+import { nominaIncluidaEnPlan } from "./stripe";
 import { createAdminClient } from "./supabase/admin";
 import type { Tramo } from "./impuestos-estimados";
 import {
@@ -29,12 +29,11 @@ import {
 async function duenoTieneNomina(db: SupabaseClient, ownerId: string): Promise<boolean> {
   const { data: perfil } = await db
     .from("users")
-    .select("plan, plan_status, addon_nomina_status")
+    .select("plan, plan_status, addon_nomina_status, nomina_fundador")
     .eq("id", ownerId)
     .maybeSingle();
   const esPro = perfil?.plan === "pro" || perfil?.plan === "proplus";
-  const incluido = perfil?.plan === "proplus" && NOMINA_INCLUIDA_EN_BUSINESS;
-  return esPro && (incluido || perfil?.addon_nomina_status === "activo");
+  return esPro && (nominaIncluidaEnPlan(perfil) || perfil?.addon_nomina_status === "activo");
 }
 
 export async function exigirNomina(
@@ -65,7 +64,10 @@ export interface ActorNomina {
 
 export async function actorNomina(
   supabase: SupabaseClient,
-  entityId: string
+  entityId: string,
+  // soloPermisos: el dueño sin Nómina activa solo puede encender/apagar los
+  // interruptores del contable (ver /api/nomina/config).
+  opts: { soloPermisos?: boolean } = {}
 ): Promise<{ g: ActorNomina } | { error: NextResponse }> {
   const {
     data: { user },
@@ -76,7 +78,7 @@ export async function actorNomina(
 
   // 1) ¿Es el dueño de la entidad?
   if (await entidadDelUsuario(supabase, user.id, entityId)) {
-    if (!(await duenoTieneNomina(supabase, user.id))) {
+    if (!opts.soloPermisos && !(await duenoTieneNomina(supabase, user.id))) {
       return { error: NextResponse.json({ error: "Necesitas el addon Nómina activo." }, { status: 403 }) };
     }
     return { g: { userId: user.id, db: supabase, actor: "dueno", email, apruebaDirecto: true } };
@@ -104,9 +106,8 @@ export async function actorNomina(
   if (!cfg?.cpa_puede_nomina) {
     return { error: NextResponse.json({ error: "El dueño no ha autorizado que el contable corra la nómina de esta entidad." }, { status: 403 }) };
   }
-  if (!(await duenoTieneNomina(admin, ent.owner_id))) {
-    return { error: NextResponse.json({ error: "El dueño no tiene el módulo Nómina activo." }, { status: 403 }) };
-  }
+  // El contable siempre tiene Nómina (decisión del 21 oct 2026): no depende de
+  // que el dueño tenga el addon; solo del permiso que el dueño le dio arriba.
   return { g: { userId: ent.owner_id, db: admin, actor: "contable", email, apruebaDirecto: !!cfg.cpa_aprueba_directo } };
 }
 
