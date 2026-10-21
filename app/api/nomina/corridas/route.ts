@@ -1,3 +1,4 @@
+import { enviarTalonariosAuto } from "@/lib/nomina-talonarios-server";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { actorNomina, calcularCorrida, registrarNomina, type EntradaCorrida } from "@/lib/nomina-server";
@@ -121,5 +122,6 @@ export async function POST(req: NextRequest) {
     periodo: `${body.periodoInicio} a ${body.periodoFin}`,
     bruto: res.resumen.totales.bruto,
   });
-  return NextResponse.json({ ok: true, id: run.id, estado: estadoNuevo });
+  const talonarios = estadoNuevo === "aprobada" ? await enviarTalonariosAuto(g, body.entityId, run.id) : null;
+  return NextResponse.json({ ok: true, id: run.id, estado: estadoNuevo, talonarios });
 }

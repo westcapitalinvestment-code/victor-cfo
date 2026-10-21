@@ -1,0 +1,6 @@
+-- 0184: manual Nómina — talonarios por email y logo (21 oct 2026). Idempotente.
+UPDATE manual_articulos
+SET contenido = contenido || $md$
+
+TALONARIOS POR EMAIL Y LOGO: los talonarios llevan el logo de la compañía (el mismo de las facturas, si está subido en el perfil de la entidad). En HISTORIAL, una corrida APROBADA tiene el botón "Enviar talonarios por email" (y cada empleado su "Enviar por email"): VICTOR muestra a quién se enviará y a quién le falta el email (se agrega en la pestaña Empleados), pide confirmación y manda a cada empleado SOLO su talonario. Si ya se habían enviado, avisa la fecha antes de reenviar; si se corrigió la corrida, el reenvío manda el talonario actualizado (los correos ya enviados no se actualizan solos). Una corrida pendiente de aprobación no se puede enviar. El contable solo puede enviar si el dueño le dio aprobación directa. ENVÍO AUTOMÁTICO: en TASAS hay una casilla "Enviar automáticamente el talonario a cada empleado cuando una corrida quede aprobada"; viene apagada. Todo envío queda en Auditoría ("Envió talonarios por email"). El correo trae sueldo y deducciones (y solo los últimos 4 del SSN), así que conviene confirmar que el email de cada empleado esté bien escrito.$md$
+WHERE slug = 'nomina' AND contenido NOT LIKE '%TALONARIOS POR EMAIL Y LOGO%';

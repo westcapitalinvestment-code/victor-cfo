@@ -241,6 +241,7 @@ const ACCIONES: Record<string, string> = {
   nomina_corrida_eliminada: "Nómina: corrida eliminada",
   nomina_licencia_registrada: "Registró vacaciones/enfermedad",
   nomina_licencia_eliminada: "Eliminó vacaciones/enfermedad",
+  nomina_talonarios_enviados: "Envió talonarios por email",
   nomina_tasas_actualizadas: "Nómina: tasas actualizadas",
   nomina_permisos_contable_cambiados: "Nómina: permisos del contable cambiados",
 };

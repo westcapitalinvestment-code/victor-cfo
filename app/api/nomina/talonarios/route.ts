@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { actorNominaPorFila } from "@/lib/nomina-server";
-import { mesesTrabajados, reglasLic, saldoLic, type MovLic } from "@/lib/nomina-licencias";
+import { cargarDatosTalonarios } from "@/lib/nomina-talonarios-server";
+import { cargarLogoExcel } from "@/lib/reporte-excel";
 
 // Talonarios (recibos de pago) de una corrida (21 oct 2026, pedido de Javier Pabón,
-// AVG Accounting). Devuelve, por empleado, todo lo que lleva un talonario: ingresos
-// del período (horas y tarifa), deducciones, neto, acumulado del año y saldos de
-// vacaciones/enfermedad. El PDF/impresión se arma en el cliente.
-const n = (v: unknown) => Number(v ?? 0) || 0;
-
+// AVG Accounting). Devuelve, por empleado, todo lo que lleva un talonario. La impresión/PDF
+// se arma en el cliente; el envío por correo está en ./enviar.
 export async function GET(req: NextRequest) {
   const supabase = createClient();
   const corridaId = req.nextUrl.searchParams.get("corridaId") ?? "";
@@ -18,77 +16,30 @@ export async function GET(req: NextRequest) {
   if ("error" in a) return a.error;
   const { g, entityId } = a;
 
-  const { data: run } = await g.db.from("payroll_runs").select("*").eq("id", corridaId).eq("owner_id", g.userId).maybeSingle();
-  if (!run) return NextResponse.json({ error: "Corrida no encontrada." }, { status: 404 });
+  const r = await cargarDatosTalonarios(g, entityId, corridaId, soloEmpleado);
+  if (!r.datos) return NextResponse.json({ error: r.error }, { status: r.status ?? 500 });
+  const { logoR2Key, ...datos } = r.datos;
 
-  const { data: ent } = await g.db.from("business_entities").select("name, ein, municipio, phone, address, zip").eq("id", entityId).maybeSingle();
+  // Logo como data URL para la ventana de impresión.
+  const logo = await cargarLogoExcel(logoR2Key);
+  const logoDataUrl = logo ? `data:image/${logo.extension};base64,${Buffer.from(logo.buffer).toString("base64")}` : null;
 
-  let q = g.db.from("payroll_run_lines").select("*").eq("run_id", corridaId).order("created_at");
-  if (soloEmpleado) q = q.eq("employee_id", soloEmpleado);
-  const { data: lineas } = await q;
-  const ids = (lineas ?? []).map((l) => l.employee_id as string);
-  if (ids.length === 0) return NextResponse.json({ ok: true, entidad: ent, corrida: run, talonarios: [] });
-
-  const { data: emps } = await g.db
-    .from("payroll_employees")
-    .select("id, nombre, ssn_ultimos4, tipo_pago, tarifa, frecuencia, fecha_ingreso, ytd_inicial, ytd_inicial_anio")
-    .in("id", ids);
-
-  // Acumulado del año: corridas aprobadas hasta este período (+ la propia) + lo previo cargado.
-  const { data: corridasAnio } = await g.db
-    .from("payroll_runs")
-    .select("id, estado, periodo_fin")
-    .eq("owner_id", g.userId)
+  // Último envío por correo (de la bitácora) para avisar antes de reenviar.
+  const { data: envios } = await g.db
+    .from("payroll_audit_log")
+    .select("created_at, actor_email, detalle")
     .eq("entity_id", entityId)
-    .eq("anio", run.anio)
-    .lte("periodo_fin", run.periodo_fin);
-  const runIds = (corridasAnio ?? []).filter((r) => r.id === corridaId || r.estado !== "pendiente").map((r) => r.id as string);
-  const { data: previas } = await g.db
-    .from("payroll_run_lines")
-    .select("employee_id, bruto, neto, ss_emp, medicare_emp, medicare_adic, hacienda, sinot_emp, choferil, otras_deducciones")
-    .in("run_id", runIds.length ? runIds : [corridaId])
-    .in("employee_id", ids);
-
-  // Vacaciones / enfermedad
-  const { data: cfg } = await g.db.from("payroll_entity_config").select("*").eq("entity_id", entityId).maybeSingle();
-  const reglas = reglasLic(cfg);
-  const { data: movs } = await g.db.from("payroll_leave").select("employee_id, tipo, movimiento, fecha, dias").eq("owner_id", g.userId).eq("entity_id", entityId).in("employee_id", ids);
-
-  const talonarios = (lineas ?? []).map((l) => {
-    const e = (emps ?? []).find((x) => x.id === l.employee_id);
-    const propias = (previas ?? []).filter((p) => p.employee_id === l.employee_id);
-    const suma = (k: string) => propias.reduce((s, p) => s + n((p as Record<string, unknown>)[k]), 0);
-    const inicial = e && e.ytd_inicial_anio === run.anio ? ((e.ytd_inicial ?? {}) as { bruto?: number }) : null;
-    const brutoAnio = suma("bruto") + n(inicial?.bruto);
-    const meses = mesesTrabajados((e?.fecha_ingreso as string | null) ?? null);
-    const m = (movs ?? []).filter((x) => x.employee_id === l.employee_id) as unknown as MovLic[];
-    return {
-      employeeId: l.employee_id as string,
-      nombre: (e?.nombre as string) ?? (l.detalle as { nombre?: string })?.nombre ?? "",
-      ssnUltimos4: (e?.ssn_ultimos4 as string | null) ?? null,
-      tipoPago: (e?.tipo_pago as string) ?? "salario",
-      tarifa: n(e?.tarifa),
-      frecuencia: (e?.frecuencia as string) ?? run.frecuencia,
-      entrada: (l.entrada ?? {}) as Record<string, unknown>,
-      linea: l.detalle as Record<string, unknown>,
-      acumulado: {
-        bruto: brutoAnio,
-        neto: suma("neto"),
-        retenciones: suma("ss_emp") + suma("medicare_emp") + suma("medicare_adic") + suma("hacienda") + suma("sinot_emp") + suma("choferil"),
-        hacienda: suma("hacienda"),
-        otras: suma("otras_deducciones"),
-      },
-      licencias: {
-        vacaciones: saldoLic("vacaciones", meses, m, reglas).saldo,
-        enfermedad: saldoLic("enfermedad", meses, m, reglas).saldo,
-      },
-    };
-  });
+    .eq("accion", "talonarios_enviados")
+    .order("created_at", { ascending: false })
+    .limit(30);
+  const ultimo = (envios ?? []).find((e) => (e.detalle as { run_id?: string })?.run_id === corridaId);
 
   return NextResponse.json({
     ok: true,
-    entidad: ent,
-    corrida: { id: run.id, frecuencia: run.frecuencia, periodo_inicio: run.periodo_inicio, periodo_fin: run.periodo_fin, fecha_pago: run.fecha_pago, anio: run.anio, estado: run.estado },
-    talonarios,
+    ...datos,
+    logo: logoDataUrl,
+    ultimoEnvio: ultimo
+      ? { en: ultimo.created_at as string, por: (ultimo.actor_email as string | null) ?? null, enviados: Number((ultimo.detalle as { enviados?: number })?.enviados ?? 0) }
+      : null,
   });
 }

@@ -346,7 +346,7 @@ PRO/PRO+ (negocio):
   cuesta un empleado?" usa estimar_costo_empleado; para el cómo hacerlo
   paso a paso, consultar_manual (artículo nomina). NUNCA inventes
   montos de nómina. Pestañas: Corrida, Empleados, Historial (corridas guardadas y sus talonarios: botón
-  "Talonarios de la corrida" imprime/guarda en PDF uno por empleado), Licencias
+  "Talonarios de la corrida" imprime/guarda en PDF uno por empleado; con logo; "Enviar talonarios por email" a cada empleado con confirmación, y envío automático opcional en Tasas), Licencias
   (vacaciones/enfermedad, saldos, calendario de ausencias, liquidación
   al salir), Tasas (reglas configurables del patrono: SUTA, CFSE, Bono
   de Navidad, tipos de bono y regla de productividad, vacaciones/enfermedad,

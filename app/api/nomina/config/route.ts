@@ -77,6 +77,7 @@ export async function PUT(req: NextRequest) {
   if ([bPct, bTope, bHoras, bIni, bFin, bPago].includes("mal")) {
     return NextResponse.json({ error: "Revisa los valores del Bono de Navidad (porcentaje, monto, horas y fechas MM-DD)." }, { status: 400 });
   }
+  if (body.talonarios_auto !== undefined) fila.talonarios_auto = !!body.talonarios_auto;
   // Tipos de bono (lista con nombre) y regla de productividad
   if (body.bono_tipos !== undefined) {
     const lista = (Array.isArray(body.bono_tipos) ? body.bono_tipos : String(body.bono_tipos ?? "").split(","))

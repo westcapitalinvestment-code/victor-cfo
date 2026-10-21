@@ -76,7 +76,7 @@ export async function sendDocumentoDeContableEmail(params: {
     <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
   </div>
   <p>Tu contable <strong>${nombre}</strong> ${accion} <strong>${doc}</strong> en tus Documentos.${escapeHtml(venceTxt)}</p>
-  <p style="text-align: center; margin: 24px 0;"><a href="${link}" style="background: #0F766E; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">Ver mi Documentos</a></p>
+  <p style="text-align: center; margin: 24px 0;"><a href="${link}" style="background: #0F766E; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">Ver mis Documentos</a></p>
   <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
   <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
 </div>`.trim();
@@ -2394,6 +2394,36 @@ export async function sendFormulario480Email(params: {
       text: `Hola ${params.nombre}, ${params.remitente} te envía adjunto tu Modelo 480.6SP del año ${params.anio}.`,
       html,
       attachments: [{ filename: `480.6SP-${params.anio}.pdf`, content: params.pdf }],
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}
+
+
+// 21 oct 2026: talonario de pago (recibo de nómina) al empleado. El cuerpo lo arma
+// lib/nomina-talonario-html.ts; el logo de la compañía va como imagen adjunta en línea
+// (cid:logo) porque está en R2 privado y muchos clientes bloquean data: URLs.
+export async function sendTalonarioEmail(params: {
+  toEmail: string;
+  empresa: string;
+  asunto: string;
+  html: string;
+  logo?: { buffer: Buffer; extension: "png" | "jpeg" };
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+  try {
+    const { error } = await resend.emails.send({
+      from: `${params.empresa.replace(/[<>"]/g, "")} vía VICTOR CFO <${FROM_ADDRESS}>`,
+      to: params.toEmail,
+      subject: params.asunto,
+      html: params.html,
+      text: `${params.asunto}. Abre este correo en un lector que muestre HTML para ver tu talonario de pago.`,
+      ...(params.logo
+        ? { attachments: [{ filename: `logo.${params.logo.extension === "png" ? "png" : "jpg"}`, content: params.logo.buffer, contentType: params.logo.extension === "png" ? "image/png" : "image/jpeg", inlineContentId: "logo" }] }
+        : {}),
     });
     if (error) return { sent: false, reason: error.message };
     return { sent: true };

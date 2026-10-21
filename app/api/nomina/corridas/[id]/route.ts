@@ -1,3 +1,4 @@
+import { enviarTalonariosAuto } from "@/lib/nomina-talonarios-server";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { actorNominaPorFila, calcularCorrida, filasDeLineas, registrarNomina, type EntradaCorrida } from "@/lib/nomina-server";
@@ -112,7 +113,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .eq("owner_id", g.userId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     await registrarNomina(g, entityId, "corrida_aprobada_por_dueno", { run_id: params.id, periodo: `${run.periodo_inicio} a ${run.periodo_fin}` });
-    return NextResponse.json({ ok: true, estado: "aprobada" });
+    const talonarios = await enviarTalonariosAuto(g, entityId, params.id);
+    return NextResponse.json({ ok: true, estado: "aprobada", talonarios });
   }
   const { error } = await g.db.from("payroll_runs").delete().eq("id", params.id).eq("owner_id", g.userId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

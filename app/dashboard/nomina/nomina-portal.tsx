@@ -6,7 +6,7 @@ import { formatFecha, formatMoney } from "@/lib/format";
 import ImportarHoras from "./importar-horas";
 import LicenciasTab from "./licencias-tab";
 import { LicenciasEnCorrida } from "./licencias-extra";
-import { abrirTalonarios } from "./talonarios";
+import { abrirTalonarios, enviarTalonariosPorEmail } from "./talonarios";
 import BonoProductividad, { type ReglaProd } from "./bono-productividad";
 import ReportesTab from "./reportes-tab";
 import BonoNavidad from "./bono-navidad";
@@ -154,6 +154,7 @@ interface Config {
   enf_tope?: number | null;
   horas_por_dia?: number | null;
   bono_tipos?: string[] | null;
+  talonarios_auto?: boolean | null;
   prod_pct?: number | null;
   prod_meta?: number | null;
   prod_tope?: number | null;
@@ -538,6 +539,9 @@ function CorridaTab({
       return;
     }
     setResultado(null);
+    if (j?.talonarios) {
+      window.alert(`Corrida aprobada. Talonarios enviados por email: ${j.talonarios.enviados}${j.talonarios.sinEmail ? ` · sin email: ${j.talonarios.sinEmail}` : ""}${j.talonarios.fallidos ? ` · fallidos: ${j.talonarios.fallidos}` : ""}.`);
+    }
     onGuardada();
   }
 
@@ -853,16 +857,23 @@ function AsientoTabla({ asiento }: { asiento: LineaAsiento[] }) {
   );
 }
 
-function Recibo({ l, onTalonario }: { l: LineaCalc; onTalonario?: () => void }) {
+function Recibo({ l, onTalonario, onEmail }: { l: LineaCalc; onTalonario?: () => void; onEmail?: () => void }) {
   return (
     <div className="vc-card">
       <div className="mb-1 flex items-center justify-between gap-2">
         <p className="text-sm font-medium">{l.nombre}</p>
-        {onTalonario && (
-          <button className="text-xs font-medium text-teal" onClick={onTalonario}>
-            Talonario (imprimir/PDF)
-          </button>
-        )}
+        <div className="flex gap-3">
+          {onTalonario && (
+            <button className="text-xs font-medium text-teal" onClick={onTalonario}>
+              Talonario (imprimir/PDF)
+            </button>
+          )}
+          {onEmail && (
+            <button className="text-xs font-medium text-blue" onClick={onEmail}>
+              Enviar por email
+            </button>
+          )}
+        </div>
       </div>
       <Fila a="Salario bruto" b={formatMoney(l.bruto)} />
       {l.desglose.bonos > 0 && (
@@ -1222,7 +1233,9 @@ function HistorialTab({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ accion }),
     });
-    if (!r.ok) window.alert((await r.json().catch(() => null))?.error ?? "No se pudo completar.");
+    const j = await r.json().catch(() => null);
+    if (!r.ok) window.alert(j?.error ?? "No se pudo completar.");
+    else if (j?.talonarios) window.alert(`Corrida aprobada. Talonarios enviados por email: ${j.talonarios.enviados}${j.talonarios.sinEmail ? ` · sin email: ${j.talonarios.sinEmail}` : ""}${j.talonarios.fallidos ? ` · fallidos: ${j.talonarios.fallidos}` : ""}.`);
     setAbierta(null);
     onCambio();
   }
@@ -1286,17 +1299,30 @@ function HistorialTab({
                     </div>
                     <AsientoTabla asiento={detalle.asiento} />
                   </div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-2">
                     <p className="text-xs font-medium">Recibos / talonarios</p>
-                    <button
-                      className="vc-btn-primary"
-                      onClick={async () => {
-                        const e = await abrirTalonarios(c.id);
-                        if (e) window.alert(e);
-                      }}
-                    >
-                      Talonarios de la corrida (imprimir/PDF)
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className="vc-btn-primary"
+                        onClick={async () => {
+                          const e = await abrirTalonarios(c.id);
+                          if (e) window.alert(e);
+                        }}
+                      >
+                        Talonarios de la corrida (imprimir/PDF)
+                      </button>
+                      {c.estado !== "pendiente" && (!modoContable || apruebaDirecto) && (
+                        <button
+                          className="rounded-lg border border-teal px-3 py-2 text-xs font-medium text-teal"
+                          onClick={async () => {
+                            const m = await enviarTalonariosPorEmail(c.id);
+                            if (m) window.alert(m);
+                          }}
+                        >
+                          Enviar talonarios por email
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {detalle.lineas.map((l) => (
                     <Recibo
@@ -1306,6 +1332,14 @@ function HistorialTab({
                         const e = await abrirTalonarios(c.id, l.detalle.employeeId);
                         if (e) window.alert(e);
                       }}
+                      onEmail={
+                        c.estado !== "pendiente" && (!modoContable || apruebaDirecto)
+                          ? async () => {
+                              const m = await enviarTalonariosPorEmail(c.id, l.detalle.employeeId);
+                              if (m) window.alert(m);
+                            }
+                          : undefined
+                      }
                     />
                   ))}
                 </>
@@ -1370,6 +1404,7 @@ const ACCION_ETIQ: Record<string, string> = {
   empleado_desactivado: "Desactivó un empleado",
   empleado_eliminado: "Eliminó un empleado",
   corrida_aprobada: "Guardó y aprobó una corrida",
+  talonarios_enviados: "Envió talonarios por email",
   corrida_enviada_a_aprobacion: "Envió una corrida para aprobación",
   corrida_aprobada_por_dueno: "El dueño aprobó una corrida",
   corrida_rechazada_por_dueno: "El dueño rechazó una corrida",
@@ -1499,6 +1534,7 @@ function TasasTab({
   const [codigo, setCodigo] = useState("");
   const [futa, setFuta] = useState(true);
   const [bonoActivo, setBonoActivo] = useState(true);
+  const [talAuto, setTalAuto] = useState(false);
   const [bonoPct, setBonoPct] = useState("");
   const [bonoTope, setBonoTope] = useState("");
   const [bonoHoras, setBonoHoras] = useState("");
@@ -1527,6 +1563,7 @@ function TasasTab({
     setCodigo(config?.cfse_codigo_riesgo ?? "");
     setFuta(config?.futa_aplica ?? true);
     setBonoActivo(config?.bono_activo ?? true);
+    setTalAuto(!!config?.talonarios_auto);
     setBonoPct(config?.bono_pct != null ? String(+(Number(config.bono_pct) * 100).toFixed(4)) : "");
     setBonoTope(config?.bono_tope != null ? String(config.bono_tope) : "");
     setBonoHoras(config?.bono_horas_min != null ? String(config.bono_horas_min) : "");
@@ -1542,6 +1579,7 @@ function TasasTab({
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ entityId, suta_pct: suta, cfse_pct: cfse, cfse_poliza: poliza, cfse_codigo_riesgo: codigo, futa_aplica: futa,
+        talonarios_auto: talAuto,
         bono_activo: bonoActivo, bono_pct: bonoPct, bono_tope: bonoTope, bono_horas_min: bonoHoras, bono_inicio: bonoIni, bono_fin: bonoFin, bono_fecha_pago: bonoPago,
         ...lic,
         ...bon,
@@ -1666,6 +1704,16 @@ function TasasTab({
               <input className="vc-input" placeholder="09-30" value={bonoFin} onChange={(e) => setBonoFin(e.target.value)} />
             </Campo>
           </div>
+        </div>
+        <div className="mt-2 border-t border-border pt-3">
+          <p className="mb-1 text-sm font-medium">Talonarios por email</p>
+          <label className="mb-2 flex items-start gap-2 text-xs">
+            <input type="checkbox" className="mt-0.5" checked={talAuto} onChange={(e) => setTalAuto(e.target.checked)} />
+            <span>
+              Enviar automáticamente el talonario a cada empleado (si tiene email) cuando una corrida quede aprobada. Apagado por defecto: sin esto, los envías tú con el botón
+              &ldquo;Enviar talonarios por email&rdquo; en Historial. El correo trae el sueldo y las deducciones del empleado.
+            </span>
+          </label>
         </div>
         <div className="mt-2 border-t border-border pt-3">
           <p className="mb-1 text-sm font-medium">Otros bonos</p>
