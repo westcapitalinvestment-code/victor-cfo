@@ -57,6 +57,32 @@ export async function PUT(req: NextRequest) {
   if (body.futa_aplica !== undefined) fila.futa_aplica = !!body.futa_aplica;
   if (body.cpa_puede_nomina !== undefined) fila.cpa_puede_nomina = !!body.cpa_puede_nomina;
   if (body.cpa_aprueba_directo !== undefined) fila.cpa_aprueba_directo = !!body.cpa_aprueba_directo;
+  // Bono de Navidad (vacío = sugerencia por defecto). El % llega como porcentaje (6 → 0.06).
+  const numOpc = (v: unknown, max: number): number | null | "mal" => {
+    if (v === null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 && n <= max ? n : "mal";
+  };
+  const mmdd = (v: unknown): string | null | "mal" => {
+    if (v === null || v === "") return null;
+    return /^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(String(v)) ? String(v) : "mal";
+  };
+  if (body.bono_activo !== undefined) fila.bono_activo = !!body.bono_activo;
+  const bPct = body.bono_pct === undefined ? undefined : numOpc(body.bono_pct, 100);
+  const bTope = body.bono_tope === undefined ? undefined : numOpc(body.bono_tope, 1_000_000);
+  const bHoras = body.bono_horas_min === undefined ? undefined : numOpc(body.bono_horas_min, 10_000);
+  const bIni = body.bono_inicio === undefined ? undefined : mmdd(body.bono_inicio);
+  const bFin = body.bono_fin === undefined ? undefined : mmdd(body.bono_fin);
+  const bPago = body.bono_fecha_pago === undefined ? undefined : mmdd(body.bono_fecha_pago);
+  if ([bPct, bTope, bHoras, bIni, bFin, bPago].includes("mal")) {
+    return NextResponse.json({ error: "Revisa los valores del Bono de Navidad (porcentaje, monto, horas y fechas MM-DD)." }, { status: 400 });
+  }
+  if (bPct !== undefined) fila.bono_pct = bPct === null ? null : (bPct as number) / 100;
+  if (bTope !== undefined) fila.bono_tope = bTope;
+  if (bHoras !== undefined) fila.bono_horas_min = bHoras;
+  if (bIni !== undefined) fila.bono_inicio = bIni;
+  if (bFin !== undefined) fila.bono_fin = bFin;
+  if (bPago !== undefined) fila.bono_fecha_pago = bPago;
   // Sin permiso para operar no tiene sentido "aprobar directo".
   if (fila.cpa_puede_nomina === false) fila.cpa_aprueba_directo = false;
   const { data, error } = await g.db.from("payroll_entity_config").upsert(fila, { onConflict: "entity_id" }).select("*").single();

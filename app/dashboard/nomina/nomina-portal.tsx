@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatFecha, formatMoney } from "@/lib/format";
 import ImportarHoras from "./importar-horas";
 import ReportesTab from "./reportes-tab";
+import BonoNavidad from "./bono-navidad";
 
 // Portal de Nómina (19 oct 2026). Cuatro pestañas: Corrida (calcular y guardar),
 // Empleados, Historial y Tasas. Todos los números los calcula el servidor
@@ -134,6 +135,13 @@ interface Config {
   futa_aplica: boolean;
   cpa_puede_nomina?: boolean;
   cpa_aprueba_directo?: boolean;
+  bono_activo?: boolean | null;
+  bono_pct?: number | null;
+  bono_tope?: number | null;
+  bono_horas_min?: number | null;
+  bono_inicio?: string | null;
+  bono_fin?: string | null;
+  bono_fecha_pago?: string | null;
 }
 
 const FREC_LABEL: Record<Frecuencia, string> = {
@@ -553,6 +561,26 @@ function CorridaTab({
                   horasRegulares: e.tipo_pago === "hora" ? String(h.regulares) : base.horasRegulares,
                   horasExtra: String(h.extra),
                 };
+              }
+              return sig;
+            });
+          }}
+        />
+      )}
+
+      {delPeriodo.length > 0 && (
+        <BonoNavidad
+          entityId={entityId}
+          empleadosVisibles={delPeriodo.map((e) => e.id)}
+          onAplicar={(montos) => {
+            setResultado(null);
+            setEntradas((p) => {
+              const sig = { ...p };
+              for (const e of delPeriodo) {
+                const m = montos[e.id];
+                if (!m) continue;
+                const base = p[e.id] ?? { incluir: true, horasRegulares: "", horasExtra: "", comisiones: "", bonos: "", otrasDeducciones: "" };
+                sig[e.id] = { ...base, incluir: true, bonos: String(m) };
               }
               return sig;
             });
@@ -1343,6 +1371,13 @@ function TasasTab({
   const [poliza, setPoliza] = useState("");
   const [codigo, setCodigo] = useState("");
   const [futa, setFuta] = useState(true);
+  const [bonoActivo, setBonoActivo] = useState(true);
+  const [bonoPct, setBonoPct] = useState("");
+  const [bonoTope, setBonoTope] = useState("");
+  const [bonoHoras, setBonoHoras] = useState("");
+  const [bonoIni, setBonoIni] = useState("");
+  const [bonoFin, setBonoFin] = useState("");
+  const [bonoPago, setBonoPago] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -1352,6 +1387,13 @@ function TasasTab({
     setPoliza(config?.cfse_poliza ?? "");
     setCodigo(config?.cfse_codigo_riesgo ?? "");
     setFuta(config?.futa_aplica ?? true);
+    setBonoActivo(config?.bono_activo ?? true);
+    setBonoPct(config?.bono_pct != null ? String(+(Number(config.bono_pct) * 100).toFixed(4)) : "");
+    setBonoTope(config?.bono_tope != null ? String(config.bono_tope) : "");
+    setBonoHoras(config?.bono_horas_min != null ? String(config.bono_horas_min) : "");
+    setBonoIni(config?.bono_inicio ?? "");
+    setBonoFin(config?.bono_fin ?? "");
+    setBonoPago(config?.bono_fecha_pago ?? "");
   }, [config]);
 
   async function guardar() {
@@ -1360,7 +1402,9 @@ function TasasTab({
     const r = await fetch("/api/nomina/config", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entityId, suta_pct: suta, cfse_pct: cfse, cfse_poliza: poliza, cfse_codigo_riesgo: codigo, futa_aplica: futa }),
+      body: JSON.stringify({ entityId, suta_pct: suta, cfse_pct: cfse, cfse_poliza: poliza, cfse_codigo_riesgo: codigo, futa_aplica: futa,
+        bono_activo: bonoActivo, bono_pct: bonoPct, bono_tope: bonoTope, bono_horas_min: bonoHoras, bono_inicio: bonoIni, bono_fin: bonoFin, bono_fecha_pago: bonoPago,
+      }),
     });
     const j = await r.json().catch(() => null);
     if (!r.ok) {
@@ -1451,6 +1495,37 @@ function TasasTab({
           <input type="checkbox" checked={futa} onChange={(e) => setFuta(e.target.checked)} />
           Esta entidad paga FUTA (desempleo federal)
         </label>
+        <div className="mt-2 border-t border-border pt-3">
+          <p className="mb-1 text-sm font-medium">Bono de Navidad</p>
+          <p className="mb-2 text-[11px] text-muted">
+            Escribe las reglas que le aplican a tu negocio. Si dejas un campo vacío, VICTOR usa una sugerencia (6 %, tope $600, 700 horas, período 10-01 a 09-30, pago 12-15)
+            marcada «por confirmar» con tu contable.
+          </p>
+          <label className="mb-2 flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={bonoActivo} onChange={(e) => setBonoActivo(e.target.checked)} />
+            Calcular Bono de Navidad en esta entidad
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <Campo label="Porcentaje del salario (%)" ayuda="Ej. 6 = 6 % del salario del período.">
+              <input className="vc-input" type="number" min="0" max="100" step="0.01" value={bonoPct} onChange={(e) => setBonoPct(e.target.value)} />
+            </Campo>
+            <Campo label="Tope por empleado ($)">
+              <input className="vc-input" type="number" min="0" step="0.01" value={bonoTope} onChange={(e) => setBonoTope(e.target.value)} />
+            </Campo>
+            <Campo label="Horas mínimas trabajadas">
+              <input className="vc-input" type="number" min="0" step="1" value={bonoHoras} onChange={(e) => setBonoHoras(e.target.value)} />
+            </Campo>
+            <Campo label="Fecha límite de pago (MM-DD)">
+              <input className="vc-input" placeholder="12-15" value={bonoPago} onChange={(e) => setBonoPago(e.target.value)} />
+            </Campo>
+            <Campo label="Período desde (MM-DD)">
+              <input className="vc-input" placeholder="10-01" value={bonoIni} onChange={(e) => setBonoIni(e.target.value)} />
+            </Campo>
+            <Campo label="Período hasta (MM-DD)">
+              <input className="vc-input" placeholder="09-30" value={bonoFin} onChange={(e) => setBonoFin(e.target.value)} />
+            </Campo>
+          </div>
+        </div>
         {error && <p className="text-xs text-red">{error}</p>}
         {msg && <p className="text-xs text-teal">{msg}</p>}
         <button className="vc-btn-primary" onClick={guardar}>Guardar tasas</button>
