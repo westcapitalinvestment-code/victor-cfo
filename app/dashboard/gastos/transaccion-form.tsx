@@ -26,9 +26,13 @@ export default function TransaccionForm({
   categorias,
   inicial,
   tipoInicial,
+  bloquearTipo,
   onListo,
   onCancelar,
 }: {
+  // Con true se oculta el selector Gasto/Ingreso: el formulario queda fijo en
+  // tipoInicial (tarjetas del Inicio gratis: tocar Ingresos = solo ingreso).
+  bloquearTipo?: boolean;
   // Para abrir el formulario de alta ya en "Ingreso" (ej. desde la tarjeta 50/30/20).
   tipoInicial?: "gasto" | "ingreso";
   hoy: string;
@@ -120,9 +124,11 @@ export default function TransaccionForm({
 
   return (
     <div className="vc-card mb-3 flex flex-col gap-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted">{editando ? "Editar transacción" : "Añadir transacción a mano"}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted">
+        {editando ? "Editar transacción" : bloquearTipo ? (tipo === "ingreso" ? "Registrar ingreso" : "Registrar gasto") : "Añadir transacción a mano"}
+      </p>
 
-      <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg p-1">
+      <div className={`grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg p-1 ${bloquearTipo ? "hidden" : ""}`}>
         <button
           type="button"
           onClick={() => {
@@ -205,7 +211,7 @@ export default function TransaccionForm({
 
       <div className="flex gap-2">
         <button type="button" className="vc-btn-primary" disabled={guardando} onClick={guardar}>
-          {guardando ? "Guardando..." : editando ? "Guardar cambios" : "Añadir"}
+          {guardando ? "Guardando..." : editando ? "Guardar cambios" : bloquearTipo ? (tipo === "ingreso" ? "Registrar ingreso" : "Registrar gasto") : "Añadir"}
         </button>
         <button type="button" className="rounded-lg border border-border px-4 text-sm text-muted" onClick={onCancelar}>
           Cancelar

@@ -59,9 +59,18 @@ export default function MetricasGratis({
   const cuentaActual =
     panel === "ahorro" ? cuentaAhorro : panel === "inversion" ? cuentaInversion : panel === "balance" ? cuentaEfectivo : null;
 
+  // Si aún no hay balance anotado, tocar Ingresos/Gastos pide primero el
+  // balance (si no, la primera vez no se ve nada) y luego abre lo que tocó.
+  const [pendiente, setPendiente] = useState<Panel>(null);
+
   function abrir(p: Panel) {
     setError(null);
     setSaldo("");
+    if ((p === "ingreso" || p === "gasto") && !cuentaEfectivo) {
+      setPendiente(p);
+      return setPanel("balance");
+    }
+    setPendiente(null);
     setPanel(p);
   }
 
@@ -92,7 +101,10 @@ export default function MetricasGratis({
       const b = await res.json().catch(() => null);
       return setError(b?.error ?? "No se pudo guardar.");
     }
-    setPanel(null);
+    const siguiente = pendiente;
+    setPendiente(null);
+    setSaldo("");
+    setPanel(siguiente);
     router.refresh();
   }
 
@@ -163,6 +175,7 @@ export default function MetricasGratis({
         <TransaccionForm
           hoy={hoy}
           tipoInicial={panel}
+          bloquearTipo
           cuentas={cuentas}
           categorias={categorias}
           onListo={() => setPanel(null)}
@@ -176,7 +189,7 @@ export default function MetricasGratis({
             {panel === "ahorro" ? "Cuánto tienes ahorrado" : panel === "balance" ? "Tu balance de hoy" : "Cuánto tienes invertido"}
           </p>
           <p className="text-xs text-muted">
-            {panel === "balance" && "Cuánto dinero tienes hoy en efectivo y en tu cuenta. Desde aquí, cada ingreso que anotes lo suma y cada gasto lo resta. "}
+            {panel === "balance" && (pendiente ? "Primero dinos con cuánto empiezas: cuánto dinero tienes hoy (efectivo y cuenta). Luego registras tu " + pendiente + ". " : "Cuánto dinero tienes hoy en efectivo y en tu cuenta. Desde aquí, cada ingreso que anotes lo suma y cada gasto lo resta. ")}
             {cuentaActual
               ? `Ahora mismo tienes anotado ${formatMoney(cuentaActual.saldo)}. Escribe el saldo nuevo.`
               : "Escribe el saldo total de hoy. Lo puedes actualizar cuando quieras."}
@@ -194,7 +207,7 @@ export default function MetricasGratis({
             <button type="button" className="vc-btn-primary" disabled={guardando} onClick={guardarSaldo}>
               {guardando ? "Guardando..." : "Guardar"}
             </button>
-            <button type="button" className="rounded-lg border border-border px-4 text-sm text-muted" onClick={() => setPanel(null)}>
+            <button type="button" className="rounded-lg border border-border px-4 text-sm text-muted" onClick={() => { setPendiente(null); setPanel(null); }}>
               Cancelar
             </button>
           </div>

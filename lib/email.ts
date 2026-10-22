@@ -871,8 +871,8 @@ export async function sendWelcomeGratisEmail(params: {
   // (categoriza, recuerda citas, avisa de documentos pendientes) en vez de
   // solo el precio.
   const pasos: [string, string][] = [
-    ["Anota tu balance de hoy", "En Inicio, toca \"Anotar mi balance\" y escribe cuánto tienes hoy. Ese es tu punto de partida: todo lo que anotes después se suma o se resta solo."],
-    ["Toca las tarjetas y registra tu día", "Ingresos, Gastos, Ahorrado, Deuda e Inversiones son botones: tócalos y anota lo tuyo en segundos. Si te equivocas, lo editas o lo borras y tu balance se corrige."],
+    ["Anota tu balance de hoy", "En Inicio, toca el botón \"Anotar mi balance\" (arriba a la derecha de las tarjetas) y escribe cuánto dinero tienes hoy. Ese es tu punto de partida: todo lo que anotes después se suma o se resta solo."],
+    ["Toca una tarjeta y registra", "Toca Ingresos para anotar dinero que entró (monto, fecha y de dónde vino) o Gastos para anotar lo que gastaste (monto, fecha y categoría). Ahorrado e Inversiones los actualizas con su saldo actual, y en Deuda añades tus tarjetas y préstamos. Si te equivocas, tocas la transacción en Transacciones para editarla o borrarla y tu balance se corrige solo."],
     ["O sube tus movimientos de golpe", "¿Prefieres no anotar uno por uno? Descarga el CSV, Excel o PDF de tu banco y súbelo desde Cuentas. Tú lo revisas y categorizas una vez, y tu dashboard cobra vida."],
     ["Planifica con tus herramientas gratis", "Calcula cómo salir de deudas (bola de nieve o avalancha), arma tu plan 50/30/20, usa la calculadora de ahorro y guarda tus compromisos en Citas."],
   ];
@@ -1632,8 +1632,8 @@ export async function sendNurtureCsvGuiaEmail(params: {
   const bajaUrl = urlBajaCorreos(SITE_URL, userId);
 
   const pasos: [string, string][] = [
-    ["Anota tu balance de hoy", "En Inicio, toca \"Anotar mi balance\" y escribe cuánto tienes hoy. Desde ahí, cada ingreso que anotes lo suma y cada gasto lo resta."],
-    ["Toca las tarjetas para registrar", "Ingresos, Gastos, Ahorrado, Deuda e Inversiones son botones: tócalos, anota el monto y listo. ¿Te equivocaste? Lo editas o lo borras y tu balance se corrige solo."],
+    ["Anota tu balance de hoy", "En Inicio, toca \"Anotar mi balance\" y escribe cuánto dinero tienes hoy. Desde ahí, cada ingreso que anotes lo suma y cada gasto lo resta."],
+    ["Toca una tarjeta y registra", "Ingresos: monto, fecha y de dónde vino. Gastos: monto, fecha y categoría. Ahorrado e Inversiones: escribe tu saldo actual. ¿Te equivocaste? Entra a Transacciones, edita o borra y tu balance se corrige solo."],
     ["¿Muchos movimientos? Súbelos de golpe", "Descarga el CSV, Excel o PDF de tu banco (los últimos 2 o 3 meses bastan), súbelo desde Cuentas y categoriza una vez. Tu dashboard cobra vida con ingresos, gastos y a dónde se va tu dinero."],
   ];
 
