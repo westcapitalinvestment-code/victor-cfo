@@ -142,11 +142,15 @@ export default function DeudasPage() {
       </div>
 
       <div className="mb-4 rounded-lg p-3.5 text-sm text-white" style={{ background: "#1B3A5C" }}>
-        <p className="font-medium">{metodo === "nieve" ? "Método bola de nieve" : "Método avalancha"}</p>
+        <p className="font-medium">¿Cómo prefieres pagar tus deudas?</p>
         <p className="mt-1 text-xs text-white/80">
-          {metodo === "nieve"
-            ? "Pagas el mínimo en todas y todo lo extra a la deuda más pequeña. Al saldarla, su pago pasa a la siguiente y la bola va creciendo. Ganas impulso rápido."
-            : "Pagas el mínimo en todas y todo lo extra a la deuda con la tasa más alta. Normalmente pagas menos intereses en total."}
+          En los dos métodos pagas el mínimo en todas las deudas y mandas todo lo extra a una sola. Lo que cambia es a cuál:
+        </p>
+        <p className={`mt-2 text-xs ${metodo === "nieve" ? "text-white" : "text-white/60"}`}>
+          <span className="font-semibold">Bola de nieve:</span> a la deuda más pequeña. Al saldarla, su pago pasa a la siguiente y la bola va creciendo. Ganas impulso rápido porque cierras deudas pronto.
+        </p>
+        <p className={`mt-1.5 text-xs ${metodo === "avalancha" ? "text-white" : "text-white/60"}`}>
+          <span className="font-semibold">Avalancha:</span> a la deuda con la tasa de interés más alta. Normalmente pagas menos intereses en total, aunque la primera deuda tarde más en desaparecer.
         </p>
         <div className="mt-2.5 flex gap-2">
           {(["nieve", "avalancha"] as Metodo[]).map((m) => (

@@ -294,8 +294,12 @@ export default function MetricasGratis({
                   </div>
                 </div>
               ))}
-              <Link href="/dashboard/deudas" className="pt-2 text-xs font-medium text-teal underline">
-                Ver mi plan para pagarlas (bola de nieve) →
+              <p className="pt-2 text-[11px] text-muted">
+                Ahí te explicamos dos formas de salir de deudas: <span className="font-medium">bola de nieve</span> (pagas primero la más pequeña, para ganar impulso) y{" "}
+                <span className="font-medium">avalancha</span> (pagas primero la de mayor interés, para gastar menos en intereses).
+              </p>
+              <Link href="/dashboard/deudas" className="pt-1 text-xs font-medium text-teal underline">
+                Ver mi plan para pagarlas →
               </Link>
             </div>
           )}
