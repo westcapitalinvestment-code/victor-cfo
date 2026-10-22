@@ -11,6 +11,7 @@ import AlertasPatronCard, { type AlertaRegla } from "./alertas-patron-card";
 import ImpuestosEstimadosCard from "./impuestos-estimados-card";
 import Regla503020Card from "./regla-503020-card";
 import MetricasGratis from "./metricas-gratis";
+import BotonBalance from "./boton-balance";
 import { calcularRegla503020 } from "@/lib/regla-50-30-20";
 import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 
@@ -786,7 +787,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <PrivacyToggle />
         </div>
         {!bancoConectado && profile.plan === "gratis" && (
-          <p className="mt-2 text-xs text-white/90">Toca &ldquo;Anotar mi balance&rdquo; aquí abajo para verlo ↓</p>
+          <>
+            <p className="mt-2 text-xs text-white/90">Dinos con cuánto dinero empiezas y todo lo que anotes lo suma o lo resta.</p>
+            <BotonBalance texto="Registra tu balance" />
+          </>
+        )}
+        {bancoConectado && profile.plan === "gratis" && (
+          <BotonBalance texto="Editar mi balance" />
         )}
         {!bancoConectado && profile.plan !== "gratis" && (
           <Link href="/dashboard/cuentas" className="mt-2 inline-block text-xs font-medium text-white underline">

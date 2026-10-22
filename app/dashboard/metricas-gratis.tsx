@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Sensitive } from "@/lib/privacy";
@@ -108,12 +108,23 @@ export default function MetricasGratis({
     router.refresh();
   }
 
+  // El botón de la tarjeta de balance (Inicio) manda este evento.
+  useEffect(() => {
+    function alEvento() {
+      abrir("balance");
+      setTimeout(() => document.getElementById("registra-finanzas")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    }
+    window.addEventListener("vc-abrir-balance", alEvento);
+    return () => window.removeEventListener("vc-abrir-balance", alEvento);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const sub = esMesActual ? "este mes" : mesLabel;
   const cls = "vc-met cursor-pointer text-left transition hover:border-teal";
 
   return (
     <>
-      <div className="mb-2 flex items-start justify-between gap-2">
+      <div id="registra-finanzas" className="mb-2 flex items-start justify-between gap-2">
         <div>
           <p className="text-sm font-medium">✍️ Registra tus finanzas aquí</p>
           <p className="text-[11px] text-muted">
