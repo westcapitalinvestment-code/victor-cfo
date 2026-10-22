@@ -15,13 +15,13 @@ const NOMBRE: Record<Grupo, string> = {
 const AYUDA: Record<Grupo, string> = {
   necesidades: "vivienda, comida, luz, transporte, salud, seguros",
   gustos: "restaurantes, entretenimiento, ropa, regalos y otros",
-  ahorro: "ahorro, inversión y pagos de deudas",
+  ahorro: "págate primero: lo que aportas a ahorro, inversión y pagos de deudas",
 };
 
 export default function Regla503020Card({ mesLabel, resultado }: { mesLabel: string; resultado: ResultadoRegla }) {
   const sinIngresos = resultado.ingresos <= 0;
   return (
-    <div className="vc-card !p-0 mb-3">
+    <div id="regla-50-30-20" className="vc-card !p-0 mb-3">
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <span aria-hidden style={{ fontSize: 14 }}>
           🥧
@@ -68,8 +68,9 @@ export default function Regla503020Card({ mesLabel, resultado }: { mesLabel: str
                   </div>
                   <p className="mt-0.5 text-[11px] text-muted">
                     <Sensitive>{formatMoney(f.monto)}</Sensitive> · {AYUDA[f.grupo]}
-                    {!ok && f.grupo !== "ahorro" && " · te pasaste de la meta"}
-                    {!ok && f.grupo === "ahorro" && " · por debajo de la meta"}
+                    {!ok && f.grupo === "necesidades" && " · por encima de la guía; es común, ve bajándolo poco a poco"}
+                    {!ok && f.grupo === "gustos" && " · un poco por encima de la guía"}
+                    {!ok && f.grupo === "ahorro" && (f.pct < 10 ? " · empieza con 10% y sube hacia 20%" : " · vas bien, sube hacia 20%")}
                   </p>
                 </div>
               );

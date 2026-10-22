@@ -12,6 +12,8 @@ import ImpuestosEstimadosCard from "./impuestos-estimados-card";
 import Regla503020Card from "./regla-503020-card";
 import MetricasGratis from "./metricas-gratis";
 import BotonBalance from "./boton-balance";
+import PlanGratisCard, { type AporteFila } from "./plan-gratis-card";
+import { respuestasValidas, type DatosPlan, type Respuestas } from "@/lib/plan-gratis";
 import { calcularRegla503020 } from "@/lib/regla-50-30-20";
 import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 
@@ -234,6 +236,33 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   let cuentaAhorroGratis: { id: string; saldo: number } | null = null;
   let cuentaInversionGratis: { id: string; saldo: number } | null = null;
   let cuentaEfectivoGratis: { id: string; saldo: number } | null = null;
+  // "Tu plan" (22 oct 2026). Consultas tolerantes: si la migración 0187 aún no
+  // corre, devuelven error/null y el Inicio sigue funcionando sin la tarjeta.
+  let respuestasGratis: Respuestas | null = null;
+  let aportesGratis: AporteFila[] = [];
+  let subioArchivoGratis = false;
+  if (profile.plan === "gratis") {
+    const [{ data: obRow }, { data: apRows }, { count: nSubidas }] = await Promise.all([
+      supabase.from("users").select("onboarding_gratis").eq("id", user.id).maybeSingle(),
+      supabase
+        .from("aportes_gratis")
+        .select("id, tipo, monto, fecha, deuda_nombre")
+        .eq("owner_id", user.id)
+        .gte("fecha", `${mesActualStr}-01`)
+        .order("created_at", { ascending: false }),
+      supabase.from("statement_uploads").select("id", { count: "exact", head: true }).eq("owner_id", user.id),
+    ]);
+    const ob = (obRow as { onboarding_gratis?: { respuestas?: unknown } | null } | null)?.onboarding_gratis;
+    if (ob && respuestasValidas(ob.respuestas)) respuestasGratis = ob.respuestas;
+    aportesGratis = ((apRows ?? []) as { id: string; tipo: AporteFila["tipo"]; monto: number | string; fecha: string; deuda_nombre: string | null }[]).map((a) => ({
+      id: a.id,
+      tipo: a.tipo,
+      monto: Number(a.monto || 0),
+      fecha: a.fecha,
+      deuda_nombre: a.deuda_nombre,
+    }));
+    subioArchivoGratis = (nSubidas ?? 0) > 0;
+  }
   if (profile.plan === "gratis") {
     const [{ data: deudasPlan }, { data: manualesGratis }] = await Promise.all([
       supabase.from("deudas_plan").select("id, nombre, saldo, apr, pago_minimo").eq("owner_id", user.id).order("saldo", { ascending: true }),
@@ -666,14 +695,39 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const resultado503020 =
     profile.plan === "gratis"
       ? calcularRegla503020(
-          (transaccionesMesActualResumen ?? [])
-            .filter((t) => t.tipo_flujo === "gasto")
-            .map((t) => ({
-              categoria: t.hacienda_category_id ? nombrePorCategoriaResumen.get(t.hacienda_category_id) ?? null : null,
-              monto: Number(t.amount),
-            })),
+          [
+            ...(transaccionesMesActualResumen ?? [])
+              .filter((t) => t.tipo_flujo === "gasto")
+              .map((t) => ({
+                categoria: t.hacienda_category_id ? nombrePorCategoriaResumen.get(t.hacienda_category_id) ?? null : null,
+                monto: Number(t.amount),
+              })),
+            // Págate primero: aportes a ahorro/inversión y pagos de deuda del mes
+            // cuentan en "Ahorro y deudas" aunque no sean gastos.
+            ...aportesGratis.map((a) => ({ categoria: "ahorro", monto: a.monto })),
+          ],
           ingresoMesActualResumen
         )
+      : null;
+
+  const datosPlanGratis: DatosPlan | null =
+    profile.plan === "gratis"
+      ? {
+          tieneBalance: !!cuentaEfectivoGratis || bancoConectado,
+          numDeudas: deudasFilasGratis.length,
+          deudaTotal: deudaTotal + deudaPlanGratis,
+          ahorrado,
+          inversion: inversionTotal,
+          balance: balanceTotal,
+          ingresosMes: ingresoMesActualResumen,
+          gastosMes: gastoMesActualResumen,
+          necesidadesMes: resultado503020?.filas.find((f) => f.grupo === "necesidades")?.monto ?? 0,
+          txMes: (transaccionesMesActualResumen ?? []).length,
+          haSubidoArchivo: subioArchivoGratis,
+          aportesMes: aportesGratis.filter((a) => a.tipo !== "deuda").reduce((s, a) => s + a.monto, 0),
+          pagosDeudaMes: aportesGratis.filter((a) => a.tipo === "deuda").reduce((s, a) => s + a.monto, 0),
+          pagosDeudaTotal: aportesGratis.filter((a) => a.tipo === "deuda").length,
+        }
       : null;
 
   if (ingresoMesActualResumen > 0 && gastoMesActualResumen > ingresoMesActualResumen) {
@@ -820,6 +874,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </p>
         )}
       </div>
+
+      {/* TU PLAN (plan gratis): justo debajo del balance, con color; se reduce a
+          una línea cuando todo está hecho y reaparece sola si algo cambia. */}
+      {datosPlanGratis && <PlanGratisCard respuestas={respuestasGratis} datos={datosPlanGratis} aportes={aportesGratis} />}
 
       {/* Tarjeta de referidos (4 sept 2026, pedido de Joel): llamativa a
           propósito — la mayoría de la gente no sabe que existe el sistema

@@ -63,6 +63,36 @@ export default function MetricasGratis({
   const cuentaActual =
     panel === "ahorro" ? cuentaAhorro : panel === "inversion" ? cuentaInversion : panel === "balance" ? cuentaEfectivo : null;
 
+  // "Págate primero": en Ahorrado/Inversiones se puede APORTAR (mueve plata del
+  // balance a la cuenta y cuenta para el 20% de la regla 50/30/20) o CORREGIR el
+  // saldo (cuando ya tenías algo o hay un error). Cada pago a una deuda también
+  // sale del balance y baja la deuda. Todo se deshace desde la tarjeta Tu plan.
+  const [modo, setModo] = useState<"aportar" | "corregir">("corregir");
+  const [pagandoId, setPagandoId] = useState<string | null>(null);
+  const [montoPago, setMontoPago] = useState("");
+
+  async function enviarAporte(tipo: "ahorro" | "inversion" | "deuda", montoTxt: string, deudaId?: string) {
+    setError(null);
+    const n = Number(montoTxt.replace(",", "."));
+    if (!(n > 0)) return setError("Escribe un monto mayor que 0.");
+    setGuardando(true);
+    const res = await fetch("/api/aportes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo, monto: n, deudaId }),
+    });
+    setGuardando(false);
+    if (!res.ok) {
+      const b = await res.json().catch(() => null);
+      return setError(b?.error ?? "No se pudo guardar.");
+    }
+    setSaldo("");
+    setMontoPago("");
+    setPagandoId(null);
+    if (tipo !== "deuda") setPanel(null);
+    router.refresh();
+  }
+
   // Deudas (tarjetas/préstamos) — se anotan aquí mismo, sin saltar a otra página.
   // Misma tabla que usa /dashboard/deudas (deudas_plan), así que el plan de pago
   // (bola de nieve) sigue viendo lo que anotes aquí.
@@ -126,6 +156,10 @@ export default function MetricasGratis({
   function abrir(p: Panel) {
     setError(null);
     setSaldo("");
+    setPagandoId(null);
+    setMontoPago("");
+    if (p === "ahorro") setModo(cuentaAhorro ? "aportar" : "corregir");
+    if (p === "inversion") setModo(cuentaInversion ? "aportar" : "corregir");
     if ((p === "ingreso" || p === "gasto") && !cuentaEfectivo) {
       setPendiente(p);
       return setPanel("balance");
@@ -168,16 +202,22 @@ export default function MetricasGratis({
     router.refresh();
   }
 
-  // El botón de la tarjeta de balance (Inicio) manda este evento.
+  // El botón de la tarjeta de balance (Inicio) y la tarjeta "Tu plan" mandan
+  // estos eventos para abrir un panel aquí mismo.
   useEffect(() => {
-    function alEvento() {
-      abrir("balance");
+    function alEvento(e: Event) {
+      const p = (e as CustomEvent<{ panel?: Panel }>).detail?.panel ?? "balance";
+      abrir(p);
       setTimeout(() => document.getElementById("registra-finanzas")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     }
     window.addEventListener("vc-abrir-balance", alEvento);
-    return () => window.removeEventListener("vc-abrir-balance", alEvento);
+    window.addEventListener("vc-abrir-panel", alEvento);
+    return () => {
+      window.removeEventListener("vc-abrir-balance", alEvento);
+      window.removeEventListener("vc-abrir-panel", alEvento);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cuentaEfectivo, cuentaAhorro, cuentaInversion]);
 
   const sub = esMesActual ? "este mes" : mesLabel;
   const cls = "vc-met cursor-pointer text-left transition hover:border-teal";
@@ -277,7 +317,7 @@ export default function MetricasGratis({
           {deudasFilas.length > 0 && (
             <div className="flex flex-col divide-y divide-border border-t border-border pt-1">
               {deudasFilas.map((d) => (
-                <div key={d.id} className="flex items-center justify-between gap-2 py-2">
+                <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{d.nombre}</p>
                     <p className="text-[11px] text-muted">
@@ -285,6 +325,17 @@ export default function MetricasGratis({
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-3">
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-grn"
+                      onClick={() => {
+                        setPagandoId(pagandoId === d.id ? null : d.id);
+                        setMontoPago("");
+                        setError(null);
+                      }}
+                    >
+                      Pagar
+                    </button>
                     <button type="button" className="text-[11px] font-medium text-teal" onClick={() => editarDeuda(d)}>
                       Editar
                     </button>
@@ -292,8 +343,26 @@ export default function MetricasGratis({
                       Quitar
                     </button>
                   </div>
+                  {pagandoId === d.id && (
+                    <div className="mt-2 flex basis-full items-center gap-2">
+                      <input
+                        className="vc-input"
+                        inputMode="decimal"
+                        placeholder={`Cuánto pagas (debes ${formatMoney(d.saldo)})`}
+                        value={montoPago}
+                        autoFocus
+                        onChange={(e) => setMontoPago(e.target.value)}
+                      />
+                      <button type="button" className="vc-btn-primary !w-auto px-4" disabled={guardando} onClick={() => enviarAporte("deuda", montoPago, d.id)}>
+                        {guardando ? "..." : "Pagar"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
+              <p className="pt-2 text-[11px] text-muted">
+                Cada pago sale de tu balance, baja la deuda y cuenta como &quot;págate primero&quot; en tu 50/30/20. Si te equivocas, lo deshaces en la tarjeta Tu plan.
+              </p>
               <p className="pt-2 text-[11px] text-muted">
                 Ahí te explicamos dos formas de salir de deudas: <span className="font-medium">bola de nieve</span> (pagas primero la más pequeña, para ganar impulso) y{" "}
                 <span className="font-medium">avalancha</span> (pagas primero la de mayor interés, para gastar menos en intereses).
@@ -311,7 +380,30 @@ export default function MetricasGratis({
           <p className="text-xs font-medium uppercase tracking-wide text-muted">
             {panel === "ahorro" ? "Cuánto tienes ahorrado" : panel === "balance" ? "Tu balance de hoy" : "Cuánto tienes invertido"}
           </p>
-          <p className="text-xs text-muted">
+          {panel !== "balance" && (
+            <div className="flex gap-1 rounded-lg border border-border p-0.5 text-xs">
+              {(["aportar", "corregir"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    setModo(m);
+                    setError(null);
+                  }}
+                  className={`flex-1 rounded-md px-2 py-1.5 font-medium ${modo === m ? "bg-teal text-white" : "text-muted"}`}
+                >
+                  {m === "aportar" ? "Aportar (págate primero)" : "Corregir mi saldo"}
+                </button>
+              ))}
+            </div>
+          )}
+          {panel !== "balance" && modo === "aportar" && (
+            <p className="text-xs text-muted">
+              Aportar mueve dinero de tu balance a {panel === "ahorro" ? "tu ahorro" : "tus inversiones"} y cuenta para el 20% de &quot;págate primero&quot;.
+              Empieza con lo que puedas (10% de lo que cobras) y sube poco a poco.
+            </p>
+          )}
+          <p className={`text-xs text-muted ${panel !== "balance" && modo === "aportar" ? "hidden" : ""}`}>
             {panel === "balance" && (pendiente ? "Primero dinos con cuánto empiezas: cuánto dinero tienes hoy (efectivo y cuenta). Luego registras tu " + pendiente + ". " : "Cuánto dinero tienes hoy en efectivo y en tu cuenta. Desde aquí, cada ingreso que anotes lo suma y cada gasto lo resta. ")}
             {cuentaActual
               ? `Ahora mismo tienes anotado ${formatMoney(cuentaActual.saldo)}. Escribe el saldo nuevo.`
@@ -320,15 +412,22 @@ export default function MetricasGratis({
           <input
             className="vc-input"
             inputMode="decimal"
-            placeholder="Saldo actual $"
+            placeholder={panel !== "balance" && modo === "aportar" ? "Cuánto aportas $" : "Saldo actual $"}
             value={saldo}
             autoFocus
             onChange={(e) => setSaldo(e.target.value)}
           />
           {error && <p className="text-xs text-red">{error}</p>}
           <div className="flex gap-2">
-            <button type="button" className="vc-btn-primary" disabled={guardando} onClick={guardarSaldo}>
-              {guardando ? "Guardando..." : "Guardar"}
+            <button
+              type="button"
+              className="vc-btn-primary"
+              disabled={guardando}
+              onClick={() =>
+                panel !== "balance" && modo === "aportar" ? enviarAporte(panel === "ahorro" ? "ahorro" : "inversion", saldo) : guardarSaldo()
+              }
+            >
+              {guardando ? "Guardando..." : panel !== "balance" && modo === "aportar" ? "Aportar" : "Guardar"}
             </button>
             <button type="button" className="rounded-lg border border-border px-4 text-sm text-muted" onClick={() => { setPendiente(null); setPanel(null); }}>
               Cancelar
