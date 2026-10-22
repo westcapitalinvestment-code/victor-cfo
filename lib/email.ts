@@ -871,9 +871,9 @@ export async function sendWelcomeGratisEmail(params: {
   // (categoriza, recuerda citas, avisa de documentos pendientes) en vez de
   // solo el precio.
   const pasos: [string, string][] = [
-    ["Anota tu balance de hoy", "En Inicio, toca el botón \"Anotar mi balance\" (arriba a la derecha de las tarjetas) y escribe cuánto dinero tienes hoy. Ese es tu punto de partida: todo lo que anotes después se suma o se resta solo."],
-    ["Toca una tarjeta y registra", "Toca Ingresos para anotar dinero que entró (monto, fecha y de dónde vino) o Gastos para anotar lo que gastaste (monto, fecha y categoría). Ahorrado e Inversiones los actualizas con su saldo actual, y en Deuda añades tus tarjetas y préstamos. Si te equivocas, tocas la transacción en Transacciones para editarla o borrarla y tu balance se corrige solo."],
-    ["O sube tus movimientos de golpe", "¿Prefieres no anotar uno por uno? Descarga el CSV, Excel o PDF de tu banco y súbelo desde Cuentas. Tú lo revisas y categorizas una vez, y tu dashboard cobra vida."],
+    ["Elige cómo empezar: subir archivo o anotar a mano", "Tienes dos caminos y los dos funcionan. Si subes el CSV, Excel o PDF de tu banco desde Cuentas, VICTOR calcula todo por ti. Si prefieres anotar a mano, el primer paso es poner lo que tienes hoy: toca \"Anotar mi balance\" en Inicio."],
+    ["Si anotas a mano, empieza con tu balance de hoy", "Escribe cuánto tienes en tu balance el día que empiezas y, a partir de ese día, anota todos tus ingresos y gastos. Así tu balance sube y baja bien. Si empiezas a anotar sin el balance de partida, el cálculo arranca en cero y se va en negativo. Toca Ingresos (monto, fecha y de dónde vino) o Gastos (monto, fecha y categoría), y si te equivocas, edita o borra en Transacciones."],
+    ["Ahorros, inversiones y deudas", "Toca las tarjetas de Ahorrado e Inversiones para poner su saldo actual, y en Deuda añade tus tarjetas y préstamos para ver cómo salir de ellas."],
     ["Planifica con tus herramientas gratis", "Calcula cómo salir de deudas (bola de nieve o avalancha), arma tu plan 50/30/20, usa la calculadora de ahorro y guarda tus compromisos en Citas."],
   ];
 
@@ -1632,9 +1632,9 @@ export async function sendNurtureCsvGuiaEmail(params: {
   const bajaUrl = urlBajaCorreos(SITE_URL, userId);
 
   const pasos: [string, string][] = [
-    ["Anota tu balance de hoy", "En Inicio, toca \"Anotar mi balance\" y escribe cuánto dinero tienes hoy. Desde ahí, cada ingreso que anotes lo suma y cada gasto lo resta."],
-    ["Toca una tarjeta y registra", "Ingresos: monto, fecha y de dónde vino. Gastos: monto, fecha y categoría. Ahorrado e Inversiones: escribe tu saldo actual. ¿Te equivocaste? Entra a Transacciones, edita o borra y tu balance se corrige solo."],
-    ["¿Muchos movimientos? Súbelos de golpe", "Descarga el CSV, Excel o PDF de tu banco (los últimos 2 o 3 meses bastan), súbelo desde Cuentas y categoriza una vez. Tu dashboard cobra vida con ingresos, gastos y a dónde se va tu dinero."],
+    ["Elige tu camino", "Si subes el CSV, Excel o PDF de tu banco desde Cuentas, VICTOR calcula todo por ti: ingresos, gastos y balance. Si prefieres anotar a mano, sigue los pasos de abajo."],
+    ["Si anotas a mano: primero tu balance de hoy", "En Inicio, toca \"Anotar mi balance\" y escribe cuánto tienes ese día. Anota todos tus ingresos y gastos a partir de esa fecha; sin el balance de partida, el cálculo arranca en cero y se va en negativo."],
+    ["Toca una tarjeta y registra", "Ingresos: monto, fecha y de dónde vino. Gastos: monto, fecha y categoría. Ahorrado e Inversiones: tu saldo actual. ¿Te equivocaste? Entra a Transacciones, edita o borra y tu balance se corrige solo."],
   ];
 
   const textoPlano =
