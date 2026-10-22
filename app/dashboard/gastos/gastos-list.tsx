@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
+import TransaccionForm from "./transaccion-form";
 
 type Transaccion = {
   id: string;
@@ -15,6 +16,7 @@ type Transaccion = {
   manual_account_id: string | null;
   tipo_flujo?: "gasto" | "ingreso" | "transferencia";
   pending?: boolean;
+  origen?: string | null;
 };
 
 type Categoria = { id: number; nombre: string };
@@ -89,7 +91,11 @@ export default function GastosList({
   categorias,
   nombrePorCuenta,
   cambioPorTransaccion,
+  hoy,
 }: {
+  // Fecha de hoy (YYYY-MM-DD). Si viene, las transacciones añadidas a mano
+  // (origen = 'manual') se pueden editar y borrar desde la lista.
+  hoy?: string;
   transaccionesIniciales: Transaccion[];
   categorias: Categoria[];
   // Mapa "plaid:<id>" | "manual:<id>" → "BPPR Visa ···4821", para
@@ -114,6 +120,20 @@ export default function GastosList({
   // categoría y no se guarda". Ahora se guarda el mensaje de error por
   // fila y se muestra debajo del selector hasta el próximo intento.
   const [errorPorFila, setErrorPorFila] = useState<Record<string, string>>({});
+
+  const [editandoManual, setEditandoManual] = useState<string | null>(null);
+
+  async function borrarManual(id: string) {
+    if (!window.confirm("¿Borrar esta transacción?")) return;
+    const res = await fetch(`/api/transacciones/manual?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (res.ok) {
+      setTransacciones((prev) => prev.filter((t) => t.id !== id));
+      router.refresh();
+    } else {
+      const body = await res.json().catch(() => null);
+      setErrorPorFila((prev) => ({ ...prev, [id]: body?.error ?? "No se pudo borrar." }));
+    }
+  }
 
   const nombreCategoria = (id: number | null) =>
     categorias.find((c) => c.id === id)?.nombre ?? "Sin categorizar";
@@ -144,7 +164,42 @@ export default function GastosList({
 
   return (
     <ul className="flex flex-col gap-1">
-      {transacciones.map((t) => (
+      {transacciones.map((t) =>
+        editandoManual === t.id && hoy ? (
+          <li key={t.id}>
+            <TransaccionForm
+              hoy={hoy}
+              cuentas={[]}
+              categorias={categorias}
+              inicial={{
+                id: t.id,
+                tipo: t.tipo_flujo === "ingreso" ? "ingreso" : "gasto",
+                monto: Math.abs(Number(t.amount)),
+                fecha: t.fecha,
+                descripcion: t.description_raw,
+                categoriaId: t.hacienda_category_id,
+              }}
+              onListo={(v) => {
+                setTransacciones((prev) =>
+                  prev.map((x) =>
+                    x.id === t.id
+                      ? {
+                          ...x,
+                          tipo_flujo: v.tipo,
+                          amount: v.tipo === "gasto" ? v.monto : -v.monto,
+                          fecha: v.fecha,
+                          description_raw: v.descripcion,
+                          hacienda_category_id: v.categoriaId,
+                        }
+                      : x
+                  )
+                );
+                setEditandoManual(null);
+              }}
+              onCancelar={() => setEditandoManual(null)}
+            />
+          </li>
+        ) : (
         <li key={t.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
           <div className="min-w-0 flex-1">
             <p className="truncate">{t.description_raw}</p>
@@ -187,6 +242,19 @@ export default function GastosList({
                 })()}
               </button>
             )}
+            {/* Añadida a mano (efectivo, propina...): se puede editar o borrar. */}
+            {t.origen === "manual" && hoy && editando !== t.id && (
+              <p className="mt-0.5 text-[11px] text-muted">
+                ✍️ A mano ·{" "}
+                <button className="font-medium text-teal hover:opacity-80" onClick={() => setEditandoManual(t.id)}>
+                  Editar
+                </button>{" "}
+                ·{" "}
+                <button className="font-medium text-red hover:opacity-80" onClick={() => borrarManual(t.id)}>
+                  Borrar
+                </button>
+              </p>
+            )}
             {/* Pendiente: el banco todavía no liquida esto — descripción y
                 monto son un estimado que Plaid puede corregir más adelante
                 (sin avisar de otra forma que reemplazando esta misma fila). */}
@@ -221,7 +289,8 @@ export default function GastosList({
             <Sensitive>{formatMoney(Math.abs(Number(t.amount)))}</Sensitive>
           </span>
         </li>
-      ))}
+        )
+      )}
     </ul>
   );
 }

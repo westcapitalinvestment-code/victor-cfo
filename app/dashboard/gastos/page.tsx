@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import GastosList from "./gastos-list";
+import AnadirTransaccion from "./anadir-transaccion";
 import CuentaDropdown from "./cuenta-dropdown";
 import CategoriaDropdown from "./categoria-dropdown";
 import ReporteContableDropdown from "./reporte-contable-dropdown";
@@ -184,7 +185,7 @@ export default async function GastosPage({
 
   let transaccionesQuery = supabase
     .from("transactions")
-    .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo, pending")
+    .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo, pending, origen")
     .eq("owner_id", user.id)
     .is("entity_id", null)
     .eq("es_duplicada", false)
@@ -232,7 +233,7 @@ export default async function GastosPage({
 
     let busquedaQuery = supabase
       .from("transactions")
-      .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo, pending")
+      .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id, tipo_flujo, pending, origen")
       .eq("owner_id", user.id)
       .is("entity_id", null)
       .eq("es_duplicada", false)
@@ -504,12 +505,19 @@ export default async function GastosPage({
     <div className="vc-shell">
       <div className="mb-3 flex items-center justify-between">
         <h1 className="text-lg font-medium">Transacciones</h1>
-        {!!totalDuplicadas && (
+        <AnadirTransaccion
+          hoy={fechaHoyPR()}
+          cuentas={(cuentasManuales ?? []).map((c) => ({ id: c.id, nombre: etiquetaCuenta(c), tipo: c.type }))}
+          categorias={categorias ?? []}
+        />
+      </div>
+      {!!totalDuplicadas && (
+        <div className="mb-3">
           <Link href="/dashboard/gastos/duplicados" className="text-xs font-medium text-amb hover:opacity-80">
             {totalDuplicadas} posible{totalDuplicadas === 1 ? "" : "s"} duplicado{totalDuplicadas === 1 ? "" : "s"} →
           </Link>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <ReporteContableDropdown rangos={rangosReporte} />
@@ -746,7 +754,9 @@ export default async function GastosPage({
                   : "Todavía no hay transacciones."}
             </p>
             {!categoriaSeleccionada && !buscarTexto && (
-              <p className="mt-1 text-xs text-muted">Se llenan solas cuando conectes tu banco en la pestaña Cuentas.</p>
+              <p className="mt-1 text-xs text-muted">
+                Toca &quot;+ Añadir&quot; para registrar efectivo o un gasto a mano, o sube un estado de cuenta en la pestaña Cuentas.
+              </p>
             )}
           </div>
         )}
@@ -770,6 +780,7 @@ export default async function GastosPage({
             categorias={categorias ?? []}
             nombrePorCuenta={Object.fromEntries(nombrePorCuenta)}
             cambioPorTransaccion={cambioPorTransaccion}
+            hoy={fechaHoyPR()}
           />
         )}
         {buscarTexto && resultadosBusqueda.length === LIMITE_BUSQUEDA && (
