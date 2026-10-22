@@ -188,7 +188,13 @@ function RegistroForm() {
   const socioEfectivo = socioCodigo ?? codigoManualValido;
   const telefonoDigitos = telefono.replace(/\D/g, "");
   const telefonoValido = telefonoDigitos.length === 10 || (telefonoDigitos.length === 11 && telefonoDigitos.startsWith("1"));
-  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  // Términos aceptados POR TARJETA (22 oct 2026, Joel: "cuando selecciono los
+  // términos para aceptar se encienden todos"). Antes las 4 tarjetas
+  // compartían un solo estado, así que marcar una marcaba todas. Clave:
+  // "gratis" | "core" | "pro" | "proplus" (el flujo de email usa la de la
+  // tarjeta desde la que se abrió).
+  const [terminos, setTerminos] = useState<Record<string, boolean>>({});
+  const setTerminosDe = (clave: string) => (v: boolean) => setTerminos((prev) => ({ ...prev, [clave]: v }));
   const [loading, setLoading] = useState(false);
   const [accionEnCurso, setAccionEnCurso] = useState<"pago" | "gratis" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -203,6 +209,8 @@ function RegistroForm() {
     gratis: true,
     plan: planDestacado,
   });
+
+  const claveEmail = emailFlujo.gratis ? "gratis" : emailFlujo.plan;
 
   function abrirEmailForm(gratis: boolean, plan: PlanPago) {
     setError(null);
@@ -250,7 +258,7 @@ function RegistroForm() {
       setError("Completa tu email y contraseña para continuar.");
       return;
     }
-    if (!aceptaTerminos) {
+    if (!terminos[esGratis ? "gratis" : planEscogido]) {
       setError("Tienes que aceptar la Política de Privacidad y los Términos de Servicio para continuar.");
       return;
     }
@@ -266,6 +274,10 @@ function RegistroForm() {
         emailRedirectTo: `${window.location.origin}/login`,
         data: {
           signup_gratis: esGratis ? "true" : "false",
+          // Plan y ciclo escogidos: si el correo hay que confirmarlo (no hay
+          // sesión todavía), /registro/completar-pago los lee de aquí para
+          // no perder lo que la persona eligió.
+          ...(esGratis ? {} : { plan_elegido: planEscogido, ciclo_elegido: ciclo }),
           ...(refId ? { ref_id: refId } : {}),
           ...(socioEfectivo ? { socio_codigo: socioEfectivo } : {}),
           ...(telefonoValido ? { telefono: telefonoDigitos } : {}),
@@ -490,11 +502,11 @@ function RegistroForm() {
                     <li className="text-muted">✕ Sin banco conectado</li>
                     <li className="text-muted">✕ Sin chat con VICTOR</li>
                   </ul>
-                  <TerminosCheckbox aceptaTerminos={aceptaTerminos} setAceptaTerminos={setAceptaTerminos} />
+                  <TerminosCheckbox aceptaTerminos={!!terminos.gratis} setAceptaTerminos={setTerminosDe("gratis")} />
                   <button
                     type="button"
                     className="vc-btn-primary flex items-center justify-center gap-2"
-                    disabled={loading || !!oauthEnCurso || !aceptaTerminos}
+                    disabled={loading || !!oauthEnCurso || !terminos.gratis}
                     onClick={() => continuarConOAuth("google", true, "core")}
                   >
                     {oauthEnCurso === "google" ? "..." : "Comenzar gratis"}
@@ -534,11 +546,11 @@ function RegistroForm() {
                     <li className="text-text">✓ Reportes listos para Hacienda</li>
                   </ul>
                   <p className="text-xs text-muted">{finePrint("core")}</p>
-                  <TerminosCheckbox aceptaTerminos={aceptaTerminos} setAceptaTerminos={setAceptaTerminos} />
+                  <TerminosCheckbox aceptaTerminos={!!terminos.core} setAceptaTerminos={setTerminosDe("core")} />
                   <button
                     type="button"
                     className="vc-btn-primary flex items-center justify-center gap-2"
-                    disabled={loading || !!oauthEnCurso || !aceptaTerminos}
+                    disabled={loading || !!oauthEnCurso || !terminos.core}
                     onClick={() => continuarConOAuth("google", false, "core")}
                   >
                     {oauthEnCurso === "google" ? "..." : esReferido ? "Activar Core — primer mes gratis" : "Activar Core"}
@@ -577,11 +589,11 @@ function RegistroForm() {
                     <li className="text-text">✓ Reportes multi-entidad</li>
                   </ul>
                   <p className="text-xs text-muted">{finePrint("pro")}</p>
-                  <TerminosCheckbox aceptaTerminos={aceptaTerminos} setAceptaTerminos={setAceptaTerminos} />
+                  <TerminosCheckbox aceptaTerminos={!!terminos.pro} setAceptaTerminos={setTerminosDe("pro")} />
                   <button
                     type="button"
                     className="vc-btn-primary flex items-center justify-center gap-2"
-                    disabled={loading || !!oauthEnCurso || !aceptaTerminos}
+                    disabled={loading || !!oauthEnCurso || !terminos.pro}
                     onClick={() => continuarConOAuth("google", false, "pro")}
                   >
                     {oauthEnCurso === "google" ? "..." : esReferido ? "Activar Pro — primer mes gratis" : "Activar Pro"}
@@ -623,11 +635,11 @@ function RegistroForm() {
                     <li className="text-text">✓ Hasta 3 técnicos de campo</li>
                   </ul>
                   <p className="text-xs text-muted">{finePrint("proplus")}</p>
-                  <TerminosCheckbox aceptaTerminos={aceptaTerminos} setAceptaTerminos={setAceptaTerminos} />
+                  <TerminosCheckbox aceptaTerminos={!!terminos.proplus} setAceptaTerminos={setTerminosDe("proplus")} />
                   <button
                     type="button"
                     className="vc-btn-primary flex items-center justify-center gap-2"
-                    disabled={loading || !!oauthEnCurso || !aceptaTerminos}
+                    disabled={loading || !!oauthEnCurso || !terminos.proplus}
                     onClick={() => continuarConOAuth("google", false, "proplus")}
                   >
                     {oauthEnCurso === "google"
@@ -685,7 +697,9 @@ function RegistroForm() {
                 required
               />
 
-              <button type="submit" className="vc-btn-primary mt-1" disabled={loading || !aceptaTerminos}>
+              <TerminosCheckbox aceptaTerminos={!!terminos[claveEmail]} setAceptaTerminos={setTerminosDe(claveEmail)} />
+
+              <button type="submit" className="vc-btn-primary mt-1" disabled={loading || !terminos[claveEmail]}>
                 {loading
                   ? "Creando cuenta..."
                   : emailFlujo.gratis

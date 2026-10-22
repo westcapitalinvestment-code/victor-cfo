@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { esPlanValido, esCicloValido, type PlanId, type Ciclo } from "@/lib/stripe";
 
 // Página de respaldo del gate de pago. Un usuario cae aquí en 3 casos:
@@ -20,10 +21,14 @@ import { esPlanValido, esCicloValido, type PlanId, type Ciclo } from "@/lib/stri
 // tienen sus Price ID reales en Stripe (Pro destapado el 3 sept 2026), así
 // que ambos son comprables aquí (mismo criterio que app/landing-pricing.tsx
 // y app/dashboard/pro-paywall.tsx).
+// 22 oct 2026 (Joel: "salen las 3 opciones incluyendo la vieja, ni el plan
+// Business sale"): "proplus" ya se llama Business y es autoservicio desde el
+// 3 oct (mismo checkout que /registro), así que aquí también está disponible.
+// Los precios son los mismos que muestra /registro.
 const PLANES: { id: PlanId; nombre: string; precioMensual: string; precioAnual: string; disponible: boolean }[] = [
   { id: "core", nombre: "VICTOR Core", precioMensual: "$14.99/mes", precioAnual: "$164/año", disponible: true },
   { id: "pro", nombre: "VICTOR Pro", precioMensual: "$49.99/mes", precioAnual: "$549/año", disponible: true },
-  { id: "proplus", nombre: "VICTOR Enterprise", precioMensual: "$99.99/mes", precioAnual: "$1,099/año", disponible: false },
+  { id: "proplus", nombre: "VICTOR Business", precioMensual: "$99.99/mes", precioAnual: "$1,099/año", disponible: true },
 ];
 
 function CompletarPagoForm() {
@@ -41,6 +46,23 @@ function CompletarPagoForm() {
   const [ciclo, setCiclo] = useState<Ciclo>(esCicloValido(cicloQuery) ? cicloQuery : "mensual");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Si la persona escogió un plan al registrarse con email pero tuvo que
+  // confirmar el correo primero, el plan quedó guardado en los metadatos del
+  // usuario (plan_elegido/ciclo_elegido, ver app/registro/page.tsx). Se usa
+  // para preseleccionarlo, salvo que la URL ya traiga ?plan= / ?ciclo=.
+  useEffect(() => {
+    if (esPlanValido(planQuery) && esCicloValido(cicloQuery)) return;
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        const meta = data.user?.user_metadata as { plan_elegido?: string; ciclo_elegido?: string } | undefined;
+        if (!esPlanValido(planQuery) && esPlanValido(meta?.plan_elegido ?? null)) setPlan(meta!.plan_elegido as PlanId);
+        if (!esCicloValido(cicloQuery) && esCicloValido(meta?.ciclo_elegido ?? null)) setCiclo(meta!.ciclo_elegido as Ciclo);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function pagar() {
     setLoading(true);
