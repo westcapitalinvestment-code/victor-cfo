@@ -58,7 +58,13 @@ export async function GET(req: NextRequest) {
         resultados[`dia2:${usuario.id}`] = { enviado: false, razon: "sin email" };
         continue;
       }
-      const resultado = await sendNurtureFeaturesGratisEmail({ toEmail: usuario.email, toName: usuario.full_name ?? null });
+      // Camino del cuestionario "Tu plan" (migración 0187). Consulta aparte y
+      // tolerante: si la columna aún no existe, camino = null y sale el correo
+      // genérico de siempre.
+      const { data: ob } = await supabase.from("users").select("onboarding_gratis").eq("id", usuario.id).maybeSingle();
+      const c = (ob as { onboarding_gratis?: { camino?: string } | null } | null)?.onboarding_gratis?.camino;
+      const camino = c === "deudas" || c === "ordenar" || c === "probar" ? c : null;
+      const resultado = await sendNurtureFeaturesGratisEmail({ toEmail: usuario.email, toName: usuario.full_name ?? null, camino });
       if (resultado.sent || resultado.reason === "RESEND_API_KEY no está configurada en el servidor.") {
         await supabase.from("users").update({ nurture_features_gratis_enviado_at: new Date().toISOString() }).eq("id", usuario.id);
       }

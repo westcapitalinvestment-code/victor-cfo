@@ -1345,12 +1345,14 @@ export async function sendRecordatorioCobroEmail(params: {
 export async function sendNurtureFeaturesGratisEmail(params: {
   toEmail: string;
   toName: string | null;
+  // Camino elegido en el cuestionario "Tu plan" (null si no lo hizo).
+  camino?: "deudas" | "ordenar" | "probar" | null;
 }): Promise<{ sent: boolean; reason?: string }> {
   if (!resend) {
     return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
   }
 
-  const { toEmail, toName } = params;
+  const { toEmail, toName, camino } = params;
   const saludoNombre = toName || "";
   const dashboardUrl = `${SITE_URL}/dashboard`;
 
@@ -1368,15 +1370,55 @@ export async function sendNurtureFeaturesGratisEmail(params: {
   // notificación push (el cron no distingue plan, ver
   // app/api/cron/notificaciones-push), pero eso es la app avisando, no
   // VICTOR conversando contigo.
-  const pasos: [string, string][] = [
+  // 22 oct 2026 — si ya contestó el cuestionario "Tu plan" del Inicio, los 3
+  // pasos siguen SU camino (deudas / ordenar / probar). Sin cuestionario: los
+  // 3 pasos genéricos de siempre.
+  const pasosGenericos: [string, string][] = [
     ["Pon tu primera Meta", "Crea una Meta desde el dashboard y anota cuánto quieres ahorrar — así ves tu progreso organizado, sin llevar la cuenta a mano."],
     ["Agenda algo en Citas", "Un pago pendiente, una cita médica, lo que sea — actívale las notificaciones y te llega un aviso antes de la fecha."],
     ["Guarda un documento en Documentos", "Sube una póliza, un contrato o el marbete del carro — todo en un solo lugar, con notificación antes de que venza."],
   ];
+  const pasosPorCamino: Record<string, { intro: string; asunto: string; pasos: [string, string][] }> = {
+    deudas: {
+      intro: "Elegiste salir de deudas, y es de los mejores primeros pasos: pagar una tarjeta con interés alto rinde más que casi cualquier ahorro. Tu plan en el Inicio va así:",
+      asunto: "Tu plan para salir de deudas, paso a paso",
+      pasos: [
+        ["Anota tu balance y tus deudas", "Toca Registra tu balance y luego la tarjeta Deuda: nombre, saldo, tasa y pago mínimo de cada una."],
+        ["Junta un colchón de $500", "Con un colchón chiquito una avería no termina en la tarjeta. Toca Ahorrado y usa Aportar."],
+        ["Ataca una deuda y regístralo", "Usa el botón Pagar en cada deuda: baja tu deuda y tu balance. Bola de nieve (la más pequeña primero) o avalancha (la de más interés primero), tú eliges."],
+      ],
+    },
+    ordenar: {
+      intro: "Elegiste ordenar tu dinero y hacerlo crecer. La idea es págate primero: separar de lo que cobras antes de gastar. Empieza con 10% y sube hacia 20%. Tu plan en el Inicio va así:",
+      asunto: "Págate primero: tu plan para ordenar y crecer",
+      pasos: [
+        ["Anota tu balance y los movimientos del mes", "Registra tu balance de hoy y tus ingresos y gastos, o sube el CSV, Excel o PDF de tu banco."],
+        ["Págate primero apenas cobres", "En Ahorrado o Inversiones toca Aportar. Cuenta para el 20% de tu regla 50/30/20 y se puede deshacer."],
+        ["Arma tu fondo de emergencia", "La meta son 3 meses de gastos básicos. La tarjeta Tu plan te muestra cuántos meses llevas."],
+      ],
+    },
+    probar: {
+      intro: "Elegiste probar VICTOR con tus números reales. En 5 minutos puedes ver tu dinero ordenado:",
+      asunto: "Prueba VICTOR con tus números reales en 5 minutos",
+      pasos: [
+        ["Sube el estado de cuenta de tu banco", "CSV, Excel o PDF de los últimos 2 o 3 meses. La app calcula tus ingresos y gastos."],
+        ["Anota tu balance de hoy", "Así ves tu patrimonio neto: lo que tienes menos lo que debes."],
+        ["Mira tu reparto 50/30/20", "Necesidades, gustos y ahorro frente a la meta, más tu flujo neto del mes."],
+      ],
+    },
+  };
+  const plan = camino ? pasosPorCamino[camino] : undefined;
+  const pasos = plan ? plan.pasos : pasosGenericos;
+  const introTexto = plan
+    ? plan.intro
+    : "¿Cómo va todo con VICTOR CFO? Si todavía no le has dado uso a tu cuenta gratis, aquí van 3 cosas rápidas para organizarte desde ya:";
+  const introHtml = plan
+    ? escapeHtml(plan.intro)
+    : "¿Cómo va todo con VICTOR CFO? Si todavía no le has dado uso a tu cuenta <strong>gratis</strong>, aquí van 3 cosas rápidas para organizarte desde ya:";
 
   const textoPlano =
     (saludoNombre ? `Hola ${saludoNombre},\n\n` : `Hola,\n\n`) +
-    `¿Cómo va todo con VICTOR CFO? Si todavía no le has dado uso a tu cuenta gratis, aquí van 3 cosas rápidas para organizarte desde ya:\n\n` +
+    `${introTexto}\n\n` +
     pasos.map(([titulo, texto], i) => `${i + 1}. ${titulo} — ${texto}`).join("\n\n") +
     `\n\nEntra aquí:\n${dashboardUrl}\n\n` +
     `Cualquier duda o pregunta, escríbenos a soporte@victorcfo.com y te respondemos en la brevedad posible.\n\n` +
@@ -1405,7 +1447,7 @@ export async function sendNurtureFeaturesGratisEmail(params: {
     <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
   </div>
   <p>${htmlSeguro ? `Hola, <strong>${htmlSeguro}</strong>,` : `Hola,`}</p>
-  <p>¿Cómo va todo con VICTOR CFO? Si todavía no le has dado uso a tu cuenta <strong>gratis</strong>, aquí van 3 cosas rápidas para organizarte desde ya:</p>
+  <p>${introHtml}</p>
   <div style="margin: 24px 0;">${pasosHtml}</div>
   <div style="text-align: center; margin: 28px 0;">
     <a href="${dashboardUrl}" style="background: #1D9E75; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">Entrar a mi cuenta</a>
@@ -1419,7 +1461,7 @@ export async function sendNurtureFeaturesGratisEmail(params: {
     const { error } = await resend.emails.send({
       from: FROM,
       to: toEmail,
-      subject: "3 cosas rápidas para organizarte con VICTOR CFO",
+      subject: plan ? plan.asunto : "3 cosas rápidas para organizarte con VICTOR CFO",
       text: textoPlano,
       html: htmlCorreo,
     });
