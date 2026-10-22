@@ -133,7 +133,17 @@ export default function ReportesTab({ entityId }: { entityId: string }) {
     };
   }, [entityId]);
 
-  const todos = empleadosLista.length > 0 && sel.length === empleadosLista.length;
+  const [buscar, setBuscar] = useState("");
+  const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const visibles = buscar.trim()
+    ? empleadosLista.filter((e) => norm(e.nombre).includes(norm(buscar.trim())))
+    : empleadosLista;
+  // "Marcar todos" actúa sobre los que se ven (filtrados por la búsqueda)
+  const todos = visibles.length > 0 && visibles.every((e) => sel.includes(e.id));
+  const marcarVisibles = () => {
+    const ids = visibles.map((e) => e.id);
+    setSel((p) => (todos ? p.filter((x) => !ids.includes(x)) : Array.from(new Set([...p, ...ids]))));
+  };
   const alternar = (id: string) => setSel((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
   function rango(p: "mes" | "mesAnt" | "anio" | "anioAnt") {
@@ -279,23 +289,38 @@ ${conPagos.map((g) => `<tr><td>${esc(g.e.nombre)}${g.e.ssn_ultimos4 ? ` ••�
 
         <div className="mb-1 flex items-center justify-between">
           <p className="text-xs font-medium text-muted">2. Empleados ({sel.length} de {empleadosLista.length})</p>
-          {empleadosLista.length > 1 && (
-            <button type="button" className="text-xs font-medium text-teal" onClick={() => setSel(todos ? [] : empleadosLista.map((e) => e.id))}>
-              {todos ? "Quitar todos" : "Marcar todos"}
+          {visibles.length > 1 && (
+            <button type="button" className="text-xs font-medium text-teal" onClick={marcarVisibles}>
+              {todos ? "Quitar todos" : buscar.trim() ? "Marcar los que salen" : "Marcar todos"}
             </button>
           )}
         </div>
         {empleadosLista.length === 0 ? (
           <p className="mb-3 text-xs text-muted">Todavía no hay empleados.</p>
         ) : (
-          <div className="mb-3 flex flex-col gap-1 rounded-lg border border-border px-3 py-2">
-            {empleadosLista.map((e) => (
-              <label key={e.id} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={sel.includes(e.id)} onChange={() => alternar(e.id)} />
-                {e.nombre}
-              </label>
-            ))}
-          </div>
+          <>
+            {empleadosLista.length > 5 && (
+              <input
+                type="search"
+                className="vc-input mb-2"
+                placeholder="Buscar empleado…"
+                value={buscar}
+                onChange={(e) => setBuscar(e.target.value)}
+              />
+            )}
+            <div className="mb-3 flex max-h-60 flex-col gap-1 overflow-y-auto rounded-lg border border-border px-3 py-2">
+              {visibles.length === 0 ? (
+                <p className="text-xs text-muted">Ningún empleado coincide.</p>
+              ) : (
+                visibles.map((e) => (
+                  <label key={e.id} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={sel.includes(e.id)} onChange={() => alternar(e.id)} />
+                    {e.nombre}
+                  </label>
+                ))
+              )}
+            </div>
+          </>
         )}
 
         <p className="mb-1 text-xs font-medium text-muted">3. Fechas</p>
