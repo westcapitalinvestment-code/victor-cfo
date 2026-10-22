@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ESPECIALIDADES, urlSocial } from "@/lib/oficinas-contables";
+import { ESPECIALIDADES, MUNICIPIOS_PR, urlSocial } from "@/lib/oficinas-contables";
 
 // Directorio de contables para usuarios de VICTOR sin contable (migración
 // 0163, 18 oct 2026). Se llena solo: cada contable que entra al portal y
@@ -54,8 +54,11 @@ export default function DirectorioContablesPage() {
       });
   }, []);
 
+  // Siempre los 78 municipios (antes solo salían los de oficinas ya listadas,
+  // y con el directorio vacío el desplegable quedaba en blanco), más cualquier
+  // pueblo extra que venga de una oficina.
   const pueblos = useMemo(
-    () => Array.from(new Set((oficinas ?? []).map((o) => o.pueblo))).sort((a, b) => a.localeCompare(b, "es")),
+    () => Array.from(new Set([...MUNICIPIOS_PR, ...(oficinas ?? []).map((o) => o.pueblo)])).sort((a, b) => a.localeCompare(b, "es")),
     [oficinas]
   );
 
