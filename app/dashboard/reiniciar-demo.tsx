@@ -15,7 +15,7 @@ export default function ReiniciarDemo() {
   const [error, setError] = useState<string | null>(null);
 
   async function reiniciar() {
-    if (!confirm("¿Reiniciar el perfil y el chat de VICTOR para el próximo visitante? (Los datos de AireFrío PR no se tocan.)")) return;
+    if (!confirm("¿Reiniciar el perfil, el chat de VICTOR y las categorías de las transacciones para el próximo visitante?")) return;
     setLoading(true);
     setError(null);
     const res = await fetch("/api/config/reiniciar-demo", { method: "POST" });
@@ -33,8 +33,8 @@ export default function ReiniciarDemo() {
     <div className="vc-card mb-4 border border-teal/30" style={{ background: "rgba(29,158,117,.05)" }}>
       <p className="text-sm font-semibold text-teal">Cuenta demo</p>
       <p className="mt-1 text-xs text-muted">
-        Borra el nombre, apodo, edad e hijos del perfil, y el historial de chat con VICTOR — para el próximo
-        visitante. La data de negocio (AireFrío PR: clientes, facturas, pagos) NO se toca.
+        Borra el nombre, apodo, edad e hijos del perfil, el historial de chat con VICTOR, y deja todas las
+        transacciones otra vez sin categorizar — para el próximo visitante. Clientes, facturas y pagos NO se tocan.
       </p>
       {error && <p className="mt-2 text-xs text-red">{error}</p>}
       <button onClick={reiniciar} disabled={loading} className="vc-btn-primary mt-3 w-full">

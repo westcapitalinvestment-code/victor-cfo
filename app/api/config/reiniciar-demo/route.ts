@@ -47,6 +47,21 @@ export async function POST() {
     .eq("id", user.id);
   if (errPerfil) return NextResponse.json({ error: errPerfil.message }, { status: 500 });
 
+  // Transacciones otra vez "sin categorizar" (Joel, 21 oct 2026): tras el
+  // onboarding VICTOR las categoriza y la próxima presentación no tenía nada
+  // que mostrar. El trigger de auto-categorizar es BEFORE INSERT, así que este
+  // UPDATE no lo dispara.
+  const { error: errTx } = await supabase
+    .from("transactions")
+    .update({
+      category: null,
+      hacienda_category_id: null,
+      matched_pattern_id: null,
+      category_overridden_by_user: false,
+    })
+    .eq("owner_id", user.id);
+  if (errTx) return NextResponse.json({ error: errTx.message }, { status: 500 });
+
   await supabase.from("conversations").delete().eq("user_id", user.id);
   await supabase.from("victor_memory").delete().eq("user_id", user.id);
 
