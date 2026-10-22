@@ -387,11 +387,10 @@ export default function CuentasPage() {
               $14.99
               <span className="text-sm font-normal">/mes</span>
             </p>
-            {esReferido && <p className="text-xs font-medium text-teal">Primer mes gratis</p>}
           </div>
           {upsellError && <p className="mb-2 text-xs text-red">{upsellError}</p>}
           <button className="vc-btn-primary mb-2" disabled={activandoCore} onClick={activarCore}>
-            {activandoCore ? "Conectando con Stripe..." : esReferido ? "Activar Core — primer mes gratis" : "Activar Core — $14.99/mes"}
+            {activandoCore ? "Conectando con Stripe..." : "Activar Core — $14.99/mes"}
           </button>
           <button
             className="w-full rounded-lg border border-border bg-transparent p-3 text-sm text-muted"

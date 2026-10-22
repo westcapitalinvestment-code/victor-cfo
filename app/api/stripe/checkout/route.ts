@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   const { data: perfil } = await supabase
     .from("users")
-    .select("stripe_customer_id, referred_by, referido_por_socio_id, stripe_subscription_id, plan_status, billed_by_firma_id")
+    .select("stripe_customer_id, referred_by, referido_por_socio_id, stripe_subscription_id, plan_status, billed_by_firma_id, plan")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -104,7 +104,13 @@ export async function POST(req: NextRequest) {
   // así que el usuario referido queda con acceso completo desde que termina
   // el checkout, sin pagar nada el primer mes. Pro+ queda fuera a propósito
   // (ya no es autoservicio).
-  const esReferidoConTrial = esReferidoPeerOEmbajador && (plan === "core" || plan === "pro");
+  // 22 oct 2026 (Joel: "quita eso del primer mes gratis pq tiene mucha ventaja
+  // con el que entra a Core directo"): un usuario que ya está en plan GRATIS
+  // y sube a Core/Pro NO recibe los 30 días; cae al trial estándar de 7 días
+  // como cualquier cliente nuevo. El mes gratis queda solo para quien entra
+  // directo a pagar por un link de referido.
+  const esReferidoConTrial =
+    esReferidoPeerOEmbajador && perfil?.plan !== "gratis" && (plan === "core" || plan === "pro");
 
   // Trial de 7 días para CUALQUIER primera suscripción (10 sept 2026,
   // pedido de Joel tras comparar con la competencia — Luna Money muestra

@@ -752,16 +752,13 @@ export default function VictorChat({
                   <span className="text-sm font-normal">desde </span>${precioUpgrade}
                   <span className="text-sm font-normal">/mes</span>
                 </p>
-                {esReferido && <p className="text-xs font-medium text-teal">Primer mes gratis</p>}
                 <p className="text-xs text-muted">Cancela cuando quieras</p>
               </div>
               {upgradeError && <p className="text-center text-xs text-red">{upgradeError}</p>}
               <button onClick={activarCore} className="vc-btn-primary" disabled={upgradeLoading}>
                 {upgradeLoading
                   ? "Conectando con Stripe..."
-                  : esReferido
-                    ? `Activar Core — primer mes gratis`
-                    : `Activar Core — desde $${precioUpgrade}/mes`}
+                  : `Activar Core — desde $${precioUpgrade}/mes`}
               </button>
               {/* Referidos (25 sept 2026, pedido de Joel: "no veo el plan de
                   referido" — el link ya existe en Configuración, pero aquí,
