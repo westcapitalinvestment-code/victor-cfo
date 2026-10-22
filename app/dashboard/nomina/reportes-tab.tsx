@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatMoney } from "@/lib/format";
 
 // Reportes de Nómina (21 oct 2026, pedido de Joel): estado de cuenta del empleado,
@@ -17,6 +17,7 @@ interface Emp {
   tarifa: number;
   ytd_inicial: { bruto?: number } | null;
   ytd_inicial_anio: number | null;
+  activo?: boolean;
 }
 interface Linea {
   id: string;
@@ -110,17 +111,30 @@ export default function ReportesTab({ entityId }: { entityId: string }) {
   const [tipo, setTipo] = useState<Tipo>("estado");
   const [desde, setDesde] = useState(`${anioHoy}-01-01`);
   const [hasta, setHasta] = useState(new Date().toISOString().slice(0, 10));
-  const [empId, setEmpId] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [datos, setDatos] = useState<{ entidad: string; empleados: Emp[]; lineas: Linea[]; desde: string; hasta: string; tipo: Tipo; empId: string } | null>(null);
   const [empleadosLista, setEmpleadosLista] = useState<Emp[]>([]);
+  const [sel, setSel] = useState<string[]>([]); // empleados marcados (por defecto, todos)
+  const [datos, setDatos] = useState<{ entidad: string; empleados: Emp[]; lineas: Linea[]; desde: string; hasta: string; tipo: Tipo; sel: string[] } | null>(null);
 
-  async function cargarEmpleados() {
-    if (empleadosLista.length > 0) return;
-    const j = await fetch(`/api/nomina/empleados?entityId=${entityId}`).then((r) => r.json()).catch(() => null);
-    setEmpleadosLista((j?.empleados ?? []) as Emp[]);
-  }
+  useEffect(() => {
+    let vivo = true;
+    fetch(`/api/nomina/empleados?entityId=${entityId}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!vivo) return;
+        const lista = ((j?.empleados ?? []) as Emp[]).filter((e) => e.activo !== false);
+        setEmpleadosLista(lista);
+        setSel(lista.map((e) => e.id));
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [entityId]);
+
+  const todos = empleadosLista.length > 0 && sel.length === empleadosLista.length;
+  const alternar = (id: string) => setSel((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
   function rango(p: "mes" | "mesAnt" | "anio" | "anioAnt") {
     const hoy = new Date();
@@ -135,20 +149,19 @@ export default function ReportesTab({ entityId }: { entityId: string }) {
 
   async function generar() {
     setError(null);
-    if ((tipo === "estado" || tipo === "certificacion") && !empId) {
-      setError("Escoge un empleado.");
+    if (sel.length === 0) {
+      setError("Marca al menos un empleado.");
       return;
     }
     setCargando(true);
     const qs = new URLSearchParams({ entityId, desde, hasta });
-    if (tipo !== "anual" && empId) qs.set("employeeId", empId);
     const j = await fetch(`/api/nomina/reportes?${qs}`).then((r) => r.json()).catch(() => null);
     setCargando(false);
     if (!j?.ok) {
       setError(j?.error ?? "No se pudo generar el reporte.");
       return;
     }
-    setDatos({ entidad: j.entidad, empleados: j.empleados, lineas: j.lineas, desde, hasta, tipo, empId });
+    setDatos({ entidad: j.entidad, empleados: j.empleados, lineas: j.lineas, desde, hasta, tipo, sel: [...sel] });
   }
 
   // Acumulado previo a VICTOR (empleado que ya venía cobrando): solo cuenta si el rango
@@ -158,68 +171,72 @@ export default function ReportesTab({ entityId }: { entityId: string }) {
     return e.ytd_inicial_anio === y && d.endsWith("-01-01") ? n(e.ytd_inicial?.bruto) : 0;
   }
 
-  const emp = datos ? datos.empleados.find((e) => e.id === datos.empId) : null;
-  const lineasEmp = datos && emp ? datos.lineas.filter((l) => l.employee_id === emp.id) : [];
+  // Empleados del reporte (los marcados al generar) con sus líneas del rango.
+  const grupos = datos
+    ? datos.empleados
+        .filter((e) => datos.sel.includes(e.id))
+        .map((e) => {
+          const ls = datos.lineas.filter((l) => l.employee_id === e.id);
+          return { e, ls, pv: previo(e, datos.desde), t: sumar(ls) };
+        })
+    : [];
+  // Estado de cuenta y certificación: solo quienes tienen pagos; el resumen también muestra acumulado previo.
+  const conPagos = grupos.filter((g) => g.ls.length > 0 || g.pv > 0);
+
+  const cell = (c: (typeof COLS)[number], l: Linea) => (c.k === "horas" ? String(valor(l, c.k)) : formatMoney(valor(l, c.k)));
+  const cellT = (c: (typeof COLS)[number], t: Record<string, number>) => (c.k === "horas" ? String(t[c.k]) : formatMoney(t[c.k]));
 
   function csvEstado() {
-    if (!datos || !emp) return;
-    descargarCsv(`estado-cuenta-${emp.nombre.replace(/\s+/g, "-")}-${datos.desde}_${datos.hasta}.csv`, [
-      ["Periodo", "Fecha de pago", ...COLS.map((c) => c.t)],
-      ...lineasEmp.map((l) => [`${fecha(l.periodo_inicio)} - ${fecha(l.periodo_fin)}`, fecha(l.fecha_pago), ...COLS.map((c) => valor(l, c.k).toFixed(2))]),
-      ["Total", "", ...COLS.map((c) => (sumar(lineasEmp)[c.k] ?? 0).toFixed(2))],
+    if (!datos) return;
+    descargarCsv(`estado-cuenta-${datos.desde}_${datos.hasta}.csv`, [
+      ["Empleado", "Periodo", "Fecha de pago", ...COLS.map((c) => c.t)],
+      ...conPagos.flatMap((g) => [
+        ...g.ls.map((l) => [g.e.nombre, `${fecha(l.periodo_inicio)} - ${fecha(l.periodo_fin)}`, fecha(l.fecha_pago), ...COLS.map((c) => valor(l, c.k).toFixed(2))]),
+        [g.e.nombre, "Total", "", ...COLS.map((c) => (g.t[c.k] ?? 0).toFixed(2))],
+      ]),
     ]);
   }
 
   function pdfEstado() {
-    if (!datos || !emp) return;
-    const t = sumar(lineasEmp);
+    if (!datos) return;
     imprimir(
-      `Estado de cuenta - ${emp.nombre}`,
-      `<h1>Estado de cuenta del empleado</h1>
-<div class="sub">${esc(datos.entidad)} · ${esc(emp.nombre)}${emp.ssn_ultimos4 ? ` · SSN ••••${esc(emp.ssn_ultimos4)}` : ""} · ${fecha(datos.desde)} al ${fecha(datos.hasta)}</div>
+      "Estados de cuenta de nómina",
+      conPagos
+        .map(
+          (g, i) => `<div style="${i > 0 ? "page-break-before:always;" : ""}"><h1>Estado de cuenta del empleado</h1>
+<div class="sub">${esc(datos.entidad)} · ${esc(g.e.nombre)}${g.e.ssn_ultimos4 ? ` · SSN ••••${esc(g.e.ssn_ultimos4)}` : ""} · ${fecha(datos.desde)} al ${fecha(datos.hasta)}</div>
 <table><tr><th>Periodo</th><th>Pago</th>${COLS.map((c) => `<th>${c.t}</th>`).join("")}</tr>
-${lineasEmp
-  .map((l) => `<tr><td>${fecha(l.periodo_inicio)} - ${fecha(l.periodo_fin)}</td><td>${fecha(l.fecha_pago)}</td>${COLS.map((c) => `<td>${c.k === "horas" ? valor(l, c.k) : formatMoney(valor(l, c.k))}</td>`).join("")}</tr>`)
-  .join("")}
-<tr class="tot"><td>Total</td><td></td>${COLS.map((c) => `<td>${c.k === "horas" ? t[c.k] : formatMoney(t[c.k])}</td>`).join("")}</tr></table>
-<p class="nota">Generado por VICTOR CFO a partir de las corridas de nómina aprobadas. Este documento no es un formulario oficial.</p>`
+${g.ls.map((l) => `<tr><td>${fecha(l.periodo_inicio)} - ${fecha(l.periodo_fin)}</td><td>${fecha(l.fecha_pago)}</td>${COLS.map((c) => `<td>${cell(c, l)}</td>`).join("")}</tr>`).join("")}
+<tr class="tot"><td>Total</td><td></td>${COLS.map((c) => `<td>${cellT(c, g.t)}</td>`).join("")}</tr></table></div>`
+        )
+        .join("") + `<p class="nota">Generado por VICTOR CFO a partir de las corridas de nómina aprobadas. Este documento no es un formulario oficial.</p>`
     );
   }
 
   function pdfCertificacion() {
-    if (!datos || !emp) return;
-    const t = sumar(lineasEmp);
-    const pv = previo(emp, datos.desde);
-    const bruto = r2(t.bruto + pv);
-    const pago = emp.tipo_pago === "hora" ? `a razón de ${formatMoney(n(emp.tarifa))} por hora` : `con un salario de ${formatMoney(n(emp.tarifa))} por período ${emp.frecuencia}`;
+    if (!datos) return;
     imprimir(
-      `Certificación de ingresos - ${emp.nombre}`,
-      `<h1>Certificación de ingresos</h1>
+      "Certificaciones de ingresos",
+      conPagos
+        .map((g, i) => {
+          const bruto = r2(g.t.bruto + g.pv);
+          const pago = g.e.tipo_pago === "hora" ? `a razón de ${formatMoney(n(g.e.tarifa))} por hora` : `con un salario de ${formatMoney(n(g.e.tarifa))} por período ${g.e.frecuencia}`;
+          return `<div style="${i > 0 ? "page-break-before:always;" : ""}"><h1>Certificación de ingresos</h1>
 <div class="sub">${esc(datos.entidad)} · Fecha: ${fecha(new Date().toISOString().slice(0, 10))}</div>
 <p>A quien corresponda:</p>
-<p>Por la presente se certifica que <b>${esc(emp.nombre)}</b>${emp.ssn_ultimos4 ? ` (SSN ••••${esc(emp.ssn_ultimos4)})` : ""} labora en <b>${esc(datos.entidad)}</b>, ${pago}.</p>
-<p>Durante el período del ${fecha(datos.desde)} al ${fecha(datos.hasta)}, el empleado devengó ingresos brutos de <b>${formatMoney(bruto)}</b> y un pago neto de <b>${formatMoney(t.neto)}</b>${pv > 0 ? ` (el bruto incluye ${formatMoney(pv)} acumulados antes de usar VICTOR CFO)` : ""}, según los registros de nómina de la empresa.</p>
-<div class="firma">Firma autorizada</div>
-<p class="nota">Preparado con VICTOR CFO a partir de las corridas de nómina aprobadas. La empresa responde por la veracidad de esta certificación.</p>`
+<p>Por la presente se certifica que <b>${esc(g.e.nombre)}</b>${g.e.ssn_ultimos4 ? ` (SSN ••••${esc(g.e.ssn_ultimos4)})` : ""} labora en <b>${esc(datos.entidad)}</b>, ${pago}.</p>
+<p>Durante el período del ${fecha(datos.desde)} al ${fecha(datos.hasta)}, el empleado devengó ingresos brutos de <b>${formatMoney(bruto)}</b> y un pago neto de <b>${formatMoney(g.t.neto)}</b>${g.pv > 0 ? ` (el bruto incluye ${formatMoney(g.pv)} acumulados antes de usar VICTOR CFO)` : ""}, según los registros de nómina de la empresa.</p>
+<div class="firma">Firma autorizada</div></div>`;
+        })
+        .join("") + `<p class="nota">Preparado con VICTOR CFO a partir de las corridas de nómina aprobadas. La empresa responde por la veracidad de esta certificación.</p>`
     );
   }
-
-  // Resumen del año: una fila por empleado.
-  const filasAnual = datos && datos.tipo === "anual"
-    ? datos.empleados
-        .map((e) => {
-          const ls = datos.lineas.filter((l) => l.employee_id === e.id);
-          const pv = previo(e, datos.desde);
-          return { e, pagos: ls.length, pv, t: sumar(ls) };
-        })
-        .filter((f) => f.pagos > 0 || f.pv > 0)
-    : [];
 
   function csvAnual() {
     if (!datos) return;
     descargarCsv(`resumen-nomina-${datos.desde}_${datos.hasta}.csv`, [
       ["Empleado", "SSN (últimos 4)", "Pagos", "Bruto (incl. previo)", "Seg. Social", "Medicare", "Hacienda", "SINOT", "Otras ded.", "Neto"],
-      ...filasAnual.map((f) => [f.e.nombre, f.e.ssn_ultimos4 ?? "", f.pagos, (f.t.bruto + f.pv).toFixed(2), f.t.ss_emp.toFixed(2), f.t.medicare_emp.toFixed(2), f.t.hacienda.toFixed(2), f.t.sinot_emp.toFixed(2), f.t.otras.toFixed(2), f.t.neto.toFixed(2)]),
+      ...conPagos.map((g) => [g.e.nombre, g.e.ssn_ultimos4 ?? "", g.ls.length, (g.t.bruto + g.pv).toFixed(2), g.t.ss_emp.toFixed(2), g.t.medicare_emp.toFixed(2), g.t.hacienda.toFixed(2), g.t.sinot_emp.toFixed(2), g.t.otras.toFixed(2), g.t.neto.toFixed(2)]),
     ]);
   }
 
@@ -230,16 +247,20 @@ ${lineasEmp
       `<h1>Resumen de nómina por empleado</h1>
 <div class="sub">${esc(datos.entidad)} · ${fecha(datos.desde)} al ${fecha(datos.hasta)}</div>
 <table><tr><th>Empleado</th><th>Pagos</th><th>Bruto</th><th>Seg. Social</th><th>Medicare</th><th>Hacienda</th><th>SINOT</th><th>Otras ded.</th><th>Neto</th></tr>
-${filasAnual.map((f) => `<tr><td>${esc(f.e.nombre)}${f.e.ssn_ultimos4 ? ` ••••${esc(f.e.ssn_ultimos4)}` : ""}</td><td>${f.pagos}</td><td>${formatMoney(f.t.bruto + f.pv)}</td><td>${formatMoney(f.t.ss_emp)}</td><td>${formatMoney(f.t.medicare_emp)}</td><td>${formatMoney(f.t.hacienda)}</td><td>${formatMoney(f.t.sinot_emp)}</td><td>${formatMoney(f.t.otras)}</td><td>${formatMoney(f.t.neto)}</td></tr>`).join("")}
+${conPagos.map((g) => `<tr><td>${esc(g.e.nombre)}${g.e.ssn_ultimos4 ? ` ••••${esc(g.e.ssn_ultimos4)}` : ""}</td><td>${g.ls.length}</td><td>${formatMoney(g.t.bruto + g.pv)}</td><td>${formatMoney(g.t.ss_emp)}</td><td>${formatMoney(g.t.medicare_emp)}</td><td>${formatMoney(g.t.hacienda)}</td><td>${formatMoney(g.t.sinot_emp)}</td><td>${formatMoney(g.t.otras)}</td><td>${formatMoney(g.t.neto)}</td></tr>`).join("")}
 </table>
 <p class="nota">Base para preparar el W-2PR y las planillas. Generado por VICTOR CFO a partir de las corridas aprobadas; no es un formulario oficial.</p>`
     );
   }
 
+  const accionImprimir = datos?.tipo === "estado" ? pdfEstado : datos?.tipo === "certificacion" ? pdfCertificacion : pdfAnual;
+  const accionCsv = datos?.tipo === "estado" ? csvEstado : datos?.tipo === "anual" ? csvAnual : null;
+
   return (
     <div>
       <div className="vc-card mb-3">
         <p className="mb-2 text-sm font-medium">Reportes de nómina</p>
+        <p className="mb-1 text-xs font-medium text-muted">1. Tipo de reporte</p>
         <div className="mb-3 flex flex-wrap gap-2">
           {([
             ["estado", "Estado de cuenta del empleado"],
@@ -248,7 +269,7 @@ ${filasAnual.map((f) => `<tr><td>${esc(f.e.nombre)}${f.e.ssn_ultimos4 ? ` ••
           ] as [Tipo, string][]).map(([id, label]) => (
             <button
               key={id}
-              onClick={() => { setTipo(id); setDatos(null); cargarEmpleados(); }}
+              onClick={() => { setTipo(id); setDatos(null); }}
               className={`rounded-full border px-3 py-1 text-xs ${tipo === id ? "border-teal bg-teal/10 text-teal" : "border-border text-muted"}`}
             >
               {label}
@@ -256,18 +277,28 @@ ${filasAnual.map((f) => `<tr><td>${esc(f.e.nombre)}${f.e.ssn_ultimos4 ? ` ••
           ))}
         </div>
 
-        {tipo !== "anual" && (
-          <label className="mb-2 block">
-            <span className="mb-1 block text-xs font-medium text-muted">Empleado</span>
-            <select className="vc-input" value={empId} onFocus={cargarEmpleados} onChange={(e) => setEmpId(e.target.value)}>
-              <option value="">Escoge...</option>
-              {empleadosLista.map((e) => (
-                <option key={e.id} value={e.id}>{e.nombre}</option>
-              ))}
-            </select>
-          </label>
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-xs font-medium text-muted">2. Empleados ({sel.length} de {empleadosLista.length})</p>
+          {empleadosLista.length > 1 && (
+            <button type="button" className="text-xs font-medium text-teal" onClick={() => setSel(todos ? [] : empleadosLista.map((e) => e.id))}>
+              {todos ? "Quitar todos" : "Marcar todos"}
+            </button>
+          )}
+        </div>
+        {empleadosLista.length === 0 ? (
+          <p className="mb-3 text-xs text-muted">Todavía no hay empleados.</p>
+        ) : (
+          <div className="mb-3 flex flex-col gap-1 rounded-lg border border-border px-3 py-2">
+            {empleadosLista.map((e) => (
+              <label key={e.id} className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={sel.includes(e.id)} onChange={() => alternar(e.id)} />
+                {e.nombre}
+              </label>
+            ))}
+          </div>
         )}
 
+        <p className="mb-1 text-xs font-medium text-muted">3. Fechas</p>
         <div className="mb-2 grid grid-cols-2 gap-2">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted">Desde</span>
@@ -291,63 +322,55 @@ ${filasAnual.map((f) => `<tr><td>${esc(f.e.nombre)}${f.e.ssn_ultimos4 ? ` ••
         <p className="mt-2 text-[11px] text-muted">Usa solo corridas aprobadas, por fecha de pago.</p>
       </div>
 
-      {datos && datos.tipo !== "anual" && emp && (
-        <div className="vc-card">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-sm font-medium">{emp.nombre} · {fecha(datos.desde)} al {fecha(datos.hasta)}</p>
-            <div className="flex gap-3 text-xs font-medium text-teal">
-              {datos.tipo === "estado" && <button onClick={csvEstado}>CSV</button>}
-              <button onClick={datos.tipo === "estado" ? pdfEstado : pdfCertificacion}>Imprimir / PDF</button>
-            </div>
-          </div>
-          {lineasEmp.length === 0 ? (
-            <p className="text-xs text-muted">Sin pagos aprobados en este rango.</p>
-          ) : datos.tipo === "estado" ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-muted">
-                    <th className="py-1 text-left font-medium">Pago</th>
-                    {COLS.map((c) => (<th key={c.t} className="px-1 text-right font-medium">{c.t}</th>))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {lineasEmp.map((l) => (
-                    <tr key={l.id} className="border-t border-border">
-                      <td className="py-1">{fecha(l.fecha_pago)}</td>
-                      {COLS.map((c) => (<td key={c.t} className="px-1 text-right">{c.k === "horas" ? valor(l, c.k) : formatMoney(valor(l, c.k))}</td>))}
-                    </tr>
-                  ))}
-                  <tr className="border-t-2 border-border font-medium">
-                    <td className="py-1">Total</td>
-                    {COLS.map((c) => (<td key={c.t} className="px-1 text-right">{c.k === "horas" ? sumar(lineasEmp)[c.k] : formatMoney(sumar(lineasEmp)[c.k])}</td>))}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-xs text-muted">
-              Bruto del período: <b>{formatMoney(sumar(lineasEmp).bruto + previo(emp, datos.desde))}</b> · Neto: <b>{formatMoney(sumar(lineasEmp).neto)}</b>. Usa «Imprimir / PDF» para la carta.
-            </p>
-          )}
-        </div>
-      )}
-
-      {datos && datos.tipo !== "anual" && !emp && (
-        <p className="text-xs text-muted">Empleado no encontrado.</p>
-      )}
-
-      {datos && datos.tipo === "anual" && (
+      {datos && (
         <div className="vc-card">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-sm font-medium">{fecha(datos.desde)} al {fecha(datos.hasta)}</p>
             <div className="flex gap-3 text-xs font-medium text-teal">
-              <button onClick={csvAnual}>CSV</button>
-              <button onClick={pdfAnual}>Imprimir / PDF</button>
+              {accionCsv && conPagos.length > 0 && <button onClick={accionCsv}>CSV</button>}
+              {conPagos.length > 0 && <button onClick={accionImprimir}>Imprimir / PDF</button>}
             </div>
           </div>
-          {filasAnual.length === 0 ? (
-            <p className="text-xs text-muted">Sin pagos aprobados en este rango.</p>
+
+          {conPagos.length === 0 ? (
+            <p className="text-xs text-muted">Sin pagos aprobados en este rango para los empleados marcados.</p>
+          ) : datos.tipo === "estado" ? (
+            <div className="flex flex-col gap-4">
+              {conPagos.map((g) => (
+                <div key={g.e.id} className="overflow-x-auto">
+                  <p className="mb-1 text-xs font-semibold">{g.e.nombre}</p>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-muted">
+                        <th className="py-1 text-left font-medium">Pago</th>
+                        {COLS.map((c) => (<th key={c.t} className="px-1 text-right font-medium">{c.t}</th>))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.ls.map((l) => (
+                        <tr key={l.id} className="border-t border-border">
+                          <td className="py-1">{fecha(l.fecha_pago)}</td>
+                          {COLS.map((c) => (<td key={c.t} className="px-1 text-right">{cell(c, l)}</td>))}
+                        </tr>
+                      ))}
+                      <tr className="border-t-2 border-border font-medium">
+                        <td className="py-1">Total</td>
+                        {COLS.map((c) => (<td key={c.t} className="px-1 text-right">{cellT(c, g.t)}</td>))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          ) : datos.tipo === "certificacion" ? (
+            <div className="flex flex-col gap-1">
+              {conPagos.map((g) => (
+                <p key={g.e.id} className="text-xs text-muted">
+                  <b className="text-text">{g.e.nombre}</b> · Bruto: <b>{formatMoney(g.t.bruto + g.pv)}</b> · Neto: <b>{formatMoney(g.t.neto)}</b>
+                </p>
+              ))}
+              <p className="mt-1 text-[11px] text-muted">Usa «Imprimir / PDF» para las cartas (una por empleado, cada una en su página).</p>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -362,14 +385,14 @@ ${filasAnual.map((f) => `<tr><td>${esc(f.e.nombre)}${f.e.ssn_ultimos4 ? ` ••
                   </tr>
                 </thead>
                 <tbody>
-                  {filasAnual.map((f) => (
-                    <tr key={f.e.id} className="border-t border-border">
-                      <td className="py-1">{f.e.nombre}</td>
-                      <td className="px-1 text-right">{formatMoney(f.t.bruto + f.pv)}</td>
-                      <td className="px-1 text-right">{formatMoney(f.t.ss_emp)}</td>
-                      <td className="px-1 text-right">{formatMoney(f.t.medicare_emp)}</td>
-                      <td className="px-1 text-right">{formatMoney(f.t.hacienda)}</td>
-                      <td className="px-1 text-right">{formatMoney(f.t.neto)}</td>
+                  {conPagos.map((g) => (
+                    <tr key={g.e.id} className="border-t border-border">
+                      <td className="py-1">{g.e.nombre}</td>
+                      <td className="px-1 text-right">{formatMoney(g.t.bruto + g.pv)}</td>
+                      <td className="px-1 text-right">{formatMoney(g.t.ss_emp)}</td>
+                      <td className="px-1 text-right">{formatMoney(g.t.medicare_emp)}</td>
+                      <td className="px-1 text-right">{formatMoney(g.t.hacienda)}</td>
+                      <td className="px-1 text-right">{formatMoney(g.t.neto)}</td>
                     </tr>
                   ))}
                 </tbody>
