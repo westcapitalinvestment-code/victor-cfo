@@ -95,6 +95,8 @@ export async function actorNomina(
     .eq("member_email", email)
     .eq("role", "cpa")
     .eq("active", true)
+    // Acceso por entidad (0185): una fila sin entidad = todas; si no, debe ser esta.
+    .or(`entity_id.is.null,entity_id.eq.${entityId}`)
     .limit(1)
     .maybeSingle();
   if (!miembro) return { error: NextResponse.json({ error: "Entidad no encontrada." }, { status: 404 }) };

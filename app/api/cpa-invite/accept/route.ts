@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   const { data: invitation, error: fetchError } = await admin
     .from("cpa_invitations")
-    .select("id, owner_id, entity_id, cpa_email, cpa_name, status")
+    .select("id, owner_id, entity_id, entity_ids, cpa_email, cpa_name, status")
     .eq("invitation_token", token)
     .maybeSingle();
 
@@ -57,17 +57,41 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, alreadyAccepted: true });
   }
 
-  const { error: memberError } = await admin.from("account_members").insert({
-    owner_id: invitation.owner_id,
-    entity_id: invitation.entity_id,
-    member_email: user.email,
-    role: "cpa",
-    active: true,
-    accepted_at: new Date().toISOString(),
-  });
+  // Una fila por entidad compartida (entity_id null = todas). Si el contable
+  // ya tenía acceso a alguna, se reactiva en vez de duplicar.
+  const destinos: (string | null)[] =
+    Array.isArray(invitation.entity_ids) && invitation.entity_ids.length > 0
+      ? (invitation.entity_ids as string[])
+      : [invitation.entity_id ?? null];
 
-  if (memberError) {
-    return NextResponse.json({ error: memberError.message }, { status: 500 });
+  const { data: existentes } = await admin
+    .from("account_members")
+    .select("id, entity_id, active")
+    .eq("owner_id", invitation.owner_id)
+    .eq("role", "cpa")
+    .ilike("member_email", user.email);
+
+  const ahora = new Date().toISOString();
+  for (const dest of destinos) {
+    const previa = (existentes ?? []).find((m) => (m.entity_id ?? null) === dest);
+    if (previa) {
+      if (!previa.active) {
+        const { error: reactErr } = await admin.from("account_members").update({ active: true, accepted_at: ahora }).eq("id", previa.id);
+        if (reactErr) return NextResponse.json({ error: reactErr.message }, { status: 500 });
+      }
+      continue;
+    }
+    const { error: memberError } = await admin.from("account_members").insert({
+      owner_id: invitation.owner_id,
+      entity_id: dest,
+      member_email: user.email,
+      role: "cpa",
+      active: true,
+      accepted_at: ahora,
+    });
+    if (memberError) {
+      return NextResponse.json({ error: memberError.message }, { status: 500 });
+    }
   }
 
   const { error: updateError } = await admin

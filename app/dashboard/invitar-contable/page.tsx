@@ -48,6 +48,14 @@ export default function InvitarContablePage() {
   const [cargandoAccesos, setCargandoAccesos] = useState(true);
   const [actualizandoId, setActualizandoId] = useState<string | null>(null);
 
+  // Entidades del dueño (0185: el acceso del contable es por entidad).
+  const [entidades, setEntidades] = useState<{ id: string; name: string }[]>([]);
+  const [todas, setTodas] = useState(true);
+  const [elegidas, setElegidas] = useState<string[]>([]);
+
+  const nombreEntidad = (id: string | null) =>
+    id ? entidades.find((e) => e.id === id)?.name ?? "Entidad" : "Todas tus entidades";
+
   async function cargarAccesos() {
     const { data } = await supabase
       .from("account_members")
@@ -60,8 +68,24 @@ export default function InvitarContablePage() {
 
   useEffect(() => {
     cargarAccesos();
+    supabase
+      .from("business_entities")
+      .select("id, name")
+      .eq("active", true)
+      .order("name")
+      .then(({ data }) => setEntidades((data ?? []) as { id: string; name: string }[]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Agrupa las filas por correo: un contable puede tener varias entidades.
+  const porContable = (() => {
+    const m = new Map<string, AccesoCpa[]>();
+    for (const a of accesos) {
+      const k = a.member_email.toLowerCase();
+      m.set(k, [...(m.get(k) ?? []), a]);
+    }
+    return Array.from(m.values());
+  })();
 
   async function toggleAcceso(id: string, nuevoActivo: boolean) {
     setActualizandoId(id);
@@ -70,12 +94,14 @@ export default function InvitarContablePage() {
     setActualizandoId(null);
   }
 
-  async function togglePersonal(id: string, compartir: boolean) {
-    setActualizandoId(id);
+  // El permiso de lo personal es por contable (no por entidad): se aplica a
+  // todas sus filas para que quede consistente.
+  async function togglePersonal(ids: string[], compartir: boolean) {
+    setActualizandoId(ids[0]);
     const { error: updateError } = await supabase
       .from("account_members")
       .update({ share_personal: compartir })
-      .eq("id", id);
+      .in("id", ids);
     if (!updateError) await cargarAccesos();
     setActualizandoId(null);
   }
@@ -88,7 +114,12 @@ export default function InvitarContablePage() {
       const res = await fetch("/api/cpa-invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cpaName: cpaName || null, cpaEmail, customMessage: mensaje || null }),
+        body: JSON.stringify({
+          cpaName: cpaName || null,
+          cpaEmail,
+          customMessage: mensaje || null,
+          entityIds: todas || entidades.length <= 1 ? [] : elegidas,
+        }),
       });
       const data = await res.json();
 
@@ -139,7 +170,7 @@ export default function InvitarContablePage() {
       <div className="mb-4 rounded-lg p-3.5 text-sm text-white" style={{ background: "#1B3A5C" }}>
         <p className="font-medium">Acceso gratis · sin costo adicional</p>
         <p className="mt-1 text-xs text-white/80">
-          Tu contable puede ver lo que compartas con él sin pagar nada extra — ni tú ni él.
+          Tu contable trabaja con las entidades que le asignes (facturas, pagos, nómina y reportes) sin pagar nada extra — ni tú ni él.
         </p>
       </div>
 
@@ -183,7 +214,41 @@ export default function InvitarContablePage() {
           />
         </div>
 
-        <button className="vc-btn-primary mt-1" disabled={!cpaEmail || loading} onClick={enviarInvitacion}>
+        {entidades.length > 1 && (
+          <div>
+            <label className="mb-1 block text-xs uppercase tracking-wide text-muted">¿Qué entidades verá?</label>
+            <label className="mb-1 flex cursor-pointer items-center gap-2 text-sm">
+              <input type="checkbox" checked={todas} onChange={(e) => setTodas(e.target.checked)} />
+              Todas mis entidades
+            </label>
+            {!todas && (
+              <div className="flex flex-col gap-1 rounded-lg border border-border p-2.5">
+                {entidades.map((e) => (
+                  <label key={e.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={elegidas.includes(e.id)}
+                      onChange={(ev) =>
+                        setElegidas((prev) => (ev.target.checked ? [...prev, e.id] : prev.filter((x) => x !== e.id)))
+                      }
+                    />
+                    {e.name}
+                  </label>
+                ))}
+                <p className="mt-1 text-[11px] text-muted">
+                  Este contable solo verá y trabajará (facturas, pagos, nómina) las entidades marcadas. Puedes invitar a otro
+                  contable para las demás.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <button
+          className="vc-btn-primary mt-1"
+          disabled={!cpaEmail || loading || (!todas && entidades.length > 1 && elegidas.length === 0)}
+          onClick={enviarInvitacion}
+        >
           {loading ? "Guardando..." : "Invitar"}
         </button>
       </div>
@@ -191,8 +256,8 @@ export default function InvitarContablePage() {
       <div className="vc-card mt-4">
         <p className="mb-1 text-xs uppercase tracking-wide text-muted">Quién tiene acceso hoy</p>
         <p className="mb-3 text-xs text-muted">
-          Incluye a los contables que invitaste tú y a cualquier colega que ellos hayan agregado a su propio
-          equipo — a cualquiera lo puedes apagar aquí sin afectar a los demás.
+          Cada contable aparece con las entidades que tiene asignadas (puedes tener uno distinto por entidad). Incluye a
+          los colegas que ellos hayan agregado a su equipo — a cualquiera lo puedes apagar aquí sin afectar a los demás.
         </p>
         {cargandoAccesos ? (
           <p className="text-xs text-muted">Cargando...</p>
@@ -200,47 +265,62 @@ export default function InvitarContablePage() {
           <p className="text-xs text-muted">Todavía no has invitado a ningún contable.</p>
         ) : (
           <div className="flex flex-col divide-y divide-border">
-            {accesos.map((a) => (
-              <div key={a.id} className="py-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{a.member_email}</p>
-                    <p className="text-xs text-muted">
-                      {a.entity_id ? "Una entidad" : "Todas tus entidades"}
-                      {a.delegated_from_email ? ` · agregado por ${a.delegated_from_email}` : ""}
-                    </p>
+            {porContable.map((filas) => {
+              const activas = filas.filter((f) => f.active);
+              const personalOn = activas.some((f) => f.share_personal);
+              return (
+                <div key={filas[0].member_email} className="py-3">
+                  <p className="text-sm font-medium">{filas[0].member_email}</p>
+                  <div className="mt-1.5 flex flex-col gap-1.5">
+                    {filas.map((a) => (
+                      <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5">
+                        <div className="min-w-0">
+                          <p className={`truncate text-xs font-medium ${a.active ? "" : "text-muted line-through"}`}>
+                            {nombreEntidad(a.entity_id)}
+                          </p>
+                          {a.delegated_from_email && (
+                            <p className="text-[11px] text-muted">agregado por {a.delegated_from_email}</p>
+                          )}
+                        </div>
+                        <button
+                          className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-medium ${
+                            a.active ? "bg-red/10 text-red" : "bg-grn/10 text-grn"
+                          }`}
+                          disabled={actualizandoId === a.id}
+                          onClick={() => toggleAcceso(a.id, !a.active)}
+                        >
+                          {actualizandoId === a.id ? "..." : a.active ? "Quitar acceso" : "Reactivar"}
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                  <button
-                    className={`rounded-full px-3 py-1 text-[11px] font-medium ${
-                      a.active ? "bg-red/10 text-red" : "bg-grn/10 text-grn"
-                    }`}
-                    disabled={actualizandoId === a.id}
-                    onClick={() => toggleAcceso(a.id, !a.active)}
-                  >
-                    {actualizandoId === a.id ? "..." : a.active ? "Quitar acceso" : "Reactivar"}
-                  </button>
-                </div>
-                {a.active && (
-                  <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={a.share_personal}
-                      disabled={actualizandoId === a.id}
-                      onChange={(e) => togglePersonal(a.id, e.target.checked)}
-                    />
-                    <span className="text-xs">
-                      <span className="font-medium">Compartir también mis finanzas personales</span>
-                      <span className="block text-muted">
-                        {a.share_personal
-                          ? "Ve (solo lectura) tus ingresos, gastos, impuestos estimados, metas y documentos personales. Puedes apagarlo cuando quieras."
-                          : "Apagado: solo ve tus entidades de negocio. Actívalo si te prepara también tu planilla personal."}
+                  {activas.length > 0 && (
+                    <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={personalOn}
+                        disabled={actualizandoId === activas[0].id}
+                        onChange={(e) =>
+                          togglePersonal(
+                            filas.map((f) => f.id),
+                            e.target.checked
+                          )
+                        }
+                      />
+                      <span className="text-xs">
+                        <span className="font-medium">Compartir también mis finanzas personales</span>
+                        <span className="block text-muted">
+                          {personalOn
+                            ? "Ve tus ingresos, gastos, impuestos estimados, metas y documentos personales. Puedes apagarlo cuando quieras."
+                            : "Apagado: solo ve las entidades de negocio indicadas arriba. Actívalo si te prepara también tu planilla personal."}
+                        </span>
                       </span>
-                    </span>
-                  </label>
-                )}
-              </div>
-            ))}
+                    </label>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

@@ -26,11 +26,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Falta un correo válido para el contable." }, { status: 400 });
   }
 
+  // Entidades a compartir (0185). Vacío/ausente = todas las entidades del
+  // dueño. Se validan contra las entidades reales del dueño.
+  let entityIds: string[] | null = null;
+  if (Array.isArray(body?.entityIds) && body.entityIds.length > 0) {
+    const pedidas = Array.from(new Set(body.entityIds.filter((x: unknown): x is string => typeof x === "string")));
+    const { data: propias } = await supabase.from("business_entities").select("id").eq("owner_id", user.id).in("id", pedidas);
+    const validas = (propias ?? []).map((e) => e.id as string);
+    if (validas.length === 0 || validas.length !== pedidas.length) {
+      return NextResponse.json({ error: "Alguna entidad no es válida." }, { status: 400 });
+    }
+    entityIds = validas;
+  }
+
   const { data: invitation, error: insertError } = await supabase
     .from("cpa_invitations")
     .insert({
       owner_id: user.id,
       entity_id: null,
+      entity_ids: entityIds,
       cpa_name: cpaName,
       cpa_email: cpaEmail,
       custom_message: customMessage,
