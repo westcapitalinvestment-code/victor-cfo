@@ -10,6 +10,7 @@ import ResumenReglasCard from "./resumen-reglas-card";
 import AlertasPatronCard, { type AlertaRegla } from "./alertas-patron-card";
 import ImpuestosEstimadosCard from "./impuestos-estimados-card";
 import Regla503020Card from "./regla-503020-card";
+import MetricasGratis from "./metricas-gratis";
 import { calcularRegla503020 } from "@/lib/regla-50-30-20";
 import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 
@@ -222,6 +223,34 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const inversionTotal = todasLasCuentas
     .filter((c) => c.type === "investment")
     .reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
+
+  // Plan gratis (22 oct 2026): datos para las tarjetas clickeables del Inicio
+  // (app/dashboard/metricas-gratis.tsx). Deuda también suma la calculadora de
+  // deudas (deudas_plan), que es donde el plan gratis anota tarjetas/préstamos.
+  let deudaPlanGratis = 0;
+  let cuentasFormGratis: { id: string; nombre: string; tipo: string }[] = [];
+  let cuentaAhorroGratis: { id: string; saldo: number } | null = null;
+  let cuentaInversionGratis: { id: string; saldo: number } | null = null;
+  if (profile.plan === "gratis") {
+    const [{ data: deudasPlan }, { data: manualesGratis }] = await Promise.all([
+      supabase.from("deudas_plan").select("saldo").eq("owner_id", user.id),
+      supabase
+        .from("manual_accounts")
+        .select("id, name, type, subtype, current_balance")
+        .eq("owner_id", user.id)
+        .is("entity_id", null)
+        .eq("es_negocio", false),
+    ]);
+    deudaPlanGratis = (deudasPlan ?? []).reduce((s, d) => s + Number(d.saldo || 0), 0);
+    const lista = manualesGratis ?? [];
+    cuentasFormGratis = lista
+      .filter((c) => c.type === "depository" && c.subtype !== "savings")
+      .map((c) => ({ id: c.id, nombre: c.name || "Cuenta", tipo: c.type }));
+    const ah = lista.find((c) => c.type === "depository" && c.subtype === "savings");
+    if (ah) cuentaAhorroGratis = { id: ah.id, saldo: Number(ah.current_balance || 0) };
+    const inv = lista.find((c) => c.type === "investment");
+    if (inv) cuentaInversionGratis = { id: inv.id, saldo: Number(inv.current_balance || 0) };
+  }
 
   // Si es Core, contamos también cuántas cuentas de negocio detectamos
   // pero dejamos afuera, para avisarle con honestidad en vez de esconderlo.
@@ -816,7 +845,24 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         ))}
       </div>
 
-      {/* MÉTRICAS */}
+      {/* MÉTRICAS — plan gratis: tarjetas clickeables para llenarlas a mano
+          (sin banco no hay otra forma obvia). Planes de pago: las de abajo. */}
+      {profile.plan === "gratis" ? (
+        <MetricasGratis
+          hoy={fechaHoyPR()}
+          mesLabel={etiquetaMes(mesSeleccionado)}
+          esMesActual={mesSeleccionado === mesActualStr}
+          ingresos={ingresosDelMes}
+          gastos={gastosDelMes}
+          ahorrado={ahorrado}
+          deuda={deudaTotal + deudaPlanGratis}
+          inversion={inversionTotal}
+          cuentas={cuentasFormGratis}
+          categorias={categorias ?? []}
+          cuentaAhorro={cuentaAhorroGratis}
+          cuentaInversion={cuentaInversionGratis}
+        />
+      ) : (
       <div className="vc-mets">
         <div className="vc-met">
           <p className="vc-ml">Ingresos</p>
@@ -854,6 +900,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <p className="mt-0.5 text-[10px] text-muted">{bancoConectado ? "cuentas de inversión" : "conecta tu banco"}</p>
         </div>
       </div>
+      )}
 
       {/* Impuestos estimados (8 oct 2026): cuánto apartar para el IRS y
           Hacienda, reintegro proyectado y próximas estimadas. Va arriba de
