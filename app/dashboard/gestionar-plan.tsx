@@ -199,7 +199,7 @@ export default function GestionarPlan({
       ) : esGratis ? (
         <>
           <p className="mb-3 text-xs text-muted">
-            Estás en el plan gratis, por tiempo limitado. Cuando quieras chat con VICTOR, banco conectado y más, elige tu plan.
+            Estás en el plan gratis y te puedes quedar aquí el tiempo que quieras. Cuando quieras el chat con VICTOR, banco conectado y más, elige tu plan.
           </p>
           <Link
             href="/registro/completar-pago"
