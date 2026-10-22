@@ -3,7 +3,6 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { MockPlan } from "./mockups";
 
 // Capturas reales de la app (cuenta de ejemplo) en /public/empieza.
 function Captura({ src, alt }: { src: string; alt: string }) {
@@ -171,7 +170,7 @@ export default function EmpiezaPage() {
         titulo="Cuatro preguntas y te armamos tu camino"
         texto="Dinos qué quieres lograr y te damos los pasos para ti: salir de deudas, ordenar y crecer, o probar la app con tus números."
         puntos={["Pasos que se marcan solos al avanzar", "Patrimonio neto y fondo de emergencia", "Págate primero: empieza con 10% y sube a 20%"]}
-        mock={<MockPlan />}
+        mock={<Captura src="/empieza/plan.png" alt="Tu plan: pasos, patrimonio neto, fondo de emergencia y págate primero" />}
       />
 
       {/* CÓMO EMPIEZO */}
