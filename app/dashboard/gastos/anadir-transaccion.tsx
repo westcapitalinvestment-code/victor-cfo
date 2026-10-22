@@ -9,12 +9,15 @@ export default function AnadirTransaccion({
   hoy,
   cuentas,
   categorias,
+  abrirComo,
 }: {
   hoy: string;
   cuentas: CuentaManualOpcion[];
   categorias: CategoriaOpcion[];
+  // ?anadir=ingreso|gasto en la URL: abre el formulario directo.
+  abrirComo?: "gasto" | "ingreso";
 }) {
-  const [abierto, setAbierto] = useState(false);
+  const [abierto, setAbierto] = useState(!!abrirComo);
   const [aviso, setAviso] = useState(false);
 
   return (
@@ -36,6 +39,7 @@ export default function AnadirTransaccion({
         <div className="fixed inset-x-0 top-0 z-40 max-h-screen overflow-y-auto bg-bg/95 p-3 backdrop-blur-sm sm:static sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
           <TransaccionForm
             hoy={hoy}
+            tipoInicial={abrirComo}
             cuentas={cuentas}
             categorias={categorias}
             onListo={() => {

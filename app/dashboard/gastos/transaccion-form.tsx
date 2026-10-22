@@ -25,9 +25,12 @@ export default function TransaccionForm({
   cuentas,
   categorias,
   inicial,
+  tipoInicial,
   onListo,
   onCancelar,
 }: {
+  // Para abrir el formulario de alta ya en "Ingreso" (ej. desde la tarjeta 50/30/20).
+  tipoInicial?: "gasto" | "ingreso";
   hoy: string;
   cuentas: CuentaManualOpcion[];
   categorias: CategoriaOpcion[];
@@ -37,7 +40,7 @@ export default function TransaccionForm({
 }) {
   const router = useRouter();
   const editando = !!inicial;
-  const [tipo, setTipo] = useState<"gasto" | "ingreso">(inicial?.tipo ?? "gasto");
+  const [tipo, setTipo] = useState<"gasto" | "ingreso">(inicial?.tipo ?? tipoInicial ?? "gasto");
   const [monto, setMonto] = useState(inicial ? String(inicial.monto) : "");
   const [fecha, setFecha] = useState(inicial?.fecha ?? hoy);
   const [descripcion, setDescripcion] = useState(inicial?.descripcion ?? "");

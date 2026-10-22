@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
 import type { ResultadoRegla, Grupo } from "@/lib/regla-50-30-20";
@@ -29,10 +30,23 @@ export default function Regla503020Card({ mesLabel, resultado }: { mesLabel: str
       </div>
       <div className="p-4">
         {sinIngresos ? (
-          <p className="text-xs text-muted">
-            Para repartir tu mes en 50/30/20 necesito saber cuánto entró. Registra o importa tus ingresos de {mesLabel} y
-            aquí verás cuánto va a necesidades, gustos y ahorro.
-          </p>
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-muted">
+              Para repartir tu mes en 50/30/20 necesito saber cuánto entró. Anota tus ingresos de {mesLabel} (sueldo, efectivo,
+              lo que sea) o sube el estado de cuenta de tu banco, y aquí verás cuánto va a necesidades, gustos y ahorro.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/dashboard/gastos?anadir=ingreso" className="vc-btn-primary !w-auto px-4 !py-1.5 !text-xs">
+                + Anotar un ingreso
+              </Link>
+              <Link
+                href="/dashboard/cuentas"
+                className="flex items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-80"
+              >
+                Subir estado de cuenta
+              </Link>
+            </div>
+          </div>
         ) : (
           <div className="flex flex-col gap-3">
             <p className="text-xs text-muted">

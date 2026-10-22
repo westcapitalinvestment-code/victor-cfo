@@ -101,7 +101,7 @@ function parsearCategoriaSeleccionada(valor: string | undefined): { tipo: "id"; 
 export default async function GastosPage({
   searchParams,
 }: {
-  searchParams: { cuentas?: string; categoria?: string; tipo?: string; mes?: string; buscar?: string };
+  searchParams: { cuentas?: string; categoria?: string; tipo?: string; mes?: string; buscar?: string; anadir?: string };
 }) {
   const supabase = createClient();
   const {
@@ -507,6 +507,7 @@ export default async function GastosPage({
         <h1 className="text-lg font-medium">Transacciones</h1>
         <AnadirTransaccion
           hoy={fechaHoyPR()}
+          abrirComo={searchParams.anadir === "ingreso" ? "ingreso" : searchParams.anadir === "gasto" ? "gasto" : undefined}
           cuentas={(cuentasManuales ?? []).map((c) => ({ id: c.id, nombre: etiquetaCuenta(c), tipo: c.type }))}
           categorias={categorias ?? []}
         />
