@@ -871,16 +871,17 @@ export async function sendWelcomeGratisEmail(params: {
   // (categoriza, recuerda citas, avisa de documentos pendientes) en vez de
   // solo el precio.
   const pasos: [string, string][] = [
-    ["Ve a Cuentas y agrega tu cuenta", "Primero agrega tu banco o tarjeta como cuenta manual — de ahí vas a poder subir tus estados de cuenta."],
-    ["Sube tu estado de cuenta y categoriza tus gastos", "Importa el CSV o Excel que descargas de tu banco. En el plan gratis tú mismo revisas y categorizas cada movimiento — una vez lo haces, lo ves todo organizado en tu dashboard."],
-    ["Usa Citas para anotar tus compromisos", "Agenda ahí lo que necesites — pagos, vencimientos, lo que sea — y queda guardado en un solo lugar."],
+    ["Anota tu balance de hoy", "En Inicio, toca \"Anotar mi balance\" y escribe cuánto tienes hoy. Ese es tu punto de partida: todo lo que anotes después se suma o se resta solo."],
+    ["Toca las tarjetas y registra tu día", "Ingresos, Gastos, Ahorrado, Deuda e Inversiones son botones: tócalos y anota lo tuyo en segundos. Si te equivocas, lo editas o lo borras y tu balance se corrige."],
+    ["O sube tus movimientos de golpe", "¿Prefieres no anotar uno por uno? Descarga el CSV, Excel o PDF de tu banco y súbelo desde Cuentas. Tú lo revisas y categorizas una vez, y tu dashboard cobra vida."],
+    ["Planifica con tus herramientas gratis", "Calcula cómo salir de deudas (bola de nieve o avalancha), arma tu plan 50/30/20, usa la calculadora de ahorro y guarda tus compromisos en Citas."],
   ];
 
   const textoPlano =
     (saludoNombre ? `¡Bienvenido, ${saludoNombre}, a VICTOR CFO!\n\n` : `¡Bienvenido a VICTOR CFO!\n\n`) +
     `Así le sacas provecho a tu cuenta gratis, paso a paso:\n\n` +
     pasos.map(([titulo, texto], i) => `${i + 1}. ${titulo} — ${texto}`).join("\n\n") +
-    `\n\nPiénsalo como tu Excel de siempre, pero ya organizado y a mano cuando lo necesites.\n\n` +
+    `\n\nPiénsalo como tu Excel de siempre, pero con balance que se actualiza solo y todo editable.\n\n` +
     `Para la experiencia completa — que VICTOR categorice tus transacciones automáticamente, te recuerde tus citas y avise de documentos pendientes antes de que venzan — puedes escoger un plan: Core (personal) o Pro (si tienes negocio).\n\n` +
     `Entra a tu cuenta aquí:\n${dashboardUrl}\n\n` +
     `Cualquier duda o pregunta, escríbenos a soporte@victorcfo.com y te responderemos en la brevedad posible.\n\n` +
@@ -911,7 +912,7 @@ export async function sendWelcomeGratisEmail(params: {
   <p>${htmlSeguro ? `¡Bienvenido, <strong>${htmlSeguro}</strong>, a VICTOR CFO!` : `¡Bienvenido a VICTOR CFO!`}</p>
   <p>Así le sacas provecho a tu cuenta <strong>gratis</strong>, paso a paso:</p>
   <div style="margin: 24px 0;">${pasosHtml}</div>
-  <p style="font-size: 14px; color: #555;">Piénsalo como tu Excel de siempre, pero ya organizado y a mano cuando lo necesites.</p>
+  <p style="font-size: 14px; color: #555;">Piénsalo como tu Excel de siempre, pero con balance que se actualiza solo y todo editable.</p>
   <div style="background: #f6faf8; border: 1px solid #d8ece4; border-radius: 10px; padding: 16px; margin: 24px 0;">
     <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px;">Para la experiencia completa, con Core o Pro:</p>
     <p style="margin: 0; font-size: 14px; color: #333;">VICTOR categoriza tus transacciones automáticamente, te recuerda tus citas y avisa de documentos pendientes antes de que venzan.</p>
@@ -1631,17 +1632,17 @@ export async function sendNurtureCsvGuiaEmail(params: {
   const bajaUrl = urlBajaCorreos(SITE_URL, userId);
 
   const pasos: [string, string][] = [
-    ["Descarga tu estado del banco", "Entra a la página o app de tu banco y busca \"Descargar transacciones\" o \"Exportar\". Escoge formato CSV o Excel y el rango de fechas (con los últimos 2 o 3 meses es suficiente para empezar)."],
-    ["Entra a Cuentas en VICTOR", "Toca \"Añadir cuenta manual\", ponle un nombre (por ejemplo, \"Banco Popular\") y luego \"Subir estado de cuenta\"."],
-    ["Sube el archivo y revisa", "Selecciona tu CSV o Excel, confirma las columnas y listo: tus movimientos aparecen en Transacciones. Categorízalos una vez y tu dashboard cobra vida con ingresos, gastos y a dónde se va tu dinero."],
+    ["Anota tu balance de hoy", "En Inicio, toca \"Anotar mi balance\" y escribe cuánto tienes hoy. Desde ahí, cada ingreso que anotes lo suma y cada gasto lo resta."],
+    ["Toca las tarjetas para registrar", "Ingresos, Gastos, Ahorrado, Deuda e Inversiones son botones: tócalos, anota el monto y listo. ¿Te equivocaste? Lo editas o lo borras y tu balance se corrige solo."],
+    ["¿Muchos movimientos? Súbelos de golpe", "Descarga el CSV, Excel o PDF de tu banco (los últimos 2 o 3 meses bastan), súbelo desde Cuentas y categoriza una vez. Tu dashboard cobra vida con ingresos, gastos y a dónde se va tu dinero."],
   ];
 
   const textoPlano =
     (toName ? `Hola ${toName},\n\n` : `Hola,\n\n`) +
     `¿Ya viste tu dashboard con tus números reales? Te toma 5 minutos y es lo que más vale la pena hacer en tu cuenta gratis:\n\n` +
     pasos.map(([t, x], i) => `${i + 1}. ${t} — ${x}`).join("\n\n") +
-    `\n\nSube tu primer estado aquí:\n${cuentasUrl}\n\n` +
-    `Si tu banco solo da PDF, también lo puedes subir.\n\n— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}\n\nDejar de recibir estos correos: ${bajaUrl}`;
+    `\n\nEmpieza aquí:\n${SITE_URL}/dashboard\n\n` +
+    `Si tu banco solo da PDF, también lo puedes subir desde Cuentas: ${cuentasUrl}\n\n— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}\n\nDejar de recibir estos correos: ${bajaUrl}`;
 
   const pasosHtml = pasos
     .map(
@@ -1660,9 +1661,9 @@ export async function sendNurtureCsvGuiaEmail(params: {
     saludo: toName || "",
     cuerpoHtml: `<p>¿Ya viste tu dashboard con tus <strong>números reales</strong>? Te toma unos 5 minutos y es lo que más vale la pena hacer en tu cuenta gratis:</p>
   <div style="margin: 24px 0;">${pasosHtml}</div>
-  <p style="font-size: 14px; color: #555;">Si tu banco solo da PDF, también lo puedes subir.</p>`,
-    ctaTexto: "Subir mi primer estado",
-    ctaUrl: cuentasUrl,
+  <p style="font-size: 14px; color: #555;">Si tu banco solo da PDF, también lo puedes subir desde <a href="${cuentasUrl}" style="color: #1D9E75;">Cuentas</a>.</p>`,
+    ctaTexto: "Registrar mis finanzas",
+    ctaUrl: `${SITE_URL}/dashboard`,
     bajaUrl,
   });
 
@@ -1670,7 +1671,7 @@ export async function sendNurtureCsvGuiaEmail(params: {
     const { error } = await resend.emails.send({
       from: FROM,
       to: toEmail,
-      subject: "Ve tu dashboard con tus números reales (5 minutos)",
+      subject: "Registra tu día en 1 minuto y ve tu balance al instante",
       text: textoPlano,
       html,
     });
