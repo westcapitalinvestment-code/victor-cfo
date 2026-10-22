@@ -50,7 +50,7 @@ export default function InvitarContablePage() {
 
   // Entidades del dueño (0185: el acceso del contable es por entidad).
   const [entidades, setEntidades] = useState<{ id: string; name: string }[]>([]);
-  const [todas, setTodas] = useState(true);
+  const [todas, setTodas] = useState(false);
   const [elegidas, setElegidas] = useState<string[]>([]);
 
   async function cargarAccesos() {
