@@ -231,6 +231,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   let cuentasFormGratis: { id: string; nombre: string; tipo: string }[] = [];
   let cuentaAhorroGratis: { id: string; saldo: number } | null = null;
   let cuentaInversionGratis: { id: string; saldo: number } | null = null;
+  let cuentaEfectivoGratis: { id: string; saldo: number } | null = null;
   if (profile.plan === "gratis") {
     const [{ data: deudasPlan }, { data: manualesGratis }] = await Promise.all([
       supabase.from("deudas_plan").select("saldo").eq("owner_id", user.id),
@@ -248,6 +249,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       .map((c) => ({ id: c.id, nombre: c.name || "Cuenta", tipo: c.type }));
     const ah = lista.find((c) => c.type === "depository" && c.subtype === "savings");
     if (ah) cuentaAhorroGratis = { id: ah.id, saldo: Number(ah.current_balance || 0) };
+    const ef = lista.find((c) => c.subtype === "cash");
+    if (ef) cuentaEfectivoGratis = { id: ef.id, saldo: Number(ef.current_balance || 0) };
     const inv = lista.find((c) => c.type === "investment");
     if (inv) cuentaInversionGratis = { id: inv.id, saldo: Number(inv.current_balance || 0) };
   }
@@ -782,7 +785,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </div>
           <PrivacyToggle />
         </div>
-        {!bancoConectado && (
+        {!bancoConectado && profile.plan === "gratis" && (
+          <p className="mt-2 text-xs text-white/90">Toca &ldquo;Anotar mi balance&rdquo; aquí abajo para verlo ↓</p>
+        )}
+        {!bancoConectado && profile.plan !== "gratis" && (
           <Link href="/dashboard/cuentas" className="mt-2 inline-block text-xs font-medium text-white underline">
             Conecta tu banco para verlo →
           </Link>
@@ -861,6 +867,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           categorias={categorias ?? []}
           cuentaAhorro={cuentaAhorroGratis}
           cuentaInversion={cuentaInversionGratis}
+          cuentaEfectivo={cuentaEfectivoGratis}
         />
       ) : (
       <div className="vc-mets">

@@ -50,6 +50,30 @@ async function resolverCategoria(
   return { id: cat.id };
 }
 
+// Sincronización con el saldo (22 oct 2026, pedido de Joel: "cada cálculo que
+// entre afecte el balance"). Cada transacción a mano mueve el saldo de su
+// cuenta manual: en cuentas de dinero un ingreso suma y un gasto resta; en
+// tarjetas/préstamos (saldo = lo que debes) un gasto suma a la deuda. Al
+// editar se revierte el efecto viejo y se aplica el nuevo; al borrar se
+// revierte. Las filas que vienen de CSV/PDF NO pasan por aquí (su saldo es el
+// del estado de cuenta), solo las de origen 'manual'.
+function efectoEnSaldo(tipoCuenta: string, tipo: Tipo, monto: number): number {
+  const esDeuda = tipoCuenta === "credit" || tipoCuenta === "loan";
+  if (tipo === "ingreso") return esDeuda ? -monto : monto;
+  return esDeuda ? monto : -monto;
+}
+
+async function ajustarSaldo(supabase: ReturnType<typeof createClient>, cuentaId: string, delta: number) {
+  if (!delta) return;
+  const { data: c } = await supabase.from("manual_accounts").select("current_balance").eq("id", cuentaId).maybeSingle();
+  if (!c) return;
+  const nuevo = Math.round((Number(c.current_balance || 0) + delta) * 100) / 100;
+  await supabase
+    .from("manual_accounts")
+    .update({ current_balance: nuevo, balance_actualizado_en: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", cuentaId);
+}
+
 function mensajeDuplicado(code: string | undefined) {
   return code === "23505"
     ? "Ya tienes una transacción igual (misma cuenta, fecha, descripción y monto). Cambia un poco la descripción si es otra compra."
@@ -147,6 +171,8 @@ export async function POST(req: NextRequest) {
       .eq("id", creada.id);
   }
 
+  await ajustarSaldo(supabase, cuenta.id, efectoEnSaldo(cuenta.type, v.tipo, v.monto));
+
   return NextResponse.json({ ok: true, id: creada.id });
 }
 
@@ -165,7 +191,7 @@ export async function PATCH(req: NextRequest) {
 
   const { data: actual } = await supabase
     .from("transactions")
-    .select("id, origen, manual_account_id")
+    .select("id, origen, manual_account_id, amount")
     .eq("id", id)
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -200,6 +226,14 @@ export async function PATCH(req: NextRequest) {
     const dup = mensajeDuplicado((error as { code?: string }).code);
     return NextResponse.json({ error: dup ?? error.message }, { status: dup ? 409 : 500 });
   }
+
+  // Revertir el efecto viejo y aplicar el nuevo (misma cuenta).
+  if (actual.manual_account_id && cuenta?.type) {
+    const montoViejo = Math.abs(Number(actual.amount));
+    const tipoViejo: Tipo = Number(actual.amount) < 0 ? "ingreso" : "gasto";
+    const delta = efectoEnSaldo(cuenta.type, v.tipo, v.monto) - efectoEnSaldo(cuenta.type, tipoViejo, montoViejo);
+    await ajustarSaldo(supabase, actual.manual_account_id, delta);
+  }
   return NextResponse.json({ ok: true });
 }
 
@@ -215,7 +249,7 @@ export async function DELETE(req: NextRequest) {
 
   const { data: actual } = await supabase
     .from("transactions")
-    .select("id, origen")
+    .select("id, origen, manual_account_id, amount")
     .eq("id", id)
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -226,5 +260,13 @@ export async function DELETE(req: NextRequest) {
 
   const { error } = await supabase.from("transactions").delete().eq("id", id).eq("owner_id", user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (actual.manual_account_id) {
+    const { data: cuenta } = await supabase.from("manual_accounts").select("type").eq("id", actual.manual_account_id).maybeSingle();
+    if (cuenta?.type) {
+      const tipoViejo: Tipo = Number(actual.amount) < 0 ? "ingreso" : "gasto";
+      await ajustarSaldo(supabase, actual.manual_account_id, -efectoEnSaldo(cuenta.type, tipoViejo, Math.abs(Number(actual.amount))));
+    }
+  }
   return NextResponse.json({ ok: true });
 }

@@ -42,6 +42,28 @@ export default function DeudasPage() {
   const [saldo, setSaldo] = useState("");
   const [apr, setApr] = useState("");
   const [minimo, setMinimo] = useState("");
+  // Editar una deuda (22 oct 2026, "que todo sea editable por si hay
+  // errores"): reutiliza el mismo formulario de arriba.
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+
+  function editar(f: Fila) {
+    setEditandoId(f.id);
+    setNombre(f.nombre);
+    setSaldo(String(f.saldo));
+    setApr(String(f.apr));
+    setMinimo(String(f.pago_minimo));
+    setError(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelarEdicion() {
+    setEditandoId(null);
+    setNombre("");
+    setSaldo("");
+    setApr("");
+    setMinimo("");
+    setError(null);
+  }
 
   async function cargar() {
     const { data: u } = await supabase.auth.getUser();
@@ -69,8 +91,11 @@ export default function DeudasPage() {
     if (a < 0 || a > 100 || m < 0) return setError("Revisa la tasa (0–100) y el pago mínimo.");
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
-    const { error: e } = await supabase.from("deudas_plan").insert({ owner_id: u.user.id, nombre: nombre.trim(), saldo: s, apr: a, pago_minimo: m });
+    const { error: e } = editandoId
+      ? await supabase.from("deudas_plan").update({ nombre: nombre.trim(), saldo: s, apr: a, pago_minimo: m }).eq("id", editandoId).eq("owner_id", u.user.id)
+      : await supabase.from("deudas_plan").insert({ owner_id: u.user.id, nombre: nombre.trim(), saldo: s, apr: a, pago_minimo: m });
     if (e) return setError("No se pudo guardar la deuda.");
+    setEditandoId(null);
     setNombre("");
     setSaldo("");
     setApr("");
@@ -137,7 +162,7 @@ export default function DeudasPage() {
       </div>
 
       <div className="vc-card mb-4 flex flex-col gap-3">
-        <p className="text-xs uppercase tracking-wide text-muted">Añadir una deuda</p>
+        <p className="text-xs uppercase tracking-wide text-muted">{editandoId ? "Editar deuda" : "Añadir una deuda"}</p>
         {error && <p className="text-xs text-red">{error}</p>}
         <input className="vc-input" placeholder="Nombre (ej. Tarjeta Visa)" value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={80} />
         <div className="flex gap-2">
@@ -145,9 +170,16 @@ export default function DeudasPage() {
           <input className="vc-input" inputMode="decimal" placeholder="Tasa anual %" value={apr} onChange={(e) => setApr(e.target.value)} />
           <input className="vc-input" inputMode="decimal" placeholder="Pago mínimo $" value={minimo} onChange={(e) => setMinimo(e.target.value)} />
         </div>
-        <button className="vc-btn-primary" onClick={agregar}>
-          Añadir deuda
-        </button>
+        <div className="flex gap-2">
+          <button className="vc-btn-primary" onClick={agregar}>
+            {editandoId ? "Guardar cambios" : "Añadir deuda"}
+          </button>
+          {editandoId && (
+            <button type="button" className="rounded-lg border border-border px-4 text-sm text-muted" onClick={cancelarEdicion}>
+              Cancelar
+            </button>
+          )}
+        </div>
       </div>
 
       {cargando ? (
@@ -172,9 +204,14 @@ export default function DeudasPage() {
                         {fin ? ` · libre en ${mesesATexto(fin.mesesHastaSaldar)}` : ""}
                       </p>
                     </div>
-                    <button className="shrink-0 text-[11px] font-medium text-red" onClick={() => borrar(d.id)}>
-                      Quitar
-                    </button>
+                    <div className="flex shrink-0 gap-3">
+                      <button className="text-[11px] font-medium text-teal" onClick={() => { const f = filas.find((x) => x.id === d.id); if (f) editar(f); }}>
+                        Editar
+                      </button>
+                      <button className="text-[11px] font-medium text-red" onClick={() => borrar(d.id)}>
+                        Quitar
+                      </button>
+                    </div>
                   </div>
                 );
               })}

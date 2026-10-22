@@ -18,7 +18,7 @@ import TransaccionForm, { type CategoriaOpcion, type CuentaManualOpcion } from "
 // Los planes de pago siguen con las tarjetas normales (se llenan por banco).
 type CuentaSaldo = { id: string; saldo: number } | null;
 
-type Panel = "ingreso" | "gasto" | "ahorro" | "inversion" | null;
+type Panel = "ingreso" | "gasto" | "ahorro" | "inversion" | "balance" | null;
 
 export default function MetricasGratis({
   hoy,
@@ -33,6 +33,7 @@ export default function MetricasGratis({
   categorias,
   cuentaAhorro,
   cuentaInversion,
+  cuentaEfectivo,
 }: {
   hoy: string;
   mesLabel: string;
@@ -46,6 +47,7 @@ export default function MetricasGratis({
   categorias: CategoriaOpcion[];
   cuentaAhorro: CuentaSaldo;
   cuentaInversion: CuentaSaldo;
+  cuentaEfectivo: CuentaSaldo;
 }) {
   const router = useRouter();
   const [panel, setPanel] = useState<Panel>(null);
@@ -53,8 +55,9 @@ export default function MetricasGratis({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const esSaldo = panel === "ahorro" || panel === "inversion";
-  const cuentaActual = panel === "ahorro" ? cuentaAhorro : panel === "inversion" ? cuentaInversion : null;
+  const esSaldo = panel === "ahorro" || panel === "inversion" || panel === "balance";
+  const cuentaActual =
+    panel === "ahorro" ? cuentaAhorro : panel === "inversion" ? cuentaInversion : panel === "balance" ? cuentaEfectivo : null;
 
   function abrir(p: Panel) {
     setError(null);
@@ -79,7 +82,9 @@ export default function MetricasGratis({
           body: JSON.stringify(
             panel === "ahorro"
               ? { nombre: "Ahorros", tipo: "depository", subtipo: "savings", balanceInicial: n }
-              : { nombre: "Inversiones", tipo: "investment", balanceInicial: n }
+              : panel === "balance"
+                ? { nombre: "Efectivo", tipo: "depository", subtipo: "cash", balanceInicial: n }
+                : { nombre: "Inversiones", tipo: "investment", balanceInicial: n }
           ),
         });
     setGuardando(false);
@@ -96,9 +101,20 @@ export default function MetricasGratis({
 
   return (
     <>
-      <div className="mb-2">
-        <p className="text-sm font-medium">✍️ Registra tus finanzas aquí</p>
-        <p className="text-[11px] text-muted">Toca una tarjeta para anotar lo tuyo: ingresos, gastos, ahorro, deudas e inversiones.</p>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">✍️ Registra tus finanzas aquí</p>
+          <p className="text-[11px] text-muted">
+            Toca una tarjeta para anotar lo tuyo. Todo lo que anotes se suma o se resta de tu balance.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => abrir("balance")}
+          className="flex-shrink-0 rounded-pill border border-teal px-3 py-1.5 text-[11px] font-medium text-teal hover:opacity-80"
+        >
+          {cuentaEfectivo ? "Ajustar mi balance" : "Anotar mi balance"}
+        </button>
       </div>
       <div className="vc-mets">
         <button type="button" className={cls} onClick={() => abrir("ingreso")} aria-label="Anotar un ingreso">
@@ -157,9 +173,10 @@ export default function MetricasGratis({
       {esSaldo && (
         <div className="vc-card mb-3 flex flex-col gap-3">
           <p className="text-xs font-medium uppercase tracking-wide text-muted">
-            {panel === "ahorro" ? "Cuánto tienes ahorrado" : "Cuánto tienes invertido"}
+            {panel === "ahorro" ? "Cuánto tienes ahorrado" : panel === "balance" ? "Tu balance de hoy" : "Cuánto tienes invertido"}
           </p>
           <p className="text-xs text-muted">
+            {panel === "balance" && "Cuánto dinero tienes hoy en efectivo y en tu cuenta. Desde aquí, cada ingreso que anotes lo suma y cada gasto lo resta. "}
             {cuentaActual
               ? `Ahora mismo tienes anotado ${formatMoney(cuentaActual.saldo)}. Escribe el saldo nuevo.`
               : "Escribe el saldo total de hoy. Lo puedes actualizar cuando quieras."}
