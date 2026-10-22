@@ -34,6 +34,9 @@ export default function LandingPage() {
               de Joel) — mismo orden que en el body: Vendedores primero,
               Calculadora después. */}
           <a href="#calculadora">Calculadora</a>
+          {/* Contables (22 oct 2026, pedido de Joel): lleva a la landing de
+              registro del contable (/contables → /registro/cpa). */}
+          <Link href="/contables">Contables</Link>
           <Link href="/registro" className={styles.navCta}>
             Comienza Gratis
           </Link>
