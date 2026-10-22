@@ -45,8 +45,9 @@ export async function enviarTalonariosPorEmail(corridaId: string, employeeId?: s
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ corridaId, employeeId }),
   });
-  const j = (await r.json().catch(() => null)) as { error?: string; enviados?: number; fallidos?: { nombre: string; motivo: string }[]; sinEmail?: string[] } | null;
+  const j = (await r.json().catch(() => null)) as { error?: string; simulado?: boolean; enviados?: number; fallidos?: { nombre: string; motivo: string }[]; sinEmail?: string[] } | null;
   if (!r.ok || !j) return j?.error ?? "No se pudo enviar.";
   const falla = j.fallidos?.length ? ` No se pudo enviar a: ${j.fallidos.map((f) => `${f.nombre} (${f.motivo})`).join("; ")}.` : "";
+  if (j.simulado) return `Cuenta demo: se simuló el envío a ${j.enviados ?? 0} empleado(s). No se mandó ningún correo real.`;
   return `Enviados: ${j.enviados ?? 0}.${falla}`;
 }

@@ -3,6 +3,7 @@ import { registrarNomina } from "./nomina-server";
 import { mesesTrabajados, reglasLic, saldoLic, type MovLic } from "./nomina-licencias";
 import { cargarLogoExcel } from "./reporte-excel";
 import { sendTalonarioEmail } from "./email";
+import { esCuentaDemo } from "./demo";
 import { htmlTalonarioCorreo, fechaMDY, type DatosTalonarios, type Talonario } from "./nomina-talonario-html";
 
 // Talonarios (recibos de pago) de una corrida: arma los datos y los envía por correo.
@@ -96,6 +97,7 @@ export async function cargarDatosTalonarios(
 const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export interface ResultadoEnvio {
+  simulado?: boolean; // cuenta demo: no se mandó ningún correo real
   enviados: number;
   sinEmail: string[];
   fallidos: { nombre: string; motivo: string }[];
@@ -114,11 +116,17 @@ export async function enviarTalonariosCorrida(
   if (d.corrida.estado !== "aprobada") return { ok: false, error: "La corrida debe estar aprobada para enviar los talonarios.", status: 409 };
   if (d.talonarios.length === 0) return { ok: false, error: "Esta corrida no tiene empleados.", status: 404 };
 
-  const logo = await cargarLogoExcel(d.logoR2Key);
-  const resultado: ResultadoEnvio = { enviados: 0, sinEmail: [], fallidos: [] };
+  // Cuenta demo: nunca se envían correos reales (los empleados de ejemplo no existen).
+  const demo = await esCuentaDemo(g.db, g.userId);
+  const logo = demo ? undefined : await cargarLogoExcel(d.logoR2Key);
+  const resultado: ResultadoEnvio = { enviados: 0, sinEmail: [], fallidos: [], ...(demo ? { simulado: true } : {}) };
   for (const t of d.talonarios) {
     if (!t.email || !EMAIL_OK.test(t.email)) {
       resultado.sinEmail.push(t.nombre);
+      continue;
+    }
+    if (demo) {
+      resultado.enviados++;
       continue;
     }
     const asunto = `Tu talonario de pago ${fechaMDY(d.corrida.periodo_inicio)} – ${fechaMDY(d.corrida.periodo_fin)}${d.entidad?.name ? ` — ${d.entidad.name}` : ""}`;
