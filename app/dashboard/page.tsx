@@ -9,6 +9,8 @@ import ResumenCard from "./resumen-card";
 import ResumenReglasCard from "./resumen-reglas-card";
 import AlertasPatronCard, { type AlertaRegla } from "./alertas-patron-card";
 import ImpuestosEstimadosCard from "./impuestos-estimados-card";
+import Regla503020Card from "./regla-503020-card";
+import { calcularRegla503020 } from "@/lib/regla-50-30-20";
 import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 
 // Primer día del mes SIGUIENTE a "YYYY-MM" — mismo helper que en
@@ -618,6 +620,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     (sum, t) => sum + (t.tipo_flujo === "ingreso" ? Math.abs(Number(t.amount)) : 0),
     0
   );
+  // Regla 50/30/20 (22 oct 2026) — solo plan gratis (los demás planes se lo
+  // piden a VICTOR). Reusa las transacciones del mes ya consultadas arriba.
+  const resultado503020 =
+    profile.plan === "gratis"
+      ? calcularRegla503020(
+          (transaccionesMesActualResumen ?? [])
+            .filter((t) => t.tipo_flujo === "gasto")
+            .map((t) => ({
+              categoria: t.hacienda_category_id ? nombrePorCategoriaResumen.get(t.hacienda_category_id) ?? null : null,
+              monto: Number(t.amount),
+            })),
+          ingresoMesActualResumen
+        )
+      : null;
+
   if (ingresoMesActualResumen > 0 && gastoMesActualResumen > ingresoMesActualResumen) {
     alertasReglas.push({
       tipo: "salud",
@@ -871,6 +888,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           mismo espíritu sin-IA que la tarjeta de arriba. Ver el bloque
           grande de cálculo junto a alertasReglas más arriba. */}
       <AlertasPatronCard alertas={alertasReglas} />
+
+      {/* Regla 50/30/20 y bola de nieve (22 oct 2026) — regalo del plan gratis,
+          equivalente a lo que traen las plantillas de Excel pero sin llenarlo
+          a mano. Cálculo puro, cero IA. */}
+      {resultado503020 && (
+        <>
+          <Regla503020Card mesLabel={etiquetaMes(mesActualStr)} resultado={resultado503020} />
+          <Link href="/dashboard/deudas" className="vc-card mb-3 flex items-center justify-between gap-3 !py-3">
+            <div>
+              <p className="text-sm font-medium">💪 Pagar mis deudas (bola de nieve)</p>
+              <p className="text-[11px] text-muted">Escribe tus deudas y te digo en qué orden pagarlas y cuándo quedas libre.</p>
+            </div>
+            <span className="text-xs font-medium text-teal">Abrir</span>
+          </Link>
+        </>
+      )}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {/* METAS */}
