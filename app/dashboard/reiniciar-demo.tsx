@@ -33,8 +33,8 @@ export default function ReiniciarDemo() {
     <div className="vc-card mb-4 border border-teal/30" style={{ background: "rgba(29,158,117,.05)" }}>
       <p className="text-sm font-semibold text-teal">Cuenta demo</p>
       <p className="mt-1 text-xs text-muted">
-        Borra el nombre, apodo, edad e hijos del perfil, el historial de chat con VICTOR, y deja todas las
-        transacciones otra vez sin categorizar — para el próximo visitante. Clientes, facturas y pagos NO se tocan.
+        Borra el nombre, apodo, edad e hijos del perfil, el historial de chat con VICTOR, deja las
+        transacciones sin categorizar y borra la nómina (empleados y corridas) — para el próximo visitante. Clientes, facturas y pagos NO se tocan.
       </p>
       {error && <p className="mt-2 text-xs text-red">{error}</p>}
       <button onClick={reiniciar} disabled={loading} className="vc-btn-primary mt-3 w-full">

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // Reset ligero de la cuenta demo (14 sept 2026, pedido de Joel): entre cada
 // visitante/reunión, quiere poder poner el perfil (nombre, apodo, edad,
@@ -61,6 +62,16 @@ export async function POST() {
     })
     .eq("owner_id", user.id);
   if (errTx) return NextResponse.json({ error: errTx.message }, { status: 500 });
+
+  // Nómina inventada en vivo durante la presentación: se borra completa (la demo
+  // no trae nómina sembrada). Cliente admin porque las corridas aprobadas y el
+  // audit log no se pueden borrar con RLS; seguro porque ya pasó el chequeo is_demo
+  // y todo va filtrado por owner_id = auth.uid().
+  const admin = createAdminClient();
+  for (const tabla of ["payroll_leave", "payroll_audit_log", "payroll_run_lines", "payroll_runs", "payroll_employees", "payroll_entity_config"]) {
+    const { error } = await admin.from(tabla).delete().eq("owner_id", user.id);
+    if (error) return NextResponse.json({ error: `${tabla}: ${error.message}` }, { status: 500 });
+  }
 
   await supabase.from("conversations").delete().eq("user_id", user.id);
   await supabase.from("victor_memory").delete().eq("user_id", user.id);
