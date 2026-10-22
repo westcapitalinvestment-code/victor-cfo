@@ -53,9 +53,6 @@ export default function InvitarContablePage() {
   const [todas, setTodas] = useState(true);
   const [elegidas, setElegidas] = useState<string[]>([]);
 
-  const nombreEntidad = (id: string | null) =>
-    id ? entidades.find((e) => e.id === id)?.name ?? "Entidad" : "Todas tus entidades";
-
   async function cargarAccesos() {
     const { data } = await supabase
       .from("account_members")
@@ -87,17 +84,56 @@ export default function InvitarContablePage() {
     return Array.from(m.values());
   })();
 
-  async function toggleAcceso(id: string, nuevoActivo: boolean) {
-    setActualizandoId(id);
-    const { error: updateError } = await supabase.from("account_members").update({ active: nuevoActivo }).eq("id", id);
-    if (!updateError) await cargarAccesos();
+  // Quitar/reactivar UNA entidad de un contable. Si tenía "todas" (fila sin
+  // entidad), se convierte en filas por entidad para poder quitar solo una.
+  async function quitarEntidad(filas: AccesoCpa[], entityId: string) {
+    const clave = filas[0].member_email;
+    setActualizandoId(clave);
+    const spec = filas.find((f) => f.entity_id === entityId && f.active);
+    if (spec) {
+      await supabase.from("account_members").update({ active: false }).eq("id", spec.id);
+    } else {
+      const nulas = filas.filter((f) => !f.entity_id && f.active);
+      const personal = filas.some((f) => f.active && f.share_personal);
+      const { data: u } = await supabase.auth.getUser();
+      if (nulas.length > 0 && u.user) {
+        for (const e of entidades) {
+          if (e.id === entityId) continue;
+          const previa = filas.find((f) => f.entity_id === e.id);
+          if (previa) {
+            if (!previa.active) await supabase.from("account_members").update({ active: true }).eq("id", previa.id);
+          } else {
+            await supabase.from("account_members").insert({
+              owner_id: u.user.id,
+              entity_id: e.id,
+              member_email: clave,
+              role: "cpa",
+              active: true,
+              share_personal: personal,
+              accepted_at: new Date().toISOString(),
+            });
+          }
+        }
+        await supabase.from("account_members").update({ active: false }).in("id", nulas.map((f) => f.id));
+      }
+    }
+    await cargarAccesos();
+    setActualizandoId(null);
+  }
+
+  async function reactivarEntidad(filas: AccesoCpa[], entityId: string) {
+    const clave = filas[0].member_email;
+    setActualizandoId(clave);
+    const previa = filas.find((f) => f.entity_id === entityId);
+    if (previa) await supabase.from("account_members").update({ active: true }).eq("id", previa.id);
+    await cargarAccesos();
     setActualizandoId(null);
   }
 
   // El permiso de lo personal es por contable (no por entidad): se aplica a
   // todas sus filas para que quede consistente.
   async function togglePersonal(ids: string[], compartir: boolean) {
-    setActualizandoId(ids[0]);
+    setActualizandoId(accesos.find((a) => a.id === ids[0])?.member_email ?? ids[0]);
     const { error: updateError } = await supabase
       .from("account_members")
       .update({ share_personal: compartir })
@@ -268,28 +304,44 @@ export default function InvitarContablePage() {
             {porContable.map((filas) => {
               const activas = filas.filter((f) => f.active);
               const personalOn = activas.some((f) => f.share_personal);
+              const conTodas = activas.some((f) => !f.entity_id);
+              const idsActivos = new Set(activas.filter((f) => f.entity_id).map((f) => f.entity_id as string));
+              const conAcceso = entidades.filter((e) => conTodas || idsActivos.has(e.id));
+              const sinAcceso = entidades.filter((e) => !conAcceso.includes(e) && filas.some((f) => f.entity_id === e.id));
+              const ocupado = actualizandoId === filas[0].member_email;
               return (
                 <div key={filas[0].member_email} className="py-3">
                   <p className="text-sm font-medium">{filas[0].member_email}</p>
+                  {filas.find((f) => f.delegated_from_email) && (
+                    <p className="text-[11px] text-muted">
+                      agregado por {filas.find((f) => f.delegated_from_email)?.delegated_from_email}
+                    </p>
+                  )}
                   <div className="mt-1.5 flex flex-col gap-1.5">
-                    {filas.map((a) => (
-                      <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5">
-                        <div className="min-w-0">
-                          <p className={`truncate text-xs font-medium ${a.active ? "" : "text-muted line-through"}`}>
-                            {nombreEntidad(a.entity_id)}
-                          </p>
-                          {a.delegated_from_email && (
-                            <p className="text-[11px] text-muted">agregado por {a.delegated_from_email}</p>
-                          )}
-                        </div>
+                    {conAcceso.length === 0 && entidades.length > 0 && (
+                      <p className="text-xs text-muted">Sin acceso a ninguna entidad.</p>
+                    )}
+                    {conAcceso.map((e) => (
+                      <div key={e.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5">
+                        <p className="min-w-0 truncate text-xs font-medium">{e.name}</p>
                         <button
-                          className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-medium ${
-                            a.active ? "bg-red/10 text-red" : "bg-grn/10 text-grn"
-                          }`}
-                          disabled={actualizandoId === a.id}
-                          onClick={() => toggleAcceso(a.id, !a.active)}
+                          className="shrink-0 rounded-full bg-red/10 px-3 py-1 text-[11px] font-medium text-red"
+                          disabled={ocupado}
+                          onClick={() => quitarEntidad(filas, e.id)}
                         >
-                          {actualizandoId === a.id ? "..." : a.active ? "Quitar acceso" : "Reactivar"}
+                          {ocupado ? "..." : "Quitar acceso"}
+                        </button>
+                      </div>
+                    ))}
+                    {sinAcceso.map((e) => (
+                      <div key={e.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5">
+                        <p className="min-w-0 truncate text-xs text-muted line-through">{e.name}</p>
+                        <button
+                          className="shrink-0 rounded-full bg-grn/10 px-3 py-1 text-[11px] font-medium text-grn"
+                          disabled={ocupado}
+                          onClick={() => reactivarEntidad(filas, e.id)}
+                        >
+                          {ocupado ? "..." : "Reactivar"}
                         </button>
                       </div>
                     ))}
@@ -300,7 +352,7 @@ export default function InvitarContablePage() {
                         type="checkbox"
                         className="mt-0.5"
                         checked={personalOn}
-                        disabled={actualizandoId === activas[0].id}
+                        disabled={ocupado}
                         onChange={(e) =>
                           togglePersonal(
                             filas.map((f) => f.id),
