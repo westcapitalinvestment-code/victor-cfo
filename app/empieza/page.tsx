@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { MockDeudas, MockDocsCitas, MockPlan } from "./mockups";
+import { MockPlan } from "./mockups";
 
 // Capturas reales de la app (cuenta de ejemplo) en /public/empieza.
 function Captura({ src, alt }: { src: string; alt: string }) {
@@ -154,7 +154,7 @@ export default function EmpiezaPage() {
         titulo="Por cuál deuda empezar y cuándo sales"
         texto="Escribe tus tarjetas y préstamos. Te explicamos bola de nieve y avalancha, te decimos el orden y en cuántos meses sales."
         puntos={["Cada pago baja tu deuda y tu balance", "Ves cuánto pagas en intereses", "Te ayuda a separar un colchón antes de acelerar"]}
-        mock={<MockDeudas />}
+        mock={<Captura src="/empieza/deudas.png" alt="Tus deudas en orden de pago y fecha en que quedas libre" />}
       />
 
       <Seccion
@@ -163,7 +163,7 @@ export default function EmpiezaPage() {
         titulo="Que no se te venza nada"
         texto="Guarda tus documentos importantes y tus citas en un solo sitio. Te llega una notificación antes de la fecha."
         puntos={["Marbete, póliza, contratos y más", "Citas médicas, pagos y compromisos", "Recordatorio en tu celular"]}
-        mock={<MockDocsCitas />}
+        mock={<Captura src="/empieza/citas.png" alt="Metas, alertas de documentos y próximas citas" />}
       />
 
       <Seccion
