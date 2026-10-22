@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import CambiarPlan from "./cambiar-plan";
 
 // Botón "Gestionar mi plan" en Config — abre el Customer Portal de Stripe,
@@ -18,6 +19,7 @@ export default function GestionarPlan({
   graciaHasta = null,
   firmaLiberadoNombre = null,
   tienePlanPropio = false,
+  esGratis = false,
 }: {
   pagadoPorFirma?: string | null;
   // Si la firma lo liberó (6 oct 2026): hasta cuándo conserva Business para
@@ -25,6 +27,9 @@ export default function GestionarPlan({
   graciaHasta?: string | null;
   firmaLiberadoNombre?: string | null;
   tienePlanPropio?: boolean;
+  // Plan gratis (22 oct 2026): no hay suscripción ni portal de Stripe que
+  // abrir; en su lugar se le lleva a escoger entre Core, Pro y Business.
+  esGratis?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -190,6 +195,19 @@ export default function GestionarPlan({
               {asumiendo === "anual" ? "Procesando..." : "Anual — $1,099"}
             </button>
           </div>
+        </>
+      ) : esGratis ? (
+        <>
+          <p className="mb-3 text-xs text-muted">
+            Estás en el plan gratis, por tiempo limitado. Cuando quieras chat con VICTOR, banco conectado y más, elige tu plan.
+          </p>
+          <Link
+            href="/registro/completar-pago"
+            className="mb-2 block w-full rounded-lg border border-teal p-3 text-center text-sm font-medium text-teal"
+            style={{ background: "rgba(29,158,117,.1)" }}
+          >
+            Elegir o mejorar mi plan
+          </Link>
         </>
       ) : (
         <>

@@ -186,6 +186,7 @@ export default async function ConfigPage() {
         pagadoPorFirma={nombreFirmaQuePaga}
         graciaHasta={graciaHasta}
         firmaLiberadoNombre={firmaLiberadoNombre}
+        esGratis={profile?.plan === "gratis"}
       />
 
       <CreditosIA />

@@ -101,7 +101,7 @@ export default function EmpiezaPage() {
       {/* HERO */}
       <section className="mb-16 grid items-center gap-8 md:grid-cols-2">
         <div>
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-teal">Gratis · sin tarjeta</p>
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-teal">Gratis por tiempo limitado · sin tarjeta</p>
           <h1 className="mb-3 text-3xl font-semibold leading-tight">Todo tu dinero, ordenado en un solo lugar</h1>
           <p className="mb-5 text-sm text-muted">
             Anota lo que entra y lo que sale y VICTOR lo ordena: tu dashboard, el resumen del mes, tu plan para salir de deudas, alertas que te avisan
@@ -193,7 +193,8 @@ export default function EmpiezaPage() {
 
       {/* CTA FINAL */}
       <section className="mx-auto mb-8 max-w-md">
-        <h2 className="mb-3 text-center text-xl font-semibold">Ordena tu dinero hoy</h2>
+        <h2 className="mb-1 text-center text-xl font-semibold">Ordena tu dinero hoy</h2>
+        <p className="mb-3 text-center text-xs font-medium text-[#B45309]">Gratis por tiempo limitado. Crea tu cuenta antes de que termine.</p>
         {registro}
       </section>
 
