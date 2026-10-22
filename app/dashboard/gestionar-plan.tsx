@@ -198,15 +198,13 @@ export default function GestionarPlan({
         </>
       ) : esGratis ? (
         <>
-          <p className="mb-3 text-xs text-muted">
-            Estás en el plan gratis y te puedes quedar aquí el tiempo que quieras. Cuando quieras el chat con VICTOR, banco conectado y más, elige tu plan.
-          </p>
+          <p className="mb-3 text-xs text-muted">¿Necesitas más? Haz upgrade cuando quieras.</p>
           <Link
             href="/registro/completar-pago"
             className="mb-2 block w-full rounded-lg border border-teal p-3 text-center text-sm font-medium text-teal"
             style={{ background: "rgba(29,158,117,.1)" }}
           >
-            Elegir o mejorar mi plan
+            Escoge tu plan aquí
           </Link>
         </>
       ) : (
