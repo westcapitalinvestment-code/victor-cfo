@@ -184,6 +184,7 @@ export default function MetricasGratis({
 
       {(panel === "ingreso" || panel === "gasto") && (
         <TransaccionForm
+          key={panel}
           hoy={hoy}
           tipoInicial={panel}
           bloquearTipo
