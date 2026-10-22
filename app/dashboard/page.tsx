@@ -12,7 +12,7 @@ import ImpuestosEstimadosCard from "./impuestos-estimados-card";
 import Regla503020Card from "./regla-503020-card";
 import MetricasGratis from "./metricas-gratis";
 import BotonBalance from "./boton-balance";
-import AlertasSync from "./alertas-sync";
+import AlertasGratisCard from "./alertas-gratis-card";
 import PlanGratisCard, { type AporteFila } from "./plan-gratis-card";
 import { respuestasValidas, type DatosPlan, type Respuestas } from "@/lib/plan-gratis";
 import { calcularRegla503020 } from "@/lib/regla-50-30-20";
@@ -242,7 +242,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   let respuestasGratis: Respuestas | null = null;
   let aportesGratis: AporteFila[] = [];
   let subioArchivoGratis = false;
+  let alertasVistasGratis: string[] = [];
   if (profile.plan === "gratis") {
+    // Alertas ya vistas (migración 0188) — consulta aparte y tolerante.
+    const { data: vistasRow } = await supabase.from("users").select("alertas_vistas").eq("id", user.id).maybeSingle();
+    const av = (vistasRow as { alertas_vistas?: unknown } | null)?.alertas_vistas;
+    if (Array.isArray(av)) alertasVistasGratis = av.filter((x): x is string => typeof x === "string");
     const [{ data: obRow }, { data: apRows }, { count: nSubidas }] = await Promise.all([
       supabase.from("users").select("onboarding_gratis").eq("id", user.id).maybeSingle(),
       supabase
@@ -880,8 +885,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           22 oct 2026) para que no se pierdan; la campanita del topbar apunta aquí. */}
       {profile.plan === "gratis" && (
         <>
-          <AlertasSync n={alertasReglas.length} />
-          <AlertasPatronCard alertas={alertasReglas} />
+          <AlertasGratisCard alertas={alertasReglas} vistasIniciales={alertasVistasGratis} />
         </>
       )}
 
