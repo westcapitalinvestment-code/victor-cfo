@@ -27,6 +27,15 @@ type Oficina = {
   facebook: string | null;
 };
 
+function norm(s: string) {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export default function DirectorioContablesPage() {
   const router = useRouter();
   const [oficinas, setOficinas] = useState<Oficina[] | null>(null);
@@ -50,10 +59,26 @@ export default function DirectorioContablesPage() {
     [oficinas]
   );
 
+  // Especialidades y sectores que realmente existen en el directorio (incluye
+  // las que los contables escribieron a mano), más las predefinidas.
+  const etiquetas = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of ESPECIALIDADES) m.set(norm(e), e);
+    for (const o of oficinas ?? []) for (const e of [...o.especialidades, ...o.sectores]) if (!m.has(norm(e))) m.set(norm(e), e);
+    return Array.from(m.values()).sort((a, b) => a.localeCompare(b, "es"));
+  }, [oficinas]);
+
   const lista = (oficinas ?? [])
     .filter((o) => !fPueblo || o.pueblo === fPueblo || o.remoto)
-    .filter((o) => !fEsp || o.especialidades.includes(fEsp))
-    .filter((o) => !busca.trim() || o.nombre.toLowerCase().includes(busca.trim().toLowerCase()));
+    .filter((o) => !fEsp || [...o.especialidades, ...o.sectores].some((e) => norm(e) === norm(fEsp)))
+    .filter((o) => {
+      // Cada palabra escrita debe aparecer en algún lugar del perfil: nombre,
+      // descripción, especialidades, sectores o pueblo. Sin tildes ni mayúsculas.
+      const palabras = norm(busca).split(" ").filter(Boolean);
+      if (palabras.length === 0) return true;
+      const texto = norm([o.nombre, o.descripcion, o.pueblo, o.contacto_nombre ?? "", ...o.especialidades, ...o.sectores].join(" "));
+      return palabras.every((p) => texto.includes(p));
+    });
 
   return (
     <div className="vc-shell">
@@ -87,15 +112,15 @@ export default function DirectorioContablesPage() {
                 ))}
               </select>
               <select value={fEsp} onChange={(e) => setFEsp(e.target.value)} className="w-1/2 rounded-lg border border-border bg-transparent p-2 text-[13px]">
-                <option value="">Cualquier especialidad</option>
-                {ESPECIALIDADES.map((e) => (
+                <option value="">Cualquier especialidad o sector</option>
+                {etiquetas.map((e) => (
                   <option key={e} value={e}>
                     {e}
                   </option>
                 ))}
               </select>
             </div>
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nombre..." className="rounded-lg border border-border p-2 text-[13px]" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar: nombre, especialidad, sector (ej. farmacia, agrícola, decretos)..." className="rounded-lg border border-border p-2 text-[13px]" />
             {fPueblo && <p className="text-[11px] text-muted">Incluye oficinas que atienden a distancia.</p>}
           </div>
 

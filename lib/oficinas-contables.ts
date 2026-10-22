@@ -88,6 +88,32 @@ export function limpiarLista(raw: unknown, permitidos: readonly string[]): strin
   return Array.from(new Set(raw.filter((x): x is string => typeof x === "string" && permitidos.includes(x))));
 }
 
+// Como limpiarLista, pero además deja que el contable escriba sus propias
+// etiquetas (ej. "Agrícola", "Farmacias", "Decretos", "Corp. sin fines de
+// lucro"): las de la lista pasan tal cual; las libres se limpian (2–40
+// caracteres, sin < > ni saltos de línea) y se limitan a 8 por lista.
+export function limpiarListaLibre(raw: unknown, permitidos: readonly string[], maxLibres = 8): string[] {
+  if (!Array.isArray(raw)) return [];
+  const vistos = new Set<string>();
+  const out: string[] = [];
+  let libres = 0;
+  for (const x of raw) {
+    if (typeof x !== "string") continue;
+    const esPermitida = permitidos.includes(x);
+    const v = esPermitida ? x : x.replace(/[<>\r\n\t]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (v.length < 2) continue;
+    const k = v.toLowerCase();
+    if (vistos.has(k)) continue;
+    if (!esPermitida) {
+      if (libres >= maxLibres) continue;
+      libres++;
+    }
+    vistos.add(k);
+    out.push(v);
+  }
+  return out;
+}
+
 // Acepta "@usuario", "usuario" o una URL completa y devuelve la URL.
 export function urlSocial(tipo: "web" | "instagram" | "facebook", valor: string | null | undefined): string | null {
   const v = (valor ?? "").trim();

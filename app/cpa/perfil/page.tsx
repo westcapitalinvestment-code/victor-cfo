@@ -31,10 +31,21 @@ type Oficina = {
   sugerencia: string;
 };
 
-function Chips({ opciones, valor, onChange }: { opciones: readonly string[]; valor: string[]; onChange: (v: string[]) => void }) {
+function Chips({ opciones, valor, onChange, placeholderOtra }: { opciones: readonly string[]; valor: string[]; onChange: (v: string[]) => void; placeholderOtra?: string }) {
+  const [otra, setOtra] = useState("");
+  const propias = valor.filter((v) => !opciones.includes(v));
+  function agregar() {
+    const t = otra.trim().slice(0, 40);
+    if (t.length < 2 || valor.some((v) => v.toLowerCase() === t.toLowerCase())) {
+      setOtra("");
+      return;
+    }
+    onChange([...valor, t]);
+    setOtra("");
+  }
   return (
     <div className="flex flex-wrap gap-1.5">
-      {opciones.map((o) => {
+      {[...opciones, ...propias].map((o) => {
         const on = valor.includes(o);
         return (
           <button
@@ -47,6 +58,24 @@ function Chips({ opciones, valor, onChange }: { opciones: readonly string[]; val
           </button>
         );
       })}
+      <div className="mt-1 flex w-full gap-1.5">
+        <input
+          value={otra}
+          onChange={(e) => setOtra(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              agregar();
+            }
+          }}
+          maxLength={40}
+          placeholder={placeholderOtra ?? "Otra (escríbela y toca Añadir)"}
+          className="min-w-0 flex-1 rounded-lg border border-border p-1.5 text-[12px]"
+        />
+        <button type="button" onClick={agregar} className="rounded-lg border border-teal px-3 text-[12px] font-medium text-teal">
+          Añadir
+        </button>
+      </div>
     </div>
   );
 }
@@ -179,11 +208,11 @@ export default function PerfilOficinaPage() {
 
           <div>
             <p className="mb-1.5 text-[12px] font-medium">Sectores con los que trabajas</p>
-            <Chips opciones={SECTORES} valor={o.sectores} onChange={(v) => set("sectores", v)} />
+            <Chips opciones={SECTORES} valor={o.sectores} onChange={(v) => set("sectores", v)} placeholderOtra="Otro sector (ej. Farmacias, Agrícola)" />
           </div>
           <div>
             <p className="mb-1.5 text-[12px] font-medium">Te especializas en</p>
-            <Chips opciones={ESPECIALIDADES} valor={o.especialidades} onChange={(v) => set("especialidades", v)} />
+            <Chips opciones={ESPECIALIDADES} valor={o.especialidades} onChange={(v) => set("especialidades", v)} placeholderOtra="Otra especialidad (ej. Decretos, Corp. sin fines de lucro)" />
           </div>
           <label className="flex items-center gap-2 text-[12px]">
             <input type="checkbox" checked={o.remoto} onChange={(e) => set("remoto", e.target.checked)} />
