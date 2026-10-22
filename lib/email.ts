@@ -875,6 +875,7 @@ export async function sendWelcomeGratisEmail(params: {
     ["Si anotas a mano, empieza con tu balance de hoy", "Escribe cuánto tienes en tu balance el día que empiezas y, a partir de ese día, anota todos tus ingresos y gastos. Así tu balance sube y baja bien. Si empiezas a anotar sin el balance de partida, el cálculo arranca en cero y se va en negativo. Toca Ingresos (monto, fecha y de dónde vino) o Gastos (monto, fecha y categoría), y si te equivocas, edita o borra en Transacciones."],
     ["Ahorros, inversiones y deudas", "Toca las tarjetas de Ahorrado e Inversiones para poner su saldo actual, y en Deuda añade tus tarjetas y préstamos para ver cómo salir de ellas."],
     ["Planifica con tus herramientas gratis", "Calcula cómo salir de deudas (bola de nieve o avalancha), arma tu plan 50/30/20, usa la calculadora de ahorro y guarda tus compromisos en Citas."],
+    ["Instala la app en tu celular y activa las notificaciones", "En iPhone: abre victorcfo.com en Safari, toca Compartir y luego \"Añadir a pantalla de inicio\". En Android: abre victorcfo.com en Chrome, toca los tres puntos y elige \"Instalar app\". Después abre VICTOR desde su ícono, ve a Configuración y activa Notificaciones (acepta el permiso cuando te lo pida). Así te llegan los avisos de tus citas y documentos por vencer. En iPhone las notificaciones solo funcionan si la abres desde el ícono instalado."],
   ];
 
   const textoPlano =
