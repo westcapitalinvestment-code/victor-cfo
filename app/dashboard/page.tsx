@@ -12,6 +12,7 @@ import ImpuestosEstimadosCard from "./impuestos-estimados-card";
 import Regla503020Card from "./regla-503020-card";
 import MetricasGratis from "./metricas-gratis";
 import BotonBalance from "./boton-balance";
+import AlertasSync from "./alertas-sync";
 import PlanGratisCard, { type AporteFila } from "./plan-gratis-card";
 import { respuestasValidas, type DatosPlan, type Respuestas } from "@/lib/plan-gratis";
 import { calcularRegla503020 } from "@/lib/regla-50-30-20";
@@ -875,6 +876,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         )}
       </div>
 
+      {/* Plan gratis: las alertas inteligentes van de primero (pedido de Joel,
+          22 oct 2026) para que no se pierdan; la campanita del topbar apunta aquí. */}
+      {profile.plan === "gratis" && (
+        <>
+          <AlertasSync n={alertasReglas.length} />
+          <AlertasPatronCard alertas={alertasReglas} />
+        </>
+      )}
+
       {/* TU PLAN (plan gratis): justo debajo del balance, con color; se reduce a
           una línea cuando todo está hecho y reaparece sola si algo cambia. */}
       {datosPlanGratis && <PlanGratisCard respuestas={respuestasGratis} datos={datosPlanGratis} aportes={aportesGratis} />}
@@ -1015,7 +1025,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {/* "Alertas inteligentes" (28 sept 2026) — patrón + salud financiera,
           mismo espíritu sin-IA que la tarjeta de arriba. Ver el bloque
           grande de cálculo junto a alertasReglas más arriba. */}
-      <AlertasPatronCard alertas={alertasReglas} />
+      {profile.plan !== "gratis" && <AlertasPatronCard alertas={alertasReglas} />}
 
       {/* Regla 50/30/20 y bola de nieve (22 oct 2026) — regalo del plan gratis,
           equivalente a lo que traen las plantillas de Excel pero sin llenarlo

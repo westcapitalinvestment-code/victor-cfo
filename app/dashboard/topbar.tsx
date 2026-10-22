@@ -181,6 +181,28 @@ export default function Topbar({
     };
   }, []);
 
+  // Campanita SOLO del plan gratis (22 oct 2026): avisa cuántas alertas
+  // inteligentes hay y lleva a la tarjeta de alertas del Inicio.
+  const [alertasN, setAlertasN] = useState(0);
+  useEffect(() => {
+    if (!esGratis) return;
+    const w = window as unknown as { __vcAlertas?: number };
+    setAlertasN(w.__vcAlertas ?? 0);
+    function alEvento(e: Event) {
+      setAlertasN(Number((e as CustomEvent<number>).detail) || 0);
+    }
+    window.addEventListener("vc-alertas-count", alEvento);
+    return () => window.removeEventListener("vc-alertas-count", alEvento);
+  }, [esGratis]);
+
+  function irAAlertas() {
+    if (pathname === "/dashboard") {
+      document.getElementById("alertas-inteligentes")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      router.push("/dashboard#alertas-inteligentes");
+    }
+  }
+
   function abrirVictor() {
     window.dispatchEvent(new Event(EVENTO_ABRIR_VICTOR));
   }
@@ -213,6 +235,25 @@ export default function Topbar({
               <span className="text-xs font-medium">VICTOR</span>
               <span className={`vc-victor-dot ${pendientes > 0 ? "alerta" : ""}`} />
             </button>
+            {esGratis && (
+              <button
+                type="button"
+                onClick={irAAlertas}
+                className="relative flex h-8 w-8 items-center justify-center rounded-full border border-border"
+                title={alertasN > 0 ? `Tienes ${alertasN} alerta(s)` : "Alertas"}
+                aria-label="Ver alertas"
+              >
+                <i className="ti ti-bell" style={{ fontSize: 16, color: "var(--muted)" }} />
+                {alertasN > 0 && (
+                  <span
+                    className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+                    style={{ background: "#D97706" }}
+                  >
+                    {alertasN}
+                  </span>
+                )}
+              </button>
+            )}
             <ThemeToggle />
           </div>
         </div>

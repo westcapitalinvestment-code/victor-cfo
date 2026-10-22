@@ -19,7 +19,7 @@ export type AlertaRegla = {
 
 export default function AlertasPatronCard({ alertas }: { alertas: AlertaRegla[] }) {
   return (
-    <div className="vc-card !p-0 mb-3">
+    <div id="alertas-inteligentes" className="vc-card !p-0 mb-3 scroll-mt-20">
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <span aria-hidden style={{ fontSize: 14 }}>
           🔎
