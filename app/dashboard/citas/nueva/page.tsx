@@ -59,7 +59,9 @@ export default function NuevaCitaPage() {
     <div className="mx-auto max-w-lg px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium">Nueva cita</h1>
-        <button onClick={() => router.push("/dashboard/citas")} className="vc-btn-back">
+        {/* Cancelar vuelve a donde estabas (Inicio, lista de Citas...) en vez
+        de forzar la lista de Citas. */}
+        <button onClick={() => (window.history.length > 1 ? router.back() : router.push("/dashboard"))} className="vc-btn-back">
           Cancelar
         </button>
       </div>

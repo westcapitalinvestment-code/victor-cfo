@@ -229,13 +229,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // (app/dashboard/metricas-gratis.tsx). Deuda también suma la calculadora de
   // deudas (deudas_plan), que es donde el plan gratis anota tarjetas/préstamos.
   let deudaPlanGratis = 0;
+  let deudasFilasGratis: { id: string; nombre: string; saldo: number; apr: number; pago_minimo: number }[] = [];
   let cuentasFormGratis: { id: string; nombre: string; tipo: string }[] = [];
   let cuentaAhorroGratis: { id: string; saldo: number } | null = null;
   let cuentaInversionGratis: { id: string; saldo: number } | null = null;
   let cuentaEfectivoGratis: { id: string; saldo: number } | null = null;
   if (profile.plan === "gratis") {
     const [{ data: deudasPlan }, { data: manualesGratis }] = await Promise.all([
-      supabase.from("deudas_plan").select("saldo").eq("owner_id", user.id),
+      supabase.from("deudas_plan").select("id, nombre, saldo, apr, pago_minimo").eq("owner_id", user.id).order("saldo", { ascending: true }),
       supabase
         .from("manual_accounts")
         .select("id, name, type, subtype, current_balance")
@@ -244,6 +245,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         .eq("es_negocio", false),
     ]);
     deudaPlanGratis = (deudasPlan ?? []).reduce((s, d) => s + Number(d.saldo || 0), 0);
+    deudasFilasGratis = (deudasPlan ?? []).map((d) => ({
+      id: d.id as string,
+      nombre: d.nombre as string,
+      saldo: Number(d.saldo || 0),
+      apr: Number(d.apr || 0),
+      pago_minimo: Number(d.pago_minimo || 0),
+    }));
     const lista = manualesGratis ?? [];
     cuentasFormGratis = lista
       .filter((c) => c.type === "depository" && c.subtype !== "savings")
@@ -869,6 +877,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           gastos={gastosDelMes}
           ahorrado={ahorrado}
           deuda={deudaTotal + deudaPlanGratis}
+          deudasFilas={deudasFilasGratis}
           inversion={inversionTotal}
           cuentas={cuentasFormGratis}
           categorias={categorias ?? []}

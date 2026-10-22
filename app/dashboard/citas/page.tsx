@@ -31,9 +31,14 @@ export default async function CitasPage() {
     <div className="vc-shell">
       <div className="mb-3 flex items-center justify-between">
         <h1 className="text-lg font-medium">Citas</h1>
-        <Link href="/dashboard/citas/nueva" className="text-xs font-medium text-teal hover:opacity-80">
-          + Nueva
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/citas/nueva" className="text-xs font-medium text-teal hover:opacity-80">
+            + Nueva
+          </Link>
+          <Link href="/dashboard" className="vc-btn-back">
+            Volver
+          </Link>
+        </div>
       </div>
 
       {/* Mismo par de tabs que en Documentos, con Citas activo aquí. */}

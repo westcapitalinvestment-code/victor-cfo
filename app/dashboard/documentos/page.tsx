@@ -32,9 +32,14 @@ export default async function DocumentosPage() {
     <div className="vc-shell">
       <div className="mb-3 flex items-center justify-between">
         <h1 className="text-lg font-medium">Documentos</h1>
-        <Link href="/dashboard/documentos/nuevo" className="text-xs font-medium text-teal hover:opacity-80">
-          + Nuevo
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/documentos/nuevo" className="text-xs font-medium text-teal hover:opacity-80">
+            + Nuevo
+          </Link>
+          <Link href="/dashboard" className="vc-btn-back">
+            Volver
+          </Link>
+        </div>
       </div>
 
       {/* Tabs Documentos/Citas — mismo estilo de pill que el toggle
