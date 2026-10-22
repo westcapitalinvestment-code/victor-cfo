@@ -897,8 +897,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <Regla503020Card mesLabel={etiquetaMes(mesActualStr)} resultado={resultado503020} />
           <Link href="/dashboard/deudas" className="vc-card mb-3 flex items-center justify-between gap-3 !py-3">
             <div>
-              <p className="text-sm font-medium">💪 Pagar mis deudas (bola de nieve)</p>
-              <p className="text-[11px] text-muted">Escribe tus deudas y te digo en qué orden pagarlas y cuándo quedas libre.</p>
+              <p className="text-sm font-medium">💪 Pagar mis deudas (nieve o avalancha)</p>
+              <p className="text-[11px] text-muted">Escribe tus deudas, escoge el método y te digo en qué orden pagarlas y cuándo quedas libre.</p>
             </div>
             <span className="text-xs font-medium text-teal">Abrir</span>
           </Link>

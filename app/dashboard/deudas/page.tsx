@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
-import { ordenBolaDeNieve, simularBolaDeNieve, type Deuda } from "@/lib/bola-de-nieve";
+import { ordenBolaDeNieve, simularBolaDeNieve, type Deuda, type Metodo } from "@/lib/bola-de-nieve";
 
 // Bola de nieve (22 oct 2026) — herramienta del plan gratis: escribes tus
 // deudas y te dice en qué orden pagarlas (la de menor saldo primero), en
@@ -36,6 +36,7 @@ export default function DeudasPage() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [extra, setExtra] = useState("");
+  const [metodo, setMetodo] = useState<Metodo>("nieve");
 
   const [nombre, setNombre] = useState("");
   const [saldo, setSaldo] = useState("");
@@ -84,8 +85,9 @@ export default function DeudasPage() {
 
   const deudas: Deuda[] = filas.map((f) => ({ id: f.id, nombre: f.nombre, saldo: f.saldo, apr: f.apr, minimo: f.pago_minimo }));
   const extraNum = Math.max(0, Number(extra) || 0);
-  const resultado = useMemo(() => simularBolaDeNieve(deudas, extraNum), [filas, extraNum]); // eslint-disable-line react-hooks/exhaustive-deps
-  const orden = ordenBolaDeNieve(deudas);
+  const resultado = useMemo(() => simularBolaDeNieve(deudas, extraNum, metodo), [filas, extraNum, metodo]); // eslint-disable-line react-hooks/exhaustive-deps
+  const orden = ordenBolaDeNieve(deudas, metodo);
+  const alt = useMemo(() => simularBolaDeNieve(deudas, extraNum, metodo === "nieve" ? "avalancha" : "nieve"), [filas, extraNum, metodo]); // eslint-disable-line react-hooks/exhaustive-deps
   const totalDeuda = filas.reduce((s, f) => s + f.saldo, 0);
   const totalMinimos = filas.reduce((s, f) => s + f.pago_minimo, 0);
 
@@ -115,11 +117,23 @@ export default function DeudasPage() {
       </div>
 
       <div className="mb-4 rounded-lg p-3.5 text-sm text-white" style={{ background: "#1B3A5C" }}>
-        <p className="font-medium">Método bola de nieve</p>
+        <p className="font-medium">{metodo === "nieve" ? "Método bola de nieve" : "Método avalancha"}</p>
         <p className="mt-1 text-xs text-white/80">
-          Pagas el mínimo en todas y todo lo extra a la deuda más pequeña. Cuando la saldas, su pago pasa a la siguiente y la bola
-          va creciendo.
+          {metodo === "nieve"
+            ? "Pagas el mínimo en todas y todo lo extra a la deuda más pequeña. Al saldarla, su pago pasa a la siguiente y la bola va creciendo. Ganas impulso rápido."
+            : "Pagas el mínimo en todas y todo lo extra a la deuda con la tasa más alta. Normalmente pagas menos intereses en total."}
         </p>
+        <div className="mt-2.5 flex gap-2">
+          {(["nieve", "avalancha"] as Metodo[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMetodo(m)}
+              className={`rounded-pill px-3 py-1 text-xs font-medium ${metodo === m ? "bg-white text-[#1B3A5C]" : "border border-white/40 text-white"}`}
+            >
+              {m === "nieve" ? "Bola de nieve" : "Avalancha"}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="vc-card mb-4 flex flex-col gap-3">
@@ -186,6 +200,11 @@ export default function DeudasPage() {
                   Pagarías unos <span className="font-medium text-text">{formatMoney(resultado.interesTotal)}</span> en intereses.
                   Pago total por mes: <span className="font-medium text-text">{formatMoney(totalMinimos + extraNum)}</span>.
                 </p>
+                {!alt.mensajeError && filas.length > 1 && (
+                  <p className="mt-1 text-[11px] text-muted">
+                    Con {metodo === "nieve" ? "avalancha" : "bola de nieve"}: {mesesATexto(alt.mesesTotal ?? 0)} y {formatMoney(alt.interesTotal)} en intereses.
+                  </p>
+                )}
               </div>
             )}
           </div>
