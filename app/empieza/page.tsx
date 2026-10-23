@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 
 // Capturas reales de la app (cuenta de ejemplo) en /public/empieza.
 function Captura({ src, alt }: { src: string; alt: string }) {
-  return <img src={src} alt={alt} loading="lazy" className="w-full rounded-2xl border border-border shadow-lg" />;
+  return <img src={src} alt={alt} loading="lazy" className="mx-auto w-full max-w-[300px] rounded-2xl border border-border shadow-lg md:max-w-[320px]" />;
 }
 
 // Landing del plan gratis (22 oct 2026). Enfoque: ORGANIZAR las finanzas —
@@ -109,34 +109,26 @@ export default function EmpiezaPage() {
           </p>
           {registro}
         </div>
-        <Captura src="/empieza/inicio.png" alt="Inicio de VICTOR con balance, alertas y tarjetas de ingresos, gastos, ahorro y deuda" />
+        <Captura src="/empieza/m-inicio.png" alt="Inicio de VICTOR con balance, alertas y tarjetas de ingresos, gastos, ahorro y deuda" />
       </section>
 
       <p className="mb-20 text-center text-[11px] text-muted md:mb-28">Capturas reales de la app con datos de ejemplo.</p>
 
       <Seccion
-        etiqueta="Alertas"
-        titulo="La app te avisa antes de que sea tarde"
-        texto="Una hoja de cálculo no te dice nada. VICTOR vigila tus números y te avisa lo que importa, con una campanita para que no se te pase."
-        puntos={["Te avisa si vas en déficit este mes", "Detecta cargos nuevos y gastos que se dispararon", "Te recuerda cuánto apartar para impuestos"]}
-        mock={<Captura src="/empieza/alertas.png" alt="Alertas inteligentes de VICTOR" />}
-      />
-
-      <Seccion
-        etiqueta="Resumen del mes"
-        titulo="En qué se te fue el dinero, sin armar nada"
-        texto="Cada mes ves cuánto entró, cuánto salió y cuál es tu categoría de mayor gasto, comparado con tu regla 50/30/20."
-        puntos={["Tu categoría con más gasto", "Comparación con el mes pasado", "Reparto en necesidades, gustos y ahorro"]}
-        mock={<Captura src="/empieza/resumen.png" alt="Resumen del mes y regla 50/30/20" />}
+        etiqueta="Dashboard"
+        titulo="Tu balance y tus números, al abrir la app"
+        texto="Un inicio claro con lo que entró, lo que salió, lo que ahorras y lo que debes. Todo lo que anotas se suma o se resta solo."
+        puntos={["Toca una tarjeta y anota ahí mismo", "Anota efectivo y gastos chiquitos en 10 segundos", "Todo se puede editar o deshacer"]}
+        mock={<Captura src="/empieza/m-numeros.png" alt="Tarjetas de ingresos, gastos, ahorro, deuda e inversiones" />}
       />
 
       <Seccion
         invertir
-        etiqueta="Transacciones"
-        titulo="Cada gasto y cada ingreso, en su categoría"
-        texto="Anota lo que entra y sale, o sube el estado de tu banco. Ves tu reporte por categoría y buscas cualquier movimiento por nombre o monto."
-        puntos={["Gastos e ingresos separados, por mes", "Reporte por categoría que se arma solo", "Descarga un reporte para tu contable"]}
-        mock={<Captura src="/empieza/transacciones.png" alt="Pantalla de transacciones con reporte de gastos por categoría" />}
+        etiqueta="Resumen del mes"
+        titulo="En qué se te fue el dinero, sin armar nada"
+        texto="Cada mes ves cuánto entró, cuánto salió y cuál es tu categoría de mayor gasto, comparado con tu regla 50/30/20."
+        puntos={["Tu categoría con más gasto", "Comparación con el mes pasado", "Reparto en necesidades, gustos y ahorro"]}
+        mock={<Captura src="/empieza/m-resumen.png" alt="Resumen del mes y regla 50/30/20" />}
       />
 
       <Seccion
@@ -144,7 +136,7 @@ export default function EmpiezaPage() {
         titulo="Por cuál deuda empezar y cuándo sales"
         texto="Escribe tus tarjetas y préstamos. Te explicamos bola de nieve y avalancha, te decimos el orden y en cuántos meses sales."
         puntos={["Cada pago baja tu deuda y tu balance", "Ves cuánto pagas en intereses", "Te ayuda a separar un colchón antes de acelerar"]}
-        mock={<Captura src="/empieza/deudas.png" alt="Tus deudas en orden de pago y fecha en que quedas libre" />}
+        mock={<Captura src="/empieza/m-deudas.png" alt="Tus deudas en orden de pago y fecha en que quedas libre" />}
       />
 
       <Seccion
@@ -153,7 +145,7 @@ export default function EmpiezaPage() {
         titulo="Que no se te venza nada"
         texto="Guarda tus documentos importantes y tus citas en un solo sitio. Te llega una notificación antes de la fecha."
         puntos={["Marbete, póliza, contratos y más", "Citas médicas, pagos y compromisos", "Recordatorio en tu celular"]}
-        mock={<Captura src="/empieza/citas.png" alt="Metas, alertas de documentos y próximas citas" />}
+        mock={<Captura src="/empieza/m-citas.png" alt="Metas, alertas de documentos y próximas citas" />}
       />
 
       <Seccion
@@ -161,7 +153,7 @@ export default function EmpiezaPage() {
         titulo="Cuatro preguntas y te armamos tu camino"
         texto="Dinos qué quieres lograr y te damos los pasos para ti: salir de deudas, ordenar y crecer, o probar la app con tus números."
         puntos={["Pasos que se marcan solos al avanzar", "Patrimonio neto y fondo de emergencia", "Págate primero: empieza con 10% y sube a 20%"]}
-        mock={<Captura src="/empieza/plan.png" alt="Tu plan: pasos, patrimonio neto, fondo de emergencia y págate primero" />}
+        mock={<Captura src="/empieza/m-plan.png" alt="Tu plan: pasos, patrimonio neto, fondo de emergencia y págate primero" />}
       />
 
       {/* CÓMO EMPIEZO */}
