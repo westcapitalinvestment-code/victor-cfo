@@ -82,12 +82,13 @@ export default function EmpiezaPage() {
       <button type="button" onClick={empezar} disabled={enCurso} className="vc-btn-primary">
         {enCurso ? "..." : "Empezar gratis con Google"}
       </button>
-      <p className="mt-3 text-xs text-muted">
-        Sin tarjeta. ¿Prefieres tu email?{" "}
-        <Link href="/registro" className="font-medium text-teal">
-          Regístrate aquí
-        </Link>
-      </p>
+      <Link
+        href="/registro"
+        className="mt-2 block w-full rounded-lg border border-border bg-white p-3 text-center text-sm font-medium text-text"
+      >
+        Registrarme con mi email
+      </Link>
+      <p className="mt-3 text-xs text-muted">Sin tarjeta. Cuenta gratis en un minuto.</p>
     </div>
   );
 
