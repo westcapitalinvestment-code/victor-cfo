@@ -16,7 +16,7 @@ function Captura({ src, alt }: { src: string; alt: string }) {
 // NO promete banco conectado ni chat con VICTOR (eso es de Core).
 function Seccion({ etiqueta, titulo, texto, puntos, mock, invertir }: { etiqueta: string; titulo: string; texto: string; puntos: string[]; mock: ReactNode; invertir?: boolean }) {
   return (
-    <section className="mb-14 grid items-center gap-6 md:grid-cols-2 md:gap-10">
+    <section className="mb-20 grid items-center gap-8 md:mb-28 md:grid-cols-2 md:gap-16">
       <div className={invertir ? "md:order-2" : ""}>
         <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-teal">{etiqueta}</p>
         <h2 className="mb-2 text-xl font-semibold leading-tight">{titulo}</h2>
@@ -99,7 +99,7 @@ export default function EmpiezaPage() {
       </div>
 
       {/* HERO */}
-      <section className="mb-16 grid items-center gap-8 md:grid-cols-2">
+      <section className="mb-10 grid items-center gap-10 md:mb-12 md:grid-cols-2 md:gap-16">
         <div>
           <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-teal">Gratis por tiempo limitado · sin tarjeta</p>
           <h1 className="mb-3 text-3xl font-semibold leading-tight">Todo tu dinero, ordenado en un solo lugar</h1>
@@ -112,18 +112,9 @@ export default function EmpiezaPage() {
         <Captura src="/empieza/inicio.png" alt="Inicio de VICTOR con balance, alertas y tarjetas de ingresos, gastos, ahorro y deuda" />
       </section>
 
-      <p className="mb-10 text-center text-[11px] text-muted">Capturas reales de la app con datos de ejemplo.</p>
+      <p className="mb-20 text-center text-[11px] text-muted md:mb-28">Capturas reales de la app con datos de ejemplo.</p>
 
       <Seccion
-        etiqueta="Dashboard"
-        titulo="Tu balance y tus números, al abrir la app"
-        texto="Un inicio claro con tu balance, lo que entró, lo que salió, lo que ahorras y lo que debes. Todo lo que anotas se suma o se resta solo."
-        puntos={["Toca una tarjeta y anota ahí mismo", "Anota efectivo y gastos chiquitos en 10 segundos", "Todo se puede editar o deshacer"]}
-        mock={<Captura src="/empieza/inicio.png" alt="Inicio de VICTOR" />}
-      />
-
-      <Seccion
-        invertir
         etiqueta="Alertas"
         titulo="La app te avisa antes de que sea tarde"
         texto="Una hoja de cálculo no te dice nada. VICTOR vigila tus números y te avisa lo que importa, con una campanita para que no se te pase."
@@ -174,8 +165,8 @@ export default function EmpiezaPage() {
       />
 
       {/* CÓMO EMPIEZO */}
-      <section className="mb-14">
-        <h2 className="mb-4 text-center text-xl font-semibold">Empieza en 3 pasos</h2>
+      <section className="mb-20 md:mb-28">
+        <h2 className="mb-6 text-center text-xl font-semibold">Empieza en 3 pasos</h2>
         <div className="grid gap-3 sm:grid-cols-3">
           {[
             ["1", "Crea tu cuenta", "Un clic con Google. Sin tarjeta."],
