@@ -93,24 +93,26 @@ export function leerReporteMT5(filas: unknown[][]): ReporteMT5 {
       continue;
     }
     // Time, Position, Symbol, Type, Volume, Price, S/L, T/P, Time, Price, Commission, Swap, Profit
-    const lado = String(celdas[3]).toLowerCase();
+    // Posiciones fijas: S/L y T/P pueden venir vacíos, así que no se usan las celdas filtradas.
+    const c = Array.from({ length: 13 }, (_, i) => (fila ?? [])[i]);
+    const lado = String(c[3]).toLowerCase();
     if (lado !== "buy" && lado !== "sell") continue; // saltar balance/depósitos
-    const sl = num(celdas[6]);
-    const tp = num(celdas[7]);
+    const sl = num(c[6]);
+    const tp = num(c[7]);
     out.trades.push({
-      ticket: String(celdas[1]),
-      simbolo: String(celdas[2]),
+      ticket: String(c[1]),
+      simbolo: String(c[2]),
       lado,
-      volumen: num(celdas[4]),
-      hora_apertura: fechaISO(celdas[0]),
-      precio_apertura: num(celdas[5]),
+      volumen: num(c[4]),
+      hora_apertura: fechaISO(c[0]),
+      precio_apertura: num(c[5]),
       sl: sl > 0 ? sl : null,
       tp: tp > 0 ? tp : null,
-      hora_cierre: fechaISO(celdas[8]),
-      precio_cierre: num(celdas[9]),
-      comision: num(celdas[10]),
-      swap: num(celdas[11]),
-      ganancia: num(celdas[12]),
+      hora_cierre: RE_FECHA.test(String(c[8] ?? "").trim()) ? fechaISO(c[8]) : null,
+      precio_cierre: num(c[9]),
+      comision: num(c[10]),
+      swap: num(c[11]),
+      ganancia: num(c[12]),
     });
   }
   return out;
