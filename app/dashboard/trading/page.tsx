@@ -137,7 +137,7 @@ export default function TradingPage() {
       const filasDb = rep.trades.map((t) => ({ ...t, owner_id: u.user!.id, account_id: cuenta.id }));
       for (let i = 0; i < filasDb.length; i += 200) {
         const { error: e } = await supabase.from("trades").upsert(filasDb.slice(i, i + 200), { onConflict: "account_id,ticket", ignoreDuplicates: true });
-        if (e) return setError("No se pudieron guardar los trades.");
+        if (e) return setError(`No se pudieron guardar los trades: ${e.message}`);
       }
       if (rep.cuenta && !cuenta.numero_cuenta) {
         await supabase.from("trading_accounts").update({ numero_cuenta: rep.cuenta, broker: rep.broker }).eq("id", cuenta.id);
