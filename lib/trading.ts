@@ -329,3 +329,55 @@ export function calcularMetricas(evaluados: TradeEvaluado[], balanceInicial: num
     reglasRotas,
   };
 }
+
+// ---------- Para el panel (gráficos) ----------
+
+export type DiaResumen = { fecha: string; neto: number; trades: number };
+
+/** Resultado por día (fecha de cierre, hora del broker). */
+export function resultadosPorDia(evaluados: TradeEvaluado[]): Record<string, DiaResumen> {
+  const out: Record<string, DiaResumen> = {};
+  for (const t of evaluados) {
+    const f = (t.hora_cierre ?? t.hora_apertura).slice(0, 10);
+    const d = (out[f] ??= { fecha: f, neto: 0, trades: 0 });
+    d.neto += t.neto;
+    d.trades += 1;
+  }
+  return out;
+}
+
+export function curvaCapital(evaluados: TradeEvaluado[], balanceInicial: number): { fecha: string; saldo: number }[] {
+  const orden = [...evaluados].sort((a, b) => ms(a.hora_cierre ?? a.hora_apertura) - ms(b.hora_cierre ?? b.hora_apertura));
+  let saldo = balanceInicial;
+  const serie = [{ fecha: orden[0] ? (orden[0].hora_cierre ?? orden[0].hora_apertura).slice(0, 10) : "", saldo }];
+  for (const t of orden) {
+    saldo += t.neto;
+    serie.push({ fecha: (t.hora_cierre ?? t.hora_apertura).slice(0, 10), saldo });
+  }
+  return serie;
+}
+
+/** Seis ejes de 0 a 100 para el radar y el puntaje general. */
+export function puntajeRadar(m: Metricas, dias: Record<string, DiaResumen>): { etiqueta: string; valor: number }[] {
+  const lista = Object.values(dias);
+  const diasPos = lista.length ? (lista.filter((d) => d.neto > 0).length / lista.length) * 100 : 0;
+  const pf = m.profitFactor === null ? 2 : m.profitFactor;
+  const rr = m.promedioPerdido !== 0 ? Math.abs(m.promedioGanado / m.promedioPerdido) : m.promedioGanado > 0 ? 2 : 0;
+  const clamp = (x: number) => Math.max(0, Math.min(100, x));
+  return [
+    { etiqueta: "Aciertos", valor: clamp(m.winRate) },
+    { etiqueta: "Factor beneficio", valor: clamp((pf / 2) * 100) },
+    { etiqueta: "Ganado/perdido", valor: clamp((rr / 2) * 100) },
+    { etiqueta: "Disciplina", valor: clamp(m.disciplina) },
+    { etiqueta: "Caída máx.", valor: clamp(100 - m.caidaMaximaPct) },
+    { etiqueta: "Consistencia", valor: clamp(diasPos) },
+  ];
+}
+
+/** Compara los trades que cumplieron todas las reglas contra los que rompieron alguna. */
+export function impactoReglas(evaluados: TradeEvaluado[]) {
+  const limpios = evaluados.filter((t) => t.violaciones.length === 0);
+  const rotos = evaluados.filter((t) => t.violaciones.length > 0);
+  const suma = (l: TradeEvaluado[]) => l.reduce((s, t) => s + t.neto, 0);
+  return { limpios: { n: limpios.length, neto: suma(limpios) }, rotos: { n: rotos.length, neto: suma(rotos) } };
+}
