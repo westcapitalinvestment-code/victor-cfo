@@ -145,6 +145,16 @@ export default function TradingPage() {
   const [cFx, setCFx] = useState<number | null>(null);
 
   const cuenta = cuentas.find((c) => c.id === cuentaId) ?? null;
+
+  // Los avisos son flotantes (se ven aunque estés abajo en la página) y se quitan solos.
+  useEffect(() => {
+    if (!error && !msg) return;
+    const t = setTimeout(() => {
+      setError(null);
+      setMsg(null);
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [error, msg]);
   const [syncToken, setSyncToken] = useState<string | null>(null);
 
   async function cargar(preferida?: string) {
@@ -498,8 +508,19 @@ export default function TradingPage() {
         ))}
       </datalist>
 
-      {error && <p className="mb-3 text-xs text-red">{error}</p>}
-      {msg && <p className="mb-3 text-xs text-teal">{msg}</p>}
+      {(error || msg) && (
+        <div
+          role="status"
+          onClick={() => {
+            setError(null);
+            setMsg(null);
+          }}
+          className="fixed bottom-20 left-1/2 z-50 w-[92%] max-w-md -translate-x-1/2 cursor-pointer rounded-lg px-4 py-3 text-sm text-white shadow-lg"
+          style={{ background: error ? "#d64545" : "#1f9d74" }}
+        >
+          {error ?? msg}
+        </div>
+      )}
 
       {cuentas.length === 0 || mostrarNueva ? (
         <div className="vc-card flex flex-col gap-3">
