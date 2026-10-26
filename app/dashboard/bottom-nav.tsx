@@ -111,8 +111,8 @@ export default function BottomNav({ esFounder = false }: { esFounder?: boolean }
         {TABS_NEGOCIO.map((tab) => (
           <NavLink key={tab.href} tab={tab} active={isActive(tab.href)} />
         ))}
-        <NavLink tab={TAB_CONFIG} active={isActive(TAB_CONFIG.href)} />
         {esFounder && <NavLink tab={TAB_TRADING} active={isActive(TAB_TRADING.href)} />}
+        <NavLink tab={TAB_CONFIG} active={isActive(TAB_CONFIG.href)} />
         {esFounder && <NavLink tab={TAB_VENTAS}active={isActive(TAB_VENTAS.href)} />}
         {esFounder && <NavLink tab={TAB_CFO} active={isActive(TAB_CFO.href)} />}
       </div>
