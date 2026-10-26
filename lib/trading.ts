@@ -250,7 +250,8 @@ export function evaluarCumplimiento(trades: Trade[], reglas: ReglasRiesgo, balan
     if (reglas.sl_obligatorio && !t.sl) v.push("sin_sl");
 
     const info = infoSimbolo(t.simbolo);
-    if (t.sl && t.precio_apertura && info) {
+    // Con el lote mínimo (0.01) no se puede arriesgar menos: no se marca.
+    if (t.sl && t.precio_apertura && info && t.volumen > 0.01 + 1e-9) {
       const riesgo = Math.abs(t.precio_apertura - t.sl) * info.contrato * t.volumen * (USD_POR_MONEDA[info.quote] ?? 1);
       if (riesgo > (balance * reglas.riesgo_por_trade_pct) / 100 + 0.005) v.push("riesgo_alto");
     }
