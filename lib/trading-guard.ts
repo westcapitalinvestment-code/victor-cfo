@@ -16,7 +16,7 @@ export type ParametrosGuardian = {
   maxAbiertos: number;
   maxTradesDia: number; // 0 = sin limite
   esperaTrasPerdidaMin: number; // 0 = sin espera
-  bloquearSLTP: boolean;
+  modoBloqueo: "total" | "flexible" | "ninguno";
   bloquearCierreManual: boolean;
 };
 
@@ -34,7 +34,8 @@ export function generarGuardianMQ5(p: ParametrosGuardian): string {
 //|  Generado: ${fecha}                                               |
 //|  NO decide entradas. Tu decides; el guardian impone TUS reglas:  |
 //|   - calcula el lote segun tu riesgo                               |
-//|   - pone SL y TP a todo trade                                     |
+//|   - pone SL (obligatorio) y TP a todo trade                       |
+//|   - SL solo se mueve a tu favor; TP libre (modo flexible)         |
 //|   - limite de trades abiertos, perdedores y perdida del dia       |
 //|   - espera obligatoria tras una perdida                           |
 //|  Todos los valores se pueden cambiar en MT5 > pestana Entradas.   |
@@ -50,7 +51,7 @@ input string AllowedSymbol      = "${sym(p.simbolo)}"; // unico simbolo permitid
 input double RiskPercent        = ${n(p.riesgoPct)};      // % del balance a arriesgar por trade
 input double SLPips             = ${n(p.distanciaPips, 2)};      // distancia del SL en pips
 input double PipSize            = ${n(p.tamanoPip, 5)};      // tamano de 1 pip en precio (oro 0.1, EURUSD 0.0001, USDJPY 0.01, NAS100/US30 1)
-input double RewardRatio        = ${n(p.relacionTP)};      // TP = SL x este numero
+input double RewardRatio        = ${n(p.relacionTP)};      // TP inicial = SL x este numero (0 = sin TP al abrir, lo pones tu)
 input int    MaxLosersPerDay    = ${Math.max(1, Math.round(p.maxPerdedoresDia))};        // perdedores maximos por dia
 input double MaxDailyLossUSD    = ${n(p.perdidaMaxDiaUSD)};     // perdida diaria maxima en dolares (incluye flotante)
 input double MinEquityUSD       = ${n(p.equityMinimoUSD)};    // si el equity baja de aqui: bloqueo total
@@ -58,7 +59,8 @@ input int    MaxOpenPositions   = ${Math.max(1, Math.round(p.maxAbiertos))};    
 input int    MaxTradesPerDay    = ${Math.max(0, Math.round(p.maxTradesDia))};        // trades maximos por dia (0 = sin limite)
 input int    CooldownMin        = ${Math.max(0, Math.round(p.esperaTrasPerdidaMin))};       // minutos de espera tras una perdida (0 = sin espera)
 input int    DeviationPts       = 30;       // deslizamiento maximo
-input bool   LockSLTP           = ${b(p.bloquearSLTP)};     // true = si mueves o quitas SL/TP, el guardian los restaura
+input bool   LockSLTP           = ${b(p.modoBloqueo !== "ninguno")};     // true = el guardian vigila el SL/TP
+input bool   FlexibleLock       = ${b(p.modoBloqueo === "flexible")};     // true = puedes mover el TP libremente y el SL solo a tu favor (nunca alejarlo ni quitarlo)
 input bool   BlockOnManualClose = ${b(p.bloquearCierreManual)};     // true = cerrar un trade a mano bloquea el resto del dia
 
 string P = "VG_";
@@ -198,23 +200,33 @@ void Guard()
       }
       kept++;
 
-      // SL/TP bloqueados: si ya los fijamos antes, cualquier cambio se revierte
+      // SL/TP vigilados: si ya los fijamos antes, se aplica el modo de bloqueo
+      bool isBuy = (typ == POSITION_TYPE_BUY);
       string ksl = P + "SL_" + (string)tk, ktp = P + "TP_" + (string)tk;
       if(LockSLTP && GlobalVariableCheck(ksl) && GlobalVariableCheck(ktp))
       {
          double lsl = GlobalVariableGet(ksl), ltp = GlobalVariableGet(ktp);
          double pt = SymbolInfoDouble(AllowedSymbol, SYMBOL_POINT);
-         if(MathAbs(sl - lsl) > pt / 2 || MathAbs(tp - ltp) > pt / 2)
+         if(FlexibleLock)
+         {
+            // SL: solo puede acercarse a tu favor (protegerte / perseguir el precio). Nunca alejarse ni quitarse.
+            bool slOk = (sl != 0) && (isBuy ? (sl >= lsl - pt / 2) : (sl <= lsl + pt / 2));
+            if(slOk && MathAbs(sl - lsl) > pt / 2) GlobalVariableSet(ksl, sl);
+            // TP: libre (mover o quitar no aumenta tu riesgo)
+            if(MathAbs(tp - ltp) > pt / 2) GlobalVariableSet(ktp, tp);
+            if(!slOk) trade.PositionModify(tk, lsl, tp);
+         }
+         else if(MathAbs(sl - lsl) > pt / 2 || MathAbs(tp - ltp) > pt / 2)
             trade.PositionModify(tk, lsl, ltp);
          continue;
       }
 
       // SL/TP obligatorios y SL no mas lejos de 1.5x lo permitido
-      bool buy = (typ == POSITION_TYPE_BUY);
+      bool buy = isBuy;
       double newSL = sl, newTP = tp;
       if(sl == 0 || MathAbs(op - sl) > SLDistance * 1.5)
          newSL = buy ? op - SLDistance : op + SLDistance;
-      if(tp == 0)
+      if(tp == 0 && RewardRatio > 0)
          newTP = buy ? op + SLDistance * RewardRatio : op - SLDistance * RewardRatio;
       newSL = NormalizeDouble(newSL, digits);
       newTP = NormalizeDouble(newTP, digits);
@@ -243,7 +255,7 @@ void OpenTrade(bool buy)
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
    double price = buy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
    double sl = buy ? price - SLDistance : price + SLDistance;
-   double tp = buy ? price + SLDistance * RewardRatio : price - SLDistance * RewardRatio;
+   double tp = (RewardRatio > 0) ? (buy ? price + SLDistance * RewardRatio : price - SLDistance * RewardRatio) : 0;
    sl = NormalizeDouble(sl, digits);
    tp = NormalizeDouble(tp, digits);
 

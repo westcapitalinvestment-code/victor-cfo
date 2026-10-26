@@ -55,7 +55,7 @@ type Guardian = {
   guard_max_open: number;
   guard_daily_loss_usd: number | null;
   guard_min_equity_usd: number | null;
-  guard_lock_sltp: boolean;
+  guard_lock_mode: "total" | "flexible" | "ninguno";
   guard_block_manual_close: boolean;
 };
 const GUARDIAN_POR_DEFECTO: Guardian = {
@@ -66,7 +66,7 @@ const GUARDIAN_POR_DEFECTO: Guardian = {
   guard_max_open: 1,
   guard_daily_loss_usd: null,
   guard_min_equity_usd: null,
-  guard_lock_sltp: true,
+  guard_lock_mode: "flexible",
   guard_block_manual_close: true,
 };
 
@@ -155,7 +155,7 @@ export default function TradingPage() {
         guard_max_open: Number(r.guard_max_open ?? 1),
         guard_daily_loss_usd: r.guard_daily_loss_usd == null ? null : Number(r.guard_daily_loss_usd),
         guard_min_equity_usd: r.guard_min_equity_usd == null ? null : Number(r.guard_min_equity_usd),
-        guard_lock_sltp: r.guard_lock_sltp !== false,
+        guard_lock_mode: r.guard_lock_mode === "total" || r.guard_lock_mode === "ninguno" ? r.guard_lock_mode : "flexible",
         guard_block_manual_close: r.guard_block_manual_close !== false,
       });
     }
@@ -325,7 +325,7 @@ export default function TradingPage() {
       maxAbiertos: guardian.guard_max_open,
       maxTradesDia: reglas.max_trades_dia,
       esperaTrasPerdidaMin: reglas.espera_tras_perdida_min,
-      bloquearSLTP: guardian.guard_lock_sltp,
+      modoBloqueo: guardian.guard_lock_mode,
       bloquearCierreManual: guardian.guard_block_manual_close,
     });
     const url = URL.createObjectURL(new Blob([codigo], { type: "text/plain;charset=utf-8" }));
@@ -712,9 +712,16 @@ export default function TradingPage() {
                     <span className="text-[10px] text-muted">Si baja de aquí, se bloquea todo</span>
                   </label>
                 </div>
-                <label className="flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked={guardian.guard_lock_sltp} onChange={(e) => setGuardian({ ...guardian, guard_lock_sltp: e.target.checked })} />
-                  Bloquear stop y take profit (si los mueves, el guardián los restaura)
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="text-muted">Qué puedo hacer con el stop y el take profit</span>
+                  <select className="vc-input" value={guardian.guard_lock_mode} onChange={(e) => setGuardian({ ...guardian, guard_lock_mode: e.target.value as Guardian["guard_lock_mode"] })}>
+                    <option value="flexible">Flexible: el stop siempre puesto; lo muevo solo a mi favor y el TP libre</option>
+                    <option value="total">Estricto: no puedo mover ninguno</option>
+                    <option value="ninguno">Sin bloqueo: solo pone el stop al abrir</option>
+                  </select>
+                  <span className="text-[10px] text-muted">
+                    Flexible deja proteger la ganancia y perseguir el precio (subir el stop, ampliar el TP), pero nunca alejar el stop ni quitarlo. Con take profit en 0 el guardián no pone TP al abrir.
+                  </span>
                 </label>
                 <label className="flex items-center gap-2 text-xs">
                   <input type="checkbox" checked={guardian.guard_block_manual_close} onChange={(e) => setGuardian({ ...guardian, guard_block_manual_close: e.target.checked })} />

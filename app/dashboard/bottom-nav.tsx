@@ -59,6 +59,9 @@ const TAB_CFO = { href: "/dashboard/cfo", label: "CFO", icon: "ti-crown" };
 // Ventas (13 oct 2026, pedido de Joel): vendedores, socios y contables. Solo
 // founder, penúltimo tab (justo antes de CFO).
 const TAB_VENTAS = { href: "/dashboard/ventas", label: "Ventas", icon: "ti-briefcase" };
+// Trading (oct 2026): módulo en prueba, solo founder hasta validarlo con
+// traders reales. Va antes de Ventas.
+const TAB_TRADING = { href: "/dashboard/trading", label: "Trading", icon: "ti-chart-candle" };
 
 function NavLink({ tab, active }: { tab: { href: string; label: string; icon: string }; active: boolean }) {
   return (
@@ -109,7 +112,8 @@ export default function BottomNav({ esFounder = false }: { esFounder?: boolean }
           <NavLink key={tab.href} tab={tab} active={isActive(tab.href)} />
         ))}
         <NavLink tab={TAB_CONFIG} active={isActive(TAB_CONFIG.href)} />
-        {esFounder && <NavLink tab={TAB_VENTAS} active={isActive(TAB_VENTAS.href)} />}
+        {esFounder && <NavLink tab={TAB_TRADING} active={isActive(TAB_TRADING.href)} />}
+        {esFounder && <NavLink tab={TAB_VENTAS}active={isActive(TAB_VENTAS.href)} />}
         {esFounder && <NavLink tab={TAB_CFO} active={isActive(TAB_CFO.href)} />}
       </div>
     </div>
