@@ -150,6 +150,50 @@ function hoyISO(): string {
   return fechaHoyPR();
 }
 
+// ---- Calendario de corridas de pago (semanal / bisemanal / quincenal / mensual) ----
+type FrecCorrida = "semanal" | "bisemanal" | "quincenal" | "mensual";
+const FREC_LABEL: Record<FrecCorrida, string> = {
+  semanal: "Semanal",
+  bisemanal: "Bisemanal (cada 2 semanas)",
+  quincenal: "Quincenal (15 y fin de mes)",
+  mensual: "Mensual (fin de mes)",
+};
+const DIAS_SEM = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const MS_DIA = 86400000;
+const aUTC = (iso: string) => new Date(`${iso}T00:00:00Z`);
+const aISO = (d: Date) => d.toISOString().slice(0, 10);
+function sumarDias(iso: string, n: number): string {
+  return aISO(new Date(aUTC(iso).getTime() + n * MS_DIA));
+}
+function ultimoDiaMes(iso: string): string {
+  const d = aUTC(iso);
+  return aISO(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)));
+}
+function fmtCorrida(iso: string): string {
+  const d = aUTC(iso);
+  return `${DIAS_SEM[d.getUTCDay()]} ${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}`;
+}
+// Primera fecha de corrida >= desde.
+function corridaDesde(desde: string, frec: FrecCorrida, ancla: string): string {
+  if (frec === "semanal" || frec === "bisemanal") {
+    const p = frec === "semanal" ? 7 : 14;
+    const diff = Math.round((aUTC(desde).getTime() - aUTC(ancla).getTime()) / MS_DIA);
+    return sumarDias(ancla, Math.ceil(diff / p) * p);
+  }
+  const fin = ultimoDiaMes(desde);
+  if (frec === "mensual") return fin;
+  const quince = `${desde.slice(0, 7)}-15`;
+  return desde <= quince ? quince : fin;
+}
+function moverCorrida(actual: string, dir: 1 | -1, frec: FrecCorrida, ancla: string): string {
+  if (dir > 0) return corridaDesde(sumarDias(actual, 1), frec, ancla);
+  let d = sumarDias(actual, -1);
+  for (let i = 0; i < 40; i++, d = sumarDias(d, -1)) {
+    if (corridaDesde(d, frec, ancla) === d) return d;
+  }
+  return sumarDias(actual, -1);
+}
+
 // Trimestre calendario (Ene-Mar, Abr-Jun, Jul-Sep, Oct-Dic) — el mismo
 // agrupamiento que pide Hacienda PR para el 480.6A/B.
 function trimestreDe(fechaISO: string): number {
@@ -462,6 +506,29 @@ function PagosTab({
   const supabase = createClient();
   const router = useRouter();
   const [fechaPago, setFechaPago] = useState(hoyISO());
+  const [frecCorrida, setFrecCorrida] = useState<FrecCorrida>("bisemanal");
+  const [anclaCorrida, setAnclaCorrida] = useState<string | null>(null);
+  const claveCiclo = `vc_pagos_ciclo_${entidadId ?? "personal"}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(claveCiclo);
+      if (!raw) return;
+      const c = JSON.parse(raw) as { frec?: FrecCorrida; ancla?: string | null };
+      if (c.frec && c.frec in FREC_LABEL) setFrecCorrida(c.frec);
+      if (c.ancla) {
+        setAnclaCorrida(c.ancla);
+        // Al abrir, sugerir de una vez la próxima corrida que toca.
+        const f = c.frec && c.frec in FREC_LABEL ? c.frec : "bisemanal";
+        setFechaPago(corridaDesde(hoyISO(), f, c.ancla));
+      }
+    } catch {}
+  }, [claveCiclo]);
+  function guardarCiclo(frec: FrecCorrida, ancla: string | null) {
+    try {
+      localStorage.setItem(claveCiclo, JSON.stringify({ frec, ancla }));
+    } catch {}
+  }
+  const anclaEf = anclaCorrida ?? fechaPago;
   const [montos, setMontos] = useState<Record<string, string>>({});
   const [pcts, setPcts] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState(false);
@@ -971,15 +1038,70 @@ function PagosTab({
   return (
     <>
       <div className="vc-card mb-3">
-        <div className="mb-2.5 flex items-center justify-between gap-2">
+        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs uppercase tracking-wide text-muted">Corrida de pago</p>
-          <input
-            type="date"
-            className="vc-input flex-shrink-0"
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="Corrida anterior"
+              className="rounded-lg border border-border px-3 py-2 text-base"
+              onClick={() => setFechaPago(moverCorrida(fechaPago, -1, frecCorrida, anclaEf))}
+            >
+              ‹
+            </button>
+            <input
+              type="date"
+              className="vc-input flex-shrink-0"
+              style={{ width: "auto" }}
+              value={fechaPago}
+              onChange={(e) => setFechaPago(e.target.value)}
+            />
+            <button
+              type="button"
+              aria-label="Corrida siguiente"
+              className="rounded-lg border border-border px-3 py-2 text-base"
+              onClick={() => setFechaPago(moverCorrida(fechaPago, 1, frecCorrida, anclaEf))}
+            >
+              ›
+            </button>
+          </div>
+        </div>
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+          <button
+            type="button"
+            className="rounded-lg border border-teal bg-teal/10 px-3 py-1.5 font-medium text-teal"
+            onClick={() => setFechaPago(corridaDesde(hoyISO(), frecCorrida, anclaEf))}
+          >
+            Próxima corrida: {fmtCorrida(corridaDesde(hoyISO(), frecCorrida, anclaEf))}
+          </button>
+          <select
+            className="vc-input"
             style={{ width: "auto" }}
-            value={fechaPago}
-            onChange={(e) => setFechaPago(e.target.value)}
-          />
+            value={frecCorrida}
+            onChange={(e) => {
+              const f = e.target.value as FrecCorrida;
+              setFrecCorrida(f);
+              guardarCiclo(f, anclaCorrida);
+            }}
+          >
+            {(Object.keys(FREC_LABEL) as FrecCorrida[]).map((f) => (
+              <option key={f} value={f}>
+                {FREC_LABEL[f]}
+              </option>
+            ))}
+          </select>
+          {(frecCorrida === "semanal" || frecCorrida === "bisemanal") && (
+            <button
+              type="button"
+              className="rounded-lg border border-border px-3 py-1.5 text-muted"
+              onClick={() => {
+                setAnclaCorrida(fechaPago);
+                guardarCiclo(frecCorrida, fechaPago);
+              }}
+            >
+              {anclaCorrida === fechaPago ? "Esta es tu semana de pago ✓" : "Marcar esta fecha como mi corrida"}
+            </button>
+          )}
         </div>
         {/* 30 sept 2026, feedback de Joel: esto era un párrafo text-xs muted
             — "muy peq y no llama la atención" para un número que de verdad
