@@ -25,11 +25,11 @@ export const MODULOS_VENDEDOR: ModuloVendedor[] = [
   {
     id: "vendedor-portal",
     grupo: "Para vendedores y socios",
-    titulo: "Portal del vendedor",
+    titulo: "Entrar al portal y compartir tu link",
     icono: "ti-briefcase",
     audiencia: ["vendedor"],
     plan: "Para vendedores aprobados",
-    resumen: "Tu link y QR, tus prospectos, tus comisiones y cuánto te toca cobrar.",
+    resumen: "Cómo entrar con tu código y PIN, y cómo usar tu link y QR.",
     donde: "victorcfo.com/socios/portal",
     pasos: [
       {
@@ -43,32 +43,59 @@ export const MODULOS_VENDEDOR: ModuloVendedor[] = [
           "Arriba tienes tu link personal y un QR. Cualquier negocio que se registre por ellos queda conectado a ti automáticamente. Copia el link o descarga el QR para enseñarlo en persona.",
         foto: "Tu link y tu QR",
       },
-      {
-        titulo: "Registra tus prospectos",
-        texto:
-          "En Tus prospectos anota a quien le presentaste VICTOR (nombre, correo, teléfono). Si se registra con ese correo o teléfono en los próximos 60 días, por donde sea, la venta es tuya. Desde ahí lo llamas o le escribes por WhatsApp y llevas el seguimiento.",
-        foto: "Formulario de prospectos y la lista con sus estados",
-      },
-      {
-        titulo: "Visita oficinas de contables",
-        texto:
-          "El registro de oficinas de contables es compartido para no repetir visitas: lo tuyo se ve completo; lo de los demás, solo nombre, pueblo y estado. Anota contacto, interés y seguimiento.",
-        foto: "Lista de oficinas de contables",
-      },
-      {
-        titulo: "Entiende lo que ganas",
-        texto:
-          "Cliente mensual: 70% con su primer pago y el 30% restante cuando llega a su 3er pago. Cliente anual: 20% del año, una sola vez, con su primer pago. Oficina de contables activada: $20 una vez cuando su primer cliente ya pagó, y $10 una vez por cada cliente que traiga, pagado cada 3 meses. Ves lo ya cobrado, lo que está en espera y la próxima fecha de pago.",
-        foto: "Resumen del vendedor con Ya cobrado, En espera y Cómo se calcula",
-      },
-      {
-        titulo: "Guarda tu planilla 480.6SP",
-        texto:
-          "Las comisiones llevan la retención de la Sección 1062.03. El portal te muestra lo retenido en el año: guarda ese comprobante para tu contribución.",
-        foto: "Tarjeta de retención para tu planilla 480.6SP",
-      },
     ],
-    consejos: ["Todo lo que ves como “Ya cobrado” es neto, después de retención. Lo que está “en espera” se calcula al liberarse."],
+    consejos: ["Los siguientes módulos de este manual explican prospectos, comisiones y oficinas de contables."],
+  },
+  {
+    id: "vendedor-prospectos",
+    grupo: "Para vendedores y socios",
+    titulo: "Prospectos y clientes",
+    icono: "ti-users",
+    audiencia: ["vendedor"],
+    plan: "Para vendedores aprobados",
+    resumen: "Registra a quien le presentaste VICTOR y sigue el estado de cada cliente.",
+    donde: "Portal del vendedor → Tus prospectos / Tus clientes",
+    pasos: [
+      { titulo: "Registra el prospecto", texto: "Escribe el nombre (persona o negocio), el pueblo si lo sabes y al menos un correo o un teléfono. Sin uno de los dos no se puede guardar.", foto: "Formulario Registrar prospecto" },
+      { titulo: "Entiende la protección de 60 días", texto: "Si ese correo o teléfono se registra en VICTOR dentro de 60 días, la venta es tuya aunque no haya usado tu link. Si quitas al prospecto, pierdes esa protección.", foto: "Lista de prospectos" },
+      { titulo: "Filtra por pueblo", texto: "Usa el filtro Todos los pueblos para organizar tus visitas por zona.", foto: "Filtro de pueblos" },
+      { titulo: "Mira el estado de tus clientes", texto: "En Tus clientes ves en qué etapa está cada uno: En trial (30 días), Generando comisión, Ciclo completo — cobrado o Cliente canceló — perdido.", foto: "Lista de clientes con su estado" },
+    ],
+    consejos: ["Registra al prospecto el mismo día de la visita: la protección de 60 días cuenta desde que lo anotas."],
+  },
+  {
+    id: "vendedor-comisiones",
+    grupo: "Para vendedores y socios",
+    titulo: "Tus comisiones y pagos",
+    icono: "ti-cash",
+    audiencia: ["vendedor"],
+    plan: "Para vendedores aprobados",
+    resumen: "Cuánto has ganado, cuánto está en espera y cuándo se te paga.",
+    donde: "Portal del vendedor → resumen",
+    pasos: [
+      { titulo: "Lee el resumen", texto: "Arriba ves el Total proyectado (por cobrar + 30% en espera + bonos) y Tu próximo pago. Si aún no hay fecha programada, aparecerá aquí cuando se fije.", foto: "Resumen del vendedor" },
+      { titulo: "Entiende el desglose", texto: "Comisiones listas (bruto), menos la Retención 1062.03, más los Bonos de oficinas (neto), da el Total a recibir.", foto: "Desglose del pago" },
+      { titulo: "Entiende cómo se calcula", texto: "Cliente mensual: 70% con su primer pago y el 30% restante cuando llega a su 3er pago. Cliente anual: 20% del año, una sola vez, con su primer pago.", foto: "Cómo se calcula lo tuyo" },
+      { titulo: "Guarda tu comprobante 480.6SP", texto: "La tarjeta de retención te muestra lo retenido en el año para tu planilla 480.6SP. Guárdala.", foto: "Retención para tu planilla" },
+    ],
+    consejos: ["Lo que ves como “Ya cobrado” es neto, después de retención."],
+  },
+  {
+    id: "vendedor-oficinas",
+    grupo: "Para vendedores y socios",
+    titulo: "Oficinas de contables y bonos",
+    icono: "ti-building",
+    audiencia: ["vendedor"],
+    plan: "Para vendedores aprobados",
+    resumen: "Registra las oficinas que visitas y cobra bonos cuando traen clientes.",
+    donde: "Portal del vendedor → Oficinas de contables / Bonos",
+    pasos: [
+      { titulo: "Busca antes de registrar", texto: "El registro de oficinas es compartido. Busca por nombre, contacto, correo, teléfono o pueblo; si ya está registrada, verás “Ya está registrada” y evitas visitas repetidas.", foto: "Buscador de oficinas" },
+      { titulo: "Registra la oficina", texto: "Pon el nombre de la oficina y escoge el pueblo (obligatorios). Si hay oficinas parecidas, el formulario te avisa. Opcional: contacto, web, Instagram, Facebook, sectores, especialidades y una descripción de lo que viste en la visita.", foto: "Formulario Registrar oficina" },
+      { titulo: "Usa las notas internas", texto: "Las notas internas solo las ves tú; sirven para el seguimiento de la próxima visita.", foto: "Notas internas" },
+      { titulo: "Mira cuáles ya tienen el portal", texto: "Las oficinas que activaron su portal muestran “Ya tiene el portal ✓”. Esas son las que generan bonos.", foto: "Oficina con el portal activo" },
+      { titulo: "Sigue tus bonos", texto: "Bonos por tus oficinas de contables muestra lo por cobrar en total, las que esperan su primer cliente y el neto estimado por trimestre, después de retención. Oficina activada: $20 una vez cuando su primer cliente ya pagó, y $10 una vez por cada cliente que traiga; se paga cada 3 meses.", foto: "Tarjeta de bonos por trimestre" },
+    ],
   },
   {
     id: "socios",

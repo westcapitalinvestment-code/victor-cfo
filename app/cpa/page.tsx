@@ -306,6 +306,12 @@ export default async function CpaPortalPage() {
           >
             <i className="ti ti-users text-sm" /> Mi equipo
           </Link>
+          <Link
+            href="/cpa/manual"
+            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-90"
+          >
+            <i className="ti ti-book text-sm" /> Manual
+          </Link>
           <span className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[10px] text-muted">
             <i className="ti ti-lock" /> Solo lectura
           </span>
