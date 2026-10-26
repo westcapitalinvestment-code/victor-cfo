@@ -140,6 +140,14 @@ export default async function ConfigPage() {
         >
           Escríbenos
         </a>
+        {profile?.plan === "gratis" && (
+          <Link
+            href="/dashboard/manual-gratis"
+            className="mt-2 block rounded-lg border border-border p-3 text-center text-sm font-medium no-underline"
+          >
+            Manual del plan Gratis
+          </Link>
+        )}
       </div>
 
       {entities && entities.length > 0 && (

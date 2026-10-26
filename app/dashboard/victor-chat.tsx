@@ -693,7 +693,7 @@ export default function VictorChat({
           (el panel ya trae su propio acceso en el encabezado). */}
       {!open && (
         <a
-          href="/dashboard/manual"
+          href={bloqueado ? "/dashboard/manual-gratis" : "/dashboard/manual"}
           aria-label="Abrir el Manual de Usuario"
           className="fixed right-4 z-40 flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-2 text-sm font-medium shadow-lg"
           style={{ bottom: "calc(10rem + env(safe-area-inset-bottom))", color: "#1D9E75" }}
@@ -728,7 +728,7 @@ export default function VictorChat({
               </p>
             </div>
             <a
-              href="/dashboard/manual"
+              href={bloqueado ? "/dashboard/manual-gratis" : "/dashboard/manual"}
               title="Manual de usuario"
               aria-label="Manual de usuario"
               className="flex h-7 items-center gap-1 rounded-full bg-white/20 px-2.5 text-xs font-medium text-white"

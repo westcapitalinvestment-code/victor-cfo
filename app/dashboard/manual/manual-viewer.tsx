@@ -35,7 +35,7 @@ function Foto({ src, alt, mostrarPendientes }: { src: string; alt: string; mostr
   );
 }
 
-function Detalle({ m, mostrarPendientes, onVolver, fotos }: { m: ModuloManual; mostrarPendientes: boolean; onVolver: () => void; fotos: boolean }) {
+function Detalle({ m, mostrarPendientes, onVolver, fotos, pie }: { m: ModuloManual; mostrarPendientes: boolean; onVolver: () => void; fotos: boolean; pie?: string }) {
   return (
     <div>
       <button type="button" onClick={onVolver} className="mb-3 text-sm font-medium text-teal print:hidden">
@@ -115,7 +115,7 @@ function Detalle({ m, mostrarPendientes, onVolver, fotos }: { m: ModuloManual; m
       )}
 
       <p className="mt-4 text-center text-sm text-muted print:hidden">
-        ¿Algo no te quedó claro? Pregúntale a VICTOR: el chat verde de abajo conoce esta guía.
+        {pie ?? "¿Algo no te quedó claro? Pregúntale a VICTOR: el chat verde de abajo conoce esta guía."}
       </p>
     </div>
   );
@@ -127,7 +127,9 @@ export default function ManualViewer({
   titulo = "Manual de Usuario",
   subtitulo = "Guías paso a paso de cada parte de VICTOR CFO.",
   fotos = true,
+  pie,
 }: {
+  pie?: string;
   modulos?: ModuloManual[];
   grupos?: readonly string[];
   titulo?: string;
@@ -182,7 +184,7 @@ export default function ManualViewer({
       </div>
 
       {modulo ? (
-        <Detalle m={modulo} mostrarPendientes={mostrarPendientes} onVolver={() => abrir(null)} fotos={fotos} />
+        <Detalle m={modulo} mostrarPendientes={mostrarPendientes} onVolver={() => abrir(null)} fotos={fotos} pie={pie} />
       ) : (
         <>
           <input
