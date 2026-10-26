@@ -134,6 +134,7 @@ export default function TradingPage() {
   const [nNombre, setNNombre] = useState("");
   const [nTipo, setNTipo] = useState<"demo" | "real">("demo");
   const [nBalance, setNBalance] = useState<number | null>(null);
+  const [mostrarNueva, setMostrarNueva] = useState(false);
 
   // Calculadora
   const [cBalance, setCBalance] = useState<number | null>(null);
@@ -276,6 +277,7 @@ export default function TradingPage() {
     if (e || !data) return setError("No se pudo crear la cuenta.");
     setNNombre("");
     setNBalance(null);
+    setMostrarNueva(false);
     await cargar(data.id);
   }
 
@@ -499,9 +501,9 @@ export default function TradingPage() {
       {error && <p className="mb-3 text-xs text-red">{error}</p>}
       {msg && <p className="mb-3 text-xs text-teal">{msg}</p>}
 
-      {cuentas.length === 0 ? (
+      {cuentas.length === 0 || mostrarNueva ? (
         <div className="vc-card flex flex-col gap-3">
-          <p className="text-sm font-medium">Crea tu primera cuenta</p>
+          <p className="text-sm font-medium">{cuentas.length === 0 ? "Crea tu primera cuenta" : "Nueva cuenta"}</p>
           <input className="vc-input" placeholder="Nombre (ej. Axi real)" value={nNombre} onChange={(e) => setNNombre(e.target.value)} maxLength={80} />
           <div className="flex gap-2">
             <select className="vc-input" value={nTipo} onChange={(e) => setNTipo(e.target.value as "demo" | "real")}>
@@ -511,6 +513,9 @@ export default function TradingPage() {
             <NumInput value={nBalance} onChange={setNBalance} placeholder="Balance inicial $" />
           </div>
           <button className="vc-btn-primary" onClick={crearCuenta}>Crear cuenta</button>
+          {cuentas.length > 0 && (
+            <button className="text-xs text-muted" onClick={() => setMostrarNueva(false)}>Cancelar</button>
+          )}
         </div>
       ) : (
         <>
@@ -528,6 +533,7 @@ export default function TradingPage() {
                 <option key={c.id} value={c.id}>{c.nombre} ({c.tipo})</option>
               ))}
             </select>
+            <button className="rounded-lg border border-border px-3 text-xs whitespace-nowrap" onClick={() => setMostrarNueva(true)}>+ Cuenta</button>
             <label className="vc-btn-primary cursor-pointer whitespace-nowrap text-center">
               Subir reporte
               <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && subirReporte(e.target.files[0])} />
