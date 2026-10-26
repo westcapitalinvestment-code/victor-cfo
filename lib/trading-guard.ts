@@ -11,8 +11,10 @@ export type ParametrosGuardian = {
   tamanoPip: number; // tamano de 1 pip en precio (ej. 0.1 oro, 0.0001 EURUSD, 1 NAS100)
   relacionTP: number;
   maxPerdedoresDia: number;
-  perdidaMaxDiaUSD: number;
-  equityMinimoUSD: number;
+  perdidaMaxDiaPct: number; // % del balance con que empezo el dia
+  perdidaMaxDiaUSD: number; // dolares fijos (0 = usar el %)
+  equityMinimoPct: number; // % del balance con que empezo el dia
+  equityMinimoUSD: number; // dolares fijos (0 = usar el %)
   maxAbiertos: number;
   maxTradesDia: number; // 0 = sin limite
   esperaTrasPerdidaMin: number; // 0 = sin espera
@@ -56,8 +58,10 @@ input double SLPips             = ${n(p.distanciaPips, 2)};      // distancia de
 input double PipSize            = ${n(p.tamanoPip, 5)};      // tamano de 1 pip en precio (oro 0.1, EURUSD 0.0001, USDJPY 0.01, NAS100/US30 1)
 input double RewardRatio        = ${n(p.relacionTP)};      // TP inicial = SL x este numero (0 = sin TP al abrir, lo pones tu)
 input int    MaxLosersPerDay    = ${Math.max(1, Math.round(p.maxPerdedoresDia))};        // perdedores maximos por dia
-input double MaxDailyLossUSD    = ${n(p.perdidaMaxDiaUSD)};     // perdida diaria maxima en dolares (incluye flotante)
-input double MinEquityUSD       = ${n(p.equityMinimoUSD)};    // si el equity baja de aqui: bloqueo total
+input double MaxDailyLossPct    = ${n(p.perdidaMaxDiaPct)};      // perdida diaria maxima en % del balance con que empezo el dia
+input double MaxDailyLossUSD    = ${n(p.perdidaMaxDiaUSD)};      // o en dolares fijos (0 = usar el %)
+input double MinEquityPct       = ${n(p.equityMinimoPct)};     // si el equity baja de este % del balance de inicio del dia: bloqueo total
+input double MinEquityUSD       = ${n(p.equityMinimoUSD)};      // o en dolares fijos (0 = usar el %)
 input int    MaxOpenPositions   = ${Math.max(1, Math.round(p.maxAbiertos))};        // trades abiertos a la vez
 input int    MaxTradesPerDay    = ${Math.max(0, Math.round(p.maxTradesDia))};        // trades maximos por dia (0 = sin limite)
 input int    CooldownMin        = ${Math.max(0, Math.round(p.esperaTrasPerdidaMin))};       // minutos de espera tras una perdida (0 = sin espera)
@@ -152,10 +156,13 @@ bool IsBlocked(string &why)
    int losers, manual, closed; double pl; datetime lastLoss;
    DayStats(losers, pl, manual, closed, lastLoss);
    double total = pl + FloatingPL();
+   double startBal = AccountInfoDouble(ACCOUNT_BALANCE) - pl;   // balance con que empezo el dia
+   double maxLoss  = (MaxDailyLossUSD > 0) ? MaxDailyLossUSD : startBal * MaxDailyLossPct / 100.0;
+   double minEq    = (MinEquityUSD > 0) ? MinEquityUSD : startBal * MinEquityPct / 100.0;
    if(BlockOnManualClose && manual > 0)        { why = "BLOQUEADO: cerraste un trade a mano hoy"; return true; }
    if(losers >= MaxLosersPerDay)               { why = "BLOQUEADO: " + IntegerToString(losers) + " perdedores hoy"; return true; }
-   if(total <= -MaxDailyLossUSD)               { why = "BLOQUEADO: perdida diaria maxima"; return true; }
-   if(AccountInfoDouble(ACCOUNT_EQUITY) <= MinEquityUSD) { why = "BLOQUEADO: equity minimo. Revisa tu plan."; return true; }
+   if(total <= -maxLoss)                       { why = "BLOQUEADO: perdida diaria maxima (" + DoubleToString(maxLoss, 2) + ")"; return true; }
+   if(AccountInfoDouble(ACCOUNT_EQUITY) <= minEq) { why = "BLOQUEADO: equity minimo. Revisa tu plan."; return true; }
    why = "OK | perdedores hoy: " + IntegerToString(losers) + "/" + IntegerToString(MaxLosersPerDay)
        + " | P/L hoy: " + DoubleToString(total, 2);
    return false;

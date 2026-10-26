@@ -379,11 +379,6 @@ export default function TradingPage() {
     ? calcularLote({ balance: balanceCalc, riesgoPct: reglas.riesgo_por_trade_pct, distanciaSL: distPrecio, contrato, usdPorQuote })
     : null;
 
-  // Guardián: valores sugeridos si el usuario no los puso
-  const refBalance = balanceActual > 0 ? balanceActual : balanceInicial;
-  const perdidaDiaUSD = guardian.guard_daily_loss_usd ?? Math.round(((refBalance * reglas.perdida_max_dia_pct) / 100) * 100) / 100;
-  const equityMinUSD = guardian.guard_min_equity_usd ?? Math.round(refBalance * 0.8 * 100) / 100;
-
   function descargarGuardian() {
     const codigo = generarGuardianMQ5({
       simbolo: guardian.guard_symbol,
@@ -392,8 +387,10 @@ export default function TradingPage() {
       tamanoPip: guardian.guard_pip_size,
       relacionTP: guardian.guard_reward_ratio,
       maxPerdedoresDia: reglas.max_perdedores_dia,
-      perdidaMaxDiaUSD: perdidaDiaUSD,
-      equityMinimoUSD: equityMinUSD,
+      perdidaMaxDiaPct: reglas.perdida_max_dia_pct,
+      perdidaMaxDiaUSD: guardian.guard_daily_loss_usd ?? 0,
+      equityMinimoPct: 80,
+      equityMinimoUSD: guardian.guard_min_equity_usd ?? 0,
       maxAbiertos: guardian.guard_max_open,
       maxTradesDia: reglas.max_trades_dia,
       esperaTrasPerdidaMin: reglas.espera_tras_perdida_min,
@@ -808,13 +805,13 @@ export default function TradingPage() {
                   <label className="flex flex-col gap-1"><span className="text-muted">Trades abiertos a la vez</span>
                     <NumInput value={guardian.guard_max_open} onChange={(n) => setGuardian({ ...guardian, guard_max_open: n ?? 1 })} />
                   </label>
-                  <label className="flex flex-col gap-1"><span className="text-muted">Pérdida máxima del día ($)</span>
-                    <NumInput value={perdidaDiaUSD} onChange={(n) => setGuardian({ ...guardian, guard_daily_loss_usd: n })} />
-                    <span className="text-[10px] text-muted">Sugerido: {reglas.perdida_max_dia_pct}% de tu balance</span>
+                  <label className="flex flex-col gap-1"><span className="text-muted">Pérdida máxima del día en $ (opcional)</span>
+                    <NumInput value={guardian.guard_daily_loss_usd} onChange={(n) => setGuardian({ ...guardian, guard_daily_loss_usd: n })} placeholder="Automática" />
+                    <span className="text-[10px] text-muted">Vacío = {reglas.perdida_max_dia_pct}% del balance que tenga MT5 al empezar el día</span>
                   </label>
-                  <label className="flex flex-col gap-1"><span className="text-muted">Equity mínimo ($)</span>
-                    <NumInput value={equityMinUSD} onChange={(n) => setGuardian({ ...guardian, guard_min_equity_usd: n })} />
-                    <span className="text-[10px] text-muted">Si baja de aquí, se bloquea todo</span>
+                  <label className="flex flex-col gap-1"><span className="text-muted">Equity mínimo en $ (opcional)</span>
+                    <NumInput value={guardian.guard_min_equity_usd} onChange={(n) => setGuardian({ ...guardian, guard_min_equity_usd: n })} placeholder="Automático" />
+                    <span className="text-[10px] text-muted">Vacío = 80% del balance de MT5 al empezar el día. Si baja de ahí, se bloquea todo</span>
                   </label>
                 </div>
                 <label className="flex flex-col gap-1 text-xs">
