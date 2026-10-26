@@ -28,7 +28,17 @@ import { Anillo, Calendario, CurvaCapital, nombreMes } from "./graficos";
 // Módulo Trading (oct 2026) — organizador, NO da señales ni consejos.
 // Panel (calendario, curva, perfil), Bitácora por mes y por día, y Riesgo
 // (reglas propias, impacto, guardián descargable para MT5, calculadora).
-type Cuenta = { id: string; nombre: string; tipo: "demo" | "real"; balance_inicial: number; numero_cuenta: string | null; broker: string | null };
+type Cuenta = {
+  id: string;
+  nombre: string;
+  tipo: "demo" | "real";
+  balance_inicial: number;
+  numero_cuenta: string | null;
+  broker: string | null;
+  balance_actual: number | null;
+  equity_actual: number | null;
+  last_sync_at: string | null;
+};
 type FilaTrade = {
   id: string;
   ticket: string;
@@ -134,15 +144,21 @@ export default function TradingPage() {
   const [cFx, setCFx] = useState<number | null>(null);
 
   const cuenta = cuentas.find((c) => c.id === cuentaId) ?? null;
+  const [syncToken, setSyncToken] = useState<string | null>(null);
 
   async function cargar(preferida?: string) {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return router.push("/login");
     const [{ data: cs }, { data: rr }] = await Promise.all([
-      supabase.from("trading_accounts").select("id, nombre, tipo, balance_inicial, numero_cuenta, broker").order("created_at"),
+      supabase.from("trading_accounts").select("id, nombre, tipo, balance_inicial, numero_cuenta, broker, balance_actual, equity_actual, last_sync_at").order("created_at"),
       supabase.from("risk_rules").select("*").eq("owner_id", u.user.id).maybeSingle(),
     ]);
-    const lista = ((cs ?? []) as Cuenta[]).map((c) => ({ ...c, balance_inicial: Number(c.balance_inicial) }));
+    const lista = ((cs ?? []) as Cuenta[]).map((c) => ({
+      ...c,
+      balance_inicial: Number(c.balance_inicial),
+      balance_actual: c.balance_actual == null ? null : Number(c.balance_actual),
+      equity_actual: c.equity_actual == null ? null : Number(c.equity_actual),
+    }));
     setCuentas(lista);
     if (rr) {
       const r = rr as Record<string, unknown>;
@@ -183,6 +199,8 @@ export default function TradingPage() {
         ganancia: Number(t.ganancia),
       }))
     );
+    const { data: tk } = await supabase.from("trading_sync_tokens").select("token").eq("account_id", id).maybeSingle();
+    setSyncToken(tk?.token ?? null);
     setMes("todo");
     setDiaSel(null);
   }
@@ -191,6 +209,59 @@ export default function TradingPage() {
     cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // En vivo: si la cuenta está sincronizada con MT5, se refresca sola cada 30 s (sin perder el mes ni el día elegidos).
+  useEffect(() => {
+    if (!syncToken || !cuentaId) return;
+    const id = setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+      const { data: c } = await supabase.from("trading_accounts").select("id, balance_actual, equity_actual, last_sync_at").eq("id", cuentaId).maybeSingle();
+      if (c) {
+        setCuentas((prev) =>
+          prev.map((x) => (x.id === cuentaId ? { ...x, balance_actual: c.balance_actual == null ? null : Number(c.balance_actual), equity_actual: c.equity_actual == null ? null : Number(c.equity_actual), last_sync_at: c.last_sync_at } : x))
+        );
+      }
+      const { data } = await supabase.from("trades").select("*").eq("account_id", cuentaId).order("hora_apertura", { ascending: false }).limit(3000);
+      if (data) {
+        setTrades(
+          (data as FilaTrade[]).map((t) => ({
+            ...t,
+            volumen: Number(t.volumen),
+            precio_apertura: t.precio_apertura === null ? null : Number(t.precio_apertura),
+            sl: t.sl === null ? null : Number(t.sl),
+            tp: t.tp === null ? null : Number(t.tp),
+            precio_cierre: t.precio_cierre === null ? null : Number(t.precio_cierre),
+            comision: Number(t.comision),
+            swap: Number(t.swap),
+            ganancia: Number(t.ganancia),
+          }))
+        );
+      }
+    }, 30000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncToken, cuentaId]);
+
+  async function activarSync() {
+    if (!cuenta) return;
+    setError(null);
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    const token = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    const { error: e } = await supabase.from("trading_sync_tokens").upsert({ account_id: cuenta.id, owner_id: u.user.id, token, created_at: new Date().toISOString(), last_sync_at: null });
+    if (e) return setError(`No se pudo activar la sincronización: ${e.message}`);
+    setSyncToken(token);
+    setMsg("Sincronización activada. Descarga el guardián otra vez para que lleve tu token.");
+  }
+
+  async function desactivarSync() {
+    if (!cuenta) return;
+    await supabase.from("trading_sync_tokens").delete().eq("account_id", cuenta.id);
+    setSyncToken(null);
+    setMsg("Sincronización desactivada. El guardián que ya tengas instalado dejará de enviar datos.");
+  }
 
   async function crearCuenta() {
     setError(null);
@@ -257,7 +328,8 @@ export default function TradingPage() {
     setTrades((prev) => prev.map((x) => (x.id === t.id ? { ...x, nota: nota.trim() || null, cumpli_plan: cumpli } : x)));
   }
 
-  const balanceInicial = cuenta?.balance_inicial ?? 0;
+  // Si la cuenta está sincronizada, el balance real viene de MT5; si no, lo escribe el usuario.
+  const balanceInicial = cuenta?.balance_actual ?? cuenta?.balance_inicial ?? 0;
 
   // Todo se evalúa con el historial completo (la revancha o el límite diario dependen de trades anteriores).
   const evaluadosAll = useMemo(() => evaluarCumplimiento(trades as unknown as Trade[], reglas, balanceInicial), [trades, reglas, balanceInicial]);
@@ -325,6 +397,8 @@ export default function TradingPage() {
       maxAbiertos: guardian.guard_max_open,
       maxTradesDia: reglas.max_trades_dia,
       esperaTrasPerdidaMin: reglas.espera_tras_perdida_min,
+      syncUrl: syncToken ? `${window.location.origin}/api/trading/sync` : "",
+      syncToken: syncToken ?? "",
       modoBloqueo: guardian.guard_lock_mode,
       bloquearCierreManual: guardian.guard_block_manual_close,
     });
@@ -462,6 +536,30 @@ export default function TradingPage() {
               <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && subirReporte(e.target.files[0])} />
             </label>
           </div>
+
+          {syncToken && (
+            <div className="vc-card mb-3 flex flex-wrap items-center justify-between gap-2 !p-3 text-xs">
+              {(() => {
+                const ult = cuenta?.last_sync_at ? new Date(cuenta.last_sync_at).getTime() : 0;
+                const min = ult ? Math.round((Date.now() - ult) / 60000) : null;
+                const vivo = min !== null && min <= 3;
+                return (
+                  <>
+                    <span className="flex items-center gap-2">
+                      <span className="inline-block h-2 w-2 rounded-full" style={{ background: vivo ? "#1f9d74" : "#e0a31a" }} />
+                      {min === null ? "Esperando la primera señal de MT5" : vivo ? "En vivo desde MT5" : `Sin señal hace ${min} min (¿MT5 cerrado?)`}
+                    </span>
+                    {cuenta?.balance_actual != null && (
+                      <span className="text-muted">
+                        Balance <b className="text-[inherit]">{formatMoney(cuenta.balance_actual)}</b>
+                        {cuenta.equity_actual != null && <> · Equity <b className="text-[inherit]">{formatMoney(cuenta.equity_actual)}</b></>}
+                      </span>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
 
           <div className="mb-4 flex gap-2">
             {([["panel", "Panel"], ["bitacora", "Bitácora"], ["riesgo", "Riesgo"]] as const).map(([t, nombre]) => (
@@ -643,6 +741,12 @@ export default function TradingPage() {
 
               <div className="vc-card mb-4 flex flex-col gap-3">
                 <p className="text-xs uppercase tracking-wide text-muted">Mi cuenta</p>
+                {cuenta?.balance_actual != null ? (
+                  <p className="text-sm">
+                    Balance en vivo desde MT5: <span className="font-medium">{formatMoney(cuenta.balance_actual)}</span>
+                    <span className="block text-[10px] text-muted">Se actualiza solo mientras el guardián esté corriendo en MT5. Se usa para el riesgo por trade, el lote y los límites.</span>
+                  </p>
+                ) : (
                 <div className="flex items-end gap-2">
                   <label className="flex flex-1 flex-col gap-1 text-xs">
                     <span className="text-muted">Balance de tu cuenta hoy ($)</span>
@@ -650,6 +754,7 @@ export default function TradingPage() {
                   </label>
                   <button className="rounded-lg border border-border px-3 py-2 text-xs" onClick={guardarBalance}>Guardar</button>
                 </div>
+                )}
                 <p className="text-[10px] text-muted">Se usa para calcular tu riesgo por trade, el lote y los límites del guardián. El reporte no incluye depósitos ni retiros, por eso no lo calculo solo: actualízalo cuando cambie.</p>
               </div>
 
@@ -730,6 +835,30 @@ export default function TradingPage() {
                 <div className="flex gap-2">
                   <button className="vc-btn-primary" onClick={guardarReglas}>Guardar reglas</button>
                   <button className="rounded-lg border border-[#1B3A5C] px-4 text-sm font-medium text-[#1B3A5C]" onClick={descargarGuardian}>Descargar para MT5</button>
+                </div>
+                <div className="rounded-lg border border-border p-3 text-xs">
+                  <p className="mb-1 font-medium">Sincronización en vivo</p>
+                  {syncToken ? (
+                    <>
+                      <p className="text-muted">
+                        Activa para <b>{cuenta?.nombre}</b>. El guardián envía tus trades cerrados y tu balance cada 30 segundos, y este panel se actualiza solo. Si cambiaste algo, <b>descarga el guardián otra vez</b> y reemplázalo en MT5 (lleva tu token adentro).
+                      </p>
+                      <div className="mt-2 flex gap-3">
+                        <button className="text-teal" onClick={activarSync}>Generar token nuevo</button>
+                        <button className="text-red" onClick={desactivarSync}>Desactivar</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-muted">Sin subir reportes: el guardián manda tus trades y tu balance a este panel mientras MT5 esté abierto.</p>
+                      <button className="mt-2 rounded-lg border border-[#1B3A5C] px-3 py-1.5 font-medium text-[#1B3A5C]" onClick={activarSync}>Activar sincronización</button>
+                    </>
+                  )}
+                  {syncToken && (
+                    <p className="mt-2 text-[10px] text-muted">
+                      Una sola vez en MT5: <b>Herramientas → Opciones → Asesores Expertos</b>, marca <b>Permitir WebRequest para las URL listadas</b> y agrega <b>{typeof window !== "undefined" ? window.location.origin : ""}</b>.
+                    </p>
+                  )}
                 </div>
                 <details className="text-[11px] text-muted">
                   <summary className="cursor-pointer text-xs font-medium text-teal">Cómo instalarlo en MT5</summary>

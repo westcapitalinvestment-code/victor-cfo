@@ -18,6 +18,8 @@ export type ParametrosGuardian = {
   esperaTrasPerdidaMin: number; // 0 = sin espera
   modoBloqueo: "total" | "flexible" | "ninguno";
   bloquearCierreManual: boolean;
+  syncUrl?: string; // direccion de VICTOR para sincronizar (vacio = sin sincronizacion)
+  syncToken?: string; // token de la cuenta
 };
 
 const n = (v: number, d = 2) => {
@@ -25,6 +27,7 @@ const n = (v: number, d = 2) => {
   return String(Number(x.toFixed(d)));
 };
 const b = (v: boolean) => (v ? "true" : "false");
+const q = (s: string) => s.replace(/[^A-Za-z0-9:/._-]/g, "");
 const sym = (s: string) => s.replace(/[^A-Za-z0-9._]/g, "").slice(0, 20) || "XAUUSD";
 
 export function generarGuardianMQ5(p: ParametrosGuardian): string {
@@ -62,6 +65,9 @@ input int    DeviationPts       = 30;       // deslizamiento maximo
 input bool   LockSLTP           = ${b(p.modoBloqueo !== "ninguno")};     // true = el guardian vigila el SL/TP
 input bool   FlexibleLock       = ${b(p.modoBloqueo === "flexible")};     // true = puedes mover el TP libremente y el SL solo a tu favor (nunca alejarlo ni quitarlo)
 input bool   BlockOnManualClose = ${b(p.bloquearCierreManual)};     // true = cerrar un trade a mano bloquea el resto del dia
+input string SyncURL            = "${q(p.syncUrl ?? "")}"; // direccion de VICTOR (permitela en Herramientas > Opciones > Asesores Expertos > WebRequest)
+input string SyncToken          = "${q(p.syncToken ?? "")}"; // token de tu cuenta de trading. No lo compartas.
+input int    SyncDays           = 30;       // dias de historial a revisar al sincronizar
 
 string P = "VG_";
 double SLDistance = 0;   // = SLPips x PipSize (se calcula al iniciar)
@@ -300,6 +306,124 @@ void UpdatePanel()
    ObjectSetString(0, P + "TM", OBJPROP_TEXT, "Cierra la vela en " + tm);
 }
 
+//------------------------------------------------------------------
+// Sincronizacion con VICTOR: envia los trades cerrados y el balance cada ~30 s.
+string g_sync = "";
+datetime g_lastTry = 0;
+
+string JStr(string s)
+{
+   StringReplace(s, "\\", "");
+   StringReplace(s, "\"", "");
+   return "\"" + s + "\"";
+}
+string JTime(datetime t) { return JStr(TimeToString(t, TIME_DATE | TIME_SECONDS)); }
+
+void SyncTick()
+{
+   if(SyncToken == "" || SyncURL == "") return;
+   if(TimeLocal() - g_lastTry < 30) return;
+   g_lastTry = TimeLocal();
+
+   datetime to = TimeCurrent();
+   if(!HistorySelect(to - (datetime)SyncDays * 86400, to + 60)) return;
+   int n = HistoryDealsTotal();
+
+   // 1) posiciones ya cerradas que todavia no enviamos
+   ulong pids[];
+   int np = 0;
+   for(int i = 0; i < n && np < 100; i++)
+   {
+      ulong tk = HistoryDealGetTicket(i);
+      long entry = HistoryDealGetInteger(tk, DEAL_ENTRY);
+      long type  = HistoryDealGetInteger(tk, DEAL_TYPE);
+      if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_INOUT) continue;
+      if(type != DEAL_TYPE_BUY && type != DEAL_TYPE_SELL) continue;
+      ulong pid = (ulong)HistoryDealGetInteger(tk, DEAL_POSITION_ID);
+      if(GlobalVariableCheck(P + "SENT_" + (string)pid)) continue;
+      if(PositionSelectByTicket(pid)) continue;   // sigue abierta
+      bool dup = false;
+      for(int k = 0; k < np; k++) if(pids[k] == pid) { dup = true; break; }
+      if(dup) continue;
+      ArrayResize(pids, np + 1);
+      pids[np] = pid;
+      np++;
+   }
+
+   // 2) armar el detalle de cada una
+   string items = "";
+   ulong sentIds[];
+   int ns = 0;
+   for(int j = 0; j < np; j++)
+   {
+      if(!HistorySelectByPosition(pids[j])) continue;
+      int m = HistoryDealsTotal();
+      datetime tOpen = 0, tClose = 0;
+      double pOpen = 0, pClose = 0, vol = 0, sl = 0, tp = 0, com = 0, swp = 0, prof = 0;
+      string side = "buy", sym = "";
+      for(int d = 0; d < m; d++)
+      {
+         ulong tk = HistoryDealGetTicket(d);
+         long entry = HistoryDealGetInteger(tk, DEAL_ENTRY);
+         long type  = HistoryDealGetInteger(tk, DEAL_TYPE);
+         com  += HistoryDealGetDouble(tk, DEAL_COMMISSION) + HistoryDealGetDouble(tk, DEAL_FEE);
+         swp  += HistoryDealGetDouble(tk, DEAL_SWAP);
+         prof += HistoryDealGetDouble(tk, DEAL_PROFIT);
+         if(entry == DEAL_ENTRY_IN)
+         {
+            if(tOpen == 0)
+            {
+               tOpen = (datetime)HistoryDealGetInteger(tk, DEAL_TIME);
+               pOpen = HistoryDealGetDouble(tk, DEAL_PRICE);
+               side  = (type == DEAL_TYPE_BUY) ? "buy" : "sell";
+               sym   = HistoryDealGetString(tk, DEAL_SYMBOL);
+            }
+            vol += HistoryDealGetDouble(tk, DEAL_VOLUME);
+         }
+         else if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT)
+         {
+            tClose = (datetime)HistoryDealGetInteger(tk, DEAL_TIME);
+            pClose = HistoryDealGetDouble(tk, DEAL_PRICE);
+            sl = HistoryDealGetDouble(tk, DEAL_SL);
+            tp = HistoryDealGetDouble(tk, DEAL_TP);
+         }
+      }
+      if(tOpen == 0 || tClose == 0 || sym == "") continue;
+      if(sl == 0 && GlobalVariableCheck(P + "SL_" + (string)pids[j])) sl = GlobalVariableGet(P + "SL_" + (string)pids[j]);
+      string it = "{\"ticket\":" + JStr((string)pids[j]) + ",\"symbol\":" + JStr(sym) + ",\"side\":" + JStr(side)
+         + ",\"volume\":" + DoubleToString(vol, 2)
+         + ",\"open_time\":" + JTime(tOpen) + ",\"open_price\":" + DoubleToString(pOpen, 8)
+         + ",\"sl\":" + DoubleToString(sl, 8) + ",\"tp\":" + DoubleToString(tp, 8)
+         + ",\"close_time\":" + JTime(tClose) + ",\"close_price\":" + DoubleToString(pClose, 8)
+         + ",\"commission\":" + DoubleToString(com, 2) + ",\"swap\":" + DoubleToString(swp, 2)
+         + ",\"profit\":" + DoubleToString(prof, 2) + "}";
+      items += (items == "" ? "" : ",") + it;
+      ArrayResize(sentIds, ns + 1);
+      sentIds[ns] = pids[j];
+      ns++;
+   }
+
+   // 3) enviar (siempre, aunque no haya trades nuevos: asi se actualiza el balance)
+   string body = "{\"token\":" + JStr(SyncToken)
+      + ",\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2)
+      + ",\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
+      + ",\"trades\":[" + items + "]}";
+   char data[], res[];
+   string rh;
+   StringToCharArray(body, data, 0, StringLen(body), CP_UTF8);
+   int code = WebRequest("POST", SyncURL, "Content-Type: application/json\r\n", 8000, data, res, rh);
+   if(code == -1)
+      g_sync = "Sync: permite " + SyncURL + " en Opciones > Asesores Expertos";
+   else if(code == 200)
+   {
+      for(int q = 0; q < ns; q++) GlobalVariableSet(P + "SENT_" + (string)sentIds[q], 1);
+      g_sync = "Sync OK " + TimeToString(TimeLocal(), TIME_MINUTES) + " (" + IntegerToString(ns) + " nuevos)";
+   }
+   else
+      g_sync = "Sync error HTTP " + IntegerToString(code);
+   ObjectSetString(0, P + "SY", OBJPROP_TEXT, g_sync);
+}
+
 int OnInit()
 {
    trade.SetDeviationInPoints(DeviationPts);
@@ -317,6 +441,11 @@ int OnInit()
    ObjectSetInteger(0, P + "TM", OBJPROP_YDISTANCE, 95);
    ObjectSetInteger(0, P + "TM", OBJPROP_COLOR, clrDeepSkyBlue);
    ObjectSetInteger(0, P + "TM", OBJPROP_FONTSIZE, 12);
+   ObjectCreate(0, P + "SY", OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, P + "SY", OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, P + "SY", OBJPROP_YDISTANCE, 125);
+   ObjectSetInteger(0, P + "SY", OBJPROP_COLOR, clrSilver);
+   ObjectSetInteger(0, P + "SY", OBJPROP_FONTSIZE, 9);
    EventSetTimer(1);
    UpdatePanel();
    return INIT_SUCCEEDED;
@@ -328,7 +457,7 @@ void OnDeinit(const int reason)
    ObjectsDeleteAll(0, P);
 }
 
-void OnTimer()  { Guard(); UpdatePanel(); }
+void OnTimer()  { Guard(); UpdatePanel(); SyncTick(); }
 void OnTick()   { Guard(); }
 
 void OnChartEvent(const int id, const long &lp, const double &dp, const string &sp)
