@@ -50,15 +50,15 @@ export function Calendario({
   return (
     <div className="vc-card !p-3">
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-medium">
-          {MESES[m - 1]} {a} <span className={`ml-2 text-xs ${totalMes >= 0 ? "text-teal" : "text-red"}`}>{formatMoney(totalMes)}</span>
+        <p className="text-base font-medium">
+          {MESES[m - 1]} {a} <span className={`ml-2 text-sm ${totalMes >= 0 ? "text-teal" : "text-red"}`}>{formatMoney(totalMes)}</span>
         </p>
         <div className="flex gap-1">
-          <button className="rounded-lg border border-border px-2 py-0.5 text-xs" onClick={() => onCambiarMes(-1)} aria-label="Mes anterior">‹</button>
-          <button className="rounded-lg border border-border px-2 py-0.5 text-xs" onClick={() => onCambiarMes(1)} aria-label="Mes siguiente">›</button>
+          <button className="rounded-lg border border-border px-2 py-0.5 text-sm" onClick={() => onCambiarMes(-1)} aria-label="Mes anterior">‹</button>
+          <button className="rounded-lg border border-border px-2 py-0.5 text-sm" onClick={() => onCambiarMes(1)} aria-label="Mes siguiente">›</button>
         </div>
       </div>
-      <div className="grid grid-cols-8 gap-1 text-center text-[10px] text-muted">
+      <div className="grid grid-cols-8 gap-1 text-center text-[13px] text-muted">
         {["L", "M", "M", "J", "V", "S", "D", "Sem."].map((x, i) => (
           <span key={i}>{x}</span>
         ))}
@@ -80,16 +80,16 @@ export function Calendario({
                     type="button"
                     disabled={!d}
                     onClick={() => onDia(sel ? null : f)}
-                    className={`flex h-12 flex-col items-center justify-center rounded-md border text-[10px] leading-tight ${sel ? "border-[#1B3A5C] ring-1 ring-[#1B3A5C]" : "border-border"}`}
+                    className={`flex h-16 flex-col items-center justify-center rounded-md border text-[13px] leading-tight ${sel ? "border-[#1B3A5C] ring-1 ring-[#1B3A5C]" : "border-border"}`}
                     style={{ background: bg }}
                   >
                     <span className="text-muted">{Number(f.slice(8))}</span>
                     {d && <span className="font-medium">{corto(d.neto)}</span>}
-                    {d && <span className="text-[9px] text-muted">{d.trades}t</span>}
+                    {d && <span className="text-[12px] text-muted">{d.trades}t</span>}
                   </button>
                 );
               })}
-              <div className={`flex h-12 items-center justify-center rounded-md text-[10px] font-medium ${hay ? (tot >= 0 ? "text-teal" : "text-red") : "text-muted"}`}>
+              <div className={`flex h-16 items-center justify-center rounded-md text-[13px] font-medium ${hay ? (tot >= 0 ? "text-teal" : "text-red") : "text-muted"}`}>
                 {hay ? corto(tot) : "—"}
               </div>
             </div>
@@ -103,7 +103,7 @@ export function Calendario({
 // ---------- Curva de capital ----------
 export function CurvaCapital({ serie }: { serie: { fecha: string; saldo: number }[] }) {
   const [hover, setHover] = useState<number | null>(null);
-  if (serie.length < 2) return <div className="vc-card text-center text-xs text-muted">Sin datos para la curva.</div>;
+  if (serie.length < 2) return <div className="vc-card text-center text-sm text-muted">Sin datos para la curva.</div>;
   const W = 600, H = 170, PX = 8, PY = 14;
   const min = Math.min(...serie.map((s) => s.saldo));
   const max = Math.max(...serie.map((s) => s.saldo));
@@ -117,7 +117,7 @@ export function CurvaCapital({ serie }: { serie: { fecha: string; saldo: number 
   const h = hover !== null ? serie[hover] : null;
   return (
     <div className="vc-card !p-3">
-      <div className="mb-1 flex items-center justify-between text-xs">
+      <div className="mb-1 flex items-center justify-between text-sm">
         <span className="uppercase tracking-wide text-muted">Resultado acumulado</span>
         <span className="text-muted">{h ? `${h.fecha} · ${formatMoney(h.saldo)}` : `${formatMoney(serie[serie.length - 1].saldo)} en total`}</span>
       </div>

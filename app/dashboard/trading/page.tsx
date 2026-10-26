@@ -420,10 +420,10 @@ export default function TradingPage() {
   }
 
   const campoRegla = (k: keyof ReglasRiesgo, etiqueta: string, ayuda?: string) => (
-    <label className="flex flex-col gap-1 text-xs">
+    <label className="flex flex-col gap-1 text-sm">
       <span className="text-muted">{etiqueta}</span>
       <NumInput value={reglas[k] as number} onChange={(n) => setReglas({ ...reglas, [k]: n ?? 0 })} />
-      {ayuda && <span className="text-[10px] text-muted">{ayuda}</span>}
+      {ayuda && <span className="text-[13px] text-muted">{ayuda}</span>}
     </label>
   );
 
@@ -433,7 +433,7 @@ export default function TradingPage() {
         <button
           key={m}
           onClick={() => elegirMes(m)}
-          className={`whitespace-nowrap rounded-pill px-3 py-1 text-xs font-medium ${mes === m ? "bg-[#1B3A5C] text-white" : "border border-border text-muted"}`}
+          className={`whitespace-nowrap rounded-pill px-3 py-1 text-sm font-medium ${mes === m ? "bg-[#1B3A5C] text-white" : "border border-border text-muted"}`}
         >
           {m === "todo" ? "Todo" : nombreMes(m)}
         </button>
@@ -446,7 +446,7 @@ export default function TradingPage() {
     const f = filaPorTicket.get(t.ticket);
     return (
       <details key={t.ticket} className="px-3 py-2">
-        <summary className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <summary className="flex cursor-pointer items-center justify-between gap-2 text-sm">
           <span>
             <span className="font-medium">{t.simbolo}</span> {t.lado === "buy" ? "compra" : "venta"} {t.volumen}
             <span className="ml-2 text-muted">{horaCorta(t.hora_apertura)}</span>
@@ -454,7 +454,7 @@ export default function TradingPage() {
           </span>
           <span className={t.neto >= 0 ? "text-teal" : "text-red"}>{formatMoney(t.neto)}</span>
         </summary>
-        <div className="mt-2 flex flex-col gap-2 text-[11px] text-muted">
+        <div className="mt-2 flex flex-col gap-2 text-[14px] text-muted">
           <p>Duración {dur(t.duracionSeg)} · SL {t.sl ?? "no puso"} · TP {t.tp ?? "no puso"} · hora del broker</p>
           {t.violaciones.map((v) => (
             <p key={v} className="text-red">• {NOMBRE_REGLA[v]}</p>
@@ -465,7 +465,7 @@ export default function TradingPage() {
     );
   };
 
-  if (cargando) return <div className="vc-shell"><p className="text-xs text-muted">Cargando...</p></div>;
+  if (cargando) return <div className="vc-shell"><p className="text-sm text-muted">Cargando...</p></div>;
 
   const tradesDia = diaSel ? evaluadosAll.filter((t) => fechaCierre(t) === diaSel).sort((a, b) => (a.hora_apertura < b.hora_apertura ? -1 : 1)) : [];
 
@@ -498,7 +498,7 @@ export default function TradingPage() {
         <button onClick={() => router.push("/dashboard")} className="vc-btn-back">Volver</button>
       </div>
 
-      <p className="mb-4 text-[11px] text-muted">
+      <p className="mb-4 text-[14px] text-muted">
         Esta herramienta organiza tus operaciones y mide si cumples tus propias reglas. No da señales, recomendaciones ni asesoría financiera, fiscal o legal.
       </p>
 
@@ -515,7 +515,7 @@ export default function TradingPage() {
             setError(null);
             setMsg(null);
           }}
-          className="fixed bottom-20 left-1/2 z-50 w-[92%] max-w-md -translate-x-1/2 cursor-pointer rounded-lg px-4 py-3 text-sm text-white shadow-lg"
+          className="fixed bottom-20 left-1/2 z-50 w-[92%] max-w-md -translate-x-1/2 cursor-pointer rounded-lg px-4 py-3 text-base text-white shadow-lg"
           style={{ background: error ? "#d64545" : "#1f9d74" }}
         >
           {error ?? msg}
@@ -524,7 +524,7 @@ export default function TradingPage() {
 
       {cuentas.length === 0 || mostrarNueva ? (
         <div className="vc-card flex flex-col gap-3">
-          <p className="text-sm font-medium">{cuentas.length === 0 ? "Crea tu primera cuenta" : "Nueva cuenta"}</p>
+          <p className="text-base font-medium">{cuentas.length === 0 ? "Crea tu primera cuenta" : "Nueva cuenta"}</p>
           <input className="vc-input" placeholder="Nombre (ej. Axi real)" value={nNombre} onChange={(e) => setNNombre(e.target.value)} maxLength={80} />
           <div className="flex gap-2">
             <select className="vc-input" value={nTipo} onChange={(e) => setNTipo(e.target.value as "demo" | "real")}>
@@ -535,7 +535,7 @@ export default function TradingPage() {
           </div>
           <button className="vc-btn-primary" onClick={crearCuenta}>Crear cuenta</button>
           {cuentas.length > 0 && (
-            <button className="text-xs text-muted" onClick={() => setMostrarNueva(false)}>Cancelar</button>
+            <button className="text-sm text-muted" onClick={() => setMostrarNueva(false)}>Cancelar</button>
           )}
         </div>
       ) : (
@@ -554,7 +554,7 @@ export default function TradingPage() {
                 <option key={c.id} value={c.id}>{c.nombre} ({c.tipo})</option>
               ))}
             </select>
-            <button className="rounded-lg border border-border px-3 text-xs whitespace-nowrap" onClick={() => setMostrarNueva(true)}>+ Cuenta</button>
+            <button className="rounded-lg border border-border px-3 text-sm whitespace-nowrap" onClick={() => setMostrarNueva(true)}>+ Cuenta</button>
             <label className="vc-btn-primary cursor-pointer whitespace-nowrap text-center">
               Subir reporte
               <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && subirReporte(e.target.files[0])} />
@@ -562,7 +562,7 @@ export default function TradingPage() {
           </div>
 
           {syncToken && (
-            <div className="vc-card mb-3 flex flex-wrap items-center justify-between gap-2 !p-3 text-xs">
+            <div className="vc-card mb-3 flex flex-wrap items-center justify-between gap-2 !p-3 text-sm">
               {(() => {
                 const ult = cuenta?.last_sync_at ? new Date(cuenta.last_sync_at).getTime() : 0;
                 const min = ult ? Math.round((Date.now() - ult) / 60000) : null;
@@ -590,7 +590,7 @@ export default function TradingPage() {
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`rounded-pill px-3 py-1 text-xs font-medium ${tab === t ? "bg-[#1B3A5C] text-white" : "border border-border text-muted"}`}
+                className={`rounded-pill px-3 py-1 text-sm font-medium ${tab === t ? "bg-[#1B3A5C] text-white" : "border border-border text-muted"}`}
               >
                 {nombre}
               </button>
@@ -603,15 +603,15 @@ export default function TradingPage() {
           {tab === "panel" && (
             <>
               {trades.length === 0 ? (
-                <div className="vc-card text-center text-xs text-muted">Sube el reporte Excel de MT5 para ver tu panel.</div>
+                <div className="vc-card text-center text-sm text-muted">Sube el reporte Excel de MT5 para ver tu panel.</div>
               ) : (
                 <>
                   <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {kpis.map(([k, v, anillo]) => (
                       <div key={k} className="vc-card flex items-center justify-between !p-3">
                         <div>
-                          <p className="text-[10px] uppercase tracking-wide text-muted">{k}</p>
-                          <p className={`text-sm font-medium ${k === "Resultado" ? (metricas.neto >= 0 ? "text-teal" : "text-red") : ""}`}>{v}</p>
+                          <p className="text-[13px] uppercase tracking-wide text-muted">{k}</p>
+                          <p className={`text-base font-medium ${k === "Resultado" ? (metricas.neto >= 0 ? "text-teal" : "text-red") : ""}`}>{v}</p>
                         </div>
                         {anillo !== null && <Anillo valor={anillo} color={k === "Disciplina" && anillo < 50 ? "#d64545" : undefined} />}
                       </div>
@@ -623,26 +623,26 @@ export default function TradingPage() {
                       {calMes && <Calendario ym={calMes} onCambiarMes={cambiarMesCal} dias={diasAll} diaSel={diaSel} onDia={setDiaSel} />}
                     </div>
                     <div className="vc-card !p-3">
-                      <p className="mb-2 text-xs uppercase tracking-wide text-muted">Cumplimiento de tus reglas</p>
+                      <p className="mb-2 text-sm uppercase tracking-wide text-muted">Cumplimiento de tus reglas</p>
                       <p className={`text-2xl font-medium ${metricas.disciplina >= 60 ? "text-teal" : "text-red"}`}>{metricas.disciplina.toFixed(0)}%</p>
-                      <p className="mb-2 text-[11px] text-muted">de tus trades cumplieron todas tus reglas</p>
+                      <p className="mb-2 text-[14px] text-muted">de tus trades cumplieron todas tus reglas</p>
                       {(Object.keys(NOMBRE_REGLA) as (keyof typeof NOMBRE_REGLA)[])
                         .filter((r) => metricas.reglasRotas[r] > 0)
                         .sort((a, b) => metricas.reglasRotas[b] - metricas.reglasRotas[a])
                         .slice(0, 3)
                         .map((r) => (
-                          <p key={r} className="flex justify-between text-xs">
+                          <p key={r} className="flex justify-between text-sm">
                             <span>{NOMBRE_REGLA[r]}</span>
                             <span className="text-red">{metricas.reglasRotas[r]}</span>
                           </p>
                         ))}
-                      <button className="mt-3 text-xs font-medium text-teal" onClick={() => setTab("riesgo")}>Ver cuánto te costó →</button>
+                      <button className="mt-3 text-sm font-medium text-teal" onClick={() => setTab("riesgo")}>Ver cuánto te costó →</button>
                     </div>
                   </div>
 
                   {diaSel && (
                     <div className="vc-card mb-4 !p-0">
-                      <p className="border-b border-border px-3 py-2 text-xs font-medium">
+                      <p className="border-b border-border px-3 py-2 text-sm font-medium">
                         {nombreDia(diaSel)} · {tradesDia.length} trades ·{" "}
                         <span className={diasAll[diaSel]?.neto >= 0 ? "text-teal" : "text-red"}>{formatMoney(diasAll[diaSel]?.neto ?? 0)}</span>
                       </p>
@@ -655,13 +655,13 @@ export default function TradingPage() {
                   </div>
 
                   <div className="vc-card !p-0">
-                    <p className="border-b border-border px-3 py-2 text-xs uppercase tracking-wide text-muted">Trades recientes</p>
+                    <p className="border-b border-border px-3 py-2 text-sm uppercase tracking-wide text-muted">Trades recientes</p>
                     <div className="divide-y divide-border">
                       {[...evaluados]
                         .sort((a, b) => ((b.hora_cierre ?? b.hora_apertura) > (a.hora_cierre ?? a.hora_apertura) ? 1 : -1))
                         .slice(0, 8)
                         .map((t) => (
-                          <div key={t.ticket} className="flex items-center justify-between gap-2 px-3 py-2 text-xs" style={{ borderLeft: `3px solid ${t.neto >= 0 ? "#1f9d74" : "#d64545"}` }}>
+                          <div key={t.ticket} className="flex items-center justify-between gap-2 px-3 py-2 text-sm" style={{ borderLeft: `3px solid ${t.neto >= 0 ? "#1f9d74" : "#d64545"}` }}>
                             <span>
                               <span className="font-medium">{t.simbolo}</span> {t.lado === "buy" ? "compra" : "venta"} {t.volumen}
                               <span className="ml-2 text-muted">{fechaCorta(t.hora_apertura)} {horaCorta(t.hora_apertura)}</span>
@@ -680,12 +680,12 @@ export default function TradingPage() {
           {/* ---------------- BITÁCORA ---------------- */}
           {tab === "bitacora" && (
             <>
-              <label className="mb-3 flex items-center gap-2 text-xs text-muted">
+              <label className="mb-3 flex items-center gap-2 text-sm text-muted">
                 <input type="checkbox" checked={soloRotas} onChange={(e) => setSoloRotas(e.target.checked)} />
                 Ver solo trades donde rompí alguna regla
               </label>
               {gruposDia.length === 0 ? (
-                <div className="vc-card text-center text-xs text-muted">
+                <div className="vc-card text-center text-sm text-muted">
                   {trades.length === 0 ? "Sube el reporte Excel de MT5 para ver tus trades." : "Ningún trade con esos filtros."}
                 </div>
               ) : (
@@ -696,7 +696,7 @@ export default function TradingPage() {
                     const rotas = lista.reduce((s, t) => s + t.violaciones.length, 0);
                     return (
                       <details key={f} className="vc-card !p-0">
-                        <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs" style={{ borderLeft: `3px solid ${tot >= 0 ? "#1f9d74" : "#d64545"}` }}>
+                        <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-sm" style={{ borderLeft: `3px solid ${tot >= 0 ? "#1f9d74" : "#d64545"}` }}>
                           <span>
                             <span className="font-medium capitalize">{nombreDia(f)}</span>
                             <span className="ml-2 text-muted">
@@ -720,9 +720,9 @@ export default function TradingPage() {
           {/* ---------------- RIESGO ---------------- */}
           {tab === "riesgo" && (
             <>
-              <div className="mb-4 rounded-lg p-3.5 text-sm text-white" style={{ background: "#1B3A5C" }}>
+              <div className="mb-4 rounded-lg p-3.5 text-base text-white" style={{ background: "#1B3A5C" }}>
                 <p className="font-medium">Cómo te ayuda el manejo de riesgo</p>
-                <ol className="mt-2 list-decimal pl-4 text-xs text-white/85">
+                <ol className="mt-2 list-decimal pl-4 text-sm text-white/85">
                   <li className="mb-1">Defines tus reglas: cuánto arriesgas por trade, cuántas pérdidas aguantas al día y cuánto esperas después de perder.</li>
                   <li className="mb-1">La app revisa tu historial y te muestra qué trades las rompieron y cuánto te costó (abajo).</li>
                   <li>Descargas el guardián para MT5: pone el lote, el stop y el límite por ti y te bloquea cuando llegas a tu tope. Así no dependes de tu fuerza de voluntad en el momento.</li>
@@ -731,25 +731,25 @@ export default function TradingPage() {
 
               {metricas.trades > 0 && (
                 <div className="vc-card mb-4">
-                  <p className="mb-2 text-xs uppercase tracking-wide text-muted">Lo que te costó romper tus reglas{mes !== "todo" ? ` · ${nombreMes(mes)}` : ""}</p>
+                  <p className="mb-2 text-sm uppercase tracking-wide text-muted">Lo que te costó romper tus reglas{mes !== "todo" ? ` · ${nombreMes(mes)}` : ""}</p>
                   <div className="grid grid-cols-2 gap-2 text-center">
                     <div className="rounded-lg p-3" style={{ background: "rgba(31,157,116,0.12)" }}>
-                      <p className="text-[10px] uppercase text-muted">Cumpliste ({impacto.limpios.n})</p>
+                      <p className="text-[13px] uppercase text-muted">Cumpliste ({impacto.limpios.n})</p>
                       <p className={`text-base font-medium ${impacto.limpios.neto >= 0 ? "text-teal" : "text-red"}`}>{formatMoney(impacto.limpios.neto)}</p>
                     </div>
                     <div className="rounded-lg p-3" style={{ background: "rgba(214,69,69,0.12)" }}>
-                      <p className="text-[10px] uppercase text-muted">Rompiste reglas ({impacto.rotos.n})</p>
+                      <p className="text-[13px] uppercase text-muted">Rompiste reglas ({impacto.rotos.n})</p>
                       <p className={`text-base font-medium ${impacto.rotos.neto >= 0 ? "text-teal" : "text-red"}`}>{formatMoney(impacto.rotos.neto)}</p>
                     </div>
                   </div>
                   {mesesDisp.length > 1 && (
                     <div className="mt-3">
-                      <p className="mb-1 text-[10px] uppercase tracking-wide text-muted">Disciplina por mes</p>
+                      <p className="mb-1 text-[13px] uppercase tracking-wide text-muted">Disciplina por mes</p>
                       {mesesDisp.map((m) => {
                         const l = evaluadosAll.filter((t) => fechaCierre(t).startsWith(m));
                         const pct = l.length ? (l.filter((t) => t.violaciones.length === 0).length / l.length) * 100 : 0;
                         return (
-                          <div key={m} className="mb-1 flex items-center gap-2 text-[11px]">
+                          <div key={m} className="mb-1 flex items-center gap-2 text-[14px]">
                             <span className="w-16 text-muted">{nombreMes(m)}</span>
                             <div className="h-2 flex-1 rounded-full bg-border">
                               <div className="h-2 rounded-full" style={{ width: `${pct}%`, background: pct >= 60 ? "#1f9d74" : pct >= 35 ? "#e0a31a" : "#d64545" }} />
@@ -764,26 +764,26 @@ export default function TradingPage() {
               )}
 
               <div className="vc-card mb-4 flex flex-col gap-3">
-                <p className="text-xs uppercase tracking-wide text-muted">Mi cuenta</p>
+                <p className="text-sm uppercase tracking-wide text-muted">Mi cuenta</p>
                 {cuenta?.balance_actual != null ? (
-                  <p className="text-sm">
+                  <p className="text-base">
                     Balance en vivo desde MT5: <span className="font-medium">{formatMoney(cuenta.balance_actual)}</span>
-                    <span className="block text-[10px] text-muted">Se actualiza solo mientras el guardián esté corriendo en MT5. Se usa para el riesgo por trade, el lote y los límites.</span>
+                    <span className="block text-[13px] text-muted">Se actualiza solo mientras el guardián esté corriendo en MT5. Se usa para el riesgo por trade, el lote y los límites.</span>
                   </p>
                 ) : (
                 <div className="flex items-end gap-2">
-                  <label className="flex flex-1 flex-col gap-1 text-xs">
+                  <label className="flex flex-1 flex-col gap-1 text-sm">
                     <span className="text-muted">Balance de tu cuenta hoy ($)</span>
                     <NumInput value={balanceEdit} onChange={setBalanceEdit} />
                   </label>
-                  <button className="rounded-lg border border-border px-3 py-2 text-xs" onClick={guardarBalance}>Guardar</button>
+                  <button className="rounded-lg border border-border px-3 py-2 text-sm" onClick={guardarBalance}>Guardar</button>
                 </div>
                 )}
-                <p className="text-[10px] text-muted">Se usa para calcular tu riesgo por trade, el lote y los límites del guardián. El reporte no incluye depósitos ni retiros, por eso no lo calculo solo: actualízalo cuando cambie.</p>
+                <p className="text-[13px] text-muted">Se usa para calcular tu riesgo por trade, el lote y los límites del guardián. El reporte no incluye depósitos ni retiros, por eso no lo calculo solo: actualízalo cuando cambie.</p>
               </div>
 
               <div className="vc-card mb-4 flex flex-col gap-3">
-                <p className="text-xs uppercase tracking-wide text-muted">Mis reglas de riesgo</p>
+                <p className="text-sm uppercase tracking-wide text-muted">Mis reglas de riesgo</p>
                 <div className="grid grid-cols-2 gap-3">
                   {campoRegla("riesgo_por_trade_pct", "Riesgo por trade (% del balance)")}
                   {campoRegla("perdida_max_dia_pct", "Pérdida máxima del día (%)")}
@@ -792,19 +792,19 @@ export default function TradingPage() {
                   {campoRegla("espera_tras_perdida_min", "Espera tras una pérdida (min)", "0 = sin espera")}
                   {campoRegla("duracion_min_seg", "Duración mínima del trade (seg)", "Solo para medir; el guardián no la fuerza")}
                 </div>
-                <label className="flex items-center gap-2 text-xs">
+                <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={reglas.sl_obligatorio} onChange={(e) => setReglas({ ...reglas, sl_obligatorio: e.target.checked })} />
                   Stop loss obligatorio
                 </label>
-                <p className="text-[10px] text-muted">Los valores iniciales son solo un punto de partida educativo. Son tus reglas: ajústalas a tu plan.</p>
+                <p className="text-[13px] text-muted">Los valores iniciales son solo un punto de partida educativo. Son tus reglas: ajústalas a tu plan.</p>
               </div>
 
               <div className="vc-card mb-4 flex flex-col gap-3">
-                <p className="text-xs uppercase tracking-wide text-muted">Guardián para MT5</p>
-                <p className="text-[11px] text-muted">
+                <p className="text-sm uppercase tracking-wide text-muted">Guardián para MT5</p>
+                <p className="text-[14px] text-muted">
                   Un programa (EA) que pones en tu gráfico de MT5. No decide cuándo entrar: tú entras con sus botones COMPRAR / VENDER y él calcula el lote, pone stop y take profit, y te bloquea al llegar a tus límites.
                 </p>
-                <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-2 gap-3 text-sm">
                   <label className="flex flex-col gap-1"><span className="text-muted">Símbolo permitido</span>
                     <input
                       className="vc-input"
@@ -816,15 +816,15 @@ export default function TradingPage() {
                         setGuardian({ ...guardian, guard_symbol: v, ...(inf ? { guard_pip_size: inf.pip } : {}) });
                       }}
                     />
-                    <span className="text-[10px] text-muted">Como aparece en tu broker (ej. EURUSD, NAS100.fs, US30). Sirve para cualquier símbolo.</span>
+                    <span className="text-[13px] text-muted">Como aparece en tu broker (ej. EURUSD, NAS100.fs, US30). Sirve para cualquier símbolo.</span>
                   </label>
                   <label className="flex flex-col gap-1"><span className="text-muted">Distancia del stop (pips)</span>
                     <NumInput value={guardian.guard_sl_pips} onChange={(n) => setGuardian({ ...guardian, guard_sl_pips: n ?? 0 })} />
-                    <span className="text-[10px] text-muted">Oro: 60 pips = $6 de precio</span>
+                    <span className="text-[13px] text-muted">Oro: 60 pips = $6 de precio</span>
                   </label>
                   <label className="flex flex-col gap-1"><span className="text-muted">Tamaño de 1 pip (precio)</span>
                     <NumInput value={guardian.guard_pip_size} onChange={(n) => setGuardian({ ...guardian, guard_pip_size: n ?? 0 })} />
-                    <span className="text-[10px] text-muted">Se llena solo para símbolos conocidos</span>
+                    <span className="text-[13px] text-muted">Se llena solo para símbolos conocidos</span>
                   </label>
                   <label className="flex flex-col gap-1"><span className="text-muted">Take profit = stop ×</span>
                     <NumInput value={guardian.guard_reward_ratio} onChange={(n) => setGuardian({ ...guardian, guard_reward_ratio: n ?? 0 })} />
@@ -834,33 +834,33 @@ export default function TradingPage() {
                   </label>
                   <label className="flex flex-col gap-1"><span className="text-muted">Pérdida máxima del día en $ (opcional)</span>
                     <NumInput value={guardian.guard_daily_loss_usd} onChange={(n) => setGuardian({ ...guardian, guard_daily_loss_usd: n })} placeholder="Automática" />
-                    <span className="text-[10px] text-muted">Vacío = {reglas.perdida_max_dia_pct}% del balance que tenga MT5 al empezar el día</span>
+                    <span className="text-[13px] text-muted">Vacío = {reglas.perdida_max_dia_pct}% del balance que tenga MT5 al empezar el día</span>
                   </label>
                   <label className="flex flex-col gap-1"><span className="text-muted">Equity mínimo en $ (opcional)</span>
                     <NumInput value={guardian.guard_min_equity_usd} onChange={(n) => setGuardian({ ...guardian, guard_min_equity_usd: n })} placeholder="Automático" />
-                    <span className="text-[10px] text-muted">Vacío = 80% del balance de MT5 al empezar el día. Si baja de ahí, se bloquea todo</span>
+                    <span className="text-[13px] text-muted">Vacío = 80% del balance de MT5 al empezar el día. Si baja de ahí, se bloquea todo</span>
                   </label>
                 </div>
-                <label className="flex flex-col gap-1 text-xs">
+                <label className="flex flex-col gap-1 text-sm">
                   <span className="text-muted">Qué puedo hacer con el stop y el take profit</span>
                   <select className="vc-input" value={guardian.guard_lock_mode} onChange={(e) => setGuardian({ ...guardian, guard_lock_mode: e.target.value as Guardian["guard_lock_mode"] })}>
                     <option value="flexible">Flexible: el stop siempre puesto; lo muevo solo a mi favor y el TP libre</option>
                     <option value="total">Estricto: no puedo mover ninguno</option>
                     <option value="ninguno">Sin bloqueo: solo pone el stop al abrir</option>
                   </select>
-                  <span className="text-[10px] text-muted">
+                  <span className="text-[13px] text-muted">
                     Flexible deja proteger la ganancia y perseguir el precio (subir el stop, ampliar el TP), pero nunca alejar el stop ni quitarlo. Con take profit en 0 el guardián no pone TP al abrir.
                   </span>
                 </label>
-                <label className="flex items-center gap-2 text-xs">
+                <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={guardian.guard_block_manual_close} onChange={(e) => setGuardian({ ...guardian, guard_block_manual_close: e.target.checked })} />
                   Si cierro un trade a mano, bloquear el resto del día
                 </label>
                 <div className="flex gap-2">
                   <button className="vc-btn-primary" onClick={guardarReglas}>Guardar reglas</button>
-                  <button className="rounded-lg border border-[#1B3A5C] px-4 text-sm font-medium text-[#1B3A5C]" onClick={descargarGuardian}>Descargar para MT5</button>
+                  <button className="rounded-lg border border-[#1B3A5C] px-4 text-base font-medium text-[#1B3A5C]" onClick={descargarGuardian}>Descargar para MT5</button>
                 </div>
-                <div className="rounded-lg border border-border p-3 text-xs">
+                <div className="rounded-lg border border-border p-3 text-sm">
                   <p className="mb-1 font-medium">Sincronización en vivo</p>
                   {syncToken ? (
                     <>
@@ -879,13 +879,13 @@ export default function TradingPage() {
                     </>
                   )}
                   {syncToken && (
-                    <p className="mt-2 text-[10px] text-muted">
+                    <p className="mt-2 text-[13px] text-muted">
                       Una sola vez en MT5: <b>Herramientas → Opciones → Asesores Expertos</b>, marca <b>Permitir WebRequest para las URL listadas</b> y agrega <b>{typeof window !== "undefined" ? window.location.origin : ""}</b>.
                     </p>
                   )}
                 </div>
-                <details className="text-[11px] text-muted">
-                  <summary className="cursor-pointer text-xs font-medium text-teal">Cómo instalarlo en MT5</summary>
+                <details className="text-[14px] text-muted">
+                  <summary className="cursor-pointer text-sm font-medium text-teal">Cómo instalarlo en MT5</summary>
                   <ol className="mt-2 list-decimal pl-4">
                     <li>En MT5 abre <b>Archivo → Abrir carpeta de datos</b> y entra a <b>MQL5 → Experts</b>.</li>
                     <li>Copia ahí el archivo <b>VictorGuard.mq5</b> descargado.</li>
@@ -894,12 +894,12 @@ export default function TradingPage() {
                     <li>Los valores se pueden ajustar en la pestaña <b>Entradas</b> sin volver a la app. Pruébalo primero en cuenta demo.</li>
                   </ol>
                 </details>
-                <p className="text-[10px] text-muted">Para MT4 el programa es distinto y todavía no está disponible. Es una herramienta de control propio, no una señal ni una garantía de resultados.</p>
+                <p className="text-[13px] text-muted">Para MT4 el programa es distinto y todavía no está disponible. Es una herramienta de control propio, no una señal ni una garantía de resultados.</p>
               </div>
 
               <div className="vc-card mb-4 flex flex-col gap-3">
-                <p className="text-xs uppercase tracking-wide text-muted">Calculadora de lote</p>
-                <div className="grid grid-cols-2 gap-3 text-xs">
+                <p className="text-sm uppercase tracking-wide text-muted">Calculadora de lote</p>
+                <div className="grid grid-cols-2 gap-3 text-sm">
                   <label className="flex flex-col gap-1"><span className="text-muted">Balance $</span>
                     <NumInput value={cBalance} onChange={setCBalance} placeholder={balanceCalc.toFixed(2)} />
                   </label>
@@ -926,38 +926,38 @@ export default function TradingPage() {
                   )}
                 </div>
                 {infoCalc && (
-                  <p className="text-[10px] text-muted">
+                  <p className="text-[13px] text-muted">
                     1 pip = {pipSize} de precio · stop = {distPrecio.toFixed(5).replace(/0+$/, "").replace(/\.$/, "")} de precio. Si tu broker cuenta los pips distinto, ajusta el tamaño en el guardián.
                   </p>
                 )}
                 {lote ? (
-                  <div className="rounded-lg bg-bg p-3 text-sm">
+                  <div className="rounded-lg bg-bg p-3 text-base">
                     <p>Riesgo permitido: <span className="font-medium">{formatMoney(lote.riesgoUSD)}</span> ({reglas.riesgo_por_trade_pct}%)</p>
                     <p>Lote máximo: <span className="font-medium">{lote.lote.toFixed(2)}</span></p>
                     {lote.loteMinimoExcede && (
-                      <p className="mt-1 text-xs text-red">
+                      <p className="mt-1 text-sm text-red">
                         Ni el lote mínimo cabe en tu regla: con 0.01 arriesgarías {formatMoney(lote.riesgoConLoteMinimo)}. Reduce el stop o sube el balance.
                       </p>
                     )}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted">Escribe las unidades por lote de ese símbolo para calcular.</p>
+                  <p className="text-sm text-muted">Escribe las unidades por lote de ese símbolo para calcular.</p>
                 )}
               </div>
 
               <div className="vc-card">
-                <p className="mb-2 text-xs uppercase tracking-wide text-muted">Reglas rotas{mes !== "todo" ? ` · ${nombreMes(mes)}` : ""}</p>
+                <p className="mb-2 text-sm uppercase tracking-wide text-muted">Reglas rotas{mes !== "todo" ? ` · ${nombreMes(mes)}` : ""}</p>
                 {metricas.trades === 0 ? (
-                  <p className="text-xs text-muted">Sube un reporte para ver el cumplimiento.</p>
+                  <p className="text-sm text-muted">Sube un reporte para ver el cumplimiento.</p>
                 ) : (
-                  <div className="flex flex-col gap-1 text-xs">
+                  <div className="flex flex-col gap-1 text-sm">
                     {(Object.keys(NOMBRE_REGLA) as (keyof typeof NOMBRE_REGLA)[]).map((r) => (
                       <p key={r} className="flex justify-between">
                         <span>{NOMBRE_REGLA[r]}</span>
                         <span className={metricas.reglasRotas[r] > 0 ? "text-red" : "text-muted"}>{metricas.reglasRotas[r]}</span>
                       </p>
                     ))}
-                    <p className="mt-2 text-[10px] text-muted">
+                    <p className="mt-2 text-[13px] text-muted">
                       El riesgo por trade solo se calcula en instrumentos conocidos (oro, forex, índices, cripto). La disciplina es el % de trades sin ninguna regla rota.
                     </p>
                   </div>
