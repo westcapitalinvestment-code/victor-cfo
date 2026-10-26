@@ -120,26 +120,48 @@ export function leerReporteMT5(filas: unknown[][]): ReporteMT5 {
 
 // ---------- Calculadora de lote ----------
 
-// Unidades por 1.00 lote para los instrumentos más comunes. Si el símbolo no
-// está, la calculadora pide el valor del contrato (lo da el broker).
-export const CONTRATO_POR_LOTE: Record<string, number> = {
-  XAUUSD: 100, // onzas
-  XAGUSD: 5000,
-  EURUSD: 100000,
-  GBPUSD: 100000,
-  AUDUSD: 100000,
-  NZDUSD: 100000,
-  BTCUSD: 1,
-  ETHUSD: 1,
-  NAS100: 1,
-  US100: 1,
-  US30: 1,
-  US500: 1,
+// Catálogo de símbolos comunes. contrato = unidades por 1.00 lote; pip = tamaño de 1 pip
+// en precio; quote = moneda en que se mide la ganancia (para pasar a dólares).
+export type InfoSimbolo = { contrato: number; pip: number; quote: string; grupo: string };
+
+const FX_USD_QUOTE = ["EURUSD", "GBPUSD", "AUDUSD", "NZDUSD"];
+const FX_OTRAS: [string, string][] = [
+  ["USDJPY", "JPY"], ["USDCHF", "CHF"], ["USDCAD", "CAD"],
+  ["EURGBP", "GBP"], ["EURJPY", "JPY"], ["EURCHF", "CHF"], ["EURAUD", "AUD"], ["EURCAD", "CAD"], ["EURNZD", "NZD"],
+  ["GBPJPY", "JPY"], ["GBPCHF", "CHF"], ["GBPAUD", "AUD"], ["GBPCAD", "CAD"], ["GBPNZD", "NZD"],
+  ["AUDJPY", "JPY"], ["AUDCAD", "CAD"], ["AUDCHF", "CHF"], ["AUDNZD", "NZD"],
+  ["NZDJPY", "JPY"], ["NZDCAD", "CAD"], ["NZDCHF", "CHF"], ["CADJPY", "JPY"], ["CADCHF", "CHF"], ["CHFJPY", "JPY"],
+];
+
+export const SIMBOLOS: Record<string, InfoSimbolo> = {
+  XAUUSD: { contrato: 100, pip: 0.1, quote: "USD", grupo: "Metales" },
+  XAGUSD: { contrato: 5000, pip: 0.01, quote: "USD", grupo: "Metales" },
+  NAS100: { contrato: 1, pip: 1, quote: "USD", grupo: "Índices" },
+  US100: { contrato: 1, pip: 1, quote: "USD", grupo: "Índices" },
+  USTEC: { contrato: 1, pip: 1, quote: "USD", grupo: "Índices" },
+  US30: { contrato: 1, pip: 1, quote: "USD", grupo: "Índices" },
+  US500: { contrato: 1, pip: 1, quote: "USD", grupo: "Índices" },
+  SPX500: { contrato: 1, pip: 1, quote: "USD", grupo: "Índices" },
+  GER40: { contrato: 1, pip: 1, quote: "EUR", grupo: "Índices" },
+  DE40: { contrato: 1, pip: 1, quote: "EUR", grupo: "Índices" },
+  UK100: { contrato: 1, pip: 1, quote: "GBP", grupo: "Índices" },
+  JP225: { contrato: 1, pip: 1, quote: "JPY", grupo: "Índices" },
+  BTCUSD: { contrato: 1, pip: 1, quote: "USD", grupo: "Cripto" },
+  ETHUSD: { contrato: 1, pip: 1, quote: "USD", grupo: "Cripto" },
+  ...Object.fromEntries(FX_USD_QUOTE.map((s) => [s, { contrato: 100000, pip: 0.0001, quote: "USD", grupo: "Forex" }])),
+  ...Object.fromEntries(FX_OTRAS.map(([s, q]) => [s, { contrato: 100000, pip: q === "JPY" ? 0.01 : 0.0001, quote: q, grupo: "Forex" }])),
 };
 
-export function contratoDe(simbolo: string): number | null {
+// Valor aproximado de 1 unidad de la moneda en dólares (editable en la calculadora).
+export const USD_POR_MONEDA: Record<string, number> = { USD: 1, JPY: 0.0065, CHF: 1.25, CAD: 0.72, GBP: 1.3, EUR: 1.08, AUD: 0.65, NZD: 0.6 };
+
+export function infoSimbolo(simbolo: string): InfoSimbolo | null {
   const base = simbolo.toUpperCase().replace(/[^A-Z0-9].*$/, "");
-  return CONTRATO_POR_LOTE[base] ?? null;
+  return SIMBOLOS[base] ?? null;
+}
+
+export function contratoDe(simbolo: string): number | null {
+  return infoSimbolo(simbolo)?.contrato ?? null;
 }
 
 export type ResultadoLote = {
@@ -154,6 +176,7 @@ export function calcularLote(opts: {
   riesgoPct: number;
   distanciaSL: number; // en unidades de precio (ej. 6.00 en oro)
   contrato: number; // unidades por 1 lote
+  usdPorQuote?: number; // dólares por 1 unidad de la moneda de cotización (1 si es USD)
   loteMin?: number;
   paso?: number;
 }): ResultadoLote {
@@ -161,7 +184,7 @@ export function calcularLote(opts: {
   const loteMin = opts.loteMin ?? 0.01;
   const paso = opts.paso ?? 0.01;
   const riesgoUSD = (balance * riesgoPct) / 100;
-  const perdidaPorLote = distanciaSL * contrato;
+  const perdidaPorLote = distanciaSL * contrato * (opts.usdPorQuote ?? 1);
   if (!(perdidaPorLote > 0)) return { riesgoUSD, lote: 0, loteMinimoExcede: false, riesgoConLoteMinimo: 0 };
   const bruto = riesgoUSD / perdidaPorLote;
   const lote = Math.floor(bruto / paso + 1e-9) * paso;
@@ -226,9 +249,9 @@ export function evaluarCumplimiento(trades: Trade[], reglas: ReglasRiesgo, balan
     const v: Regla[] = [];
     if (reglas.sl_obligatorio && !t.sl) v.push("sin_sl");
 
-    const contrato = contratoDe(t.simbolo);
-    if (t.sl && t.precio_apertura && contrato) {
-      const riesgo = Math.abs(t.precio_apertura - t.sl) * contrato * t.volumen;
+    const info = infoSimbolo(t.simbolo);
+    if (t.sl && t.precio_apertura && info) {
+      const riesgo = Math.abs(t.precio_apertura - t.sl) * info.contrato * t.volumen * (USD_POR_MONEDA[info.quote] ?? 1);
       if (riesgo > (balance * reglas.riesgo_por_trade_pct) / 100 + 0.005) v.push("riesgo_alto");
     }
     const dur = Math.max(0, Math.round((cierra - abre) / 1000));
@@ -355,23 +378,6 @@ export function curvaCapital(evaluados: TradeEvaluado[], balanceInicial: number)
     serie.push({ fecha: (t.hora_cierre ?? t.hora_apertura).slice(0, 10), saldo });
   }
   return serie;
-}
-
-/** Seis ejes de 0 a 100 para el radar y el puntaje general. */
-export function puntajeRadar(m: Metricas, dias: Record<string, DiaResumen>): { etiqueta: string; valor: number }[] {
-  const lista = Object.values(dias);
-  const diasPos = lista.length ? (lista.filter((d) => d.neto > 0).length / lista.length) * 100 : 0;
-  const pf = m.profitFactor === null ? 2 : m.profitFactor;
-  const rr = m.promedioPerdido !== 0 ? Math.abs(m.promedioGanado / m.promedioPerdido) : m.promedioGanado > 0 ? 2 : 0;
-  const clamp = (x: number) => Math.max(0, Math.min(100, x));
-  return [
-    { etiqueta: "Aciertos", valor: clamp(m.winRate) },
-    { etiqueta: "Factor beneficio", valor: clamp((pf / 2) * 100) },
-    { etiqueta: "Ganado/perdido", valor: clamp((rr / 2) * 100) },
-    { etiqueta: "Disciplina", valor: clamp(m.disciplina) },
-    { etiqueta: "Caída máx.", valor: clamp(100 - m.caidaMaximaPct) },
-    { etiqueta: "Consistencia", valor: clamp(diasPos) },
-  ];
 }
 
 /** Compara los trades que cumplieron todas las reglas contra los que rompieron alguna. */

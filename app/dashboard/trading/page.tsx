@@ -10,19 +10,20 @@ import {
   NOMBRE_REGLA,
   calcularLote,
   calcularMetricas,
-  contratoDe,
+  infoSimbolo,
+  SIMBOLOS,
+  USD_POR_MONEDA,
   curvaCapital,
   evaluarCumplimiento,
   impactoReglas,
   leerReporteMT5,
-  puntajeRadar,
   resultadosPorDia,
   type ReglasRiesgo,
   type Trade,
   type TradeEvaluado,
 } from "@/lib/trading";
 import { generarGuardianMQ5 } from "@/lib/trading-guard";
-import { Anillo, Calendario, CurvaCapital, Radar, nombreMes } from "./graficos";
+import { Anillo, Calendario, CurvaCapital, nombreMes } from "./graficos";
 
 // Módulo Trading (oct 2026) — organizador, NO da señales ni consejos.
 // Panel (calendario, curva, perfil), Bitácora por mes y por día, y Riesgo
@@ -48,7 +49,8 @@ type FilaTrade = {
 };
 type Guardian = {
   guard_symbol: string;
-  guard_sl_distance: number;
+  guard_sl_pips: number;
+  guard_pip_size: number;
   guard_reward_ratio: number;
   guard_max_open: number;
   guard_daily_loss_usd: number | null;
@@ -58,7 +60,8 @@ type Guardian = {
 };
 const GUARDIAN_POR_DEFECTO: Guardian = {
   guard_symbol: "XAUUSD",
-  guard_sl_distance: 6,
+  guard_sl_pips: 60,
+  guard_pip_size: 0.1,
   guard_reward_ratio: 2,
   guard_max_open: 1,
   guard_daily_loss_usd: null,
@@ -125,8 +128,10 @@ export default function TradingPage() {
   // Calculadora
   const [cBalance, setCBalance] = useState<number | null>(null);
   const [cSimbolo, setCSimbolo] = useState("XAUUSD");
-  const [cSL, setCSL] = useState<number | null>(6);
+  const [cPips, setCPips] = useState<number | null>(60);
   const [cContrato, setCContrato] = useState<number | null>(null);
+  const [cPipSize, setCPipSize] = useState<number | null>(null);
+  const [cFx, setCFx] = useState<number | null>(null);
 
   const cuenta = cuentas.find((c) => c.id === cuentaId) ?? null;
 
@@ -144,7 +149,8 @@ export default function TradingPage() {
       setReglas({ ...REGLAS_POR_DEFECTO, ...(Object.fromEntries(Object.entries(r).filter(([k]) => k in REGLAS_POR_DEFECTO).map(([k, v]) => [k, typeof v === "string" ? Number(v) : v])) as Partial<ReglasRiesgo>) });
       setGuardian({
         guard_symbol: String(r.guard_symbol ?? "XAUUSD"),
-        guard_sl_distance: Number(r.guard_sl_distance ?? 6),
+        guard_sl_pips: Number(r.guard_sl_pips ?? 60),
+        guard_pip_size: Number(r.guard_pip_size ?? 0.1),
         guard_reward_ratio: Number(r.guard_reward_ratio ?? 2),
         guard_max_open: Number(r.guard_max_open ?? 1),
         guard_daily_loss_usd: r.guard_daily_loss_usd == null ? null : Number(r.guard_daily_loss_usd),
@@ -269,12 +275,11 @@ export default function TradingPage() {
     [evaluadosAll, mes, balanceInicial]
   );
   const metricas = useMemo(() => calcularMetricas(evaluados, balanceInicioPeriodo), [evaluados, balanceInicioPeriodo]);
-  const serie = useMemo(() => curvaCapital(evaluados, balanceInicioPeriodo), [evaluados, balanceInicioPeriodo]);
-  const radar = useMemo(() => puntajeRadar(metricas, resultadosPorDia(evaluados)), [metricas, evaluados]);
-  const puntaje = radar.length ? radar.reduce((s, e) => s + e.valor, 0) / radar.length : 0;
+  const serie = useMemo(() => curvaCapital(evaluados, 0), [evaluados]);
   const impacto = useMemo(() => impactoReglas(evaluados), [evaluados]);
-  const netoTotal = evaluadosAll.reduce((s, t) => s + t.neto, 0);
-  const balanceActual = balanceInicial + netoTotal;
+  // El reporte de posiciones no trae depósitos ni retiros, así que no se puede reconstruir el balance real:
+  // el "capital" lo escribe el usuario (su balance de hoy) y se usa para calcular % de riesgo y lotes.
+  const balanceActual = balanceInicial;
 
   function cambiarMesCal(delta: number) {
     if (!calMes) return;
@@ -291,10 +296,16 @@ export default function TradingPage() {
   }
 
   // Calculadora de lote
-  const contratoAuto = contratoDe(cSimbolo);
-  const contrato = cContrato ?? contratoAuto ?? 0;
+  const infoCalc = infoSimbolo(cSimbolo);
+  const contrato = cContrato ?? infoCalc?.contrato ?? 0;
+  const pipSize = cPipSize ?? infoCalc?.pip ?? 0;
+  const quote = infoCalc?.quote ?? "USD";
+  const usdPorQuote = quote === "USD" ? 1 : cFx ?? USD_POR_MONEDA[quote] ?? 1;
+  const distPrecio = (cPips ?? 0) * pipSize;
   const balanceCalc = cBalance ?? (balanceActual > 0 ? balanceActual : 0);
-  const lote = contrato ? calcularLote({ balance: balanceCalc, riesgoPct: reglas.riesgo_por_trade_pct, distanciaSL: cSL ?? 0, contrato }) : null;
+  const lote = contrato && pipSize
+    ? calcularLote({ balance: balanceCalc, riesgoPct: reglas.riesgo_por_trade_pct, distanciaSL: distPrecio, contrato, usdPorQuote })
+    : null;
 
   // Guardián: valores sugeridos si el usuario no los puso
   const refBalance = balanceActual > 0 ? balanceActual : balanceInicial;
@@ -305,7 +316,8 @@ export default function TradingPage() {
     const codigo = generarGuardianMQ5({
       simbolo: guardian.guard_symbol,
       riesgoPct: reglas.riesgo_por_trade_pct,
-      distanciaSL: guardian.guard_sl_distance,
+      distanciaPips: guardian.guard_sl_pips,
+      tamanoPip: guardian.guard_pip_size,
       relacionTP: guardian.guard_reward_ratio,
       maxPerdedoresDia: reglas.max_perdedores_dia,
       perdidaMaxDiaUSD: perdidaDiaUSD,
@@ -407,6 +419,12 @@ export default function TradingPage() {
         Esta herramienta organiza tus operaciones y mide si cumples tus propias reglas. No da señales, recomendaciones ni asesoría financiera, fiscal o legal.
       </p>
 
+      <datalist id="vt-simbolos">
+        {Object.keys(SIMBOLOS).map((k) => (
+          <option key={k} value={k} />
+        ))}
+      </datalist>
+
       {error && <p className="mb-3 text-xs text-red">{error}</p>}
       {msg && <p className="mb-3 text-xs text-teal">{msg}</p>}
 
@@ -482,7 +500,22 @@ export default function TradingPage() {
                     <div className="lg:col-span-2">
                       {calMes && <Calendario ym={calMes} onCambiarMes={cambiarMesCal} dias={diasAll} diaSel={diaSel} onDia={setDiaSel} />}
                     </div>
-                    <Radar ejes={radar} puntaje={puntaje} />
+                    <div className="vc-card !p-3">
+                      <p className="mb-2 text-xs uppercase tracking-wide text-muted">Cumplimiento de tus reglas</p>
+                      <p className={`text-2xl font-medium ${metricas.disciplina >= 60 ? "text-teal" : "text-red"}`}>{metricas.disciplina.toFixed(0)}%</p>
+                      <p className="mb-2 text-[11px] text-muted">de tus trades cumplieron todas tus reglas</p>
+                      {(Object.keys(NOMBRE_REGLA) as (keyof typeof NOMBRE_REGLA)[])
+                        .filter((r) => metricas.reglasRotas[r] > 0)
+                        .sort((a, b) => metricas.reglasRotas[b] - metricas.reglasRotas[a])
+                        .slice(0, 3)
+                        .map((r) => (
+                          <p key={r} className="flex justify-between text-xs">
+                            <span>{NOMBRE_REGLA[r]}</span>
+                            <span className="text-red">{metricas.reglasRotas[r]}</span>
+                          </p>
+                        ))}
+                      <button className="mt-3 text-xs font-medium text-teal" onClick={() => setTab("riesgo")}>Ver cuánto te costó →</button>
+                    </div>
                   </div>
 
                   {diaSel && (
@@ -612,12 +645,12 @@ export default function TradingPage() {
                 <p className="text-xs uppercase tracking-wide text-muted">Mi cuenta</p>
                 <div className="flex items-end gap-2">
                   <label className="flex flex-1 flex-col gap-1 text-xs">
-                    <span className="text-muted">Balance con el que empezaste (antes del primer trade del reporte) $</span>
+                    <span className="text-muted">Balance de tu cuenta hoy ($)</span>
                     <NumInput value={balanceEdit} onChange={setBalanceEdit} />
                   </label>
                   <button className="rounded-lg border border-border px-3 py-2 text-xs" onClick={guardarBalance}>Guardar</button>
                 </div>
-                <p className="text-[10px] text-muted">Balance estimado ahora: {formatMoney(balanceActual)}. De aquí salen la caída máxima en % y el riesgo por trade.</p>
+                <p className="text-[10px] text-muted">Se usa para calcular tu riesgo por trade, el lote y los límites del guardián. El reporte no incluye depósitos ni retiros, por eso no lo calculo solo: actualízalo cuando cambie.</p>
               </div>
 
               <div className="vc-card mb-4 flex flex-col gap-3">
@@ -644,12 +677,25 @@ export default function TradingPage() {
                 </p>
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <label className="flex flex-col gap-1"><span className="text-muted">Símbolo permitido</span>
-                    <input className="vc-input" value={guardian.guard_symbol} onChange={(e) => setGuardian({ ...guardian, guard_symbol: e.target.value.toUpperCase() })} />
-                    <span className="text-[10px] text-muted">Como aparece en tu broker (ej. XAUUSD, NAS100.fs)</span>
+                    <input
+                      className="vc-input"
+                      list="vt-simbolos"
+                      value={guardian.guard_symbol}
+                      onChange={(e) => {
+                        const v = e.target.value.toUpperCase();
+                        const inf = infoSimbolo(v);
+                        setGuardian({ ...guardian, guard_symbol: v, ...(inf ? { guard_pip_size: inf.pip } : {}) });
+                      }}
+                    />
+                    <span className="text-[10px] text-muted">Como aparece en tu broker (ej. EURUSD, NAS100.fs, US30). Sirve para cualquier símbolo.</span>
                   </label>
-                  <label className="flex flex-col gap-1"><span className="text-muted">Distancia del stop (en precio)</span>
-                    <NumInput value={guardian.guard_sl_distance} onChange={(n) => setGuardian({ ...guardian, guard_sl_distance: n ?? 0 })} />
-                    <span className="text-[10px] text-muted">Oro: 6 = $6 de precio</span>
+                  <label className="flex flex-col gap-1"><span className="text-muted">Distancia del stop (pips)</span>
+                    <NumInput value={guardian.guard_sl_pips} onChange={(n) => setGuardian({ ...guardian, guard_sl_pips: n ?? 0 })} />
+                    <span className="text-[10px] text-muted">Oro: 60 pips = $6 de precio</span>
+                  </label>
+                  <label className="flex flex-col gap-1"><span className="text-muted">Tamaño de 1 pip (precio)</span>
+                    <NumInput value={guardian.guard_pip_size} onChange={(n) => setGuardian({ ...guardian, guard_pip_size: n ?? 0 })} />
+                    <span className="text-[10px] text-muted">Se llena solo para símbolos conocidos</span>
                   </label>
                   <label className="flex flex-col gap-1"><span className="text-muted">Take profit = stop ×</span>
                     <NumInput value={guardian.guard_reward_ratio} onChange={(n) => setGuardian({ ...guardian, guard_reward_ratio: n ?? 0 })} />
@@ -698,17 +744,32 @@ export default function TradingPage() {
                     <NumInput value={cBalance} onChange={setCBalance} placeholder={balanceCalc.toFixed(2)} />
                   </label>
                   <label className="flex flex-col gap-1"><span className="text-muted">Símbolo</span>
-                    <input className="vc-input" value={cSimbolo} onChange={(e) => setCSimbolo(e.target.value.toUpperCase())} />
+                    <input className="vc-input" list="vt-simbolos" value={cSimbolo} onChange={(e) => setCSimbolo(e.target.value.toUpperCase())} />
                   </label>
-                  <label className="flex flex-col gap-1"><span className="text-muted">Distancia al stop (precio)</span>
-                    <NumInput value={cSL} onChange={setCSL} />
+                  <label className="flex flex-col gap-1"><span className="text-muted">Distancia al stop (pips)</span>
+                    <NumInput value={cPips} onChange={setCPips} />
                   </label>
-                  {!contratoAuto && (
-                    <label className="flex flex-col gap-1"><span className="text-muted">Unidades por lote</span>
-                      <NumInput value={cContrato} onChange={setCContrato} placeholder="Lo da tu broker" />
+                  {!infoCalc && (
+                    <>
+                      <label className="flex flex-col gap-1"><span className="text-muted">Unidades por lote</span>
+                        <NumInput value={cContrato} onChange={setCContrato} placeholder="Lo da tu broker" />
+                      </label>
+                      <label className="flex flex-col gap-1"><span className="text-muted">Tamaño de 1 pip (precio)</span>
+                        <NumInput value={cPipSize} onChange={setCPipSize} placeholder="ej. 0.0001" />
+                      </label>
+                    </>
+                  )}
+                  {infoCalc && quote !== "USD" && (
+                    <label className="flex flex-col gap-1"><span className="text-muted">1 {quote} = ? USD (aprox.)</span>
+                      <NumInput value={usdPorQuote} onChange={setCFx} />
                     </label>
                   )}
                 </div>
+                {infoCalc && (
+                  <p className="text-[10px] text-muted">
+                    1 pip = {pipSize} de precio · stop = {distPrecio.toFixed(5).replace(/0+$/, "").replace(/\.$/, "")} de precio. Si tu broker cuenta los pips distinto, ajusta el tamaño en el guardián.
+                  </p>
+                )}
                 {lote ? (
                   <div className="rounded-lg bg-bg p-3 text-sm">
                     <p>Riesgo permitido: <span className="font-medium">{formatMoney(lote.riesgoUSD)}</span> ({reglas.riesgo_por_trade_pct}%)</p>

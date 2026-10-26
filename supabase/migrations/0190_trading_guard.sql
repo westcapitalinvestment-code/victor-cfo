@@ -7,3 +7,5 @@ ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS guard_daily_loss_usd numeric CHE
 ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS guard_min_equity_usd numeric CHECK (guard_min_equity_usd >= 0);
 ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS guard_lock_sltp boolean NOT NULL DEFAULT true;
 ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS guard_block_manual_close boolean NOT NULL DEFAULT true;
+ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS guard_sl_pips numeric NOT NULL DEFAULT 60 CHECK (guard_sl_pips > 0);
+ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS guard_pip_size numeric NOT NULL DEFAULT 0.1 CHECK (guard_pip_size > 0);

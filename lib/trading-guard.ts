@@ -7,7 +7,8 @@
 export type ParametrosGuardian = {
   simbolo: string;
   riesgoPct: number;
-  distanciaSL: number;
+  distanciaPips: number; // distancia del stop en pips
+  tamanoPip: number; // tamano de 1 pip en precio (ej. 0.1 oro, 0.0001 EURUSD, 1 NAS100)
   relacionTP: number;
   maxPerdedoresDia: number;
   perdidaMaxDiaUSD: number;
@@ -47,7 +48,8 @@ CTrade trade;
 
 input string AllowedSymbol      = "${sym(p.simbolo)}"; // unico simbolo permitido
 input double RiskPercent        = ${n(p.riesgoPct)};      // % del balance a arriesgar por trade
-input double SLDistance         = ${n(p.distanciaSL, 5)};      // distancia del SL en precio
+input double SLPips             = ${n(p.distanciaPips, 2)};      // distancia del SL en pips
+input double PipSize            = ${n(p.tamanoPip, 5)};      // tamano de 1 pip en precio (oro 0.1, EURUSD 0.0001, USDJPY 0.01, NAS100/US30 1)
 input double RewardRatio        = ${n(p.relacionTP)};      // TP = SL x este numero
 input int    MaxLosersPerDay    = ${Math.max(1, Math.round(p.maxPerdedoresDia))};        // perdedores maximos por dia
 input double MaxDailyLossUSD    = ${n(p.perdidaMaxDiaUSD)};     // perdida diaria maxima en dolares (incluye flotante)
@@ -60,6 +62,7 @@ input bool   LockSLTP           = ${b(p.bloquearSLTP)};     // true = si mueves 
 input bool   BlockOnManualClose = ${b(p.bloquearCierreManual)};     // true = cerrar un trade a mano bloquea el resto del dia
 
 string P = "VG_";
+double SLDistance = 0;   // = SLPips x PipSize (se calcula al iniciar)
 
 //------------------------------------------------------------------
 double LossPerLot(double dist)
@@ -288,6 +291,8 @@ void UpdatePanel()
 int OnInit()
 {
    trade.SetDeviationInPoints(DeviationPts);
+   SLDistance = SLPips * PipSize;
+   if(SLDistance <= 0) { Alert("VictorGuard: SLPips y PipSize deben ser mayores que 0"); return INIT_PARAMETERS_INCORRECT; }
    MakeButton(P + "BUY",  "COMPRAR", 10, 30, clrSeaGreen);
    MakeButton(P + "SELL", "VENDER",  130, 30, clrFireBrick);
    ObjectCreate(0, P + "ST", OBJ_LABEL, 0, 0, 0);

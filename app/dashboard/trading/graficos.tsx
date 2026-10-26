@@ -45,7 +45,6 @@ export function Calendario({
     }
   }
   if (fila.length) semanas.push([...fila, ...Array(7 - fila.length).fill(null)]);
-  const maxAbs = Math.max(1, ...Object.values(dias).filter((d) => d.fecha.startsWith(ym)).map((d) => Math.abs(d.neto)));
   const totalMes = Object.values(dias).filter((d) => d.fecha.startsWith(ym)).reduce((s, d) => s + d.neto, 0);
 
   return (
@@ -74,8 +73,7 @@ export function Calendario({
                 if (!f) return <span key={j} />;
                 const d = dias[f];
                 const sel = diaSel === f;
-                const alpha = d ? 0.18 + 0.5 * (Math.abs(d.neto) / maxAbs) : 0;
-                const bg = d ? (d.neto >= 0 ? `rgba(31,157,116,${alpha})` : `rgba(214,69,69,${alpha})`) : "transparent";
+                const bg = d ? (d.neto >= 0 ? "rgba(31,157,116,0.22)" : "rgba(214,69,69,0.22)") : "transparent";
                 return (
                   <button
                     key={j}
@@ -120,8 +118,8 @@ export function CurvaCapital({ serie }: { serie: { fecha: string; saldo: number 
   return (
     <div className="vc-card !p-3">
       <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="uppercase tracking-wide text-muted">Curva de capital</span>
-        <span className="text-muted">{h ? `${h.fecha} · ${formatMoney(h.saldo)}` : `${formatMoney(serie[serie.length - 1].saldo)} ahora`}</span>
+        <span className="uppercase tracking-wide text-muted">Resultado acumulado</span>
+        <span className="text-muted">{h ? `${h.fecha} · ${formatMoney(h.saldo)}` : `${formatMoney(serie[serie.length - 1].saldo)} en total`}</span>
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
@@ -153,45 +151,6 @@ export function CurvaCapital({ serie }: { serie: { fecha: string; saldo: number 
           </>
         )}
       </svg>
-    </div>
-  );
-}
-
-// ---------- Radar (puntaje de trading) ----------
-export function Radar({ ejes, puntaje }: { ejes: { etiqueta: string; valor: number }[]; puntaje: number }) {
-  const C = 100, R = 66;
-  const punto = (i: number, v: number) => {
-    const ang = (-90 + (360 / ejes.length) * i) * (Math.PI / 180);
-    return [C + Math.cos(ang) * R * (v / 100), C + Math.sin(ang) * R * (v / 100)] as const;
-  };
-  const poligono = (v: number) => ejes.map((_, i) => punto(i, v).join(",")).join(" ");
-  const datos = ejes.map((e, i) => punto(i, e.valor).join(",")).join(" ");
-  const color = puntaje >= 60 ? VERDE : puntaje >= 40 ? "#e0a31a" : ROJO;
-  return (
-    <div className="vc-card !p-3">
-      <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="uppercase tracking-wide text-muted">Perfil de trading</span>
-        <span className="font-medium" style={{ color }}>{puntaje.toFixed(0)} / 100</span>
-      </div>
-      <svg viewBox="0 0 200 200" className="mx-auto w-full max-w-[260px]">
-        {[25, 50, 75, 100].map((v) => (
-          <polygon key={v} points={poligono(v)} fill="none" stroke="currentColor" strokeOpacity="0.15" />
-        ))}
-        {ejes.map((_, i) => {
-          const [px, py] = punto(i, 100);
-          return <line key={i} x1={C} y1={C} x2={px} y2={py} stroke="currentColor" strokeOpacity="0.12" />;
-        })}
-        <polygon points={datos} fill={color} fillOpacity="0.28" stroke={color} strokeWidth="2" />
-        {ejes.map((e, i) => {
-          const [px, py] = punto(i, 128);
-          return (
-            <text key={i} x={px} y={py} fontSize="8" textAnchor="middle" dominantBaseline="middle" fill="currentColor" opacity="0.7">
-              {e.etiqueta}
-            </text>
-          );
-        })}
-      </svg>
-      <p className="mt-1 text-center text-[10px] text-muted">Mide qué tan bien operas, no qué operar. Más lleno = mejor.</p>
     </div>
   );
 }
