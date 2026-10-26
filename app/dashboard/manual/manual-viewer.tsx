@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { GRUPOS_MANUAL, MODULOS_MANUAL, type Audiencia, type ModuloManual } from "@/lib/manual-usuario";
+import { GRUPOS_MANUAL, MODULOS_MANUAL, type ModuloManual } from "@/lib/manual-usuario";
 
 // Visor del Manual de Usuario. Índice por grupos, buscador, filtro
 // Usuario/Vendedor y la guía paso a paso de cada módulo con su captura.
@@ -35,7 +35,7 @@ function Foto({ src, alt, mostrarPendientes }: { src: string; alt: string; mostr
   );
 }
 
-function Detalle({ m, mostrarPendientes, onVolver }: { m: ModuloManual; mostrarPendientes: boolean; onVolver: () => void }) {
+function Detalle({ m, mostrarPendientes, onVolver, fotos }: { m: ModuloManual; mostrarPendientes: boolean; onVolver: () => void; fotos: boolean }) {
   return (
     <div>
       <button type="button" onClick={onVolver} className="mb-3 text-sm font-medium text-teal print:hidden">
@@ -72,7 +72,7 @@ function Detalle({ m, mostrarPendientes, onVolver }: { m: ModuloManual; mostrarP
               <div className="min-w-0 flex-1">
                 <p className="text-base font-medium">{p.titulo}</p>
                 <p className="mt-1 text-sm leading-relaxed text-muted">{p.texto}</p>
-                {p.foto && <Foto src={`/api/manual/foto/${m.id}/${i + 1}`} alt={p.foto} mostrarPendientes={mostrarPendientes} />}
+                {fotos && p.foto && <Foto src={`/api/manual/foto/${m.id}/${i + 1}`} alt={p.foto} mostrarPendientes={mostrarPendientes} />}
               </div>
             </div>
           </li>
@@ -121,15 +121,26 @@ function Detalle({ m, mostrarPendientes, onVolver }: { m: ModuloManual; mostrarP
   );
 }
 
-export default function ManualViewer() {
-  const [aud, setAud] = useState<Audiencia | "todos">("todos");
+export default function ManualViewer({
+  modulos = MODULOS_MANUAL,
+  grupos = GRUPOS_MANUAL as unknown as readonly string[],
+  titulo = "Manual de Usuario",
+  subtitulo = "Guías paso a paso de cada parte de VICTOR CFO.",
+  fotos = true,
+}: {
+  modulos?: ModuloManual[];
+  grupos?: readonly string[];
+  titulo?: string;
+  subtitulo?: string;
+  fotos?: boolean;
+} = {}) {
   const [q, setQ] = useState("");
   const [abierto, setAbierto] = useState<string | null>(null);
   const [mostrarPendientes, setMostrarPendientes] = useState(false);
 
   useEffect(() => {
     const h = window.location.hash.replace("#", "");
-    if (h && MODULOS_MANUAL.some((m) => m.id === h)) setAbierto(h);
+    if (h && modulos.some((m) => m.id === h)) setAbierto(h);
     setMostrarPendientes(new URLSearchParams(window.location.search).get("capturas") === "1");
   }, []);
 
@@ -143,24 +154,23 @@ export default function ManualViewer() {
 
   const visibles = useMemo(() => {
     const nq = normalizar(q.trim());
-    return MODULOS_MANUAL.filter((m) => {
-      if (aud !== "todos" && !m.audiencia.includes(aud)) return false;
+    return modulos.filter((m) => {
       if (!nq) return true;
       const texto = normalizar(
         [m.titulo, m.resumen, m.donde, ...m.pasos.map((p) => `${p.titulo} ${p.texto}`), ...(m.consejos ?? []), m.ejemplo ?? ""].join(" ")
       );
       return nq.split(/\s+/).every((w) => texto.includes(w));
     });
-  }, [aud, q]);
+  }, [q, modulos]);
 
-  const modulo = abierto ? MODULOS_MANUAL.find((m) => m.id === abierto) ?? null : null;
+  const modulo = abierto ? modulos.find((m) => m.id === abierto) ?? null : null;
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 pb-32 pt-4">
       <div className="mb-4 flex items-start justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold">Manual de Usuario</h1>
-          <p className="text-sm text-muted">Guías paso a paso de cada parte de VICTOR CFO.</p>
+          <h1 className="text-xl font-semibold">{titulo}</h1>
+          <p className="text-sm text-muted">{subtitulo}</p>
         </div>
         <button
           type="button"
@@ -172,7 +182,7 @@ export default function ManualViewer() {
       </div>
 
       {modulo ? (
-        <Detalle m={modulo} mostrarPendientes={mostrarPendientes} onVolver={() => abrir(null)} />
+        <Detalle m={modulo} mostrarPendientes={mostrarPendientes} onVolver={() => abrir(null)} fotos={fotos} />
       ) : (
         <>
           <input
@@ -182,34 +192,13 @@ export default function ManualViewer() {
             className="vc-input mb-3 w-full"
             aria-label="Buscar en el manual"
           />
-          <div className="mb-4 flex flex-wrap gap-2">
-            {(
-              [
-                ["todos", "Todo"],
-                ["usuario", "Para usuarios"],
-                ["vendedor", "Para vendedores"],
-              ] as [Audiencia | "todos", string][]
-            ).map(([v, label]) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setAud(v)}
-                className={`rounded-pill border px-3 py-1.5 text-sm font-medium ${
-                  aud === v ? "border-teal bg-teal text-white" : "border-border text-muted"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
           {visibles.length === 0 && (
             <div className="vc-card text-center text-sm text-muted">
               No encontré nada con “{q}”. Prueba con otra palabra o pregúntale a VICTOR.
             </div>
           )}
 
-          {GRUPOS_MANUAL.map((g) => {
+          {grupos.map((g) => {
             const items = visibles.filter((m) => m.grupo === g);
             if (items.length === 0) return null;
             return (
