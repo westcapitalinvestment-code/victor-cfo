@@ -291,9 +291,14 @@ export default function SocioPortalPage() {
           <p className="text-base font-medium">Hola, {sesion.nombre}</p>
           <p className="text-xs text-muted">Tus clientes y tus comisiones</p>
         </div>
-        <button onClick={salir} className="rounded-pill border border-border px-2.5 py-1 text-[11px] font-medium text-muted">
-          Salir
-        </button>
+        <div className="flex items-center gap-1.5">
+          <a href="/manual#vendedor-portal" className="rounded-pill border border-border px-2.5 py-1 text-[11px] font-medium text-teal">
+            Manual
+          </a>
+          <button onClick={salir} className="rounded-pill border border-border px-2.5 py-1 text-[11px] font-medium text-muted">
+            Salir
+          </button>
+        </div>
       </div>
 
       {!datos ? (

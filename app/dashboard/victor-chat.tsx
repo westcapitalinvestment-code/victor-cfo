@@ -688,6 +688,21 @@ export default function VictorChat({
         )}
       </button>
 
+      {/* Manual de Usuario (26 oct 2026, pedido de Joel): acceso directo justo
+          encima del botón de VICTOR. Se oculta mientras el chat está abierto
+          (el panel ya trae su propio acceso en el encabezado). */}
+      {!open && (
+        <a
+          href="/dashboard/manual"
+          aria-label="Abrir el Manual de Usuario"
+          className="fixed right-4 z-40 flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-2 text-sm font-medium shadow-lg"
+          style={{ bottom: "calc(10rem + env(safe-area-inset-bottom))", color: "#1D9E75" }}
+        >
+          <i className="ti ti-book-2" style={{ fontSize: 18 }} />
+          Manual de usuario
+        </a>
+      )}
+
       {open && (
         <div
           className="fixed right-4 z-50 flex max-h-[70dvh] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
@@ -712,6 +727,14 @@ export default function VictorChat({
                 {bloqueado ? "Desbloquéalo con Core o Pro" : "Tu CFO personal · siempre disponible"}
               </p>
             </div>
+            <a
+              href="/dashboard/manual"
+              title="Manual de usuario"
+              aria-label="Manual de usuario"
+              className="flex h-7 items-center gap-1 rounded-full bg-white/20 px-2.5 text-xs font-medium text-white"
+            >
+              <i className="ti ti-book-2" /> Manual
+            </a>
             <button
               onClick={() => setOpen(false)}
               title="Minimizar"
