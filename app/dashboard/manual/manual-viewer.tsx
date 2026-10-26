@@ -72,7 +72,7 @@ function Detalle({ m, mostrarPendientes, onVolver }: { m: ModuloManual; mostrarP
               <div className="min-w-0 flex-1">
                 <p className="text-base font-medium">{p.titulo}</p>
                 <p className="mt-1 text-sm leading-relaxed text-muted">{p.texto}</p>
-                {p.foto && <Foto src={`/manual/${m.id}/${i + 1}.png`} alt={p.foto} mostrarPendientes={mostrarPendientes} />}
+                {p.foto && <Foto src={`/api/manual/foto/${m.id}/${i + 1}`} alt={p.foto} mostrarPendientes={mostrarPendientes} />}
               </div>
             </div>
           </li>
