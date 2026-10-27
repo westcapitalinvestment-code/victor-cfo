@@ -8,7 +8,7 @@ import { useState } from "react";
 // Todo es bruto; la retención 1062.03 (10%) se muestra aparte como estimado.
 
 const PLANES = {
-  core: { nombre: "Core", mensual: 14.99, anual: 164 },
+  core: { nombre: "Core", mensual: 15, anual: 164 }, // Core mensual: comisión fija $15.00
   pro: { nombre: "Pro", mensual: 49.99, anual: 549 },
   business: { nombre: "Business", mensual: 99.99, anual: 1099 },
 } as const;
@@ -41,12 +41,13 @@ export default function CalculadoraVendedor() {
   const [plan, setPlan] = useState<PlanKey>("business");
   const [mensuales, setMensuales] = useState(5);
   const [anuales, setAnuales] = useState(0);
+  const [addons, setAddons] = useState(0);
   const [oficinas, setOficinas] = useState(20);
   const [porOficina, setPorOficina] = useState(3);
 
   const p = PLANES[plan];
-  const comMensual = mensuales * p.mensual;
-  const comAnual = anuales * p.anual * 0.2;
+  const comMensual = mensuales * (p.mensual + addons);
+  const comAnual = anuales * (p.anual + addons * 12) * 0.2;
   const comisiones = comMensual + comAnual;
   const bonoClientes = oficinas * porOficina * BONO_CLIENTE;
   const bonoOficinas = porOficina > 0 ? oficinas * BONO_OFICINA : 0;
@@ -80,6 +81,8 @@ export default function CalculadoraVendedor() {
       <div className="grid grid-cols-2 gap-3">
         <Campo label="Clientes mensuales que vendes" valor={mensuales} onChange={setMensuales} />
         <Campo label="Clientes anuales que vendes" valor={anuales} onChange={setAnuales} />
+        <Campo label="Add-ons por cliente ($/mes, ej. 35)" valor={addons} onChange={setAddons} />
+        <div />
         <Campo label="Oficinas de contables activas" valor={oficinas} onChange={setOficinas} />
         <Campo label="Clientes por oficina" valor={porOficina} onChange={setPorOficina} />
       </div>

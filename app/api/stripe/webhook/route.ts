@@ -1085,7 +1085,19 @@ async function procesarComisionVendedor(
       const sub = await getStripe().subscriptions.retrieve(referido.stripe_subscription_id);
       const priceIdsDePlanes = new Set(todosLosPriceIdsDePlanes());
       const itemPlan = sub.items.data.find((it) => priceIdsDePlanes.has(it.price.id));
+      // Base = plan + add-ons que ya tiene la suscripción (pedido de Joel,
+      // 27 oct 2026: "si los motivamos a venderlos hay que pagárselos").
+      // Ej.: Pro $49.99 + Pagos $24.99 + Secretaria $10 = $84.98 → 70% ahora
+      // y 30% al 3er pago. Los add-ons que se agreguen DESPUÉS del primer
+      // pago real no suman (la base queda fija desde ese momento).
       montoBase = itemPlan?.price.unit_amount ?? null;
+      if (montoBase) {
+        for (const it of sub.items.data) {
+          if (it.id === itemPlan?.id) continue;
+          if (it.price.recurring?.interval !== itemPlan?.price.recurring?.interval) continue;
+          montoBase += (it.price.unit_amount ?? 0) * (it.quantity ?? 1);
+        }
+      }
       intervalo = (itemPlan?.price.recurring?.interval as "month" | "year" | undefined) ?? null;
     } catch (err) {
       console.error("No se pudo leer la suscripción del referido para la comisión de vendedor:", err);
