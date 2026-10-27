@@ -292,7 +292,7 @@ export default function SocioPortalPage() {
           <p className="text-xs text-muted">Tus clientes y tus comisiones</p>
         </div>
         <div className="flex items-center gap-1.5">
-          <a href="/socios/manual#vendedor-portal" className="rounded-pill border border-border px-2.5 py-1 text-[11px] font-medium text-teal">
+          <a href="/socios/manual" className="rounded-pill border border-border px-2.5 py-1 text-[11px] font-medium text-teal">
             Manual
           </a>
           <button onClick={salir} className="rounded-pill border border-border px-2.5 py-1 text-[11px] font-medium text-muted">
