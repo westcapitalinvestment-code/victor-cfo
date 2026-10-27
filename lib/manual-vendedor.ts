@@ -264,11 +264,15 @@ export const MODULOS_VENDEDOR: ModuloVendedor[] = [
     donde: "Portal del vendedor → resumen",
     pasos: [
       { titulo: "Lee el resumen", texto: "Arriba ves el Total proyectado (por cobrar + 30% en espera + bonos) y Tu próximo pago. Si aún no hay fecha programada, aparecerá aquí cuando se fije.", foto: "Resumen del vendedor" },
-      { titulo: "Entiende el desglose", texto: "Comisiones listas (bruto), menos la Retención 1062.03, más los Bonos de oficinas (neto), da el Total a recibir.", foto: "Desglose del pago" },
+      { titulo: "Entiende el desglose", texto: "Comisiones listas (bruto) más los Bonos de oficinas (bruto) dan el Subtotal. A ese subtotal se le resta la Retención 1062.03 y el resultado es el Total a recibir.", foto: "Desglose del pago" },
       { titulo: "Entiende cómo se calcula", texto: "Cliente mensual: 70% con su primer pago y el 30% restante cuando llega a su 3er pago. Cliente anual: 20% del año, una sola vez, con su primer pago.", foto: "Cómo se calcula lo tuyo" },
+      { titulo: "Suma el bono por oficinas de contables", texto: "Además de la comisión por cada cliente que vendes, ganas un bono por cada oficina de contables que activaste: $20 una sola vez cuando el primer cliente de esa oficina ya pagó, y $10 una sola vez por cada cliente que esa oficina traiga. No tienes que venderle tú al cliente: lo trae el contable y tú cobras el bono. Se paga cada 3 meses.", foto: "Tarjeta de bonos por trimestre" },
+      { titulo: "Por qué conviene visitar contables", texto: "Una visita puede pagarte muchas veces: cada oficina que activas sigue trayendo clientes sin que vuelvas a venderle a cada uno. Mientras más oficinas visites y registres, más bonos se acumulan. Usa la calculadora de abajo para proyectar tus números.", foto: "Oficinas de contables" },
       { titulo: "Guarda tu comprobante 480.6SP", texto: "La tarjeta de retención te muestra lo retenido en el año para tu planilla 480.6SP. Guárdala.", foto: "Retención para tu planilla" },
     ],
-    consejos: ["Lo que ves como “Ya cobrado” es neto, después de retención."],
+    calculadora: "vendedor",
+    ejemplo: "Visitas y activas 20 oficinas de contables y cada una trae 3 clientes. Bono por clientes: 20 × 3 × $10 = $600. Bono por activar las oficinas: 20 × $20 = $400. Total en bonos: $1,000, sin contar las comisiones de los clientes que tú mismo vendas. Antes de retención.",
+    consejos: ["Lo que ves como “Ya cobrado” es neto, después de retención.", "Los bonos de oficinas se suman a tus comisiones: no se pisan ni se descuentan entre sí."],
   },
   {
     id: "vendedor-oficinas",

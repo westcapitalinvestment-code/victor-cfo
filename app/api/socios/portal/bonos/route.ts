@@ -87,6 +87,7 @@ export async function GET(req: NextRequest) {
     trimestreActual: actual,
     reglas: { activacionCentavos: BONO_ACTIVACION_CENTAVOS, clienteCentavos: BONO_CLIENTE_CENTAVOS },
     totalPendienteNetoCentavos: filas.filter((f) => f.estado === "pendiente").reduce((s, f) => s + neto(f), 0),
+    totalPendienteBrutoCentavos: filas.filter((f) => f.estado === "pendiente").reduce((s, f) => s + Number(f.comision_centavos), 0),
     totalPagadoNetoCentavos: filas.filter((f) => f.estado === "pagada").reduce((s, f) => s + neto(f), 0),
     trimestres: Array.from(porTrim.values()).sort((a, b) => b.trimestre.localeCompare(a.trimestre)),
     oficinas: oficinasSalida,

@@ -23,6 +23,7 @@ type Datos = {
 type Bonos = {
   trimestreActual: string;
   totalPendienteNetoCentavos: number;
+  totalPendienteBrutoCentavos?: number;
   totalPagadoNetoCentavos: number;
   trimestres: { trimestre: string; netoCentavos: number }[];
   oficinas: { clientes: unknown[] }[];
@@ -71,6 +72,9 @@ export default function ResumenVendedor({ datos }: { datos: Datos }) {
   const brutoPend = datos.totalPendienteBrutoCentavos ?? 0;
   const retPend = datos.totalRetenidoPendienteCentavos ?? 0;
   const retAnio = datos.totalRetenidoAnioCentavos ?? 0;
+  // Bonos en bruto; la retención del pago es una sola línea al final (comisiones + bonos).
+  const bonosBruto = bonos?.totalPendienteBrutoCentavos ?? bonosPorCobrar;
+  const retTotal = brutoPend + bonosBruto - (datos.totalPendienteCentavos + bonosPorCobrar);
 
   return (
     <div className="mb-4">
@@ -117,8 +121,9 @@ export default function ResumenVendedor({ datos }: { datos: Datos }) {
           <div className="vc-card mt-2 text-xs leading-snug">
             <p className="mb-1 font-medium">Tu próximo pago</p>
             <div className="flex justify-between"><span className="text-muted">Comisiones listas (bruto)</span><span>{fmt(brutoPend)}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Retención 1062.03</span><span>− {fmt(retPend)}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Bonos de oficinas (neto)</span><span>+ {fmt(bonosPorCobrar)}</span></div>
+            <div className="flex justify-between"><span className="text-muted">Bonos de oficinas (bruto)</span><span>+ {fmt(bonosBruto)}</span></div>
+            <div className="mt-1 flex justify-between border-t border-border pt-1"><span className="text-muted">Subtotal</span><span>{fmt(brutoPend + bonosBruto)}</span></div>
+            <div className="flex justify-between"><span className="text-muted">Retención 1062.03</span><span>− {fmt(retTotal)}</span></div>
             <div className="mt-1 flex justify-between border-t border-border pt-1 font-semibold">
               <span>Total a recibir</span>
               <span className="text-teal">{fmt(datos.totalPendienteCentavos + bonosPorCobrar)}</span>

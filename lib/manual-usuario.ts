@@ -31,6 +31,7 @@ export type ModuloManual = {
   donde: string;
   pasos: Paso[];
   ejemplo?: string;
+  calculadora?: "vendedor"; // muestra la calculadora de ganancias del vendedor
   consejos?: string[];
   preguntas?: { p: string; r: string }[];
 };

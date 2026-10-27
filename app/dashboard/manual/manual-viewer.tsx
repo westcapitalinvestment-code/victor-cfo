@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { GRUPOS_MANUAL, MODULOS_MANUAL, type ModuloManual } from "@/lib/manual-usuario";
+import CalculadoraVendedor from "./calculadora-vendedor";
 
 // Visor del Manual de Usuario. Índice por grupos, buscador, filtro
 // Usuario/Vendedor y la guía paso a paso de cada módulo con su captura.
@@ -85,6 +86,8 @@ function Detalle({ m, mostrarPendientes, onVolver, fotos, pie }: { m: ModuloManu
           <p className="text-muted">{m.ejemplo.replace(/^Ejemplo:\s*/i, "")}</p>
         </div>
       )}
+
+      {m.calculadora === "vendedor" && <CalculadoraVendedor />}
 
       {m.consejos && m.consejos.length > 0 && (
         <div className="vc-card mt-3 text-sm">
