@@ -150,6 +150,10 @@ double FloatingPL()
    return f;
 }
 
+// cierre con el boton X del grafico: cuenta como cierre manual del dia
+string XFlag() { return P + "XCLOSE_" + TimeToString(TimeCurrent(), TIME_DATE); }
+bool XClosedToday() { return GlobalVariableCheck(XFlag()); }
+
 // bloqueo duro: cierra todo y no deja operar
 bool IsBlocked(string &why)
 {
@@ -159,7 +163,7 @@ bool IsBlocked(string &why)
    double startBal = AccountInfoDouble(ACCOUNT_BALANCE) - pl;   // balance con que empezo el dia
    double maxLoss  = (MaxDailyLossUSD > 0) ? MaxDailyLossUSD : startBal * MaxDailyLossPct / 100.0;
    double minEq    = (MinEquityUSD > 0) ? MinEquityUSD : startBal * MinEquityPct / 100.0;
-   if(BlockOnManualClose && manual > 0)        { why = "BLOQUEADO: cerraste un trade a mano hoy"; return true; }
+   if(BlockOnManualClose && (manual > 0 || XClosedToday()))        { why = "BLOQUEADO: cerraste un trade a mano hoy"; return true; }
    if(losers >= MaxLosersPerDay)               { why = "BLOQUEADO: " + IntegerToString(losers) + " perdedores hoy"; return true; }
    if(total <= -maxLoss)                       { why = "BLOQUEADO: perdida diaria maxima (" + DoubleToString(maxLoss, 2) + ")"; return true; }
    if(AccountInfoDouble(ACCOUNT_EQUITY) <= minEq) { why = "BLOQUEADO: equity minimo. Revisa tu plan."; return true; }
@@ -307,7 +311,16 @@ void UpdatePL()
    ObjectSetInteger(0, P + "PL", OBJPROP_COLOR, tot > 0 ? clrDodgerBlue : (tot < 0 ? clrRed : clrSilver));
 
    // etiqueta junto a la linea de entrada de cada posicion abierta
-   ObjectsDeleteAll(0, P + "EP");
+   // quita etiquetas/botones de posiciones que ya no existen
+   for(int k = ObjectsTotal(0) - 1; k >= 0; k--)
+   {
+      string on = ObjectName(0, k);
+      if(StringFind(on, P + "EP") == 0 || StringFind(on, P + "XB") == 0)
+      {
+         ulong otk = (ulong)StringToInteger(StringSubstr(on, StringLen(P) + 2));
+         if(!PositionSelectByTicket(otk)) ObjectDelete(0, on);
+      }
+   }
    datetime tx = iTime(_Symbol, _Period, 0) + (datetime)(PeriodSeconds() * 3);
    double step = (ChartGetDouble(0, CHART_PRICE_MAX) - ChartGetDouble(0, CHART_PRICE_MIN)) / 35.0;
    int shown = 0;
@@ -317,12 +330,34 @@ void UpdatePL()
       if(tk == 0 || PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
       double fp = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
       string nm = P + "EP" + (string)tk;
-      ObjectCreate(0, nm, OBJ_TEXT, 0, tx, PositionGetDouble(POSITION_PRICE_OPEN) - step * shown);
+      double py = PositionGetDouble(POSITION_PRICE_OPEN) - step * shown;
       shown++;
+      if(ObjectFind(0, nm) < 0) ObjectCreate(0, nm, OBJ_TEXT, 0, tx, py);
+      ObjectSetInteger(0, nm, OBJPROP_TIME, tx);
+      ObjectSetDouble(0, nm, OBJPROP_PRICE, py);
       ObjectSetString(0, nm, OBJPROP_TEXT, "<< entrada " + Money(fp));
       ObjectSetInteger(0, nm, OBJPROP_COLOR, fp >= 0 ? clrDodgerBlue : clrRed);
       ObjectSetInteger(0, nm, OBJPROP_FONTSIZE, 11);
       ObjectSetInteger(0, nm, OBJPROP_ANCHOR, ANCHOR_LEFT);
+
+      // boton X para cerrar este trade (sirve en pantalla completa)
+      string bn = P + "XB" + (string)tk;
+      int bx, by;
+      if(ChartTimePriceToXY(0, 0, tx, py, bx, by))
+      {
+         if(ObjectFind(0, bn) < 0)
+         {
+            ObjectCreate(0, bn, OBJ_BUTTON, 0, 0, 0);
+            ObjectSetInteger(0, bn, OBJPROP_XSIZE, 26);
+            ObjectSetInteger(0, bn, OBJPROP_YSIZE, 22);
+            ObjectSetString(0, bn, OBJPROP_TEXT, "X");
+            ObjectSetInteger(0, bn, OBJPROP_COLOR, clrWhite);
+            ObjectSetInteger(0, bn, OBJPROP_BGCOLOR, clrFireBrick);
+            ObjectSetInteger(0, bn, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+         }
+         ObjectSetInteger(0, bn, OBJPROP_XDISTANCE, bx + 150);
+         ObjectSetInteger(0, bn, OBJPROP_YDISTANCE, by - 11);
+      }
    }
 }
 
@@ -513,6 +548,13 @@ void OnChartEvent(const int id, const long &lp, const double &dp, const string &
    if(id != CHARTEVENT_OBJECT_CLICK) return;
    if(sp == P + "BUY")  { ObjectSetInteger(0, sp, OBJPROP_STATE, false); OpenTrade(true); }
    if(sp == P + "SELL") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); OpenTrade(false); }
+   if(StringFind(sp, P + "XB") == 0)
+   {
+      ObjectSetInteger(0, sp, OBJPROP_STATE, false);
+      ulong tk = (ulong)StringToInteger(StringSubstr(sp, StringLen(P) + 2));
+      if(PositionSelectByTicket(tk) && trade.PositionClose(tk))
+         if(BlockOnManualClose) GlobalVariableSet(XFlag(), 1);
+   }
 }
 `;
 }
