@@ -304,20 +304,23 @@ void UpdatePL()
    double tot = pl + fl;
    ObjectSetString(0, P + "PL", OBJPROP_TEXT, "P/L hoy: " + Money(tot)
                    + "  (cerrado " + Money(pl) + " | abierto " + Money(fl) + ")");
-   ObjectSetInteger(0, P + "PL", OBJPROP_COLOR, tot > 0 ? clrLime : (tot < 0 ? clrTomato : clrSilver));
+   ObjectSetInteger(0, P + "PL", OBJPROP_COLOR, tot > 0 ? clrDodgerBlue : (tot < 0 ? clrRed : clrSilver));
 
    // etiqueta junto a la linea de entrada de cada posicion abierta
    ObjectsDeleteAll(0, P + "EP");
    datetime tx = iTime(_Symbol, _Period, 0) + (datetime)(PeriodSeconds() * 3);
+   double step = (ChartGetDouble(0, CHART_PRICE_MAX) - ChartGetDouble(0, CHART_PRICE_MIN)) / 35.0;
+   int shown = 0;
    for(int i = 0; i < PositionsTotal(); i++)
    {
       ulong tk = PositionGetTicket(i);
       if(tk == 0 || PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
       double fp = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
       string nm = P + "EP" + (string)tk;
-      ObjectCreate(0, nm, OBJ_TEXT, 0, tx, PositionGetDouble(POSITION_PRICE_OPEN));
+      ObjectCreate(0, nm, OBJ_TEXT, 0, tx, PositionGetDouble(POSITION_PRICE_OPEN) - step * shown);
+      shown++;
       ObjectSetString(0, nm, OBJPROP_TEXT, "<< entrada " + Money(fp));
-      ObjectSetInteger(0, nm, OBJPROP_COLOR, fp >= 0 ? clrLime : clrTomato);
+      ObjectSetInteger(0, nm, OBJPROP_COLOR, fp >= 0 ? clrDodgerBlue : clrRed);
       ObjectSetInteger(0, nm, OBJPROP_FONTSIZE, 11);
       ObjectSetInteger(0, nm, OBJPROP_ANCHOR, ANCHOR_LEFT);
    }
