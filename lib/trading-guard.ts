@@ -150,10 +150,6 @@ double FloatingPL()
    return f;
 }
 
-// cierre con el boton X del grafico: cuenta como cierre manual del dia
-string XFlag() { return P + "XCLOSE_" + TimeToString(TimeCurrent(), TIME_DATE); }
-bool XClosedToday() { return GlobalVariableCheck(XFlag()); }
-
 // bloqueo duro: cierra todo y no deja operar
 bool IsBlocked(string &why)
 {
@@ -163,7 +159,7 @@ bool IsBlocked(string &why)
    double startBal = AccountInfoDouble(ACCOUNT_BALANCE) - pl;   // balance con que empezo el dia
    double maxLoss  = (MaxDailyLossUSD > 0) ? MaxDailyLossUSD : startBal * MaxDailyLossPct / 100.0;
    double minEq    = (MinEquityUSD > 0) ? MinEquityUSD : startBal * MinEquityPct / 100.0;
-   if(BlockOnManualClose && (manual > 0 || XClosedToday()))        { why = "BLOQUEADO: cerraste un trade a mano hoy"; return true; }
+   if(BlockOnManualClose && manual > 0)        { why = "BLOQUEADO: cerraste un trade a mano hoy"; return true; }
    if(losers >= MaxLosersPerDay)               { why = "BLOQUEADO: " + IntegerToString(losers) + " perdedores hoy"; return true; }
    if(total <= -maxLoss)                       { why = "BLOQUEADO: perdida diaria maxima (" + DoubleToString(maxLoss, 2) + ")"; return true; }
    if(AccountInfoDouble(ACCOUNT_EQUITY) <= minEq) { why = "BLOQUEADO: equity minimo. Revisa tu plan."; return true; }
@@ -552,8 +548,8 @@ void OnChartEvent(const int id, const long &lp, const double &dp, const string &
    {
       ObjectSetInteger(0, sp, OBJPROP_STATE, false);
       ulong tk = (ulong)StringToInteger(StringSubstr(sp, StringLen(P) + 2));
-      if(PositionSelectByTicket(tk) && trade.PositionClose(tk))
-         if(BlockOnManualClose) GlobalVariableSet(XFlag(), 1);
+      // cierre con la X del grafico: NO bloquea el dia (lo hace el EA, no cuenta como cierre manual)
+      if(PositionSelectByTicket(tk)) trade.PositionClose(tk);
    }
 }
 `;
