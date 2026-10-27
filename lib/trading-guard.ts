@@ -291,6 +291,38 @@ void MakeButton(string name, string text, int x, int y, color bg)
    ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
 }
 
+
+// P/L del dia (cerrado + flotante) en grande, y P/L flotante pegado a cada entrada
+string Money(double v) { return (v >= 0 ? "+$" : "-$") + DoubleToString(MathAbs(v), 2); }
+
+void UpdatePL()
+{
+   int losers, manual; double pl;
+   int closed; datetime lastLoss;
+   DayStats(losers, pl, manual, closed, lastLoss);
+   double fl = FloatingPL();
+   double tot = pl + fl;
+   ObjectSetString(0, P + "PL", OBJPROP_TEXT, "P/L hoy: " + Money(tot)
+                   + "  (cerrado " + Money(pl) + " | abierto " + Money(fl) + ")");
+   ObjectSetInteger(0, P + "PL", OBJPROP_COLOR, tot > 0 ? clrLime : (tot < 0 ? clrTomato : clrSilver));
+
+   // etiqueta junto a la linea de entrada de cada posicion abierta
+   ObjectsDeleteAll(0, P + "EP");
+   datetime tx = iTime(_Symbol, _Period, 0) + (datetime)(PeriodSeconds() * 3);
+   for(int i = 0; i < PositionsTotal(); i++)
+   {
+      ulong tk = PositionGetTicket(i);
+      if(tk == 0 || PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+      double fp = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+      string nm = P + "EP" + (string)tk;
+      ObjectCreate(0, nm, OBJ_TEXT, 0, tx, PositionGetDouble(POSITION_PRICE_OPEN));
+      ObjectSetString(0, nm, OBJPROP_TEXT, "<< entrada " + Money(fp));
+      ObjectSetInteger(0, nm, OBJPROP_COLOR, fp >= 0 ? clrLime : clrTomato);
+      ObjectSetInteger(0, nm, OBJPROP_FONTSIZE, 11);
+      ObjectSetInteger(0, nm, OBJPROP_ANCHOR, ANCHOR_LEFT);
+   }
+}
+
 void UpdatePanel()
 {
    string why;
@@ -311,6 +343,7 @@ void UpdatePanel()
    string tm = (h > 0 ? IntegerToString(h) + ":" : "")
              + StringFormat("%02d:%02d", (int)m, (int)s);
    ObjectSetString(0, P + "TM", OBJPROP_TEXT, "Cierra la vela en " + tm);
+   UpdatePL();
 }
 
 //------------------------------------------------------------------
@@ -453,6 +486,11 @@ int OnInit()
    ObjectSetInteger(0, P + "SY", OBJPROP_YDISTANCE, 125);
    ObjectSetInteger(0, P + "SY", OBJPROP_COLOR, clrSilver);
    ObjectSetInteger(0, P + "SY", OBJPROP_FONTSIZE, 9);
+   ObjectCreate(0, P + "PL", OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, P + "PL", OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, P + "PL", OBJPROP_YDISTANCE, 150);
+   ObjectSetInteger(0, P + "PL", OBJPROP_COLOR, clrSilver);
+   ObjectSetInteger(0, P + "PL", OBJPROP_FONTSIZE, 13);
    EventSetTimer(1);
    UpdatePanel();
    return INIT_SUCCEEDED;
