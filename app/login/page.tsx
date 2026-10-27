@@ -178,7 +178,7 @@ function LoginForm() {
           {resetEnviado ? (
             <div className="vc-card text-center">
               <p className="mb-2 text-sm font-medium">Revisa tu correo</p>
-              <p className="mb-4 text-xs text-muted">
+              <p className="mb-4 text-sm text-muted">
                 Si {email} tiene una cuenta con nosotros, te mandamos un link para crear una contraseña nueva.
               </p>
               <button
@@ -195,7 +195,7 @@ function LoginForm() {
           ) : (
             <form onSubmit={handleOlvide} className="vc-card flex flex-col gap-3">
               <h1 className="mb-1 text-base font-medium">¿Olvidaste tu contraseña?</h1>
-              <p className="mb-2 text-xs text-muted">
+              <p className="mb-2 text-sm text-muted">
                 Escribe tu correo y te mandamos un link para crear una contraseña nueva.
               </p>
 
@@ -208,7 +208,7 @@ function LoginForm() {
                 required
               />
 
-              {error && <p className="text-xs text-red">{error}</p>}
+              {error && <p className="text-sm text-red">{error}</p>}
 
               <button type="submit" className="vc-btn-primary mt-2" disabled={enviandoReset}>
                 {enviandoReset ? "Enviando..." : "Enviar link"}
@@ -216,7 +216,7 @@ function LoginForm() {
 
               <button
                 type="button"
-                className="mt-1 text-center text-xs text-muted hover:text-teal"
+                className="mt-1 text-center text-sm text-muted hover:text-teal"
                 onClick={() => {
                   setModo("entrar");
                   setError(null);
@@ -243,7 +243,7 @@ function LoginForm() {
           <h1 className="mb-2 text-base font-medium">Entrar a tu cuenta</h1>
 
           {cerradaPorInactividad && (
-            <p className="rounded bg-amb/10 px-3 py-2 text-xs text-amb">
+            <p className="rounded bg-amb/10 px-3 py-2 text-sm text-amb">
               Cerramos tu sesión por inactividad. Entra de nuevo para seguir.
             </p>
           )}
@@ -265,13 +265,13 @@ function LoginForm() {
             required
           />
 
-          {error && <p className="text-xs text-red">{error}</p>}
+          {error && <p className="text-sm text-red">{error}</p>}
 
           <button type="submit" className="vc-btn-primary mt-2" disabled={loading}>
             {loading ? "Entrando..." : "Entrar"}
           </button>
 
-          <div className="my-1 flex items-center gap-2 text-xs text-muted">
+          <div className="my-1 flex items-center gap-2 text-sm text-muted">
             <span className="h-px flex-1 bg-border" />
             <span>o</span>
             <span className="h-px flex-1 bg-border" />
@@ -298,7 +298,7 @@ function LoginForm() {
 
           <button
             type="button"
-            className="text-center text-xs text-muted hover:text-teal"
+            className="text-center text-sm text-muted hover:text-teal"
             onClick={() => {
               setModo("olvide");
               setError(null);
@@ -307,7 +307,7 @@ function LoginForm() {
             ¿Olvidaste tu contraseña?
           </button>
 
-          <p className="mt-1 text-center text-xs text-muted">
+          <p className="mt-1 text-center text-sm text-muted">
             ¿No tienes cuenta?{" "}
             <Link href="/registro" className="font-medium text-teal">
               Comienza ahora

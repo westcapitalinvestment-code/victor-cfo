@@ -18,12 +18,12 @@ function Seccion({ etiqueta, titulo, texto, puntos, mock, invertir }: { etiqueta
   return (
     <section className="mb-20 grid items-center gap-8 md:mb-28 md:grid-cols-2 md:gap-16">
       <div className={invertir ? "md:order-2" : ""}>
-        <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-teal">{etiqueta}</p>
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-teal">{etiqueta}</p>
         <h2 className="mb-2 text-xl font-semibold leading-tight">{titulo}</h2>
-        <p className="mb-3 text-sm text-muted">{texto}</p>
+        <p className="mb-3 text-base text-muted">{texto}</p>
         <ul className="flex flex-col gap-1.5">
           {puntos.map((p) => (
-            <li key={p} className="flex items-start gap-2 text-sm">
+            <li key={p} className="flex items-start gap-2 text-base">
               <span className="mt-0.5 text-teal" aria-hidden>
                 ✓
               </span>
@@ -63,7 +63,7 @@ export default function EmpiezaPage() {
 
   const registro = (
     <div className="vc-card text-center">
-      <p className="mb-3 text-sm font-medium">Crea tu cuenta gratis en un clic</p>
+      <p className="mb-3 text-base font-medium">Crea tu cuenta gratis en un clic</p>
       <label className="mb-3 flex items-start gap-2 rounded-lg border border-border bg-bg px-2.5 py-2 text-left text-[0.7rem] leading-snug">
         <input type="checkbox" checked={acepta} onChange={(e) => setAcepta(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-teal" />
         <span>
@@ -78,17 +78,17 @@ export default function EmpiezaPage() {
           .
         </span>
       </label>
-      {error && <p className="mb-2 text-xs text-red">{error}</p>}
+      {error && <p className="mb-2 text-sm text-red">{error}</p>}
       <button type="button" onClick={empezar} disabled={enCurso} className="vc-btn-primary">
         {enCurso ? "..." : "Empezar gratis con Google"}
       </button>
       <Link
         href="/registro"
-        className="mt-2 block w-full rounded-lg border border-border bg-white p-3 text-center text-sm font-medium text-text"
+        className="mt-2 block w-full rounded-lg border border-border bg-white p-3 text-center text-base font-medium text-text"
       >
         Registrarme con mi email
       </Link>
-      <p className="mt-3 text-xs text-muted">Sin tarjeta. Cuenta gratis en un minuto.</p>
+      <p className="mt-3 text-sm text-muted">Sin tarjeta. Cuenta gratis en un minuto.</p>
     </div>
   );
 
@@ -102,9 +102,9 @@ export default function EmpiezaPage() {
       {/* HERO */}
       <section className="mb-10 grid items-center gap-10 md:mb-12 md:grid-cols-2 md:gap-16">
         <div>
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-teal">Gratis por tiempo limitado · sin tarjeta</p>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-teal">Gratis por tiempo limitado · sin tarjeta</p>
           <h1 className="mb-3 text-3xl font-semibold leading-tight">Todo tu dinero, ordenado en un solo lugar</h1>
-          <p className="mb-5 text-sm text-muted">
+          <p className="mb-5 text-base text-muted">
             Anota lo que entra y lo que sale y VICTOR lo ordena: tu dashboard, el resumen del mes, tu plan para salir de deudas, alertas que te avisan
             y tus documentos y citas con recordatorio. Pensado para que sepas dónde estás parado, sin hojas de cálculo.
           </p>
@@ -113,7 +113,7 @@ export default function EmpiezaPage() {
         <Captura src="/empieza/m-inicio.png" alt="Inicio de VICTOR con balance, alertas y tarjetas de ingresos, gastos, ahorro y deuda" />
       </section>
 
-      <p className="mb-20 text-center text-[11px] text-muted md:mb-28">Capturas reales de la app con datos de ejemplo.</p>
+      <p className="mb-20 text-center text-xs text-muted md:mb-28">Capturas reales de la app con datos de ejemplo.</p>
 
       <Seccion
         etiqueta="Dashboard"
@@ -167,9 +167,9 @@ export default function EmpiezaPage() {
             ["3", "Sigue tu plan", "Ves tu dashboard, tus alertas y tu plan desde el primer día."],
           ].map(([n, t, d]) => (
             <div key={n} className="vc-card text-center">
-              <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-[#eefaf4] text-sm font-bold text-[#14543d]">{n}</div>
-              <p className="mb-1 text-sm font-medium">{t}</p>
-              <p className="text-xs text-muted">{d}</p>
+              <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-[#eefaf4] text-base font-bold text-[#14543d]">{n}</div>
+              <p className="mb-1 text-base font-medium">{t}</p>
+              <p className="text-sm text-muted">{d}</p>
             </div>
           ))}
         </div>
@@ -178,18 +178,18 @@ export default function EmpiezaPage() {
       {/* CTA FINAL */}
       <section className="mx-auto mb-8 max-w-md">
         <h2 className="mb-1 text-center text-xl font-semibold">Ordena tu dinero hoy</h2>
-        <p className="mb-3 text-center text-xs font-medium text-[#B45309]">Gratis por tiempo limitado. Crea tu cuenta antes de que termine.</p>
+        <p className="mb-3 text-center text-sm font-medium text-[#B45309]">Gratis por tiempo limitado. Crea tu cuenta antes de que termine.</p>
         {registro}
       </section>
 
       <section className="mb-6 text-center">
-        <p className="mx-auto max-w-lg text-xs text-muted">
+        <p className="mx-auto max-w-lg text-sm text-muted">
           El plan gratis no conecta tu banco automáticamente ni incluye el chat con VICTOR: eso es del plan Core, cuando lo quieras. Para empezar a
           ordenar tu dinero no lo necesitas.
         </p>
       </section>
 
-      <p className="text-center text-xs text-muted">
+      <p className="text-center text-sm text-muted">
         ¿Ya tienes cuenta?{" "}
         <Link href="/login" className="font-medium text-teal">
           Entra aquí

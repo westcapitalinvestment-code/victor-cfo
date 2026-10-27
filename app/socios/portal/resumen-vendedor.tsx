@@ -39,9 +39,9 @@ function label(t: string) {
 function Tarjeta({ titulo, valor, nota, color }: { titulo: string; valor: string; nota?: string; color?: string }) {
   return (
     <div className="vc-card">
-      <p className="text-[10px] uppercase tracking-wide text-muted">{titulo}</p>
+      <p className="text-xs uppercase tracking-wide text-muted">{titulo}</p>
       <p className={`mt-1 text-lg font-semibold ${color ?? ""}`}>{valor}</p>
-      {nota && <p className="mt-0.5 text-[10px] leading-snug text-muted">{nota}</p>}
+      {nota && <p className="mt-0.5 text-xs leading-snug text-muted">{nota}</p>}
     </div>
   );
 }
@@ -80,13 +80,13 @@ export default function ResumenVendedor({ datos }: { datos: Datos }) {
         className="vc-card flex w-full items-center justify-between text-left"
       >
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted">Tu resumen</p>
-          <p className="text-[11px] text-muted">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Tu resumen</p>
+          <p className="text-xs text-muted">
             Proyectado <span className="font-semibold text-teal">{fmt(proyectado)}</span>
             {datos.proximaFechaPago ? ` · próximo pago ${fechaLarga(datos.proximaFechaPago)}` : ""}
           </p>
         </div>
-        <span className="shrink-0 text-[11px] text-muted">{abierto ? "Ocultar ▲" : "Ver ▼"}</span>
+        <span className="shrink-0 text-xs text-muted">{abierto ? "Ocultar ▲" : "Ver ▼"}</span>
       </button>
 
       {abierto && (
@@ -108,13 +108,13 @@ export default function ResumenVendedor({ datos }: { datos: Datos }) {
 
           <div className="vc-card mt-2 flex items-center justify-between">
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-muted">Total proyectado</p>
-              <p className="text-[10px] text-muted">por cobrar + 30% en espera + bonos</p>
+              <p className="text-xs uppercase tracking-wide text-muted">Total proyectado</p>
+              <p className="text-xs text-muted">por cobrar + 30% en espera + bonos</p>
             </div>
             <p className="text-xl font-semibold text-teal">{fmt(proyectado)}</p>
           </div>
 
-          <div className="vc-card mt-2 text-[11px] leading-snug">
+          <div className="vc-card mt-2 text-xs leading-snug">
             <p className="mb-1 font-medium">Tu próximo pago</p>
             <div className="flex justify-between"><span className="text-muted">Comisiones listas (bruto)</span><span>{fmt(brutoPend)}</span></div>
             <div className="flex justify-between"><span className="text-muted">Retención 1062.03</span><span>− {fmt(retPend)}</span></div>
@@ -130,7 +130,7 @@ export default function ResumenVendedor({ datos }: { datos: Datos }) {
             </p>
           </div>
 
-          <div className="vc-card mt-2 text-[11px] leading-snug">
+          <div className="vc-card mt-2 text-xs leading-snug">
             <p className="mb-1 font-medium">Retención para tu planilla 480.6SP</p>
             <div className="flex justify-between"><span className="text-muted">Retenido en {datos.anioRetencion ?? new Date().getFullYear()}</span><span className="font-semibold">{fmt(retAnio)}</span></div>
             <p className="mt-1 text-muted">
@@ -138,7 +138,7 @@ export default function ResumenVendedor({ datos }: { datos: Datos }) {
             </p>
           </div>
 
-          <div className="vc-card mt-2 text-[11px] leading-snug text-muted">
+          <div className="vc-card mt-2 text-xs leading-snug text-muted">
             <p className="mb-1 font-medium text-foreground">Cómo se calcula lo tuyo</p>
             <p>• Cliente mensual: 70% con su primer pago y el 30% restante cuando llega a su 3er pago.</p>
             <p>• Cliente anual: 20% del año, una sola vez, con su primer pago.</p>

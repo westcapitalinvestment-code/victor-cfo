@@ -98,7 +98,7 @@ function CompletarPagoForm() {
 
         <div className="vc-card flex flex-col gap-3">
           <h1 className="mb-1 text-base font-medium">Completa tu pago para entrar</h1>
-          <p className="mb-1 text-xs text-muted">
+          <p className="mb-1 text-sm text-muted">
             Tu cuenta ya existe — solo falta activar tu plan para desbloquear el dashboard.
           </p>
 
@@ -118,14 +118,14 @@ function CompletarPagoForm() {
                 }`}
               >
                 <p className="font-medium text-text">
-                  {p.nombre} {!p.disponible && <span className="text-xs text-muted">(Próximamente)</span>}
+                  {p.nombre} {!p.disponible && <span className="text-sm text-muted">(Próximamente)</span>}
                 </p>
-                <p className="text-xs text-muted">{ciclo === "mensual" ? p.precioMensual : p.precioAnual}</p>
+                <p className="text-sm text-muted">{ciclo === "mensual" ? p.precioMensual : p.precioAnual}</p>
               </button>
             ))}
           </div>
 
-          <div className="flex gap-2 text-xs">
+          <div className="flex gap-2 text-sm">
             <button
               type="button"
               onClick={() => setCiclo("mensual")}
@@ -142,12 +142,12 @@ function CompletarPagoForm() {
             </button>
           </div>
 
-          {error && <p className="text-xs text-red">{error}</p>}
+          {error && <p className="text-sm text-red">{error}</p>}
 
           <button type="button" onClick={pagar} className="vc-btn-primary mt-2" disabled={loading}>
             {loading ? "Conectando con Stripe..." : "Continuar al pago"}
           </button>
-          <button type="button" onClick={cerrarSesion} className="text-center text-xs text-muted">
+          <button type="button" onClick={cerrarSesion} className="text-center text-sm text-muted">
             Prefiero salir por ahora
           </button>
         </div>

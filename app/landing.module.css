@@ -52,7 +52,7 @@
 }
 .navLogo span { color: var(--white); }
 .navLinks { display: flex; gap: 2rem; align-items: center; }
-.navLinks a { font-size: 0.9rem; color: var(--muted); text-decoration: none; transition: color 0.2s; }
+.navLinks a { font-size: 0.98rem; color: var(--muted); text-decoration: none; transition: color 0.2s; }
 .navLinks a:hover { color: var(--white); }
 .navCta {
   background: var(--teal); color: #fff !important;
@@ -83,7 +83,7 @@
   display: inline-flex; align-items: center; gap: 0.5rem;
   background: var(--teal-dim); border: 1px solid #0D9E7535;
   border-radius: 100px; padding: 0.3rem 1rem;
-  font-family: 'Courier New', monospace; font-size: 0.75rem;
+  font-family: 'Courier New', monospace; font-size: 0.83rem;
   color: var(--teal-mid); margin-bottom: 1.5rem; letter-spacing: 0.04em;
 }
 .badgeDot {
@@ -112,12 +112,12 @@
 .btnPrimary {
   background: var(--teal); color: #fff;
   padding: 0.8rem 1.75rem; border-radius: 7px;
-  font-weight: 500; font-size: 0.95rem;
+  font-weight: 500; font-size: 1rem;
   text-decoration: none; border: none; cursor: pointer;
   transition: opacity 0.2s; display: inline-block;
 }
 .btnPrimary:hover { opacity: 0.85; }
-.btnGhost { color: var(--muted); font-size: 0.9rem; text-decoration: none; transition: color 0.2s; }
+.btnGhost { color: var(--muted); font-size: 0.98rem; text-decoration: none; transition: color 0.2s; }
 .btnGhost:hover { color: var(--white); }
 
 /* TERMINAL */
@@ -135,9 +135,9 @@
 }
 .termDot { width: 9px; height: 9px; border-radius: 50%; }
 .dR{background:#FF5F56} .dY{background:#FFBD2E} .dG{background:#27C93F}
-.termTitle { font-family:'Courier New',monospace; font-size:0.68rem; color:var(--muted); margin-left:0.5rem; }
+.termTitle { font-family:'Courier New',monospace; font-size:0.76rem; color:var(--muted); margin-left:0.5rem; }
 .termBody { padding: 1.25rem 1.5rem; }
-.tl { font-family:'Courier New',monospace; font-size:0.8rem; line-height:2; }
+.tl { font-family:'Courier New',monospace; font-size:0.88rem; line-height:2; }
 .tm{color:var(--muted)} .tt{color:var(--teal-mid)} .tw{color:var(--white)}
 .tg{color:#22C55E} .ty{color:#F59E0B}
 .cursor {
@@ -160,13 +160,13 @@
 }
 .stat:last-child { border-right: none; }
 .statNum { font-size: 1.9rem; font-weight: 700; color: var(--teal-mid); line-height: 1.1; }
-.statLabel { font-size: 0.75rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.4; }
+.statLabel { font-size: 0.83rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.4; }
 
 /* SECTIONS */
 .section { padding: 4.5rem 6%; max-width: 1240px; margin: 0 auto; scroll-margin-top: 120px; }
 .sectionLabel {
   font-family: 'Courier New', monospace;
-  font-size: 0.7rem; color: var(--teal-dark); font-weight: 600;
+  font-size: 0.78rem; color: var(--teal-dark); font-weight: 600;
   letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.6rem;
 }
 .sectionTitle {
@@ -182,10 +182,10 @@
   border-radius: 10px; padding: 1.5rem; transition: border-color 0.2s;
 }
 .stepCard:hover { border-color: var(--teal); }
-.stepNum { font-family:'Courier New',monospace; font-size:0.65rem; color:var(--teal-dark); font-weight:600; margin-bottom:0.9rem; }
+.stepNum { font-family:'Courier New',monospace; font-size:0.73rem; color:var(--teal-dark); font-weight:600; margin-bottom:0.9rem; }
 .stepIcon { font-size: 1.3rem; margin-bottom: 0.6rem; }
 .stepTitle { font-size: 1rem; font-weight: 600; margin-bottom: 0.4rem; }
-.stepDesc { font-size: 0.9rem; color: var(--muted); line-height: 1.65; }
+.stepDesc { font-size: 0.98rem; color: var(--muted); line-height: 1.65; }
 
 /* VICTOR BOX */
 .victorBox {
@@ -203,15 +203,15 @@
   display: flex; align-items: center; justify-content: center;
   font-size: 1.2rem; margin-bottom: 0.75rem;
 }
-.victorName { font-family:'Courier New',monospace; font-size:0.75rem; color:var(--teal-mid); margin-bottom:0.15rem; }
-.victorRole { font-size: 0.75rem; color: var(--muted); margin-bottom: 1.25rem; }
+.victorName { font-family:'Courier New',monospace; font-size:0.83rem; color:var(--teal-mid); margin-bottom:0.15rem; }
+.victorRole { font-size: 0.83rem; color: var(--muted); margin-bottom: 1.25rem; }
 .victorMessage { font-size: 1rem; color: var(--white); line-height: 1.8; max-width: 600px; }
 .victorMessage strong { color: var(--teal-mid); }
 .victorGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; margin-top:2rem; }
 .victorFeature { background:#F1F4F7; border:1px solid var(--border); border-radius:8px; padding:1rem; }
 .victorFeatureIcon { font-size:1.2rem; margin-bottom:0.5rem; }
-.victorFeatureTitle { font-size:0.9rem; font-weight:600; margin-bottom:0.3rem; }
-.victorFeatureDesc { font-size:0.82rem; color:var(--muted); line-height:1.5; }
+.victorFeatureTitle { font-size:0.98rem; font-weight:600; margin-bottom:0.3rem; }
+.victorFeatureDesc { font-size:0.9rem; color:var(--muted); line-height:1.5; }
 
 /* BANNER CONCILIACIÓN AUTOMÁTICA — pedido de Joel (2 oct 2026): resaltar
    que las facturas se cierran solas cuando llega el depósito al banco,
@@ -235,11 +235,11 @@
 }
 .reconBannerBody { flex: 1; min-width: 260px; }
 .reconBannerTag {
-  font-family: 'Courier New', monospace; font-size: 0.68rem; font-weight: 600;
+  font-family: 'Courier New', monospace; font-size: 0.76rem; font-weight: 600;
   color: var(--teal-dark); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem;
 }
 .reconBannerTitle { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.4rem; line-height: 1.3; }
-.reconBannerDesc { font-size: 0.9rem; color: var(--muted); line-height: 1.6; max-width: 620px; }
+.reconBannerDesc { font-size: 0.98rem; color: var(--muted); line-height: 1.6; max-width: 620px; }
 
 /* TRUST BAR — Plaid/Stripe, para generar confianza a quien no los conoce
    (pedido de Joel, 9 sept 2026). Mismo lenguaje visual que victorFeature/
@@ -248,15 +248,15 @@
 .trustCard { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; }
 .trustHead { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.75rem; }
 .trustLogo {
-  font-family: 'Courier New', monospace; font-weight: 700; font-size: 0.95rem;
+  font-family: 'Courier New', monospace; font-weight: 700; font-size: 1rem;
   color: var(--teal-mid); border: 1px solid var(--border); border-radius: 6px;
   padding: 0.2rem 0.55rem; letter-spacing: 0.02em;
 }
-.trustDesc { font-size: 0.85rem; color: var(--muted); line-height: 1.6; margin-bottom: 1.1rem; }
+.trustDesc { font-size: 0.93rem; color: var(--muted); line-height: 1.6; margin-bottom: 1.1rem; }
 .trustStats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
 .trustStat { text-align: center; }
 .trustStatNum { font-size: 1.15rem; font-weight: 700; color: var(--teal-mid); line-height: 1.1; }
-.trustStatLabel { font-size: 0.68rem; color: var(--muted); margin-top: 0.2rem; line-height: 1.3; }
+.trustStatLabel { font-size: 0.76rem; color: var(--muted); margin-top: 0.2rem; line-height: 1.3; }
 
 /* PRICING */
 .pricingGrid { display: grid; grid-template-columns: repeat(auto-fit,minmax(270px,1fr)); gap: 1.25rem; margin-top: 2.5rem; }
@@ -273,27 +273,27 @@
 .featuredBadge {
   position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
   background: var(--teal); color: #fff;
-  font-size: 0.65rem; font-weight: 700; letter-spacing: 0.07em;
+  font-size: 0.73rem; font-weight: 700; letter-spacing: 0.07em;
   padding: 0.2rem 0.75rem; border-radius: 100px; white-space: nowrap;
 }
-.priceTier { font-family:'Courier New',monospace; font-size:0.65rem; color:var(--teal-dark); font-weight:600; letter-spacing:0.08em; margin-bottom:0.4rem; }
+.priceTier { font-family:'Courier New',monospace; font-size:0.73rem; color:var(--teal-dark); font-weight:600; letter-spacing:0.08em; margin-bottom:0.4rem; }
 .priceName { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.2rem; }
-.priceDesc { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.25rem; line-height: 1.5; }
+.priceDesc { font-size: 0.93rem; color: var(--muted); margin-bottom: 1.25rem; line-height: 1.5; }
 .priceAmount { font-size: 2.4rem; font-weight: 700; line-height: 1; }
 .priceAmount sup { font-size: 1rem; vertical-align: super; }
-.priceAmount .mo { font-size: 0.85rem; color: var(--muted); font-weight: 400; }
+.priceAmount .mo { font-size: 0.93rem; color: var(--muted); font-weight: 400; }
 .priceDivider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
 .priceFeatures { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; padding: 0; }
-.priceFeatures li { font-size: 0.9rem; color: var(--muted); display: flex; gap: 0.5rem; align-items: flex-start; }
+.priceFeatures li { font-size: 0.98rem; color: var(--muted); display: flex; gap: 0.5rem; align-items: flex-start; }
 .priceFeatures li::before { content:'✓'; color:var(--teal); font-weight:700; flex-shrink:0; }
 .priceCta {
   display: block; text-align: center; margin-top: 1.5rem;
   padding: 0.75rem; border-radius: 7px; font-weight: 500;
-  font-size: 0.9rem; text-decoration: none; transition: all 0.2s; cursor: pointer; border: none;
+  font-size: 0.98rem; text-decoration: none; transition: all 0.2s; cursor: pointer; border: none;
 }
 .ctaFilled { background: var(--teal); color: #fff; }
 .ctaFilled:hover { opacity: 0.85; }
-.moreBtn { background:none; border:none; color:var(--teal-mid); font-size:0.82rem; cursor:pointer; padding:0.25rem 0; margin-top:0.5rem; text-align:left; }
+.moreBtn { background:none; border:none; color:var(--teal-mid); font-size:0.9rem; cursor:pointer; padding:0.25rem 0; margin-top:0.5rem; text-align:left; }
 
 /* ADDONS */
 .addonsGrid { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 0.9rem; margin-top: 1.75rem; }
@@ -305,8 +305,8 @@
 }
 .addonCard:hover { border-color: var(--teal); }
 .addonIcon { font-size: 1.2rem; flex-shrink: 0; }
-.addonName { font-size: 0.9rem; font-weight: 500; margin-bottom: 0.15rem; }
-.addonDesc { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
+.addonName { font-size: 0.98rem; font-weight: 500; margin-bottom: 0.15rem; }
+.addonDesc { font-size: 0.86rem; color: var(--muted); line-height: 1.4; }
 
 /* CTA FINAL */
 .ctaFinal { text-align: center; padding: 4rem 6% 5rem; max-width: 680px; margin: 0 auto; }
@@ -336,10 +336,10 @@
   font-weight: 700; color: #B45309; letter-spacing: 0.04em; margin-bottom: 0.75rem;
 }
 .sociosBanner h3 { font-size: 1.7rem; font-weight: 700; margin-bottom: 0.6rem; }
-.sociosBanner p { color: var(--muted); font-size: 0.92rem; line-height: 1.6; max-width: 560px; margin: 0 auto 1.5rem; }
+.sociosBanner p { color: var(--muted); font-size: 1rem; line-height: 1.6; max-width: 560px; margin: 0 auto 1.5rem; }
 .sociosBtn {
   display: inline-block; background: #D97706; color: #fff !important; text-decoration: none;
-  font-weight: 600; font-size: 0.9rem; padding: 0.8rem 1.9rem; border-radius: 8px; transition: opacity 0.2s;
+  font-weight: 600; font-size: 0.98rem; padding: 0.8rem 1.9rem; border-radius: 8px; transition: opacity 0.2s;
 }
 .sociosBtn:hover { opacity: 0.85; }
 
@@ -360,12 +360,12 @@
   font-weight: 700; color: var(--teal-dark); letter-spacing: 0.04em; margin-bottom: 0.75rem;
 }
 .calcBanner h3 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.6rem; }
-.calcExplicacion { color: var(--muted); font-size: 0.9rem; line-height: 1.6; max-width: 560px; margin: 0 auto 1.5rem; }
+.calcExplicacion { color: var(--muted); font-size: 0.98rem; line-height: 1.6; max-width: 560px; margin: 0 auto 1.5rem; }
 .calcGrid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; text-align: left; margin-bottom: 1.25rem;
 }
 @media (max-width: 640px) { .calcGrid { grid-template-columns: 1fr; } }
-.calcField { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem; color: var(--muted); }
+.calcField { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.9rem; color: var(--muted); }
 /* 3 oct 2026, fix reportado por Joel (screenshot: "no se ve nada cuando
    uno escoge ni cuando uno esta poniendo la cantidad") — el primer intento
    de arreglo usó var(--dark) para el texto, pero en ESTE archivo --dark es
@@ -380,7 +380,7 @@
   display: block;
   width: 100%;
   border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.75rem;
-  font-size: 0.95rem; color: var(--white) !important; background: #fff !important;
+  font-size: 1rem; color: var(--white) !important; background: #fff !important;
 }
 .calcInputMoney {
   display: flex; align-items: center; gap: 0.3rem;
@@ -389,17 +389,17 @@
 }
 .calcInputMoney span { color: var(--muted); }
 .calcInputMoney input {
-  border: none; outline: none; width: 100%; font-size: 0.95rem;
+  border: none; outline: none; width: 100%; font-size: 1rem;
   color: var(--white) !important; background: transparent !important;
 }
 .calcResultado {
   display: flex; align-items: baseline; justify-content: center; gap: 0.6rem;
   padding: 1rem; border-radius: 10px; background: var(--teal-dim); margin-bottom: 1rem;
 }
-.calcResultado span { font-size: 0.85rem; color: var(--muted); }
+.calcResultado span { font-size: 0.93rem; color: var(--muted); }
 .calcResultado strong { font-size: 2rem; font-weight: 700; color: var(--teal-dark); }
-.calcDisclaimer { font-size: 0.75rem; color: var(--muted); font-style: italic; margin-bottom: 1.25rem; }
-.calcPitch { font-size: 0.88rem; color: var(--white); line-height: 1.6; max-width: 560px; margin: 0 auto; }
+.calcDisclaimer { font-size: 0.83rem; color: var(--muted); font-style: italic; margin-bottom: 1.25rem; }
+.calcPitch { font-size: 0.96rem; color: var(--white); line-height: 1.6; max-width: 560px; margin: 0 auto; }
 
 /* PRODUCT TOUR — sección interactiva "haz click y explora" (27 sept 2026,
    pedido de Joel tras ver holded.com). Reconstruida el mismo día a partir
@@ -419,7 +419,7 @@
 .tourTab {
   display: inline-flex; align-items: center; gap: 0.5rem;
   background: var(--card); border: 1px solid var(--border);
-  color: var(--muted); font-size: 0.85rem; font-weight: 500;
+  color: var(--muted); font-size: 0.93rem; font-weight: 500;
   padding: 0.6rem 1.1rem; border-radius: 100px;
   cursor: pointer; transition: all 0.2s;
 }
@@ -428,7 +428,7 @@
   background: var(--teal-dim); border-color: var(--teal);
   color: var(--teal-mid);
 }
-.tourTabIcon { font-size: 0.95rem; }
+.tourTabIcon { font-size: 1rem; }
 
 .tourFrame {
   background: #fff; border: 1px solid var(--border);
@@ -453,14 +453,14 @@
 
 .tourScreenHead { display: flex; align-items: center; justify-content: space-between; }
 .tourGreeting { font-size: 1.05rem; font-weight: 700; color: var(--white); }
-.tourSubtle { font-size: 0.78rem; color: var(--muted); }
+.tourSubtle { font-size: 0.86rem; color: var(--muted); }
 .tourPill {
-  font-size: 0.7rem; font-weight: 600; color: var(--teal-mid);
+  font-size: 0.78rem; font-weight: 600; color: var(--teal-mid);
   background: var(--teal-dim); border: 1px solid #0D9E7535;
   padding: 0.3rem 0.75rem; border-radius: 100px;
 }
 .tourPillTeal {
-  font-size: 0.75rem; font-weight: 600; color: #fff;
+  font-size: 0.83rem; font-weight: 600; color: #fff;
   background: var(--teal); padding: 0.45rem 0.9rem; border-radius: 7px;
   cursor: pointer;
 }
@@ -469,9 +469,9 @@
 .tourBalanceCard {
   background: var(--teal); border-radius: 14px; padding: 1.15rem 1.25rem;
 }
-.tourBalanceLbl { font-size: 0.7rem; color: rgba(255,255,255,0.75); }
+.tourBalanceLbl { font-size: 0.78rem; color: rgba(255,255,255,0.75); }
 .tourBalanceNum { font-size: 1.9rem; font-weight: 700; color: #fff; margin: 0.2rem 0 0.6rem; letter-spacing: -0.02em; }
-.tourBalanceRow { display: flex; justify-content: space-between; gap: 1.25rem; font-size: 0.75rem; }
+.tourBalanceRow { display: flex; justify-content: space-between; gap: 1.25rem; font-size: 0.83rem; }
 .tourUp { color: #9FE1CB; font-weight: 600; }
 .tourDown { color: rgba(255,255,255,0.7); }
 
@@ -479,7 +479,7 @@
   display: flex; gap: 0.7rem; align-items: flex-start;
   background: #FFFBEB; border: 1px solid #F3D488;
   border-radius: 10px; padding: 0.9rem 1.1rem;
-  font-size: 0.85rem; color: var(--white);
+  font-size: 0.93rem; color: var(--white);
 }
 
 .tourMiniGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
@@ -498,15 +498,15 @@
 .tourAvatar {
   width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 0.7rem; font-weight: 700;
+  color: #fff; font-size: 0.78rem; font-weight: 700;
 }
 .tourListInfo { flex: 1; min-width: 0; }
-.tourListName { font-size: 0.88rem; font-weight: 600; color: var(--white); }
+.tourListName { font-size: 0.96rem; font-weight: 600; color: var(--white); }
 .tourListRight { text-align: right; flex-shrink: 0; }
-.tourAmountWhite { font-size: 0.9rem; font-weight: 600; color: var(--white); }
-.tourAmountGreen { font-size: 0.9rem; font-weight: 600; color: #15803D; }
+.tourAmountWhite { font-size: 0.98rem; font-weight: 600; color: var(--white); }
+.tourAmountGreen { font-size: 0.98rem; font-weight: 600; color: #15803D; }
 .tourBadgeGreen, .tourBadgeAmber, .tourBadgeRed {
-  font-size: 0.68rem; font-weight: 600; padding: 0.2rem 0.55rem; border-radius: 100px; margin-top: 0.15rem; display: inline-block;
+  font-size: 0.76rem; font-weight: 600; padding: 0.2rem 0.55rem; border-radius: 100px; margin-top: 0.15rem; display: inline-block;
 }
 .tourBadgeGreen { background: #DCFCE7; color: #15803D; }
 .tourBadgeAmber { background: #FEF3C7; color: #92400E; }
@@ -517,29 +517,29 @@
 .tourChatVictor {
   width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
   background: var(--teal); color: #fff; font-family: 'Courier New', monospace;
-  font-size: 0.75rem; font-weight: 700;
+  font-size: 0.83rem; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
 .tourBubbleVictor {
   background: var(--card); border: 1px solid var(--border);
   border-radius: 10px 10px 10px 2px; padding: 0.7rem 0.95rem;
-  font-size: 0.85rem; color: var(--white); line-height: 1.55; max-width: 420px;
+  font-size: 0.93rem; color: var(--white); line-height: 1.55; max-width: 420px;
 }
 .tourBubbleUser {
   background: var(--teal-dim); border: 1px solid #0D9E7535;
   border-radius: 10px 10px 2px 10px; padding: 0.7rem 0.95rem;
-  font-size: 0.85rem; color: var(--teal-mid); max-width: 300px;
+  font-size: 0.93rem; color: var(--teal-mid); max-width: 300px;
 }
 .tourChatInputBar {
   display: flex; align-items: center; justify-content: space-between;
   background: var(--card); border: 1px solid var(--border);
   border-radius: 100px; padding: 0.7rem 1.1rem; margin-top: 0.3rem;
 }
-.tourChatSend { color: var(--teal-mid); font-size: 0.9rem; }
+.tourChatSend { color: var(--teal-mid); font-size: 0.98rem; }
 .tourChatQuick { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .tourChatQuickBtn {
   background: var(--teal-dim); border: 1px solid #0D9E7535; color: var(--teal-mid);
-  font-size: 0.75rem; padding: 0.4rem 0.8rem; border-radius: 100px;
+  font-size: 0.83rem; padding: 0.4rem 0.8rem; border-radius: 100px;
 }
 
 @media(max-width:640px){
@@ -574,11 +574,11 @@
   padding: 0.9rem 1rem; background: var(--teal);
 }
 .bubbleAvatarImg { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: #fff; }
-.bubblePanelTitle { font-size: 0.9rem; font-weight: 700; color: #fff; }
-.bubblePanelSub { font-size: 0.72rem; color: rgba(255,255,255,0.8); }
+.bubblePanelTitle { font-size: 0.98rem; font-weight: 700; color: #fff; }
+.bubblePanelSub { font-size: 0.8rem; color: rgba(255,255,255,0.8); }
 .bubbleCloseBtn {
   background: rgba(255,255,255,0.2); border: none; border-radius: 50%;
-  width: 26px; height: 26px; color: #fff; cursor: pointer; font-size: 0.8rem;
+  width: 26px; height: 26px; color: #fff; cursor: pointer; font-size: 0.88rem;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 
@@ -591,18 +591,18 @@
   align-self: flex-start; max-width: 85%;
   background: #fff; border: 1px solid var(--border);
   border-radius: 10px 10px 10px 2px; padding: 0.6rem 0.85rem;
-  font-size: 0.85rem; color: var(--white); line-height: 1.5;
+  font-size: 0.93rem; color: var(--white); line-height: 1.5;
   white-space: pre-wrap;
 }
 .bubbleMsgUser {
   align-self: flex-end; max-width: 85%;
   background: var(--teal-dim); border: 1px solid #0D9E7535;
   border-radius: 10px 10px 2px 10px; padding: 0.6rem 0.85rem;
-  font-size: 0.85rem; color: var(--teal-mid); line-height: 1.5;
+  font-size: 0.93rem; color: var(--teal-mid); line-height: 1.5;
   white-space: pre-wrap;
 }
 .bubbleError {
-  align-self: center; font-size: 0.75rem; color: #B91C1C;
+  align-self: center; font-size: 0.83rem; color: #B91C1C;
   background: #FEE2E2; border-radius: 8px; padding: 0.5rem 0.75rem;
 }
 
@@ -612,14 +612,14 @@
 }
 .bubbleInput {
   flex: 1; border: 1px solid var(--border); border-radius: 100px;
-  padding: 0.55rem 0.9rem; font-size: 0.85rem; outline: none;
+  padding: 0.55rem 0.9rem; font-size: 0.93rem; outline: none;
   background: var(--card); color: var(--white);
 }
 .bubbleInput:focus { border-color: var(--teal); }
 .bubbleSendBtn {
   background: var(--teal); color: #fff; border: none; border-radius: 50%;
   width: 34px; height: 34px; flex-shrink: 0; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; font-size: 0.85rem;
+  display: flex; align-items: center; justify-content: center; font-size: 0.93rem;
 }
 .bubbleSendBtn:disabled { opacity: 0.5; cursor: default; }
 
@@ -635,8 +635,8 @@
   text-align: center; display: flex; flex-direction: column;
   gap: 0.4rem; align-items: center;
 }
-.footerLogo { font-family:'Courier New',monospace; font-size:0.85rem; color:var(--teal-mid); }
-.footerSub { font-size: 0.75rem; color: var(--muted); }
+.footerLogo { font-family:'Courier New',monospace; font-size:0.93rem; color:var(--teal-mid); }
+.footerSub { font-size: 0.83rem; color: var(--muted); }
 
 @media(max-width:640px){
   /* Bug real reportado por un visitante (27 sept 2026): "no veo ningun

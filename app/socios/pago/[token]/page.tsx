@@ -126,7 +126,7 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
         <div className="w-full max-w-sm text-center">
           <div className="vc-card">
             <p className="text-sm font-medium">Link no válido</p>
-            <p className="mt-2 text-xs text-muted">
+            <p className="mt-2 text-sm text-muted">
               Este link no es válido o todavía no está activo. Contacta a VICTOR CFO para que te manden uno nuevo.
             </p>
           </div>
@@ -145,7 +145,7 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
           <Logo />
           <div className="vc-card">
             <p className="mb-2 text-sm font-medium">¡Listo!</p>
-            <p className="text-xs text-muted">
+            <p className="text-sm text-muted">
               {estado.requiereContrato
                 ? "Tus documentos están completos. Te enviamos por correo tu código personal, tu QR y el PIN de tu portal de vendedor (revisa también spam)."
                 : "Guardamos tu información de forma segura. Ya podemos pagarte por ACH cuando tengas comisiones pendientes."}
@@ -166,11 +166,11 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
 
         {contratoPendiente ? (
           <form onSubmit={enviarContrato} className="vc-card flex flex-col gap-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">
               Paso {pasoActual} de {totalPasos}
             </p>
             <h1 className="mb-1 text-base font-medium">Hola{estado.nombre ? `, ${estado.nombre}` : ""}, tu contrato</h1>
-            <p className="mb-1 text-xs text-muted">
+            <p className="mb-1 text-sm text-muted">
               Lee el Contrato de Servicios Independientes y completa tus datos de contratista. Se guardan cifrados y solo
               se usan para el contrato y para reportar tus pagos a Hacienda.
             </p>
@@ -179,7 +179,7 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
               href="/documentos/contrato-vendedor.pdf"
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-lg border border-border p-2 text-center text-xs font-medium text-teal"
+              className="rounded-lg border border-border p-2 text-center text-sm font-medium text-teal"
             >
               Leer el contrato (PDF)
             </a>
@@ -211,7 +211,7 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
               required
             />
 
-            <label className="flex items-start gap-2 text-xs text-muted">
+            <label className="flex items-start gap-2 text-sm text-muted">
               <input type="checkbox" checked={acepta} onChange={(e) => setAcepta(e.target.checked)} className="mt-0.5" required />
               <span>
                 He leído y acepto el Contrato de Servicios Independientes con West Capital Ventures LLC. Entiendo que
@@ -219,7 +219,7 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
               </span>
             </label>
 
-            {error && <p className="text-xs text-red">{error}</p>}
+            {error && <p className="text-sm text-red">{error}</p>}
 
             <button type="submit" className="vc-btn-primary mt-2" disabled={enviando || !acepta}>
               {enviando ? "Guardando..." : "Aceptar y continuar"}
@@ -227,11 +227,11 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
           </form>
         ) : (
           <form onSubmit={enviarPago} className="vc-card flex flex-col gap-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">
               Paso {pasoActual} de {totalPasos}
             </p>
             <h1 className="mb-1 text-base font-medium">Hola{estado.nombre ? `, ${estado.nombre}` : ""}, tus datos de pago</h1>
-            <p className="mb-1 text-xs text-muted">
+            <p className="mb-1 text-sm text-muted">
               Para pagarte tus comisiones por ACH necesitamos los datos de tu cuenta bancaria. Esta información se guarda
               cifrada y solo la usamos para transferirte tu dinero.
             </p>
@@ -273,7 +273,7 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
               required
             />
 
-            {error && <p className="text-xs text-red">{error}</p>}
+            {error && <p className="text-sm text-red">{error}</p>}
 
             <button type="submit" className="vc-btn-primary mt-2" disabled={enviando}>
               {enviando ? "Guardando..." : "Guardar mis datos"}

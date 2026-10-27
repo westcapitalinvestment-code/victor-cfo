@@ -352,7 +352,7 @@ function RegistroForm() {
           </div>
           <div className="vc-card">
             <p className="mb-2 text-sm font-medium">Revisa tu correo</p>
-            <p className="text-xs text-muted">
+            <p className="text-sm text-muted">
               Te enviamos un link de confirmación a {email}. Confírmalo para activar tu cuenta y
               {accionEnCurso === "gratis"
                 ? " comenzar. Tu plan gratis queda activo de una vez — ¡bienvenido a VICTOR!"
@@ -435,7 +435,7 @@ function RegistroForm() {
         <div className={mostrarEmailForm ? "w-full max-w-md" : "w-full max-w-5xl"}>
           {/* ¿Te presentó un vendedor de VICTOR? — opcional, colapsado para no
               estorbar a quien llega solo. Ver comentario de los estados arriba. */}
-          <details className="mx-auto mb-4 w-full max-w-md rounded-lg border border-border bg-bg px-3 py-2 text-left text-xs">
+          <details className="mx-auto mb-4 w-full max-w-md rounded-lg border border-border bg-bg px-3 py-2 text-left text-sm">
             <summary className="cursor-pointer font-medium text-text">¿Te presentó VICTOR un vendedor? (opcional)</summary>
             <p className="mt-2 text-muted">
               Si un vendedor te enseñó la app, déjanos el teléfono con el que te contactó o su código, para que reciba su
@@ -461,12 +461,12 @@ function RegistroForm() {
                 disabled={!!socioCodigo}
               />
             </div>
-            {socioCodigo && <p className="mt-1.5 text-[11px] text-teal">Ya viniste con el link de tu vendedor ✓</p>}
+            {socioCodigo && <p className="mt-1.5 text-xs text-teal">Ya viniste con el link de tu vendedor ✓</p>}
           </details>
 
           {!mostrarEmailForm ? (
             <>
-              {error && <p className="mb-3 text-center text-xs text-red">{error}</p>}
+              {error && <p className="mb-3 text-center text-sm text-red">{error}</p>}
 
               {/* Toggle Mensual/Anual, aplica a las tarjetas de Core y Pro */}
               <div className="mx-auto mb-5 flex w-fit justify-center gap-1 rounded-full bg-bg p-1 text-sm">
@@ -495,7 +495,7 @@ function RegistroForm() {
                 <div className="vc-card flex flex-col gap-3 p-6 text-center">
                   <p className="text-lg font-semibold text-text">Gratis</p>
                   <p className="text-3xl font-bold text-teal">$0</p>
-                  <ul className="flex flex-1 flex-col gap-1.5 text-left text-xs">
+                  <ul className="flex flex-1 flex-col gap-1.5 text-left text-sm">
                     <li className="text-text">✓ Documentos</li>
                     <li className="text-text">✓ Metas y Citas</li>
                     <li className="text-text">✓ Categorizar por CSV/Excel</li>
@@ -513,7 +513,7 @@ function RegistroForm() {
                   </button>
                   <button
                     type="button"
-                    className="text-xs text-muted underline"
+                    className="text-sm text-muted underline"
                     disabled={loading || !!oauthEnCurso}
                     onClick={() => abrirEmailForm(true, "core")}
                   >
@@ -528,7 +528,7 @@ function RegistroForm() {
                   }`}
                 >
                   <p className="text-lg font-semibold text-text">Core</p>
-                  <p className="text-xs text-muted">Personal</p>
+                  <p className="text-sm text-muted">Personal</p>
                   <p className="text-3xl font-bold text-teal">
                     ${precioCore}
                     <span className="text-sm font-normal">{sufijoCore}</span>
@@ -538,14 +538,14 @@ function RegistroForm() {
                       ${anualPorMesCore}/mes · ahorra {ahorroCore}%
                     </p>
                   )}
-                  <ul className="flex flex-1 flex-col gap-1.5 text-left text-xs">
+                  <ul className="flex flex-1 flex-col gap-1.5 text-left text-sm">
                     <li className="text-text">✓ Banco conectado (Plaid)</li>
                     <li className="text-text">✓ VICTOR, tu asesor por chat, 24/7</li>
                     <li className="text-text">✓ Categorización automática</li>
                     <li className="text-text">✓ Metas, Documentos y Citas</li>
                     <li className="text-text">✓ Reportes listos para Hacienda</li>
                   </ul>
-                  <p className="text-xs text-muted">{finePrint("core")}</p>
+                  <p className="text-sm text-muted">{finePrint("core")}</p>
                   <TerminosCheckbox aceptaTerminos={!!terminos.core} setAceptaTerminos={setTerminosDe("core")} />
                   <button
                     type="button"
@@ -557,7 +557,7 @@ function RegistroForm() {
                   </button>
                   <button
                     type="button"
-                    className="text-xs text-muted underline"
+                    className="text-sm text-muted underline"
                     disabled={loading || !!oauthEnCurso}
                     onClick={() => abrirEmailForm(false, "core")}
                   >
@@ -572,7 +572,7 @@ function RegistroForm() {
                   }`}
                 >
                   <p className="text-lg font-semibold text-text">Pro</p>
-                  <p className="text-xs text-muted">Negocio</p>
+                  <p className="text-sm text-muted">Negocio</p>
                   <p className="text-3xl font-bold text-teal">
                     ${precioPro}
                     <span className="text-sm font-normal">{sufijoPro}</span>
@@ -582,13 +582,13 @@ function RegistroForm() {
                       ${anualPorMesPro}/mes · ahorra {ahorroPro}%
                     </p>
                   )}
-                  <ul className="flex flex-1 flex-col gap-1.5 text-left text-xs">
+                  <ul className="flex flex-1 flex-col gap-1.5 text-left text-sm">
                     <li className="text-text">✓ Todo lo de Core</li>
                     <li className="text-text">✓ Facturación y cotizaciones</li>
                     <li className="text-text">✓ Cobros con tarjeta</li>
                     <li className="text-text">✓ Reportes multi-entidad</li>
                   </ul>
-                  <p className="text-xs text-muted">{finePrint("pro")}</p>
+                  <p className="text-sm text-muted">{finePrint("pro")}</p>
                   <TerminosCheckbox aceptaTerminos={!!terminos.pro} setAceptaTerminos={setTerminosDe("pro")} />
                   <button
                     type="button"
@@ -600,7 +600,7 @@ function RegistroForm() {
                   </button>
                   <button
                     type="button"
-                    className="text-xs text-muted underline"
+                    className="text-sm text-muted underline"
                     disabled={loading || !!oauthEnCurso}
                     onClick={() => abrirEmailForm(false, "pro")}
                   >
@@ -618,7 +618,7 @@ function RegistroForm() {
                   }`}
                 >
                   <p className="text-lg font-semibold text-text">Business</p>
-                  <p className="text-xs text-muted">Todo incluido</p>
+                  <p className="text-sm text-muted">Todo incluido</p>
                   <p className="text-3xl font-bold text-teal">
                     ${precioBusiness}
                     <span className="text-sm font-normal">{sufijoBusiness}</span>
@@ -628,13 +628,13 @@ function RegistroForm() {
                       ${anualPorMesBusiness}/mes · ahorra {ahorroBusiness}%
                     </p>
                   )}
-                  <ul className="flex flex-1 flex-col gap-1.5 text-left text-xs">
+                  <ul className="flex flex-1 flex-col gap-1.5 text-left text-sm">
                     <li className="text-text">✓ Todo lo de Pro</li>
                     <li className="text-text">✓ Pagos a contratistas (480.6SP automático)</li>
                     <li className="text-text">✓ 1 acceso de secretaria o administrador</li>
                     <li className="text-text">✓ Hasta 3 técnicos de campo</li>
                   </ul>
-                  <p className="text-xs text-muted">{finePrint("proplus")}</p>
+                  <p className="text-sm text-muted">{finePrint("proplus")}</p>
                   <TerminosCheckbox aceptaTerminos={!!terminos.proplus} setAceptaTerminos={setTerminosDe("proplus")} />
                   <button
                     type="button"
@@ -650,7 +650,7 @@ function RegistroForm() {
                   </button>
                   <button
                     type="button"
-                    className="text-xs text-muted underline"
+                    className="text-sm text-muted underline"
                     disabled={loading || !!oauthEnCurso}
                     onClick={() => abrirEmailForm(false, "proplus")}
                   >
@@ -659,7 +659,7 @@ function RegistroForm() {
                 </div>
               </div>
 
-              <p className="mt-5 text-center text-xs text-muted">
+              <p className="mt-5 text-center text-sm text-muted">
                 ¿Ya tienes cuenta?{" "}
                 <Link href="/login" className="font-medium text-teal">
                   Entra aquí
@@ -676,7 +676,7 @@ function RegistroForm() {
                     }`}
               </p>
 
-              {error && <p className="text-center text-xs text-red">{error}</p>}
+              {error && <p className="text-center text-sm text-red">{error}</p>}
 
               <input
                 className="vc-input"
@@ -709,7 +709,7 @@ function RegistroForm() {
 
               <button
                 type="button"
-                className="text-center text-xs text-muted hover:text-teal"
+                className="text-center text-sm text-muted hover:text-teal"
                 onClick={() => {
                   setError(null);
                   setMostrarEmailForm(false);

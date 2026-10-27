@@ -163,7 +163,7 @@ export default function AceptarInvitacionFirmaPage() {
           </div>
           <div className="vc-card">
             <p className="mb-1 text-sm font-medium">Este link ya no es válido</p>
-            <p className="text-xs text-muted">{errorInvite || "Invitación no encontrada."}</p>
+            <p className="text-sm text-muted">{errorInvite || "Invitación no encontrada."}</p>
           </div>
         </div>
       </div>
@@ -180,7 +180,7 @@ export default function AceptarInvitacionFirmaPage() {
           </div>
           <div className="vc-card">
             <p className="mb-2 text-sm font-medium">Ya aceptaste esta invitación</p>
-            <p className="mb-4 text-xs text-muted">Entra con tu correo y contraseña para usar tu cuenta.</p>
+            <p className="mb-4 text-sm text-muted">Entra con tu correo y contraseña para usar tu cuenta.</p>
             <button className="vc-btn-primary" onClick={() => router.push("/login")}>
               Ir a iniciar sesión
             </button>
@@ -200,7 +200,7 @@ export default function AceptarInvitacionFirmaPage() {
           </div>
           <div className="vc-card">
             <p className="mb-2 text-sm font-medium">Revisa tu correo</p>
-            <p className="text-xs text-muted">
+            <p className="text-sm text-muted">
               Te mandamos un link de confirmación a {invite.email}. Entra ahí y vuelves directo a este mismo link
               ya con tu cuenta activa — no hace falta hacer nada más.
             </p>
@@ -216,7 +216,7 @@ export default function AceptarInvitacionFirmaPage() {
         <div className="mb-8 flex items-center justify-center gap-2">
           <img src="/victor-avatar.png" alt="VICTOR" className="h-9 w-9 flex-shrink-0 rounded-full object-cover" style={{ background: "#fff" }} />
           <span className="text-lg font-medium">VICTOR</span>
-          <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-[10px] font-medium text-teal">
+          <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-xs font-medium text-teal">
             Plan Business
           </span>
         </div>
@@ -226,7 +226,7 @@ export default function AceptarInvitacionFirmaPage() {
             <p className="text-sm font-medium">
               {invite.firmaName ? `${invite.firmaName} te regaló una cuenta de VICTOR CFO` : "Te invitaron a VICTOR CFO"}
             </p>
-            <p className="mt-1 text-xs text-muted">
+            <p className="mt-1 text-sm text-muted">
               {invite.firmaName || "Tu contador"} cubre tu plan Business{invite.nombreNegocio ? ` de ${invite.nombreNegocio}` : ""} —
               vas a usar tu cuenta completa todos los días, sin tener que pagar nada.
             </p>
@@ -236,21 +236,21 @@ export default function AceptarInvitacionFirmaPage() {
             <button
               type="button"
               onClick={() => setModo("crear")}
-              className={`flex-1 rounded-md py-1.5 text-xs font-medium ${modo === "crear" ? "bg-teal text-white" : "text-muted"}`}
+              className={`flex-1 rounded-md py-1.5 text-sm font-medium ${modo === "crear" ? "bg-teal text-white" : "text-muted"}`}
             >
               Crear contraseña
             </button>
             <button
               type="button"
               onClick={() => setModo("entrar")}
-              className={`flex-1 rounded-md py-1.5 text-xs font-medium ${modo === "entrar" ? "bg-teal text-white" : "text-muted"}`}
+              className={`flex-1 rounded-md py-1.5 text-sm font-medium ${modo === "entrar" ? "bg-teal text-white" : "text-muted"}`}
             >
               Ya tengo cuenta
             </button>
           </div>
 
-          {error && <p className="text-xs text-red">{error}</p>}
-          {conectando && <p className="text-xs text-muted">Conectando tu cuenta...</p>}
+          {error && <p className="text-sm text-red">{error}</p>}
+          {conectando && <p className="text-sm text-muted">Conectando tu cuenta...</p>}
 
           {modo === "crear" ? (
             <form onSubmit={handleCrear} className="flex flex-col gap-2">
@@ -283,11 +283,11 @@ export default function AceptarInvitacionFirmaPage() {
                 {enviando ? "Entrando..." : "Entrar"}
               </button>
               {!resetEnviado ? (
-                <button type="button" onClick={handleOlvidoContrasena} className="text-center text-xs text-muted underline">
+                <button type="button" onClick={handleOlvidoContrasena} className="text-center text-sm text-muted underline">
                   Olvidé mi contraseña
                 </button>
               ) : (
-                <p className="text-center text-xs text-muted">Te mandamos un link para restablecerla.</p>
+                <p className="text-center text-sm text-muted">Te mandamos un link para restablecerla.</p>
               )}
             </form>
           )}

@@ -101,7 +101,7 @@ function Chips({
             key={o}
             type="button"
             onClick={() => onChange(on ? valor.filter((x) => x !== o) : [...valor, o])}
-            className={`rounded-pill border px-2.5 py-1 text-[11px] ${
+            className={`rounded-pill border px-2.5 py-1 text-xs ${
               on ? "border-teal bg-teal text-white" : "border-border text-muted"
             }`}
           >
@@ -257,11 +257,11 @@ export default function OficinasContables() {
 
   return (
     <div className="mb-5">
-      <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
         Oficinas de contables {mias ? `(${mias.length} tuyas · ${mias.length + otras.length} en total)` : ""}
       </p>
       <div className="vc-card mb-3 flex flex-col gap-2">
-        <p className="text-[11px] text-muted">
+        <p className="text-xs text-muted">
           Registra aquí cada oficina de contables que visites. Así nadie más la repite y tú le das seguimiento por 60 días
           (cada actualización renueva el plazo). Cuando el contable entra al portal, el status cambia solo a «Tiene el
           portal».
@@ -277,7 +277,7 @@ export default function OficinasContables() {
         )}
         {abierto && (
           <form onSubmit={guardar} className="flex flex-col gap-2">
-            {error && <p className="text-xs text-red">{error}</p>}
+            {error && <p className="text-sm text-red">{error}</p>}
             <input
               value={f.nombre}
               onChange={(e) => set("nombre", e.target.value)}
@@ -285,7 +285,7 @@ export default function OficinasContables() {
               className="rounded-lg border border-border p-2 text-sm"
             />
             {coincidencias.length > 0 && (
-              <div className="rounded-lg border border-border p-2 text-[11px]">
+              <div className="rounded-lg border border-border p-2 text-xs">
                 <p className="mb-1 font-medium text-amb">Ojo: ya hay oficinas parecidas registradas</p>
                 {coincidencias.map((c) => (
                   <p key={c.id} className="text-muted">
@@ -367,11 +367,11 @@ export default function OficinasContables() {
                 className="w-1/2 rounded-lg border border-border p-2 text-sm"
               />
             </div>
-            <p className="text-[11px] font-medium text-muted">Sectores con los que trabaja</p>
+            <p className="text-xs font-medium text-muted">Sectores con los que trabaja</p>
             <Chips opciones={SECTORES} valor={f.sectores} onChange={(v) => set("sectores", v)} />
-            <p className="text-[11px] font-medium text-muted">Se especializa en</p>
+            <p className="text-xs font-medium text-muted">Se especializa en</p>
             <Chips opciones={ESPECIALIDADES} valor={f.especialidades} onChange={(v) => set("especialidades", v)} />
-            <label className="flex items-center gap-2 text-[12px]">
+            <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={f.remoto} onChange={(e) => set("remoto", e.target.checked)} />
               Atiende clientes a distancia
             </label>
@@ -408,7 +408,7 @@ export default function OficinasContables() {
         className="mb-2 w-full rounded-lg border border-border p-2 text-sm"
       />
       {porContacto.length > 0 && (
-        <div className="vc-card mb-2 text-[12px]">
+        <div className="vc-card mb-2 text-sm">
           <p className="mb-1 font-medium text-amb">Ya está registrada</p>
           {porContacto.map((c) => (
             <p key={c.id} className="text-muted">
@@ -430,7 +430,7 @@ export default function OficinasContables() {
                   key={e}
                   type="button"
                   onClick={() => setFEstado(e)}
-                  className={`rounded-pill border px-2.5 py-1 text-[11px] font-medium ${
+                  className={`rounded-pill border px-2.5 py-1 text-xs font-medium ${
                     fEstado === e ? "border-teal bg-teal text-white" : "border-border text-muted"
                   }`}
                 >
@@ -443,7 +443,7 @@ export default function OficinasContables() {
             <select
               value={fPueblo}
               onChange={(e) => setFPueblo(e.target.value)}
-              className="rounded-lg border border-border bg-transparent p-2 text-[12px]"
+              className="rounded-lg border border-border bg-transparent p-2 text-sm"
             >
               <option value="">Todos los pueblos</option>
               {pueblosMios.map((m) => (
@@ -463,11 +463,11 @@ export default function OficinasContables() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{m.nombre}</p>
-                  <p className="truncate text-[11px] text-muted">
+                  <p className="truncate text-xs text-muted">
                     {[m.pueblo, m.contactoNombre, m.telefono ? fmtTel(m.telefono) : null].filter(Boolean).join(" · ")}
                   </p>
                 </div>
-                <span className={`shrink-0 text-right text-[11px] font-medium ${STATUS_COLOR[m.status]}`}>
+                <span className={`shrink-0 text-right text-xs font-medium ${STATUS_COLOR[m.status]}`}>
                   {STATUS_OFICINA_LABEL[m.status].split(" · ")[0].replace(" (seguimiento vencido)", "")}
                   {m.status === "en_seguimiento" && m.diasRestantes !== null ? ` · ${m.diasRestantes} d` : ""}
                   {m.status === "disponible" ? " · venció" : ""}
@@ -475,14 +475,14 @@ export default function OficinasContables() {
               </div>
               <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
                 {m.status === "tiene_portal" ? (
-                  <span className="text-[12px] font-medium text-teal">Ya tiene el portal ✓</span>
+                  <span className="text-sm font-medium text-teal">Ya tiene el portal ✓</span>
                 ) : (
                   <>
-                    <span className="text-[11px] text-muted">Estado:</span>
+                    <span className="text-xs text-muted">Estado:</span>
                     <select
                       value={m.estado}
                       onChange={(e) => cambiarEstado(m, e.target.value as EstadoSeguimiento)}
-                      className={`rounded-lg border border-border bg-transparent px-2 py-1 text-[12px] font-medium ${ESTADO_SEGUIMIENTO_COLOR[m.estado]}`}
+                      className={`rounded-lg border border-border bg-transparent px-2 py-1 text-sm font-medium ${ESTADO_SEGUIMIENTO_COLOR[m.estado]}`}
                     >
                       {ESTADOS_SEGUIMIENTO.map((e) => (
                         <option key={e} value={e}>
@@ -495,13 +495,13 @@ export default function OficinasContables() {
                 <button
                   type="button"
                   onClick={() => setExpandida(expandida === m.id ? null : m.id)}
-                  className="ml-auto text-[12px] text-muted"
+                  className="ml-auto text-sm text-muted"
                 >
                   {expandida === m.id ? "Ocultar" : "Ver más"}
                 </button>
               </div>
               {expandida === m.id && (
-                <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2 text-[12px]">
+                <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2 text-sm">
                   {m.descripcion && <p>{m.descripcion}</p>}
                   {m.especialidades.length > 0 && <p className="text-muted">Especialidades: {m.especialidades.join(", ")}</p>}
                   {m.sectores.length > 0 && <p className="text-muted">Sectores: {m.sectores.join(", ")}</p>}
@@ -554,7 +554,7 @@ export default function OficinasContables() {
       )}
 
       {busca.trim() && lista.length === 0 && otrasFiltradas.length === 0 && porContacto.length === 0 && (
-        <p className="mb-2 text-center text-[12px] text-muted">No hay oficinas que coincidan. Puedes registrarla.</p>
+        <p className="mb-2 text-center text-sm text-muted">No hay oficinas que coincidan. Puedes registrarla.</p>
       )}
 
       {otras.length > 0 && (
@@ -562,7 +562,7 @@ export default function OficinasContables() {
           <button
             type="button"
             onClick={() => setVerOtras(!verOtras)}
-            className="flex w-full items-center justify-between text-[12px] font-medium"
+            className="flex w-full items-center justify-between text-sm font-medium"
           >
             <span>
               Oficinas de otros vendedores ({busca.trim() ? `${otrasFiltradas.length} de ${otras.length}` : otras.length})
@@ -572,12 +572,12 @@ export default function OficinasContables() {
           {(verOtras || busca.trim()) && (
             <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
               {otrasFiltradas.map((o) => (
-                <div key={o.id} className="flex items-start justify-between gap-2 text-[12px]">
+                <div key={o.id} className="flex items-start justify-between gap-2 text-sm">
                   <span className="min-w-0 truncate">
                     {o.nombre}
                     {o.pueblo ? <span className="text-muted"> · {o.pueblo}</span> : null}
                   </span>
-                  <span className={`shrink-0 text-[11px] font-medium ${STATUS_COLOR[o.status]}`}>
+                  <span className={`shrink-0 text-xs font-medium ${STATUS_COLOR[o.status]}`}>
                     {STATUS_OFICINA_LABEL[o.status].split(" · ")[0].replace(" (seguimiento vencido)", "")}
                   </span>
                 </div>

@@ -169,7 +169,7 @@ export default function RegistroCpaPage() {
     <div className="mb-8 flex items-center justify-center gap-2">
       <img src="/victor-avatar.png" alt="VICTOR" className="h-9 w-9 flex-shrink-0 rounded-full object-cover" style={{ background: "#fff" }} />
       <span className="text-lg font-medium">VICTOR</span>
-      <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-[10px] font-medium text-teal">Portal Contable</span>
+      <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-xs font-medium text-teal">Portal Contable</span>
     </div>
   );
 
@@ -180,7 +180,7 @@ export default function RegistroCpaPage() {
           {encabezado}
           <div className="vc-card">
             <p className="mb-2 text-sm font-medium">Revisa tu correo</p>
-            <p className="text-xs text-muted">
+            <p className="text-sm text-muted">
               Te mandamos un link de confirmación a {email}. Entra ahí y volverás aquí con tu cuenta lista — no hace
               falta hacer nada más.
             </p>
@@ -198,21 +198,21 @@ export default function RegistroCpaPage() {
         <div className="vc-card flex flex-col gap-3">
           <div>
             <p className="text-sm font-medium">Abre tu cuenta de contable</p>
-            <p className="mt-1 text-xs text-muted">Sin costo. Te toma un minuto y no necesitas tener clientes todavía.</p>
+            <p className="mt-1 text-sm text-muted">Sin costo. Te toma un minuto y no necesitas tener clientes todavía.</p>
           </div>
 
           <div className="flex gap-1 rounded-lg border border-border p-1">
             <button
               type="button"
               onClick={() => setModo("crear")}
-              className={`flex-1 rounded-md py-1.5 text-xs font-medium ${modo === "crear" ? "bg-teal text-white" : "text-muted"}`}
+              className={`flex-1 rounded-md py-1.5 text-sm font-medium ${modo === "crear" ? "bg-teal text-white" : "text-muted"}`}
             >
               Crear cuenta
             </button>
             <button
               type="button"
               onClick={() => setModo("entrar")}
-              className={`flex-1 rounded-md py-1.5 text-xs font-medium ${modo === "entrar" ? "bg-teal text-white" : "text-muted"}`}
+              className={`flex-1 rounded-md py-1.5 text-sm font-medium ${modo === "entrar" ? "bg-teal text-white" : "text-muted"}`}
             >
               Ya tengo cuenta
             </button>
@@ -259,7 +259,7 @@ export default function RegistroCpaPage() {
               onChange={(e) => setLicenciaCpa(e.target.value)}
             />
 
-            {error && <p className="text-xs text-red">{error}</p>}
+            {error && <p className="text-sm text-red">{error}</p>}
 
             <button type="submit" className="vc-btn-primary mt-1" disabled={enviando || conectando}>
               {conectando ? "Preparando tu portal..." : enviando ? "Un momento..." : modo === "crear" ? "Crear cuenta y entrar" : "Entrar"}
@@ -268,9 +268,9 @@ export default function RegistroCpaPage() {
 
           {modo === "entrar" &&
             (resetEnviado ? (
-              <p className="text-center text-xs text-muted">Te mandamos un link a {email} para crear una contraseña nueva.</p>
+              <p className="text-center text-sm text-muted">Te mandamos un link a {email} para crear una contraseña nueva.</p>
             ) : (
-              <button type="button" className="text-center text-xs text-muted hover:text-teal" onClick={handleOlvido}>
+              <button type="button" className="text-center text-sm text-muted hover:text-teal" onClick={handleOlvido}>
                 ¿Olvidaste tu contraseña?
               </button>
             ))}

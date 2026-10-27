@@ -51,22 +51,22 @@ export default function BonosOficinas() {
 
   return (
     <div className="mb-5">
-      <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">Bonos por tus oficinas de contables</p>
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Bonos por tus oficinas de contables</p>
       <div className="vc-card mb-2">
-        <p className="text-[11px] text-muted">
+        <p className="text-xs text-muted">
           Ganas {fmt(d.reglas.activacionCentavos)} una vez por cada oficina cuando su primer cliente ya pagó, más{" "}
           {fmt(d.reglas.clienteCentavos)} una vez por cada cliente que traiga. Se paga cada 3 meses.
         </p>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-muted">Este trimestre ({label(d.trimestreActual)})</p>
+            <p className="text-xs uppercase tracking-wide text-muted">Este trimestre ({label(d.trimestreActual)})</p>
             <p className="text-lg font-medium">{fmt(actual?.netoCentavos ?? 0)}</p>
-            <p className="text-[10px] text-muted">neto estimado, después de retención</p>
+            <p className="text-xs text-muted">neto estimado, después de retención</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-muted">Por cobrar en total</p>
+            <p className="text-xs uppercase tracking-wide text-muted">Por cobrar en total</p>
             <p className="text-lg font-medium">{fmt(d.totalPendienteNetoCentavos)}</p>
-            <p className="text-[10px] text-muted">ya cobrado {fmt(d.totalPagadoNetoCentavos)}</p>
+            <p className="text-xs text-muted">ya cobrado {fmt(d.totalPagadoNetoCentavos)}</p>
           </div>
         </div>
       </div>
@@ -77,14 +77,14 @@ export default function BonosOficinas() {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{o.nombre}</p>
-                <p className="text-[11px] text-muted">{o.pueblo ?? ""}</p>
+                <p className="text-xs text-muted">{o.pueblo ?? ""}</p>
               </div>
-              <span className={`shrink-0 text-right text-[11px] font-medium ${o.esperandoPrimerCliente ? "text-amb" : "text-teal"}`}>
+              <span className={`shrink-0 text-right text-xs font-medium ${o.esperandoPrimerCliente ? "text-amb" : "text-teal"}`}>
                 {o.esperandoPrimerCliente ? "Esperando su primer cliente" : `${o.clientes.length} cliente${o.clientes.length === 1 ? "" : "s"} · ${fmt(o.ganadoBrutoCentavos)}`}
               </span>
             </div>
             {o.clientes.length > 0 && (
-              <div className="mt-2 flex flex-col gap-0.5 border-t border-border pt-2 text-[12px] text-muted">
+              <div className="mt-2 flex flex-col gap-0.5 border-t border-border pt-2 text-sm text-muted">
                 {o.activacion && (
                   <p>
                     Activación de la oficina: {fmt(o.activacion.centavos)} · {o.activacion.estado === "pagada" ? "pagada" : "pendiente"}
@@ -105,11 +105,11 @@ export default function BonosOficinas() {
 
       {d.trimestres.filter((t) => t.brutoCentavos > 0).length > 0 && (
         <div className="vc-card mt-2">
-          <p className="mb-1 text-[11px] font-medium text-muted">Por trimestre (neto)</p>
+          <p className="mb-1 text-xs font-medium text-muted">Por trimestre (neto)</p>
           {d.trimestres
             .filter((t) => t.brutoCentavos > 0)
             .map((t) => (
-              <p key={t.trimestre} className="flex justify-between text-[12px]">
+              <p key={t.trimestre} className="flex justify-between text-sm">
                 <span>{label(t.trimestre)}</span>
                 <span>
                   {fmt(t.netoCentavos)}

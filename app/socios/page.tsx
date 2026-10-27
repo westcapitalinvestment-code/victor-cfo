@@ -76,12 +76,12 @@ export default function SociosPage() {
             <span className="text-lg font-medium">VICTOR</span>
           </div>
           <div className="vc-card">
-            <p className="mb-2 text-sm font-medium">¡Solicitud enviada!</p>
-            <p className="text-xs text-muted">
+            <p className="mb-2 text-base font-medium">¡Solicitud enviada!</p>
+            <p className="text-sm text-muted">
               Recibimos tu información y tu currículum. Te mandamos un correo con los próximos pasos (revisa también
               tu carpeta de spam).
             </p>
-            <ol className="mt-3 list-decimal space-y-1 pl-4 text-left text-xs text-muted">
+            <ol className="mt-3 list-decimal space-y-1 pl-4 text-left text-sm text-muted">
               <li>El equipo de VICTOR CFO revisa tu solicitud.</li>
               <li>Si eres aprobado, te avisamos por correo y por WhatsApp.</li>
               <li>Completas tus documentos (contrato y datos de pago) desde un link privado.</li>
@@ -103,7 +103,7 @@ export default function SociosPage() {
 
         <form onSubmit={enviar} className="vc-card flex flex-col gap-3">
           <h1 className="mb-1 text-base font-medium">Únete al equipo de VICTOR CFO</h1>
-          <p className="mb-1 text-xs text-muted">
+          <p className="mb-1 text-sm text-muted">
             {/* h1 cambiado de "Sé Embajador o Afiliado" a algo neutral (3 oct
                 2026) — ahora el tráfico principal a este form llega desde el
                 CTA "Quiero ser Vendedor" de la landing (ver
@@ -120,7 +120,7 @@ export default function SociosPage() {
             para explicarte cómo puedes colaborar con nosotros.
           </p>
 
-          <div className="mb-1 flex gap-2 text-xs">
+          <div className="mb-1 flex gap-2 text-sm">
             <button
               type="button"
               onClick={() => setTipo("cpa")}
@@ -178,18 +178,18 @@ export default function SociosPage() {
           />
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Currículum (PDF o Word, máx. 4 MB)</label>
+            <label className="mb-1 block text-sm font-medium text-muted">Currículum (PDF o Word, máx. 4 MB)</label>
             <input
-              className="vc-input !py-2 text-xs"
+              className="vc-input !py-2 text-sm"
               type="file"
               accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               onChange={(e) => setResume(e.target.files?.[0] ?? null)}
               required
             />
-            {resume && <p className="mt-1 truncate text-[11px] text-teal">{resume.name}</p>}
+            {resume && <p className="mt-1 truncate text-xs text-teal">{resume.name}</p>}
           </div>
 
-          <label className="flex items-start gap-2 text-xs text-muted">
+          <label className="flex items-start gap-2 text-sm text-muted">
             <input
               type="checkbox"
               checked={aceptaTerminos}
@@ -206,13 +206,13 @@ export default function SociosPage() {
             </span>
           </label>
 
-          {error && <p className="text-xs text-red">{error}</p>}
+          {error && <p className="text-sm text-red">{error}</p>}
 
           <button type="submit" className="vc-btn-primary mt-2" disabled={loading || !aceptaTerminos}>
             {loading ? "Enviando..." : "Enviar solicitud"}
           </button>
 
-          <p className="mt-1 text-center text-xs text-muted">
+          <p className="mt-1 text-center text-sm text-muted">
             ¿Ya tienes cuenta?{" "}
             <Link href="/login" className="font-medium text-teal">
               Entra aquí

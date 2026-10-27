@@ -255,9 +255,9 @@ export default function SocioPortalPage() {
 
           <form onSubmit={entrar} className="vc-card flex flex-col gap-3">
             <h1 className="mb-1 text-base font-medium">Portal de vendedor</h1>
-            <p className="mb-1 text-xs text-muted">Entra con tu código y tu PIN de 4 dígitos para ver tus clientes y tus comisiones.</p>
+            <p className="mb-1 text-sm text-muted">Entra con tu código y tu PIN de 4 dígitos para ver tus clientes y tus comisiones.</p>
 
-            {error && <p className="text-xs text-red">{error}</p>}
+            {error && <p className="text-sm text-red">{error}</p>}
 
             <input
               value={codigo}
@@ -289,13 +289,13 @@ export default function SocioPortalPage() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <p className="text-base font-medium">Hola, {sesion.nombre}</p>
-          <p className="text-xs text-muted">Tus clientes y tus comisiones</p>
+          <p className="text-sm text-muted">Tus clientes y tus comisiones</p>
         </div>
         <div className="flex items-center gap-1.5">
-          <a href="/socios/manual" className="rounded-pill border border-border px-2.5 py-1 text-[11px] font-medium text-teal">
+          <a href="/socios/manual" className="rounded-pill border border-border px-2.5 py-1 text-xs font-medium text-teal">
             Manual
           </a>
-          <button onClick={salir} className="rounded-pill border border-border px-2.5 py-1 text-[11px] font-medium text-muted">
+          <button onClick={salir} className="rounded-pill border border-border px-2.5 py-1 text-xs font-medium text-muted">
             Salir
           </button>
         </div>
@@ -306,28 +306,28 @@ export default function SocioPortalPage() {
       ) : (
         <>
           {/* Link personal + QR: para enseñarlo en persona o compartirlo */}
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">Tu link y tu QR</p>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Tu link y tu QR</p>
           <div className="vc-card mb-4 flex flex-col items-center gap-2 text-center">
-            <p className="text-[11px] text-muted">
+            <p className="text-xs text-muted">
               Cualquier negocio que se registre por este link o este QR queda conectado a ti automáticamente.
             </p>
             {qrUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={qrUrl} alt={`QR de ${codigoSocio}`} width={200} height={200} className="rounded-lg bg-white" />
             ) : (
-              <div className="flex h-[200px] w-[200px] items-center justify-center text-[11px] text-muted">Generando QR…</div>
+              <div className="flex h-[200px] w-[200px] items-center justify-center text-xs text-muted">Generando QR…</div>
             )}
             <p className="text-sm font-semibold tracking-wide">{codigoSocio}</p>
-            <p className="break-all text-[11px] text-muted">{linkPersonal}</p>
+            <p className="break-all text-xs text-muted">{linkPersonal}</p>
             <div className="flex gap-2">
-              <button type="button" onClick={copiarLink} className="rounded-pill border border-border px-3 py-1.5 text-[12px] font-medium">
+              <button type="button" onClick={copiarLink} className="rounded-pill border border-border px-3 py-1.5 text-sm font-medium">
                 {copiado ? "Copiado ✓" : "Copiar link"}
               </button>
               {qrUrl && (
                 <a
                   href={qrUrl}
                   download={`qr-${codigoSocio}.png`}
-                  className="rounded-pill bg-teal px-3 py-1.5 text-[12px] font-medium text-white"
+                  className="rounded-pill bg-teal px-3 py-1.5 text-sm font-medium text-white"
                 >
                   Descargar QR
                 </a>
@@ -343,15 +343,15 @@ export default function SocioPortalPage() {
 
           {/* Prospectos: protege tu comisión si el cliente se registra después
               por la landing, y te deja dar seguimiento (llamar / WhatsApp). */}
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
             Tus prospectos {prospectos ? `(${prospectos.length})` : ""}
           </p>
           <form onSubmit={agregarProspecto} className="vc-card mb-3 flex flex-col gap-2">
-            <p className="text-[11px] text-muted">
+            <p className="text-xs text-muted">
               Registra a quien le presentaste VICTOR. Si se registra con ese email o teléfono en los próximos 60 días, por
               donde sea, la venta es tuya.
             </p>
-            {pError && <p className="text-xs text-red">{pError}</p>}
+            {pError && <p className="text-sm text-red">{pError}</p>}
             <input
               value={pNombre}
               onChange={(e) => setPNombre(e.target.value)}
@@ -422,7 +422,7 @@ export default function SocioPortalPage() {
                       key={e}
                       type="button"
                       onClick={() => setFSeg(e)}
-                      className={`rounded-pill border px-2.5 py-1 text-[11px] font-medium ${
+                      className={`rounded-pill border px-2.5 py-1 text-xs font-medium ${
                         fSeg === e ? "border-teal bg-teal text-white" : "border-border text-muted"
                       }`}
                     >
@@ -435,7 +435,7 @@ export default function SocioPortalPage() {
                 <select
                   value={fPueblo}
                   onChange={(e) => setFPueblo(e.target.value)}
-                  className="w-1/2 rounded-lg border border-border bg-transparent p-2 text-[12px]"
+                  className="w-1/2 rounded-lg border border-border bg-transparent p-2 text-sm"
                 >
                   <option value="">Todos los pueblos</option>
                   {Array.from(new Set(prospectos.map((p) => p.pueblo).filter((x): x is string => !!x)))
@@ -450,7 +450,7 @@ export default function SocioPortalPage() {
                   value={fBusca}
                   onChange={(e) => setFBusca(e.target.value)}
                   placeholder="Buscar nombre..."
-                  className="w-1/2 rounded-lg border border-border p-2 text-[12px]"
+                  className="w-1/2 rounded-lg border border-border p-2 text-sm"
                 />
               </div>
             </div>
@@ -469,23 +469,23 @@ export default function SocioPortalPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{p.nombre}</p>
-                        <p className="truncate text-[11px] text-muted">
+                        <p className="truncate text-xs text-muted">
                           {[p.email, p.telefono ? fmtTel(p.telefono) : null].filter(Boolean).join(" · ")}
                         </p>
-                        {p.pueblo && <p className="text-[11px] text-muted">{p.pueblo}</p>}
-                        {p.notas && <p className="mt-0.5 text-[11px] text-muted">{p.notas}</p>}
+                        {p.pueblo && <p className="text-xs text-muted">{p.pueblo}</p>}
+                        {p.notas && <p className="mt-0.5 text-xs text-muted">{p.notas}</p>}
                       </div>
-                      <span className={`shrink-0 text-[11px] font-medium ${info.color}`}>
+                      <span className={`shrink-0 text-xs font-medium ${info.color}`}>
                         {info.texto}
                         {p.estado === "vigente" && p.diasRestantes !== null ? ` · ${p.diasRestantes} d` : ""}
                       </span>
                     </div>
                     <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
-                      <span className="text-[11px] text-muted">Seguimiento:</span>
+                      <span className="text-xs text-muted">Seguimiento:</span>
                       <select
                         value={p.seguimiento}
                         onChange={(e) => cambiarSeguimiento(p.id, e.target.value as EstadoSeguimiento)}
-                        className={`rounded-lg border border-border bg-transparent px-2 py-1 text-[12px] font-medium ${ESTADO_SEGUIMIENTO_COLOR[p.seguimiento]}`}
+                        className={`rounded-lg border border-border bg-transparent px-2 py-1 text-sm font-medium ${ESTADO_SEGUIMIENTO_COLOR[p.seguimiento]}`}
                       >
                         {ESTADOS_SEGUIMIENTO.map((e) => (
                           <option key={e} value={e}>
@@ -495,7 +495,7 @@ export default function SocioPortalPage() {
                       </select>
                     </div>
                     {p.estado === "vigente" && (
-                      <div className="mt-2 flex flex-wrap gap-3 border-t border-border pt-2 text-[12px]">
+                      <div className="mt-2 flex flex-wrap gap-3 border-t border-border pt-2 text-sm">
                         {p.telefono && (
                           <a href={`tel:+1${p.telefono}`} className="font-medium text-teal">
                             Llamar
@@ -527,7 +527,7 @@ export default function SocioPortalPage() {
             </div>
           )}
 
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
             Tus clientes ({datos.clientes.length})
           </p>
 
@@ -542,15 +542,15 @@ export default function SocioPortalPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{c.nombre || "Cliente"}</p>
-                        <p className="text-[11px] text-muted">
+                        <p className="text-xs text-muted">
                           Desde {fmtFecha(c.registradoEn)}
                           {c.ciclo ? ` · ${c.ciclo}` : ""}
                         </p>
                       </div>
-                      <span className={`shrink-0 text-[11px] font-medium ${estadoInfo.color}`}>{estadoInfo.texto}</span>
+                      <span className={`shrink-0 text-xs font-medium ${estadoInfo.color}`}>{estadoInfo.texto}</span>
                     </div>
                     {(c.cobradoCentavos > 0 || c.pendienteCentavos > 0 || c.treintaEsperaCentavos > 0) && (
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-2 text-[12px]">
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-2 text-sm">
                         {c.cobradoCentavos > 0 && (
                           <span>
                             Cobrado: <span className="font-medium text-teal">{fmt(c.cobradoCentavos)}</span>

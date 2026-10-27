@@ -113,7 +113,7 @@ function VerificarForm() {
         {modo === "totp" ? (
           <form onSubmit={verificarTotp} className="vc-card flex flex-col items-center gap-3">
             <h1 className="mb-1 text-base font-medium">Verificación en dos pasos</h1>
-            <p className="mb-2 text-center text-xs text-muted">
+            <p className="mb-2 text-center text-sm text-muted">
               Escribe el código de 6 dígitos de tu app de autenticación.
             </p>
 
@@ -127,7 +127,7 @@ function VerificarForm() {
               autoFocus
             />
 
-            {error && <p className="text-xs text-red">{error}</p>}
+            {error && <p className="text-sm text-red">{error}</p>}
 
             <button type="submit" className="vc-btn-primary w-full" disabled={procesando || codigo.length !== 6}>
               {procesando ? "Verificando..." : "Entrar"}
@@ -135,7 +135,7 @@ function VerificarForm() {
 
             <button
               type="button"
-              className="text-center text-xs text-muted hover:text-teal"
+              className="text-center text-sm text-muted hover:text-teal"
               onClick={() => {
                 setModo("respaldo");
                 setCodigo("");
@@ -148,7 +148,7 @@ function VerificarForm() {
         ) : (
           <form onSubmit={usarCodigoRespaldo} className="vc-card flex flex-col gap-3">
             <h1 className="mb-1 text-base font-medium">Código de respaldo</h1>
-            <p className="mb-2 text-xs text-muted">
+            <p className="mb-2 text-sm text-muted">
               Escribe uno de los 10 códigos que guardaste al activar la verificación en dos pasos. Usarlo la
               desactiva — puedes volver a activarla después desde Configuración.
             </p>
@@ -161,7 +161,7 @@ function VerificarForm() {
               autoFocus
             />
 
-            {error && <p className="text-xs text-red">{error}</p>}
+            {error && <p className="text-sm text-red">{error}</p>}
 
             <button type="submit" className="vc-btn-primary mt-1" disabled={procesando || !codigo.trim()}>
               {procesando ? "Verificando..." : "Entrar"}
@@ -169,7 +169,7 @@ function VerificarForm() {
 
             <button
               type="button"
-              className="text-center text-xs text-muted hover:text-teal"
+              className="text-center text-sm text-muted hover:text-teal"
               onClick={() => {
                 setModo("totp");
                 setCodigo("");

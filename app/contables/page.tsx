@@ -56,8 +56,8 @@ const BENEFICIOS = [
   },
   {
     icono: "🎁",
-    titulo: "VICTOR Accountant",
-    texto: "Regálales o inclúyeles el plan Business en tu iguala. Pagas $60/mes por cliente en vez de $99.99 (precio de lanzamiento el primer año).",
+    titulo: "Crea tu oficina virtual",
+    texto: "Abre tu oficina virtual con VICTOR Accountant y recibe un descuento en el plan Business para tus clientes activos y futuros. Tú decides a quién se lo incluyes.",
   },
 ];
 
@@ -85,12 +85,12 @@ export default function ContablesPage() {
     <div className="min-h-screen bg-white text-text">
       {/* Barra superior */}
       <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-2 text-sm font-medium">
+        <Link href="/" className="flex items-center gap-2 text-base font-medium">
           <img src="/victor-avatar.png" alt="VICTOR" className="h-8 w-8 rounded-full object-cover" />
           <span>VICTOR</span>
-          <span className="rounded-full border border-teal px-2 py-0.5 text-[10px] font-medium text-teal">Contables</span>
+          <span className="rounded-full border border-teal px-2 py-0.5 text-xs font-medium text-teal">Contables</span>
         </Link>
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3 text-base">
           <Link href="/login" className="text-muted hover:text-teal">
             Ya tengo cuenta
           </Link>
@@ -103,7 +103,7 @@ export default function ContablesPage() {
       {/* Hero */}
       <section className="px-6 pb-14 pt-8 text-center" style={{ background: `linear-gradient(180deg, #ffffff 0%, #eef5f4 100%)` }}>
         <div className="mx-auto max-w-3xl">
-          <span className="mb-4 inline-block rounded-full border border-border bg-white px-3 py-1 text-xs text-muted">
+          <span className="mb-4 inline-block rounded-full border border-border bg-white px-3 py-1 text-sm text-muted">
             Para contables y firmas de contabilidad de Puerto Rico
           </span>
           <h1 className="text-3xl font-semibold leading-tight sm:text-5xl" style={{ color: NAVY }}>
@@ -116,14 +116,14 @@ export default function ContablesPage() {
             nuestro directorio y trabaja con los números de tus clientes siempre al día.
           </p>
           <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link href="/registro/cpa" className="rounded-full bg-teal px-7 py-3 text-sm font-medium text-white shadow-sm">
+            <Link href="/registro/cpa" className="rounded-full bg-teal px-7 py-3 text-base font-medium text-white shadow-sm">
               Crear mi cuenta de contable, gratis
             </Link>
-            <a href="#como-funciona" className="rounded-full border border-border bg-white px-7 py-3 text-sm font-medium text-muted">
+            <a href="#como-funciona" className="rounded-full border border-border bg-white px-7 py-3 text-base font-medium text-muted">
               Ver cómo funciona
             </a>
           </div>
-          <p className="mt-3 text-xs text-muted">Sin costo · sin clientes previos · te toma un minuto</p>
+          <p className="mt-3 text-sm text-muted">Sin costo · sin clientes previos · te toma un minuto</p>
         </div>
       </section>
 
@@ -135,9 +135,9 @@ export default function ContablesPage() {
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
           {PASOS.map((p) => (
             <div key={p.n} className="rounded-2xl border border-border bg-white p-5">
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-teal text-sm font-semibold text-white">{p.n}</div>
-              <p className="text-sm font-medium">{p.titulo}</p>
-              <p className="mt-1.5 text-xs leading-relaxed text-muted">{p.texto}</p>
+              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-teal text-base font-semibold text-white">{p.n}</div>
+              <p className="text-base font-medium">{p.titulo}</p>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted">{p.texto}</p>
             </div>
           ))}
         </div>
@@ -148,12 +148,12 @@ export default function ContablesPage() {
         <div className="mx-auto grid max-w-5xl items-center gap-10 sm:grid-cols-2">
           <div className="text-white">
             <h2 className="text-2xl font-semibold">Así te ven los usuarios de VICTOR</h2>
-            <p className="mt-3 text-sm leading-relaxed text-white/80">
+            <p className="mt-3 text-base leading-relaxed text-white/80">
               Dentro de la app hay un directorio de contables. El usuario filtra por pueblo y especialidad, lee tu descripción y te
               contacta directo por teléfono, correo, web o redes. Tú escribes lo que te hace diferente; nosotros ponemos al cliente
               frente a ti.
             </p>
-            <Link href="/registro/cpa" className="mt-6 inline-block rounded-full bg-white px-6 py-2.5 text-sm font-medium" style={{ color: NAVY }}>
+            <Link href="/registro/cpa" className="mt-6 inline-block rounded-full bg-white px-6 py-2.5 text-base font-medium" style={{ color: NAVY }}>
               Quiero mi ficha
             </Link>
           </div>
@@ -162,29 +162,29 @@ export default function ContablesPage() {
           <div className="rounded-2xl bg-white p-5 shadow-lg">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold" style={{ color: NAVY }}>
+                <p className="text-base font-semibold" style={{ color: NAVY }}>
                   Tu Oficina de Contabilidad
                 </p>
-                <p className="text-xs text-muted">📍 Tu pueblo · Atiende a distancia</p>
+                <p className="text-sm text-muted">📍 Tu pueblo · Atiende a distancia</p>
               </div>
-              <span className="rounded-full border border-teal px-2 py-0.5 text-[10px] font-medium text-teal">En el directorio</span>
+              <span className="rounded-full border border-teal px-2 py-0.5 text-xs font-medium text-teal">En el directorio</span>
             </div>
-            <p className="mt-3 text-xs leading-relaxed text-muted">
+            <p className="mt-3 text-sm leading-relaxed text-muted">
               “Llevamos la contabilidad de pequeños negocios y profesionales: planillas, IVU, 480.6SP y planificación contributiva.
               Atención personalizada y respuesta en el mismo día.”
             </p>
             <div className="mt-3 flex flex-wrap gap-1.5">
               {["Pequeños negocios", "Profesionales de salud", "Planillas e IVU", "Retenciones"].map((t) => (
-                <span key={t} className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted">
+                <span key={t} className="rounded-full border border-border px-2.5 py-1 text-xs text-muted">
                   {t}
                 </span>
               ))}
             </div>
-            <div className="mt-4 flex gap-2 text-xs">
+            <div className="mt-4 flex gap-2 text-sm">
               <span className="flex-1 rounded-lg bg-teal px-3 py-2 text-center font-medium text-white">Llamar</span>
               <span className="flex-1 rounded-lg border border-border px-3 py-2 text-center font-medium text-muted">Escribir</span>
             </div>
-            <p className="mt-3 text-center text-[10px] text-muted">Ejemplo ilustrativo</p>
+            <p className="mt-3 text-center text-xs text-muted">Ejemplo ilustrativo</p>
           </div>
         </div>
       </section>
@@ -194,7 +194,7 @@ export default function ContablesPage() {
         <h2 className="text-center text-2xl font-semibold" style={{ color: NAVY }}>
           Más que un directorio: tu portal de trabajo
         </h2>
-        <p className="mx-auto mt-2 max-w-xl text-center text-sm text-muted">
+        <p className="mx-auto mt-2 max-w-xl text-center text-base text-muted">
           Cuando un cliente te da acceso, trabajas con su información real y actualizada, no con fotos de recibos.
         </p>
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -203,8 +203,8 @@ export default function ContablesPage() {
               <div className="mb-2 text-2xl" aria-hidden>
                 {b.icono}
               </div>
-              <p className="text-sm font-medium">{b.titulo}</p>
-              <p className="mt-1.5 text-xs leading-relaxed text-muted">{b.texto}</p>
+              <p className="text-base font-medium">{b.titulo}</p>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted">{b.texto}</p>
             </div>
           ))}
         </div>
@@ -218,8 +218,8 @@ export default function ContablesPage() {
         <div className="mt-6 flex flex-col gap-3">
           {PREGUNTAS.map((q) => (
             <div key={q.p} className="rounded-2xl border border-border bg-white p-4">
-              <p className="text-sm font-medium">{q.p}</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted">{q.r}</p>
+              <p className="text-base font-medium">{q.p}</p>
+              <p className="mt-1 text-sm leading-relaxed text-muted">{q.r}</p>
             </div>
           ))}
         </div>
@@ -230,11 +230,11 @@ export default function ContablesPage() {
         <h2 className="text-2xl font-semibold" style={{ color: NAVY }}>
           Tu oficina, frente a quien ya busca contable
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm text-muted">Abre tu cuenta hoy. Es gratis y toma un minuto.</p>
-        <Link href="/registro/cpa" className="mt-6 inline-block rounded-full bg-teal px-8 py-3 text-sm font-medium text-white shadow-sm">
+        <p className="mx-auto mt-2 max-w-md text-base text-muted">Abre tu cuenta hoy. Es gratis y toma un minuto.</p>
+        <Link href="/registro/cpa" className="mt-6 inline-block rounded-full bg-teal px-8 py-3 text-base font-medium text-white shadow-sm">
           Crear mi cuenta de contable
         </Link>
-        <p className="mt-4 text-xs text-muted">
+        <p className="mt-4 text-sm text-muted">
           ¿Ya tienes cuenta?{" "}
           <Link href="/login" className="text-teal underline">
             Entra aquí
