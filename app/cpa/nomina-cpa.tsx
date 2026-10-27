@@ -100,7 +100,7 @@ export default function NominaCpa({
   return (
     <div className="flex flex-col gap-3">
       <div className="vc-card border-amb/30 bg-amb/5">
-        <p className="text-xs text-muted">
+        <p className="text-sm text-muted">
           {puedeOperar
             ? "Resumen del año (solo lectura) de las corridas aprobadas. "
             : "Solo lectura: el dueño no ha activado que usted corra la nómina desde aquí. "}
@@ -111,17 +111,17 @@ export default function NominaCpa({
       </div>
 
       <div className="vc-card">
-        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Acumulado {anio} (corridas aprobadas: {corridas.length})</p>
+        <p className="mb-2 text-sm uppercase tracking-wide text-muted">Acumulado {anio} (corridas aprobadas: {corridas.length})</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div><p className="text-[11px] text-muted">Bruto</p><p className="text-sm font-medium">{formatMoney(bruto)}</p></div>
-          <div><p className="text-[11px] text-muted">Retenido a empleados</p><p className="text-sm font-medium">{formatMoney(retenciones)}</p></div>
-          <div><p className="text-[11px] text-muted">Costo patronal</p><p className="text-sm font-medium">{formatMoney(patronal)}</p></div>
-          <div><p className="text-[11px] text-muted">Neto pagado</p><p className="text-sm font-medium">{formatMoney(neto)}</p></div>
+          <div><p className="text-xs text-muted">Bruto</p><p className="text-sm font-medium">{formatMoney(bruto)}</p></div>
+          <div><p className="text-xs text-muted">Retenido a empleados</p><p className="text-sm font-medium">{formatMoney(retenciones)}</p></div>
+          <div><p className="text-xs text-muted">Costo patronal</p><p className="text-sm font-medium">{formatMoney(patronal)}</p></div>
+          <div><p className="text-xs text-muted">Neto pagado</p><p className="text-sm font-medium">{formatMoney(neto)}</p></div>
         </div>
       </div>
 
       <div className="vc-card">
-        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Corridas</p>
+        <p className="mb-2 text-sm uppercase tracking-wide text-muted">Corridas</p>
         {corridas.length === 0 ? (
           <p className="text-sm text-muted">El cliente todavía no ha aprobado ninguna corrida este año.</p>
         ) : (
@@ -143,16 +143,16 @@ export default function NominaCpa({
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue text-sm font-semibold leading-none text-white">{open ? "−" : "+"}</span>
                       <span>
                         <span className="font-medium text-blue underline underline-offset-2">Pago {fecha(c.fecha_pago)}</span>{" "}
-                        <span className="text-xs text-muted">({fecha(c.periodo_inicio)} – {fecha(c.periodo_fin)}, {c.frecuencia})</span>
+                        <span className="text-sm text-muted">({fecha(c.periodo_inicio)} – {fecha(c.periodo_fin)}, {c.frecuencia})</span>
                       </span>
                     </span>
                     <span className="flex items-center gap-2">
                       <span className="text-sm font-medium">{formatMoney(n(t.bruto))}</span>
-                      <span className="text-xs font-medium text-blue underline underline-offset-2">{open ? "Ocultar detalle" : "Ver detalle"}</span>
+                      <span className="text-sm font-medium text-blue underline underline-offset-2">{open ? "Ocultar detalle" : "Ver detalle"}</span>
                     </span>
                   </button>
                   {open && (
-                    <div className="mt-2 flex flex-col gap-2 text-xs">
+                    <div className="mt-2 flex flex-col gap-2 text-sm">
                       <p className="text-muted">
                         Neto {formatMoney(n(t.neto))} · Costo total patrono {formatMoney(n(t.costoTotalPatrono))}
                       </p>
@@ -201,12 +201,12 @@ export default function NominaCpa({
       </div>
 
       <div className="vc-card">
-        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Empleados</p>
+        <p className="mb-2 text-sm uppercase tracking-wide text-muted">Empleados</p>
         {empleados.length === 0 ? (
           <p className="text-sm text-muted">Sin empleados registrados.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-sm">
               <thead className="text-muted">
                 <tr><th className="pr-2">Nombre</th><th className="pr-2">SSN</th><th className="pr-2">Pago</th><th className="pr-2">499 R-4</th><th className="pr-2">Bruto YTD</th><th className="pr-2">Hacienda YTD</th><th>FICA YTD</th></tr>
               </thead>
@@ -233,8 +233,8 @@ export default function NominaCpa({
 
       {config && (
         <div className="vc-card">
-          <p className="mb-1 text-xs uppercase tracking-wide text-muted">Tasas de la entidad</p>
-          <p className="text-xs">
+          <p className="mb-1 text-sm uppercase tracking-wide text-muted">Tasas de la entidad</p>
+          <p className="text-sm">
             SUTA: {config.suta_tasa === null ? "por defecto" : `${(n(config.suta_tasa) * 100).toFixed(2)}%`} · CFSE: {config.cfse_tasa === null ? "sin configurar" : `${(n(config.cfse_tasa) * 100).toFixed(2)}%`}
             {config.cfse_poliza ? ` (póliza ${config.cfse_poliza})` : ""} · FUTA: {config.futa_aplica ? "aplica" : "no aplica"}
           </p>

@@ -189,12 +189,12 @@ export default function FirmaAccountantPanel() {
       {!esFirma ? (
         <>
           <p className="mb-1 text-sm font-medium">Hazte VICTOR Accountant</p>
-          <p className="mb-3 text-xs text-muted">
+          <p className="mb-3 text-sm text-muted">
             Regala el plan Business a tus clientes nuevos — tú pagas 40% menos ($60/mes en vez de $99.99, precio de lanzamiento el primer año) y
             decides si se lo cobras, lo incluyes en tu iguala, o lo regalas. El cliente usa su cuenta de VICTOR
             todos los días; la mensualidad la ves tú, no él.
           </p>
-          {errorActivar && <p className="mb-2 text-xs text-red">{errorActivar}</p>}
+          {errorActivar && <p className="mb-2 text-sm text-red">{errorActivar}</p>}
           <form onSubmit={activar} className="flex flex-col gap-2">
             <input
               className="vc-input"
@@ -219,7 +219,7 @@ export default function FirmaAccountantPanel() {
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-sm font-medium">VICTOR Accountant</p>
-              <p className="text-xs text-muted">
+              <p className="text-sm text-muted">
                 {seatsActivos > 0
                   ? `${seatsActivos} cliente${seatsActivos === 1 ? "" : "s"} activo${seatsActivos === 1 ? "" : "s"} bajo tu plan.`
                   : "Todavía no has invitado a ningún cliente."}
@@ -228,19 +228,19 @@ export default function FirmaAccountantPanel() {
             <button
               type="button"
               onClick={() => setMostrarModal(true)}
-              className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-teal px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-teal px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
             >
               <i className="ti ti-user-plus text-sm" /> Invitar cliente nuevo
             </button>
           </div>
-          {exito && <p className="mt-2 text-xs text-teal">{exito}</p>}
+          {exito && <p className="mt-2 text-sm text-teal">{exito}</p>}
 
           {(clientes.length > 0 || pendientes.length > 0) && (
             <div className="mt-3 border-t border-border pt-3">
               <button
                 type="button"
                 onClick={() => setMostrarClientes((v) => !v)}
-                className="flex w-full items-center justify-between text-xs font-medium text-muted"
+                className="flex w-full items-center justify-between text-sm font-medium text-muted"
               >
                 <span>Administrar clientes bajo tu plan ({clientes.length + pendientes.length})</span>
                 <i className={`ti ${mostrarClientes ? "ti-chevron-up" : "ti-chevron-down"}`} />
@@ -248,18 +248,18 @@ export default function FirmaAccountantPanel() {
 
               {mostrarClientes && (
                 <div className="mt-2 flex flex-col divide-y divide-border">
-                  {errorAccion && <p className="mb-2 text-xs text-red">{errorAccion}</p>}
+                  {errorAccion && <p className="mb-2 text-sm text-red">{errorAccion}</p>}
                   {clientes.map((c) => (
                     <div key={c.id} className="flex items-center justify-between gap-2 py-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{c.nombre || c.email}</p>
-                        <p className="truncate text-xs text-muted">{c.nombre ? c.email : "Cliente activo"}</p>
+                        <p className="truncate text-sm text-muted">{c.nombre ? c.email : "Cliente activo"}</p>
                       </div>
                       <button
                         type="button"
                         disabled={accionEn === c.id}
                         onClick={() => liberar(c)}
-                        className="flex-shrink-0 whitespace-nowrap rounded-full border border-red px-3 py-1 text-xs font-medium text-red hover:opacity-80"
+                        className="flex-shrink-0 whitespace-nowrap rounded-full border border-red px-3 py-1 text-sm font-medium text-red hover:opacity-80"
                       >
                         {accionEn === c.id ? "Liberando..." : "Liberar"}
                       </button>
@@ -269,19 +269,19 @@ export default function FirmaAccountantPanel() {
                     <div key={p.id} className="flex items-center justify-between gap-2 py-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{p.nombreNegocio || p.email}</p>
-                        <p className="truncate text-xs text-muted">Invitación pendiente · {p.email}</p>
+                        <p className="truncate text-sm text-muted">Invitación pendiente · {p.email}</p>
                       </div>
                       <button
                         type="button"
                         disabled={accionEn === p.id}
                         onClick={() => cancelarInvitacion(p)}
-                        className="flex-shrink-0 whitespace-nowrap rounded-full border border-border px-3 py-1 text-xs font-medium text-muted hover:opacity-80"
+                        className="flex-shrink-0 whitespace-nowrap rounded-full border border-border px-3 py-1 text-sm font-medium text-muted hover:opacity-80"
                       >
                         {accionEn === p.id ? "Cancelando..." : "Cancelar"}
                       </button>
                     </div>
                   ))}
-                  <p className="pt-2 text-[11px] text-muted">
+                  <p className="pt-2 text-xs text-muted">
                     Al liberar a un cliente dejas de pagar su plan desde hoy. Él conserva Business y todos sus datos 30 días
                     para continuar con su propio plan; después pasa al plan gratis. No se borra nada.
                   </p>
@@ -299,7 +299,7 @@ export default function FirmaAccountantPanel() {
         >
           <div className="vc-card w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 text-sm font-medium">Cómo funciona</p>
-            <p className="mb-3 text-xs text-muted">
+            <p className="mb-3 text-sm text-muted">
               El plan Business de tu cliente ($99.99/mes de lista) queda incluido en TU factura, con 40% de
               descuento ($60/mes, precio de lanzamiento el primer año) — nunca se le cobra nada a él por el plan base. El descuento aplica SOLO al plan
               Business; si tu cliente activa un addon después (Técnicos, Administrador, Entidades adicionales o
@@ -307,7 +307,7 @@ export default function FirmaAccountantPanel() {
               pedir que registres una tarjeta para esta suscripción — de ahí en adelante, cada cliente nuevo solo
               se suma, sin volver a pedírtela.
             </p>
-            {errorInvitar && <p className="mb-2 text-xs text-red">{errorInvitar}</p>}
+            {errorInvitar && <p className="mb-2 text-sm text-red">{errorInvitar}</p>}
             <form onSubmit={invitar} className="flex flex-col gap-2">
               <input
                 className="vc-input"

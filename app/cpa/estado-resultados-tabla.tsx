@@ -16,16 +16,16 @@ type Linea = { nombre: string; lineaScheduleC: string | null; porMes: number[]; 
 function FilaLinea({ l, color, tinte }: { l: Linea; color: string; tinte: string }) {
   return (
     <tr className="border-b" style={{ borderColor: "var(--border)", background: tinte }}>
-      <td className="sticky left-0 whitespace-nowrap px-3 py-2 text-xs" style={{ background: tinte }}>
+      <td className="sticky left-0 whitespace-nowrap px-3 py-2 text-sm" style={{ background: tinte }}>
         <div>{l.nombre}</div>
-        {l.lineaScheduleC && <div className="text-[10px] text-muted">{l.lineaScheduleC}</div>}
+        {l.lineaScheduleC && <div className="text-xs text-muted">{l.lineaScheduleC}</div>}
       </td>
       {l.porMes.map((v, i) => (
-        <td key={i} className="whitespace-nowrap px-3 py-2 text-right text-xs" style={{ color: v ? undefined : "var(--muted)" }}>
+        <td key={i} className="whitespace-nowrap px-3 py-2 text-right text-sm" style={{ color: v ? undefined : "var(--muted)" }}>
           {v ? formatMoney(v, 0) : "—"}
         </td>
       ))}
-      <td className="whitespace-nowrap px-3 py-2 text-right text-xs font-medium" style={{ color }}>
+      <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-medium" style={{ color }}>
         {formatMoney(l.total, 0)}
       </td>
     </tr>
@@ -35,15 +35,15 @@ function FilaLinea({ l, color, tinte }: { l: Linea; color: string; tinte: string
 function FilaTotal({ label, porMes, total, color, tinte }: { label: string; porMes: number[]; total: number; color: string; tinte: string }) {
   return (
     <tr className="border-b-2 border-t-2" style={{ borderColor: color }}>
-      <td className="sticky left-0 whitespace-nowrap px-3 py-2 text-xs font-semibold" style={{ background: tinte, color }}>
+      <td className="sticky left-0 whitespace-nowrap px-3 py-2 text-sm font-semibold" style={{ background: tinte, color }}>
         {label}
       </td>
       {porMes.map((v, i) => (
-        <td key={i} className="whitespace-nowrap px-3 py-2 text-right text-xs font-semibold" style={{ background: tinte, color }}>
+        <td key={i} className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold" style={{ background: tinte, color }}>
           {formatMoney(v, 0)}
         </td>
       ))}
-      <td className="whitespace-nowrap px-3 py-2 text-right text-xs font-bold" style={{ background: tinte, color }}>
+      <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-bold" style={{ background: tinte, color }}>
         {formatMoney(total, 0)}
       </td>
     </tr>
@@ -53,7 +53,7 @@ function FilaTotal({ label, porMes, total, color, tinte }: { label: string; porM
 function FilaSeccion({ label, color }: { label: string; color: string }) {
   return (
     <tr>
-      <td colSpan={14} className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide" style={{ background: color, color: "white" }}>
+      <td colSpan={14} className="px-3 py-2 text-xs font-bold uppercase tracking-wide" style={{ background: color, color: "white" }}>
         {label}
       </td>
     </tr>
@@ -72,22 +72,22 @@ export default function EstadoResultadosTabla({ er, anio }: { er: EstadoResultad
       <table className="w-full border-collapse">
         <thead>
           <tr style={{ background: "#0f6b4e" }}>
-            <th className="sticky left-0 whitespace-nowrap px-3 py-2 text-left text-xs font-semibold text-white" style={{ background: "#0f6b4e" }}>
+            <th className="sticky left-0 whitespace-nowrap px-3 py-2 text-left text-sm font-semibold text-white" style={{ background: "#0f6b4e" }}>
               Categoría
             </th>
             {MESES_CORTOS.map((m) => (
-              <th key={m} className="whitespace-nowrap px-3 py-2 text-right text-xs font-semibold text-white">
+              <th key={m} className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold text-white">
                 {m}
               </th>
             ))}
-            <th className="whitespace-nowrap px-3 py-2 text-right text-xs font-semibold text-white">Total</th>
+            <th className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold text-white">Total</th>
           </tr>
         </thead>
         <tbody>
           <FilaSeccion label="Ingresos" color={TEAL} />
           {er.ingresos.length === 0 && (
             <tr style={{ background: TINTE_INGRESOS }}>
-              <td colSpan={14} className="px-3 py-2 text-xs text-muted">
+              <td colSpan={14} className="px-3 py-2 text-sm text-muted">
                 Sin ingresos categorizados en {anio}.
               </td>
             </tr>
@@ -100,7 +100,7 @@ export default function EstadoResultadosTabla({ er, anio }: { er: EstadoResultad
           <FilaSeccion label="Gastos" color={ROJO} />
           {er.gastos.length === 0 && (
             <tr style={{ background: TINTE_GASTOS }}>
-              <td colSpan={14} className="px-3 py-2 text-xs text-muted">
+              <td colSpan={14} className="px-3 py-2 text-sm text-muted">
                 Sin gastos categorizados en {anio}.
               </td>
             </tr>

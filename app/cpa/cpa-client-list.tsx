@@ -114,10 +114,10 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
         aria-expanded={abierto}
         className="mb-3 flex w-full items-center justify-between gap-2 text-left"
       >
-        <span className="text-xs uppercase tracking-wide text-muted">
+        <span className="text-sm uppercase tracking-wide text-muted">
           Entidades ({clientes.length})
           {!abierto && conAlertas.length > 0 && (
-            <span className="ml-2 rounded-full bg-red/10 px-2 py-0.5 text-[10px] font-medium normal-case text-red">
+            <span className="ml-2 rounded-full bg-red/10 px-2 py-0.5 text-xs font-medium normal-case text-red">
               {conAlertas.length} con alertas
             </span>
           )}
@@ -127,7 +127,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
       {abierto && (<>
 
       {errorFavorito && (
-        <p className="mb-2 rounded-lg bg-red/10 px-2.5 py-1.5 text-xs text-red">
+        <p className="mb-2 rounded-lg bg-red/10 px-2.5 py-1.5 text-sm text-red">
           No se pudo guardar la estrella: {errorFavorito}
         </p>
       )}
@@ -146,7 +146,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
         <div className="flex gap-1 rounded-lg border border-border p-0.5">
           <button
             onClick={() => setTab("todos")}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === "todos" ? "bg-teal text-white" : "text-muted hover:text-text"
             }`}
           >
@@ -154,7 +154,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
           </button>
           <button
             onClick={() => setTab("mios")}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === "mios" ? "bg-teal text-white" : "text-muted hover:text-text"
             }`}
           >
@@ -163,7 +163,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
           </button>
           <button
             onClick={() => setTab("alertas")}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === "alertas" ? "bg-teal text-white" : "text-muted hover:text-text"
             }`}
           >
@@ -173,11 +173,11 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
       </div>
 
       {clientes.length === 0 ? (
-        <p className="text-xs text-muted">
+        <p className="text-sm text-muted">
           Todavía no tienes clientes conectados. En cuanto un dueño te invite y aceptes, aparecerán aquí.
         </p>
       ) : filtrados.length === 0 ? (
-        <p className="text-xs text-muted">
+        <p className="text-sm text-muted">
           {tab === "alertas"
             ? "Ningún cliente tiene alertas pendientes ahora mismo."
             : tab === "mios"
@@ -202,7 +202,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
                 </button>
                 <div>
                   <p className="text-sm font-medium">{c.name}</p>
-                  <p className="text-xs text-muted">
+                  <p className="text-sm text-muted">
                     {c.entityType} {c.ein ? `· EIN ${c.ein}` : ""}
                     {c.ownerName ? ` · de ${c.ownerName}` : ""}
                   </p>
@@ -210,19 +210,19 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
               </div>
               <div className="flex items-center gap-2">
                 {c.origen === "firma" && (
-                  <span className="rounded-full bg-teal/10 px-2 py-1 text-[10px] font-medium text-teal">
+                  <span className="rounded-full bg-teal/10 px-2 py-1 text-xs font-medium text-teal">
                     Incluido por tu firma
                   </span>
                 )}
                 {c.alertCount > 0 && (
-                  <span className="rounded-full bg-red/10 px-2 py-1 text-[10px] font-medium text-red">
+                  <span className="rounded-full bg-red/10 px-2 py-1 text-xs font-medium text-red">
                     {c.alertCount} alerta{c.alertCount === 1 ? "" : "s"}
                   </span>
                 )}
                 {c.ivu ? (
                   <span
                     className={
-                      "rounded-full px-2 py-1 text-[10px] font-medium " +
+                      "rounded-full px-2 py-1 text-xs font-medium " +
                       (c.ivu.status === "depositado"
                         ? "bg-grn/10 text-grn"
                         : c.ivu.status === "overdue"
@@ -233,7 +233,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
                     IVU {formatMoney(c.ivu.monto)}
                   </span>
                 ) : (
-                  <span className="rounded-full bg-muted/10 px-2 py-1 text-[10px] text-muted">Sin datos IVU</span>
+                  <span className="rounded-full bg-muted/10 px-2 py-1 text-xs text-muted">Sin datos IVU</span>
                 )}
                 {c.ownerEmail && (
                   // Botón (no <a>) porque la fila ya es un <Link>; abre el cliente de correo del contable.
@@ -246,7 +246,7 @@ export default function CpaClientList({ clientes }: { clientes: ClienteCpa[] }) 
                       const asunto = encodeURIComponent(`${c.name} — consulta de tu contable`);
                       window.location.href = `mailto:${c.ownerEmail}?subject=${asunto}`;
                     }}
-                    className="flex items-center gap-1 rounded-full border border-teal px-2 py-1 text-[10px] font-medium text-teal"
+                    className="flex items-center gap-1 rounded-full border border-teal px-2 py-1 text-xs font-medium text-teal"
                   >
                     <i className="ti ti-mail" style={{ fontSize: 12 }} /> Escribir
                   </button>

@@ -73,7 +73,7 @@ export default function CpaPersonalList({ clientes }: { clientes: ClientePersona
   }, [clientes, conAlertas, misClientes, tab, busqueda]);
 
   const tabCls = (t: string) =>
-    `rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${tab === t ? "bg-teal text-white" : "text-muted hover:text-text"}`;
+    `rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === t ? "bg-teal text-white" : "text-muted hover:text-text"}`;
 
   return (
     <div className="vc-card mb-4">
@@ -83,10 +83,10 @@ export default function CpaPersonalList({ clientes }: { clientes: ClientePersona
         className="flex w-full items-center justify-between text-left"
         aria-expanded={abierto}
       >
-        <span className="text-xs uppercase tracking-wide text-muted">
+        <span className="text-sm uppercase tracking-wide text-muted">
           Personal ({clientes.length})
           {!abierto && conAlertas.length > 0 && (
-            <span className="ml-2 rounded-full bg-red/10 px-2 py-0.5 text-[10px] font-medium normal-case text-red">
+            <span className="ml-2 rounded-full bg-red/10 px-2 py-0.5 text-xs font-medium normal-case text-red">
               {conAlertas.length} con alertas
             </span>
           )}
@@ -94,14 +94,14 @@ export default function CpaPersonalList({ clientes }: { clientes: ClientePersona
         <i className={`ti ${abierto ? "ti-chevron-up" : "ti-chevron-down"} text-muted`} />
       </button>
       {abierto && (
-        <p className="mb-3 mt-1 text-xs text-muted">
+        <p className="mb-3 mt-1 text-sm text-muted">
           Finanzas personales de clientes que decidieron compartirlas contigo (planilla personal, estimadas, documentos).
         </p>
       )}
       {abierto && (<>
 
       {errorFav && (
-        <p className="mb-2 rounded-lg bg-red/10 px-2.5 py-1.5 text-xs text-red">
+        <p className="mb-2 rounded-lg bg-red/10 px-2.5 py-1.5 text-sm text-red">
           No se pudo guardar la estrella: {errorFav}
         </p>
       )}
@@ -132,12 +132,12 @@ export default function CpaPersonalList({ clientes }: { clientes: ClientePersona
       </div>
 
       {clientes.length === 0 ? (
-        <p className="text-xs text-muted">
+        <p className="text-sm text-muted">
           Ningún cliente ha compartido sus finanzas personales todavía. Cada cliente lo activa desde “Invita a tu
           contable”.
         </p>
       ) : filtrados.length === 0 ? (
-        <p className="text-xs text-muted">
+        <p className="text-sm text-muted">
           {tab === "alertas"
             ? "Ningún cliente tiene alertas pendientes ahora mismo."
             : tab === "mios"
@@ -162,7 +162,7 @@ export default function CpaPersonalList({ clientes }: { clientes: ClientePersona
                 </button>
                 <div>
                   <p className="text-sm font-medium">{c.nombre}</p>
-                  <p className="text-xs text-muted">
+                  <p className="text-sm text-muted">
                     Personal{c.email && c.email !== c.nombre ? ` · ${c.email}` : ""}
                   </p>
                 </div>
@@ -178,7 +178,7 @@ export default function CpaPersonalList({ clientes }: { clientes: ClientePersona
                       e.stopPropagation();
                       router.push(`/cpa/personal/${c.id}?tab=alertas`);
                     }}
-                    className="cursor-pointer rounded-full bg-red/10 px-2 py-1 text-[10px] font-medium text-red hover:underline"
+                    className="cursor-pointer rounded-full bg-red/10 px-2 py-1 text-xs font-medium text-red hover:underline"
                   >
                     {c.alertas.length} alerta{c.alertas.length === 1 ? "" : "s"}
                   </span>
@@ -192,7 +192,7 @@ export default function CpaPersonalList({ clientes }: { clientes: ClientePersona
                       e.stopPropagation();
                       window.location.href = `mailto:${c.email}?subject=${encodeURIComponent(`${c.nombre} — consulta de tu contable`)}`;
                     }}
-                    className="flex items-center gap-1 rounded-full border border-teal px-2 py-1 text-[10px] font-medium text-teal"
+                    className="flex items-center gap-1 rounded-full border border-teal px-2 py-1 text-xs font-medium text-teal"
                   >
                     <i className="ti ti-mail" style={{ fontSize: 12 }} /> Escribir
                   </button>

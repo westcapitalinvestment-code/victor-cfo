@@ -86,19 +86,19 @@ function PagosRegistrados({ retenciones, vendors }: { retenciones: Retencion[]; 
   return (
     <div className="vc-card">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs uppercase tracking-wide text-muted">Pagos registrados</p>
+        <p className="text-sm uppercase tracking-wide text-muted">Pagos registrados</p>
         <button type="button" className="vc-btn-back" onClick={() => setAbierto((v) => !v)}>
           {abierto ? "Ocultar lista ▲" : `Desplegar lista (${filas.length}) ▼`}
         </button>
       </div>
       {!abierto && (
-        <p className="text-xs text-muted">
+        <p className="text-sm text-muted">
           {filas.length} pago(s) · neto <span className="font-medium text-text">{formatMoney(total)}</span>
         </p>
       )}
       {abierto && (
       <>
-      <div className="mb-3 flex flex-wrap items-end gap-3 text-xs">
+      <div className="mb-3 flex flex-wrap items-end gap-3 text-sm">
         <label>
           <span className="block text-muted">Desde</span>
           <input type="date" className="vc-input" value={desde} onChange={(e) => setDesde(e.target.value)} />
@@ -122,7 +122,7 @@ function PagosRegistrados({ retenciones, vendors }: { retenciones: Retencion[]; 
             <li key={r.id ?? i} className="flex items-center justify-between gap-2 py-2">
               <div className="min-w-0">
                 <p className="truncate">{nombre.get(r.vendor_id) ?? "Contratista"}</p>
-                <p className="text-[11px] text-muted">
+                <p className="text-xs text-muted">
                   {r.period_start} · Bruto {formatMoney(Number(r.gross_amount ?? 0))} · Ret. {formatMoney(Number(r.retention_amount ?? 0))}
                   {r.retention_pct != null ? ` (${Number(r.retention_pct)}%)` : ""}
                 </p>
@@ -216,7 +216,7 @@ function Badge({ tone, children }: { tone: "grn" | "amb" | "red" | "muted"; chil
         : tone === "red"
           ? "bg-red/10 text-red"
           : "bg-muted/10 text-muted";
-  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${clases}`}>{children}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${clases}`}>{children}</span>;
 }
 
 const TZ = "America/Puerto_Rico";
@@ -309,19 +309,19 @@ function AuditoriaTab({ auditoria }: { auditoria: Auditoria[] }) {
 
   return (
     <div className="vc-card">
-      <p className="mb-3 text-xs uppercase tracking-wide text-muted">Historial de cambios</p>
+      <p className="mb-3 text-sm uppercase tracking-wide text-muted">Historial de cambios</p>
 
       <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
         <div>
-          <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Desde (fecha y hora)</label>
+          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Desde (fecha y hora)</label>
           <input className="vc-input" type="datetime-local" value={desde} onChange={(e) => setDesde(e.target.value)} />
         </div>
         <div>
-          <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Hasta (fecha y hora)</label>
+          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Hasta (fecha y hora)</label>
           <input className="vc-input" type="datetime-local" value={hasta} onChange={(e) => setHasta(e.target.value)} />
         </div>
         <div>
-          <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Tipo de cambio</label>
+          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Tipo de cambio</label>
           <select className="vc-input" value={accion} onChange={(e) => setAccion(e.target.value)}>
             <option value="">Todos</option>
             {Object.entries(ACCIONES).map(([k, v]) => (
@@ -332,7 +332,7 @@ function AuditoriaTab({ auditoria }: { auditoria: Auditoria[] }) {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Quién</label>
+          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Quién</label>
           <select className="vc-input" value={rol} onChange={(e) => setRol(e.target.value)}>
             <option value="">Todos</option>
             {Object.entries(ROLES).map(([k, v]) => (
@@ -343,7 +343,7 @@ function AuditoriaTab({ auditoria }: { auditoria: Auditoria[] }) {
           </select>
         </div>
       </div>
-      <div className="mb-2 flex items-center justify-between text-[11px] text-muted">
+      <div className="mb-2 flex items-center justify-between text-xs text-muted">
         <span>
           {filtrados.length} de {auditoria.length} registros · horas en hora de Puerto Rico
         </span>
@@ -373,12 +373,12 @@ function AuditoriaTab({ auditoria }: { auditoria: Auditoria[] }) {
             <li key={a.id} className="py-2 text-sm">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-medium">{ACCIONES[a.action] ?? a.action}</p>
-                <span className="whitespace-nowrap text-[11px] text-muted">
+                <span className="whitespace-nowrap text-xs text-muted">
                   {new Date(a.created_at).toLocaleString("es-PR", { timeZone: TZ })}
                 </span>
               </div>
-              <p className="text-xs">{detalleAuditoria(a)}</p>
-              <p className="text-[11px] text-muted">
+              <p className="text-sm">{detalleAuditoria(a)}</p>
+              <p className="text-xs text-muted">
                 {ROLES[a.actor_role] ?? a.actor_role}
                 {a.actor_email ? ` · ${a.actor_email}` : ""}
               </p>
@@ -470,7 +470,7 @@ export default function CpaTabs({
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
+            className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
               tab === t.id ? "border-teal text-teal" : "border-transparent text-muted hover:text-text"
             }`}
           >
@@ -483,8 +483,8 @@ export default function CpaTabs({
         <div className="flex flex-col gap-3">
           <div className="vc-card">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs uppercase tracking-wide text-muted">Estado de Resultados — {anioResultados}</p>
-              <div className="flex items-center gap-3 text-xs">
+              <p className="text-sm uppercase tracking-wide text-muted">Estado de Resultados — {anioResultados}</p>
+              <div className="flex items-center gap-3 text-sm">
                 <a href={`?anio=${anioResultados - 1}`} className="text-muted hover:text-teal">
                   ← {anioResultados - 1}
                 </a>
@@ -509,15 +509,15 @@ export default function CpaTabs({
             </div>
             <div className="mb-3 flex flex-wrap gap-4">
               <div>
-                <p className="text-[11px] text-muted">Ingresos</p>
+                <p className="text-xs text-muted">Ingresos</p>
                 <p className="text-base font-semibold text-grn">{formatMoney(estadoResultados.totalIngresos)}</p>
               </div>
               <div>
-                <p className="text-[11px] text-muted">Gastos</p>
+                <p className="text-xs text-muted">Gastos</p>
                 <p className="text-base font-semibold text-red">{formatMoney(estadoResultados.totalGastos)}</p>
               </div>
               <div>
-                <p className="text-[11px] text-muted">Utilidad neta</p>
+                <p className="text-xs text-muted">Utilidad neta</p>
                 <p className={`text-base font-semibold ${estadoResultados.utilidadNeta >= 0 ? "text-grn" : "text-red"}`}>
                   {formatMoney(estadoResultados.utilidadNeta)}
                 </p>
@@ -525,7 +525,7 @@ export default function CpaTabs({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-xs">
+              <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-border">
                     <th className="whitespace-nowrap px-2 py-1 text-left font-medium text-muted">Categoría</th>
@@ -543,7 +543,7 @@ export default function CpaTabs({
                       no se distingue... fatiga visual") — cada bloque lleva
                       su color de principio a fin, no solo el encabezado. */}
                   <tr>
-                    <td colSpan={14} className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: "#0f6b4e" }}>
+                    <td colSpan={14} className="px-2 py-1.5 text-xs font-bold uppercase tracking-wide text-white" style={{ background: "#0f6b4e" }}>
                       Ingresos
                     </td>
                   </tr>
@@ -573,7 +573,7 @@ export default function CpaTabs({
                   </tr>
 
                   <tr>
-                    <td colSpan={14} className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: "#d44c3d" }}>
+                    <td colSpan={14} className="px-2 py-1.5 text-xs font-bold uppercase tracking-wide text-white" style={{ background: "#d44c3d" }}>
                       Gastos
                     </td>
                   </tr>
@@ -624,22 +624,22 @@ export default function CpaTabs({
         <div className="flex flex-col gap-3">
           {(desgloseIvuPropinas.ivuEstatal > 0 || desgloseIvuPropinas.ivuMunicipal > 0 || desgloseIvuPropinas.propinas > 0) && (
             <div className="vc-card">
-              <p className="mb-3 text-xs uppercase tracking-wide text-muted">Desglose de facturas — {anioResultados} (#781/#782)</p>
+              <p className="mb-3 text-sm uppercase tracking-wide text-muted">Desglose de facturas — {anioResultados} (#781/#782)</p>
               <div className="grid grid-cols-3 gap-3 text-sm">
                 <div>
-                  <p className="text-[11px] text-muted">IVU estatal (10.5%)</p>
+                  <p className="text-xs text-muted">IVU estatal (10.5%)</p>
                   <p className="font-medium">{formatMoney(desgloseIvuPropinas.ivuEstatal)}</p>
-                  <p className="text-[10px] text-muted">A SURI</p>
+                  <p className="text-xs text-muted">A SURI</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted">IVU municipal (1%)</p>
+                  <p className="text-xs text-muted">IVU municipal (1%)</p>
                   <p className="font-medium">{formatMoney(desgloseIvuPropinas.ivuMunicipal)}</p>
-                  <p className="text-[10px] text-muted">Al municipio</p>
+                  <p className="text-xs text-muted">Al municipio</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted">Propinas excluidas</p>
+                  <p className="text-xs text-muted">Propinas excluidas</p>
                   <p className="font-medium">{formatMoney(desgloseIvuPropinas.propinas)}</p>
-                  <p className="text-[10px] text-muted">No es venta tributable</p>
+                  <p className="text-xs text-muted">No es venta tributable</p>
                 </div>
               </div>
             </div>
@@ -647,30 +647,30 @@ export default function CpaTabs({
 
           {tienePos && (
             <div className="vc-card">
-              <p className="mb-3 text-xs uppercase tracking-wide text-muted">Ventas de POS (Clover/Verifone/Square) — {anioResultados}</p>
-              <p className="mb-2 text-[11px] text-muted">
+              <p className="mb-3 text-sm uppercase tracking-wide text-muted">Ventas de POS (Clover/Verifone/Square) — {anioResultados}</p>
+              <p className="mb-2 text-xs text-muted">
                 Desglose de reportes de POS subidos por el dueño — NO es un ingreso adicional, es el detalle del depósito que ya llega
                 por el banco.
               </p>
               <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
                 <div>
-                  <p className="text-[11px] text-muted">Venta bruta</p>
+                  <p className="text-xs text-muted">Venta bruta</p>
                   <p className="font-medium">{formatMoney(resumenPos.grossSales)}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted">IVU estatal</p>
+                  <p className="text-xs text-muted">IVU estatal</p>
                   <p className="font-medium">{formatMoney(resumenPos.ivuEstatal)}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted">IVU municipal</p>
+                  <p className="text-xs text-muted">IVU municipal</p>
                   <p className="font-medium">{formatMoney(resumenPos.ivuMunicipal)}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted">Propinas</p>
+                  <p className="text-xs text-muted">Propinas</p>
                   <p className="font-medium">{formatMoney(resumenPos.tips)}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted">Venta neta</p>
+                  <p className="text-xs text-muted">Venta neta</p>
                   <p className="font-medium text-teal">{formatMoney(resumenPos.netSales)}</p>
                 </div>
               </div>
@@ -688,22 +688,22 @@ export default function CpaTabs({
           ) : (
             <>
               <div className="vc-card">
-                <p className="mb-3 text-xs uppercase tracking-wide text-muted">IVU del periodo actual</p>
+                <p className="mb-3 text-sm uppercase tracking-wide text-muted">IVU del periodo actual</p>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div>
-                    <p className="text-[11px] text-muted">Cobrado</p>
+                    <p className="text-xs text-muted">Cobrado</p>
                     <p className="text-base font-medium">{formatMoney(Number(ivuTracker.ivu_collected))}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] text-muted">Crédito</p>
+                    <p className="text-xs text-muted">Crédito</p>
                     <p className="text-base font-medium">{formatMoney(Number(ivuTracker.ivu_paid_credits))}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] text-muted">Neto a depositar</p>
+                    <p className="text-xs text-muted">Neto a depositar</p>
                     <p className="text-base font-medium">{formatMoney(Number(ivuTracker.ivu_net_due))}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] text-muted">Vence</p>
+                    <p className="text-xs text-muted">Vence</p>
                     <p className="text-base font-medium">{ivuTracker.due_date}</p>
                   </div>
                 </div>
@@ -724,7 +724,7 @@ export default function CpaTabs({
                         : "Pendiente"}
                   </Badge>
                   {ivuTracker.suri_confirmation_number && (
-                    <span className="ml-2 text-[11px] text-muted">
+                    <span className="ml-2 text-xs text-muted">
                       Confirmación SURI: {ivuTracker.suri_confirmation_number}
                     </span>
                   )}
@@ -734,7 +734,7 @@ export default function CpaTabs({
               <div className="vc-card">
                 <div className="mb-3 flex items-center gap-2">
                   <i className="ti ti-traffic-cone text-muted" />
-                  <p className="text-xs uppercase tracking-wide text-muted">Semáforo de cuadre IVU</p>
+                  <p className="text-sm uppercase tracking-wide text-muted">Semáforo de cuadre IVU</p>
                 </div>
                 {!ivuReconciliation ? (
                   <p className="text-sm text-muted">Todavía no hay reconciliación para este periodo.</p>
@@ -754,26 +754,26 @@ export default function CpaTabs({
                     </div>
                     <div className="grid grid-cols-3 gap-3 text-sm">
                       <div>
-                        <p className="text-[11px] text-muted">SURI</p>
+                        <p className="text-xs text-muted">SURI</p>
                         <p>{formatMoney(Number(ivuReconciliation.ivu_declared_suri))}</p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-muted">Banco</p>
+                        <p className="text-xs text-muted">Banco</p>
                         <p>{formatMoney(Number(ivuReconciliation.ivu_bank_deposits))}</p>
-                        <p className="text-[10px] text-muted">
+                        <p className="text-xs text-muted">
                           Δ {formatMoney(Number(ivuReconciliation.variance_bank))}
                         </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-muted">Procesador</p>
+                        <p className="text-xs text-muted">Procesador</p>
                         <p>{formatMoney(Number(ivuReconciliation.ivu_processor_reported))}</p>
-                        <p className="text-[10px] text-muted">
+                        <p className="text-xs text-muted">
                           Δ {formatMoney(Number(ivuReconciliation.variance_processor))}
                         </p>
                       </div>
                     </div>
                     {ivuReconciliation.alert_message && (
-                      <p className="mt-3 rounded bg-red/10 p-2 text-xs text-red">{ivuReconciliation.alert_message}</p>
+                      <p className="mt-3 rounded bg-red/10 p-2 text-sm text-red">{ivuReconciliation.alert_message}</p>
                     )}
                   </>
                 )}
@@ -796,7 +796,7 @@ export default function CpaTabs({
                 <span className="text-sm font-semibold text-blue">
                   Realizar nómina {nominaOperarAbierto ? "−" : "+"}
                 </span>
-                <span className="text-xs text-muted">{nominaOperarAbierto ? "Ocultar" : "Desplegar"}</span>
+                <span className="text-sm text-muted">{nominaOperarAbierto ? "Ocultar" : "Desplegar"}</span>
               </button>
               {nominaOperarAbierto && (
                 <div className="mt-3">
@@ -821,7 +821,7 @@ export default function CpaTabs({
               <span className="text-sm font-semibold text-blue">
                 Resumen de nómina del año {nominaResumenAbierto ? "−" : "+"}
               </span>
-              <span className="text-xs text-muted">{nominaResumenAbierto ? "Ocultar" : "Desplegar"}</span>
+              <span className="text-sm text-muted">{nominaResumenAbierto ? "Ocultar" : "Desplegar"}</span>
             </button>
             {nominaResumenAbierto && (
               <div className="mt-3">
@@ -837,7 +837,7 @@ export default function CpaTabs({
       {tab === "recibos" && (
         <div className="vc-card">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs uppercase tracking-wide text-muted">Recibos</p>
+            <p className="text-sm uppercase tracking-wide text-muted">Recibos</p>
             <Badge tone="amb">{recibos.filter((r) => r.estado === "pendiente").length} pendientes</Badge>
           </div>
           {recibos.length === 0 ? (
@@ -848,7 +848,7 @@ export default function CpaTabs({
                 <li key={r.id} className="flex items-center justify-between py-2 text-sm">
                   <div>
                     <p>{r.descripcion ?? "Sin descripción"}</p>
-                    <p className="text-[11px] text-muted">
+                    <p className="text-xs text-muted">
                       {r.categoria_sugerida ?? "Sin categoría"} · {r.fecha_captura?.slice(0, 10)}
                     </p>
                   </div>
@@ -873,12 +873,12 @@ export default function CpaTabs({
               filtro: cuánto hay que remesar a SURI y si ya venció. */}
           {depositoMensual.totalDolares > 0 && (
             <div className={`vc-card ${depositoMensual.vencido ? "border-red/40 bg-red/5" : "border-amb/30 bg-amb/5"}`}>
-              <p className="mb-1 text-xs uppercase tracking-wide text-muted">Depósito mensual — Modelo 480.9A</p>
+              <p className="mb-1 text-sm uppercase tracking-wide text-muted">Depósito mensual — Modelo 480.9A</p>
               <p className="text-sm">
                 Retenido en {MESES_ES_LARGO[depositoMensual.mes]} {depositoMensual.anio}:{" "}
                 <span className="font-medium">{formatMoney(depositoMensual.totalDolares)}</span>
               </p>
-              <p className={`text-xs ${depositoMensual.vencido ? "text-red" : "text-muted"}`}>
+              <p className={`text-sm ${depositoMensual.vencido ? "text-red" : "text-muted"}`}>
                 {depositoMensual.vencido
                   ? `⚠️ Venció el ${depositoMensual.venceISO} — hay que remesarlo a SURI cuanto antes.`
                   : `Vence el ${depositoMensual.venceISO} (día 15 del mes siguiente).`}
@@ -888,13 +888,13 @@ export default function CpaTabs({
           <div className="vc-card">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted">Retenciones a contratistas (480.6SP)</p>
+                <p className="text-sm uppercase tracking-wide text-muted">Retenciones a contratistas (480.6SP)</p>
                 <p className="mt-1 text-2xl font-semibold text-amb">{formatMoney(totalRetencionesPendientes)}</p>
-                <p className="mt-1 text-[11px] text-muted">
+                <p className="mt-1 text-xs text-muted">
                   Pendiente de remesar a Hacienda — el depósito mensual (480.9A) vence el día 15 del mes siguiente.
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-3 text-xs">
+              <div className="flex shrink-0 items-center gap-3 text-sm">
                 <a
                   href={`/api/pagos/reportes/480-6sp/pdf?entityId=${entityId}&anio=${anioResultados}`}
                   target="_blank"
@@ -918,7 +918,7 @@ export default function CpaTabs({
             </div>
           </div>
           <div className="vc-card">
-            <p className="mb-3 text-xs uppercase tracking-wide text-muted">Contratistas — estado 480.6SP</p>
+            <p className="mb-3 text-sm uppercase tracking-wide text-muted">Contratistas — estado 480.6SP</p>
             {vendors.length === 0 ? (
               <p className="text-sm text-muted">No hay contratistas registrados.</p>
             ) : (
@@ -936,14 +936,14 @@ export default function CpaTabs({
                     <li key={v.id} className="py-2 text-sm">
                       <div className="mb-1 flex items-center justify-between">
                         <p className="font-medium">
-                          {v.name} <span className="text-[10px] text-muted">({v.is_corporation ? "Corporación" : "Individuo"})</span>
+                          {v.name} <span className="text-xs text-muted">({v.is_corporation ? "Corporación" : "Individuo"})</span>
                         </p>
                         <Badge tone={val?.ready_for_480 ? "grn" : "amb"}>
                           {val?.ready_for_480 ? "Listo para 480" : "Faltan datos"}
                         </Badge>
                       </div>
-                      {v.address && <p className="mb-1 text-[11px] text-muted">{v.address}</p>}
-                      <div className="mb-1 flex flex-wrap items-center gap-3 text-[11px] text-muted">
+                      {v.address && <p className="mb-1 text-xs text-muted">{v.address}</p>}
+                      <div className="mb-1 flex flex-wrap items-center gap-3 text-xs text-muted">
                         <span>
                           <i className={`ti ${val?.name_confirmed ? "ti-circle-check text-grn" : "ti-circle-x text-red"}`} /> Nombre
                         </span>
@@ -967,7 +967,7 @@ export default function CpaTabs({
                           )}
                         </span>
                       </div>
-                      <div className="flex flex-wrap items-center gap-3 text-[11px]">
+                      <div className="flex flex-wrap items-center gap-3 text-xs">
                         <span className="flex items-center gap-1">
                           <Badge tone={tieneRelevo ? (relevoVigente ? "grn" : "red") : "muted"}>
                             {tieneRelevo
@@ -1008,8 +1008,8 @@ export default function CpaTabs({
               Pendiente/Vencida del año que se esté mirando (mismo selector
               de año que el tab Resultados). */}
           <div className="flex items-center justify-between">
-            <p className="text-xs uppercase tracking-wide text-muted">Facturación — {anioResultados}</p>
-            <div className="flex items-center gap-3 text-xs">
+            <p className="text-sm uppercase tracking-wide text-muted">Facturación — {anioResultados}</p>
+            <div className="flex items-center gap-3 text-sm">
               <a href={`?anio=${anioResultados - 1}`} className="text-muted hover:text-teal">
                 ← {anioResultados - 1}
               </a>
@@ -1020,51 +1020,51 @@ export default function CpaTabs({
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="vc-card">
-              <p className="text-[11px] uppercase tracking-wide text-muted">Facturado</p>
+              <p className="text-xs uppercase tracking-wide text-muted">Facturado</p>
               <p className="mt-1 text-lg font-semibold">{formatMoney(resumenFacturacion.facturado)}</p>
-              <p className="mt-0.5 text-[11px] text-muted">{resumenFacturacion.cantidadFacturas} facturas</p>
+              <p className="mt-0.5 text-xs text-muted">{resumenFacturacion.cantidadFacturas} facturas</p>
             </div>
             <div className="vc-card">
-              <p className="text-[11px] uppercase tracking-wide text-muted">Cobrado</p>
+              <p className="text-xs uppercase tracking-wide text-muted">Cobrado</p>
               <p className="mt-1 text-lg font-semibold text-grn">{formatMoney(resumenFacturacion.cobrado)}</p>
-              <p className="mt-0.5 text-[11px] text-muted">{resumenFacturacion.pctCobrado}%</p>
+              <p className="mt-0.5 text-xs text-muted">{resumenFacturacion.pctCobrado}%</p>
             </div>
             <div className="vc-card">
-              <p className="text-[11px] uppercase tracking-wide text-muted">Pendiente</p>
+              <p className="text-xs uppercase tracking-wide text-muted">Pendiente</p>
               <p className="mt-1 text-lg font-semibold text-amb">{formatMoney(resumenFacturacion.pendiente)}</p>
-              <p className="mt-0.5 text-[11px] text-muted">{resumenFacturacion.cantidadPendiente} fact.</p>
+              <p className="mt-0.5 text-xs text-muted">{resumenFacturacion.cantidadPendiente} fact.</p>
             </div>
             <div className="vc-card">
-              <p className="text-[11px] uppercase tracking-wide text-muted">Vencida</p>
+              <p className="text-xs uppercase tracking-wide text-muted">Vencida</p>
               <p className={`mt-1 text-lg font-semibold ${resumenFacturacion.vencido > 0 ? "text-red" : ""}`}>
                 {formatMoney(resumenFacturacion.vencido)}
               </p>
-              <p className="mt-0.5 text-[11px] text-muted">{resumenFacturacion.cantidadVencida} fact.</p>
+              <p className="mt-0.5 text-xs text-muted">{resumenFacturacion.cantidadVencida} fact.</p>
             </div>
           </div>
           <div className="vc-card">
-            <p className="mb-3 text-xs uppercase tracking-wide text-muted">Facturación del mes en curso</p>
+            <p className="mb-3 text-sm uppercase tracking-wide text-muted">Facturación del mes en curso</p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div>
-                <p className="text-[11px] text-muted">Emitidas</p>
+                <p className="text-xs text-muted">Emitidas</p>
                 <p className="text-base font-medium">{metricasFacturas.emitidas}</p>
               </div>
               <div>
-                <p className="text-[11px] text-muted">Cobradas</p>
+                <p className="text-xs text-muted">Cobradas</p>
                 <p className="text-base font-medium">{metricasFacturas.cobradas}</p>
               </div>
               <div>
-                <p className="text-[11px] text-muted">Vencidas</p>
+                <p className="text-xs text-muted">Vencidas</p>
                 <p className="text-base font-medium text-red">{metricasFacturas.vencidas}</p>
               </div>
               <div>
-                <p className="text-[11px] text-muted">Total</p>
+                <p className="text-xs text-muted">Total</p>
                 <p className="text-base font-medium">{formatMoney(metricasFacturas.total)}</p>
               </div>
             </div>
           </div>
           <div className="vc-card">
-            <p className="mb-3 text-xs uppercase tracking-wide text-muted">
+            <p className="mb-3 text-sm uppercase tracking-wide text-muted">
               Certificados de exención IVU (revendedores)
             </p>
             {clientesExentos.length === 0 ? (
@@ -1077,7 +1077,7 @@ export default function CpaTabs({
                       <i className="ti ti-certificate text-muted" />
                       <div>
                         <p>{c.name}</p>
-                        <p className="text-[11px] text-muted">{c.exemption_certificate_number ?? "Sin # de registro"}</p>
+                        <p className="text-xs text-muted">{c.exemption_certificate_number ?? "Sin # de registro"}</p>
                       </div>
                     </div>
                     <Badge tone={c.exemption_validated ? "grn" : "amb"}>
@@ -1093,7 +1093,7 @@ export default function CpaTabs({
 
       {tab === "estimados" && (
         <div className="vc-card">
-          <p className="mb-3 text-xs uppercase tracking-wide text-muted">Contribución estimada trimestral</p>
+          <p className="mb-3 text-sm uppercase tracking-wide text-muted">Contribución estimada trimestral</p>
           {estimados.length === 0 ? (
             <p className="text-sm text-muted">No hay pagos estimados registrados.</p>
           ) : (
@@ -1104,7 +1104,7 @@ export default function CpaTabs({
                     <p>
                       Trimestre {e.quarter} · {e.period_year}
                     </p>
-                    <p className="text-[11px] text-muted">Vence {e.due_date}</p>
+                    <p className="text-xs text-muted">Vence {e.due_date}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span>{formatMoney(Number(e.amount_due))}</span>

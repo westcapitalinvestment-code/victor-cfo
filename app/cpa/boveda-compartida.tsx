@@ -35,16 +35,16 @@ function fmtFecha(f: string): string {
 
 function EstadoVence({ fecha }: { fecha: string | null }) {
   const dias = diasHasta(fecha);
-  if (dias === null || !fecha) return <span className="text-[11px] text-muted">Sin vencimiento</span>;
+  if (dias === null || !fecha) return <span className="text-xs text-muted">Sin vencimiento</span>;
   if (dias < 0)
-    return <span className="rounded-full bg-red/10 px-2 py-0.5 text-[10px] font-medium text-red">Vencido {fmtFecha(fecha)}</span>;
+    return <span className="rounded-full bg-red/10 px-2 py-0.5 text-xs font-medium text-red">Vencido {fmtFecha(fecha)}</span>;
   if (dias <= 30)
     return (
-      <span className="rounded-full bg-amb/10 px-2 py-0.5 text-[10px] font-medium text-amb">
+      <span className="rounded-full bg-amb/10 px-2 py-0.5 text-xs font-medium text-amb">
         Vence en {dias} d · {fmtFecha(fecha)}
       </span>
     );
-  return <span className="text-[11px] text-muted">Vence {fmtFecha(fecha)}</span>;
+  return <span className="text-xs text-muted">Vence {fmtFecha(fecha)}</span>;
 }
 
 export default function BovedaCompartida({ ownerId, entityId }: { ownerId: string; entityId: string | null }) {
@@ -184,7 +184,7 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
             <i className="ti ti-bell mr-1 text-amb" />
             Renovaciones pendientes
           </p>
-          <ul className="text-xs text-muted">
+          <ul className="text-sm text-muted">
             {vencidos.map((d) => (
               <li key={d.id}>
                 <span className="font-medium text-red">Vencido</span> · {d.nombre}
@@ -198,7 +198,7 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
               </li>
             ))}
           </ul>
-          <p className="mt-1.5 text-[11px] text-muted">
+          <p className="mt-1.5 text-xs text-muted">
             VICTOR también le avisa a tu cliente; si tú lo renuevas aquí, las alertas se reinician solas.
           </p>
         </div>
@@ -207,13 +207,13 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
       <div className="vc-card">
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-sm font-medium">Documentos compartidos</p>
-          <button type="button" className="vc-btn-primary !w-auto px-3 py-1.5 text-xs" onClick={() => setMostrarNuevo((v) => !v)}>
+          <button type="button" className="vc-btn-primary !w-auto px-3 py-1.5 text-sm" onClick={() => setMostrarNuevo((v) => !v)}>
             {mostrarNuevo ? "Cancelar" : "Subir documento"}
           </button>
         </div>
 
-        {error && <p className="mb-2 text-xs text-red">{error}</p>}
-        {ok && <p className="mb-2 text-xs text-grn">{ok}</p>}
+        {error && <p className="mb-2 text-sm text-red">{error}</p>}
+        {ok && <p className="mb-2 text-sm text-grn">{ok}</p>}
 
         {mostrarNuevo && (
           <form onSubmit={subirNuevo} className="mb-3 flex flex-col gap-2 rounded-lg border border-border p-3">
@@ -224,9 +224,9 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
               ))}
             </select>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Fecha de vencimiento</label>
+              <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Fecha de vencimiento</label>
               <input className="vc-input" type="date" value={fecha} disabled={sinVencNuevo} onChange={(e) => setFecha(e.target.value)} />
-              <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+              <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm">
                 <input
                   type="checkbox"
                   checked={sinVencNuevo}
@@ -238,7 +238,7 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
                 <span>Sin fecha de vencimiento</span>
               </label>
             </div>
-            <input ref={archivoNuevoRef} className="text-xs" type="file" multiple accept="image/*,application/pdf" required />
+            <input ref={archivoNuevoRef} className="text-sm" type="file" multiple accept="image/*,application/pdf" required />
             <button type="submit" className="vc-btn-primary" disabled={subiendo}>
               {subiendo ? "Subiendo..." : "Subir y avisar al cliente"}
             </button>
@@ -246,9 +246,9 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
         )}
 
         {docs === null ? (
-          <p className="text-xs text-muted">Cargando...</p>
+          <p className="text-sm text-muted">Cargando...</p>
         ) : lista.length === 0 ? (
-          <p className="text-xs text-muted">
+          <p className="text-sm text-muted">
             {entityId
               ? "Esta entidad aún no tiene documentos. Sube el primero."
               : "El cliente no ha compartido documentos personales todavía. Puedes subir el primero."}
@@ -262,12 +262,12 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
                     <p className="text-sm font-medium">
                       {d.nombre}
                       {d.subido_por_contable && (
-                        <span className="ml-2 rounded-full border border-teal px-1.5 py-0.5 text-[10px] font-medium text-teal">
+                        <span className="ml-2 rounded-full border border-teal px-1.5 py-0.5 text-xs font-medium text-teal">
                           Subido por contable
                         </span>
                       )}
                     </p>
-                    <p className="text-xs text-muted">{d.tipo ?? "Documento"}</p>
+                    <p className="text-sm text-muted">{d.tipo ?? "Documento"}</p>
                   </div>
                   <EstadoVence fecha={d.fecha_vencimiento} />
                 </div>
@@ -280,13 +280,13 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
                           href={`/api/documentos/archivo/${a.id}/ver`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="rounded-full border border-teal px-2.5 py-1 text-[11px] font-medium text-teal"
+                          className="rounded-full border border-teal px-2.5 py-1 text-xs font-medium text-teal"
                         >
                           <i className="ti ti-file mr-1" />
                           {a.etiqueta || `Archivo ${i + 1}`}
                         </a>
                         {d.subido_por_contable && (d.subido_por_email ?? "").toLowerCase() === miEmail && (
-                          <button type="button" className="text-[11px] text-muted hover:text-red" onClick={() => borrarArchivo(a.id)} title="Borrar">
+                          <button type="button" className="text-xs text-muted hover:text-red" onClick={() => borrarArchivo(a.id)} title="Borrar">
                             <i className="ti ti-trash" />
                           </button>
                         )}
@@ -305,7 +305,7 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
                         ))}
                       </select>
                       <div>
-                        <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Fecha de vencimiento</label>
+                        <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Fecha de vencimiento</label>
                         <input
                           className="vc-input"
                           type="date"
@@ -313,7 +313,7 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
                           disabled={sinVencEd}
                           onChange={(e) => setFechaRenov(e.target.value)}
                         />
-                        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+                        <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm">
                           <input
                             type="checkbox"
                             checked={sinVencEd}
@@ -326,9 +326,9 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
                         </label>
                       </div>
                       <div>
-                        <label className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Subir archivo nuevo (opcional)</label>
-                        <input ref={archivoRenovRef} className="text-xs" type="file" multiple accept="image/*,application/pdf" />
-                        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+                        <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Subir archivo nuevo (opcional)</label>
+                        <input ref={archivoRenovRef} className="text-sm" type="file" multiple accept="image/*,application/pdf" />
+                        <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm">
                           <input type="checkbox" checked={reemplazarEd} onChange={(e) => setReemplazarEd(e.target.checked)} />
                           <span>Reemplazar los archivos anteriores (si no, el viejo se queda guardado)</span>
                         </label>
@@ -345,7 +345,7 @@ export default function BovedaCompartida({ ownerId, entityId }: { ownerId: strin
                   ) : (
                     <button
                       type="button"
-                      className="rounded-pill border border-border px-2.5 py-1 text-xs"
+                      className="rounded-pill border border-border px-2.5 py-1 text-sm"
                       onClick={() => abrirEdicion(d)}
                     >
                       <i className="ti ti-pencil mr-1" />

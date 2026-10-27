@@ -420,11 +420,11 @@ export default async function CpaClientePage({
         <div className="flex items-center gap-2">
           <Link
             href="/cpa/manual"
-            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm font-medium text-muted hover:opacity-90"
           >
-            <i className="ti ti-book text-sm" /> Manual
+            <i className="ti ti-book text-base" /> Manual
           </Link>
-          <span className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[10px] text-muted">
+          <span className="flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-sm text-muted">
             <i className="ti ti-lock" /> Solo lectura
           </span>
           <CpaAccountMenu email={user.email ?? null} />
@@ -437,7 +437,7 @@ export default async function CpaClientePage({
 
       <div className="vc-card mb-4">
         <p className="text-base font-medium">{entidad.name}</p>
-        <p className="text-xs text-muted">
+        <p className="text-sm text-muted">
           {entidad.entity_type} {entidad.ein ? `· EIN ${entidad.ein}` : ""}
         </p>
       </div>
@@ -445,7 +445,7 @@ export default async function CpaClientePage({
       <div className="vc-card mb-4">
         <div className="mb-3 flex items-center gap-2">
           <i className="ti ti-bulb text-muted" />
-          <p className="text-xs uppercase tracking-wide text-muted">Alertas inteligentes</p>
+          <p className="text-sm uppercase tracking-wide text-muted">Alertas inteligentes</p>
         </div>
         <AlertasAgrupadas
           alertas={alertasEntidad}

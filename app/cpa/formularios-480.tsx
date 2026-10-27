@@ -79,11 +79,11 @@ export default function Formularios480({ ownerId, entityId }: { ownerId: string;
 
   return (
     <div className="vc-card">
-      <p className="mb-1 text-xs uppercase tracking-wide text-muted">Formularios 480.6SP para el cliente</p>
-      <p className="mb-3 text-[11px] text-muted">
+      <p className="mb-1 text-sm uppercase tracking-wide text-muted">Formularios 480.6SP para el cliente</p>
+      <p className="mb-3 text-xs text-muted">
         Sube aquí las 480.6SP ya preparadas. Tu cliente las ve en su módulo de Pagos y recibe aviso.
       </p>
-      <div className="mb-3 flex flex-wrap items-end gap-2 text-xs">
+      <div className="mb-3 flex flex-wrap items-end gap-2 text-sm">
         <label>
           <span className="block text-muted">Año</span>
           <select className="vc-input" value={anio} onChange={(e) => setAnio(e.target.value)}>
@@ -98,12 +98,12 @@ export default function Formularios480({ ownerId, entityId }: { ownerId: string;
           <span className="block text-muted">Contratista (opcional)</span>
           <input className="vc-input" value={contratista} onChange={(e) => setContratista(e.target.value)} placeholder="Todos / nombre" />
         </label>
-        <input ref={inputRef} type="file" accept="application/pdf,image/*" multiple className="text-xs" />
+        <input ref={inputRef} type="file" accept="application/pdf,image/*" multiple className="text-sm" />
         <button type="button" className="vc-btn-secondary !w-auto px-4" disabled={subiendo} onClick={subir}>
           {subiendo ? "Subiendo…" : "Subir"}
         </button>
       </div>
-      {msg && <p className={`mb-2 text-xs ${msg.tipo === "ok" ? "text-teal" : "text-red"}`}>{msg.texto}</p>}
+      {msg && <p className={`mb-2 text-sm ${msg.tipo === "ok" ? "text-teal" : "text-red"}`}>{msg.texto}</p>}
       {docs === null ? (
         <p className="text-sm text-muted">Cargando…</p>
       ) : docs.length === 0 ? (
@@ -116,11 +116,11 @@ export default function Formularios480({ ownerId, entityId }: { ownerId: string;
               <div className="flex shrink-0 gap-2">
                 {d.archivos.map((a, i) => (
                   <span key={a.id} className="flex gap-1">
-                    <a href={`/api/documentos/archivo/${a.id}/ver`} target="_blank" rel="noreferrer" className="vc-btn-back text-xs">
+                    <a href={`/api/documentos/archivo/${a.id}/ver`} target="_blank" rel="noreferrer" className="vc-btn-back text-sm">
                       Ver{d.archivos.length > 1 ? ` ${i + 1}` : ""}
                     </a>
                     {d.subido_por_contable && (d.subido_por_email ?? "").toLowerCase() === miEmail && (
-                      <button type="button" className="vc-btn-back text-xs" onClick={() => borrar(a.id)}>
+                      <button type="button" className="vc-btn-back text-sm" onClick={() => borrar(a.id)}>
                         Borrar
                       </button>
                     )}

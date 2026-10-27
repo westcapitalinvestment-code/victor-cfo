@@ -163,7 +163,7 @@ export default function AceptarEquipoCpaPage() {
           </div>
           <div className="vc-card">
             <p className="mb-1 text-sm font-medium">Este link ya no es válido</p>
-            <p className="text-xs text-muted">{errorInvite || "Invitación no encontrada."}</p>
+            <p className="text-sm text-muted">{errorInvite || "Invitación no encontrada."}</p>
           </div>
         </div>
       </div>
@@ -180,7 +180,7 @@ export default function AceptarEquipoCpaPage() {
           </div>
           <div className="vc-card">
             <p className="mb-2 text-sm font-medium">Ya aceptaste esta invitación</p>
-            <p className="mb-4 text-xs text-muted">Entra con tu correo y contraseña para ver el portal.</p>
+            <p className="mb-4 text-sm text-muted">Entra con tu correo y contraseña para ver el portal.</p>
             <button className="vc-btn-primary" onClick={() => router.push("/login")}>
               Ir a iniciar sesión
             </button>
@@ -200,7 +200,7 @@ export default function AceptarEquipoCpaPage() {
           </div>
           <div className="vc-card">
             <p className="mb-2 text-sm font-medium">Revisa tu correo</p>
-            <p className="text-xs text-muted">
+            <p className="text-sm text-muted">
               Te mandamos un link de confirmación a {invite.staffEmail}. Entra ahí y vuelves directo a este mismo
               link ya conectado — no hace falta hacer nada más.
             </p>
@@ -216,7 +216,7 @@ export default function AceptarEquipoCpaPage() {
         <div className="mb-8 flex items-center justify-center gap-2">
           <img src="/victor-avatar.png" alt="VICTOR" className="h-9 w-9 flex-shrink-0 rounded-full object-cover" style={{ background: "#fff" }} />
           <span className="text-lg font-medium">VICTOR</span>
-          <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-[10px] font-medium text-teal">
+          <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-xs font-medium text-teal">
             Equipo Contable
           </span>
         </div>
@@ -226,7 +226,7 @@ export default function AceptarEquipoCpaPage() {
             <p className="text-sm font-medium">
               {invite.leadName ? `${invite.leadName} te invitó a su equipo` : `${invite.leadEmail} te invitó a su equipo`}
             </p>
-            <p className="mt-1 text-xs text-muted">
+            <p className="mt-1 text-sm text-muted">
               Vas a ver automáticamente los mismos clientes que {invite.leadName || invite.leadEmail} ya tiene en
               VICTOR — acceso de solo lectura, igual que el de {invite.leadName || "él"}.
             </p>
@@ -236,14 +236,14 @@ export default function AceptarEquipoCpaPage() {
             <button
               type="button"
               onClick={() => setModo("crear")}
-              className={`flex-1 rounded-md py-1.5 text-xs font-medium ${modo === "crear" ? "bg-teal text-white" : "text-muted"}`}
+              className={`flex-1 rounded-md py-1.5 text-sm font-medium ${modo === "crear" ? "bg-teal text-white" : "text-muted"}`}
             >
               Crear contraseña
             </button>
             <button
               type="button"
               onClick={() => setModo("entrar")}
-              className={`flex-1 rounded-md py-1.5 text-xs font-medium ${modo === "entrar" ? "bg-teal text-white" : "text-muted"}`}
+              className={`flex-1 rounded-md py-1.5 text-sm font-medium ${modo === "entrar" ? "bg-teal text-white" : "text-muted"}`}
             >
               Ya tengo cuenta
             </button>
@@ -261,7 +261,7 @@ export default function AceptarEquipoCpaPage() {
               required
             />
 
-            {error && <p className="text-xs text-red">{error}</p>}
+            {error && <p className="text-sm text-red">{error}</p>}
 
             <button type="submit" className="vc-btn-primary mt-1" disabled={enviando || conectando}>
               {conectando
@@ -276,13 +276,13 @@ export default function AceptarEquipoCpaPage() {
 
           {modo === "entrar" &&
             (resetEnviado ? (
-              <p className="text-center text-xs text-muted">
+              <p className="text-center text-sm text-muted">
                 Te mandamos un link a {invite.staffEmail} para crear una contraseña nueva.
               </p>
             ) : (
               <button
                 type="button"
-                className="text-center text-xs text-muted hover:text-teal"
+                className="text-center text-sm text-muted hover:text-teal"
                 onClick={handleOlvidoContrasena}
               >
                 ¿Olvidaste tu contraseña?

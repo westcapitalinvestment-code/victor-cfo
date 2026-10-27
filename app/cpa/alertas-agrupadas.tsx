@@ -49,7 +49,7 @@ export default function AlertasAgrupadas({ alertas, emptyText }: { alertas: Aler
       {listaGrupos.map((g) => (
         <div key={g.tipoLabel}>
           <p
-            className={`mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide ${
+            className={`mb-1.5 flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide ${
               g.tono === "red" ? "text-red" : "text-amb"
             }`}
           >

@@ -226,12 +226,12 @@ export default async function CpaPersonalPage({
           <Link href="/cpa" className="vc-btn-back">
             <i className="ti ti-arrow-left" /> Atrás
           </Link>
-          <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-[10px] font-medium text-teal">
+          <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-xs font-medium text-teal">
             Personal
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[10px] text-muted">
+          <span className="flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-sm text-muted">
             <i className="ti ti-lock" /> Solo lectura
           </span>
           <CpaAccountMenu email={user.email ?? null} />
@@ -239,7 +239,7 @@ export default async function CpaPersonalPage({
       </div>
 
       <p className="text-lg font-medium">{nombreDueno}</p>
-      <p className="mb-3 text-xs text-muted">
+      <p className="mb-3 text-sm text-muted">
         Finanzas personales · compartidas por el cliente (puede quitar este acceso cuando quiera)
       </p>
 
@@ -249,7 +249,7 @@ export default async function CpaPersonalPage({
             <Link
               key={t.id}
               href={href(t.id)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                 tab === t.id ? "bg-teal text-white" : "text-muted hover:text-text"
               }`}
             >
@@ -264,7 +264,7 @@ export default async function CpaPersonalPage({
               <Link
                 key={a}
                 href={`${base}?tab=${tab}&anio=${a}`}
-                className={`rounded-full border px-2.5 py-1 text-[11px] ${
+                className={`rounded-full border px-2.5 py-1 text-xs ${
                   a === anio ? "border-teal text-teal" : "border-border text-muted"
                 }`}
               >
@@ -278,7 +278,7 @@ export default async function CpaPersonalPage({
       {tab === "alertas" && (
         <div className="vc-card">
           {alertasP.length === 0 ? (
-            <p className="text-xs text-muted">Todo se ve normal con este cliente — sin pendientes urgentes.</p>
+            <p className="text-sm text-muted">Todo se ve normal con este cliente — sin pendientes urgentes.</p>
           ) : (
             <div className="flex flex-col divide-y divide-border">
               {alertasP.map((a, i) => (
@@ -286,7 +286,7 @@ export default async function CpaPersonalPage({
                   <i className={`ti ${a.tono === "red" ? "ti-alert-triangle text-red" : "ti-clock text-amb"} mt-0.5`} />
                   <div>
                     <p className="text-sm font-medium">{a.titulo}</p>
-                    <p className="text-xs text-muted">{a.detalle}</p>
+                    <p className="text-sm text-muted">{a.detalle}</p>
                   </div>
                 </div>
               ))}
@@ -299,20 +299,20 @@ export default async function CpaPersonalPage({
         <div className="vc-card">
           <div className="mb-3 grid grid-cols-3 gap-2 text-center">
             <div>
-              <p className="text-[10px] uppercase text-muted">Ingresos {anio}</p>
+              <p className="text-xs uppercase text-muted">Ingresos {anio}</p>
               <p className="text-base font-medium text-grn">{formatMoney(totalIngresos)}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase text-muted">Gastos {anio}</p>
+              <p className="text-xs uppercase text-muted">Gastos {anio}</p>
               <p className="text-base font-medium text-red">{formatMoney(totalGastos)}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase text-muted">Neto</p>
+              <p className="text-xs uppercase text-muted">Neto</p>
               <p className="text-base font-medium">{formatMoney(totalIngresos - totalGastos)}</p>
             </div>
           </div>
           <div className="divide-y divide-border text-sm">
-            <div className="grid grid-cols-4 gap-2 py-1.5 text-[10px] uppercase tracking-wide text-muted">
+            <div className="grid grid-cols-4 gap-2 py-1.5 text-xs uppercase tracking-wide text-muted">
               <span>Mes</span>
               <span className="text-right">Ingresos</span>
               <span className="text-right">Gastos</span>
@@ -327,7 +327,7 @@ export default async function CpaPersonalPage({
               </div>
             ))}
           </div>
-          <p className="mt-3 text-[11px] text-muted">
+          <p className="mt-3 text-xs text-muted">
             Excluye transferencias entre cuentas y transacciones marcadas como duplicadas.
           </p>
         </div>
@@ -336,10 +336,10 @@ export default async function CpaPersonalPage({
       {tab === "categorias" && (
         <div className="vc-card">
           {categorias.length === 0 ? (
-            <p className="text-xs text-muted">Sin transacciones personales en {anio}.</p>
+            <p className="text-sm text-muted">Sin transacciones personales en {anio}.</p>
           ) : (
             <div className="divide-y divide-border text-sm">
-              <div className="grid grid-cols-4 gap-2 py-1.5 text-[10px] uppercase tracking-wide text-muted">
+              <div className="grid grid-cols-4 gap-2 py-1.5 text-xs uppercase tracking-wide text-muted">
                 <span>Categoría</span>
                 <span className="text-right">Ingresos</span>
                 <span className="text-right">Gastos</span>
@@ -362,7 +362,7 @@ export default async function CpaPersonalPage({
 
           {catSel && (
             <div className="mt-4 border-t border-border pt-3">
-              <p className="mb-2 text-xs uppercase tracking-wide text-muted">
+              <p className="mb-2 text-sm uppercase tracking-wide text-muted">
                 Transacciones de la categoría {txsCat.length >= 300 ? "(primeras 300)" : ""}
               </p>
               <div className="divide-y divide-border text-sm">
@@ -370,7 +370,7 @@ export default async function CpaPersonalPage({
                   <div key={t.id} className="flex items-center justify-between gap-2 py-1.5">
                     <div className="min-w-0">
                       <p className="truncate">{t.description_raw}</p>
-                      <p className="text-[11px] text-muted">{formatFecha(t.fecha)}</p>
+                      <p className="text-xs text-muted">{formatFecha(t.fecha)}</p>
                     </div>
                     <span className={t.tipo_flujo === "ingreso" ? "text-grn" : ""}>
                       {formatMoney(Math.abs(Number(t.amount)))}
@@ -386,39 +386,39 @@ export default async function CpaPersonalPage({
       {tab === "impuestos" && (
         <div className="vc-card">
           {!estimado ? (
-            <p className="text-xs text-muted">No se pudo calcular el estimado de impuestos de este cliente.</p>
+            <p className="text-sm text-muted">No se pudo calcular el estimado de impuestos de este cliente.</p>
           ) : estimado.perfil.tipo === "empleado" ? (
-            <p className="text-xs text-muted">
+            <p className="text-sm text-muted">
               Este cliente indicó que trabaja por sueldo (nómina): sus impuestos se retienen del cheque, así que no hay
               calendario de estimadas.
             </p>
           ) : (
             <>
-              <p className="mb-1 text-xs uppercase tracking-wide text-muted">
+              <p className="mb-1 text-sm uppercase tracking-wide text-muted">
                 Impuestos estimados {estimado.resultado.anio} · {estimado.perfil.residencia === "pr" ? "Puerto Rico" : "EE. UU."} ·{" "}
                 {estimado.perfil.tipo === "corporacion" ? "corporación" : "cuenta propia"}
               </p>
               <div className="mb-3 grid grid-cols-3 gap-2 text-center">
                 <div>
-                  <p className="text-[10px] uppercase text-muted">Ingreso proyectado</p>
+                  <p className="text-xs uppercase text-muted">Ingreso proyectado</p>
                   <p className="text-sm font-medium">{formatMoney(estimado.resultado.ingresoBrutoProyectado)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase text-muted">Impuesto total</p>
+                  <p className="text-xs uppercase text-muted">Impuesto total</p>
                   <p className="text-sm font-medium">{formatMoney(estimado.resultado.totalImpuesto)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase text-muted">Pagado/retenido</p>
+                  <p className="text-xs uppercase text-muted">Pagado/retenido</p>
                   <p className="text-sm font-medium">{formatMoney(estimado.resultado.pagadoYTD)}</p>
                 </div>
               </div>
               <CalendarioEstimadas resultado={estimado.resultado} ocultable={false} />
-              <ul className="mt-3 list-disc pl-4 text-[11px] text-muted">
+              <ul className="mt-3 list-disc pl-4 text-xs text-muted">
                 {estimado.resultado.supuestos.map((s, i) => (
                   <li key={i}>{s}</li>
                 ))}
               </ul>
-              <p className="mt-2 text-[11px] text-muted">
+              <p className="mt-2 text-xs text-muted">
                 Estimado informativo calculado por VICTOR a partir de las transacciones del cliente; confirma fechas y
                 montos con tu criterio profesional.
               </p>
@@ -434,13 +434,13 @@ export default async function CpaPersonalPage({
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-semibold">Estado de Resultados — {anio}</p>
-              <p className="text-xs text-muted">Ingresos y gastos personales por categoría y mes.</p>
+              <p className="text-sm text-muted">Ingresos y gastos personales por categoría y mes.</p>
             </div>
             <div className="flex items-center gap-2">
-              <Link href={`${base}?tab=reportes&anio=${anio - 1}`} className="rounded-pill border border-border px-2.5 py-1 text-xs">
+              <Link href={`${base}?tab=reportes&anio=${anio - 1}`} className="rounded-pill border border-border px-2.5 py-1 text-sm">
                 ← {anio - 1}
               </Link>
-              <Link href={`${base}?tab=reportes&anio=${anio + 1}`} className="rounded-pill border border-border px-2.5 py-1 text-xs">
+              <Link href={`${base}?tab=reportes&anio=${anio + 1}`} className="rounded-pill border border-border px-2.5 py-1 text-sm">
                 {anio + 1} →
               </Link>
             </div>
@@ -448,24 +448,24 @@ export default async function CpaPersonalPage({
 
           <div className="vc-card mb-3 flex flex-wrap gap-4">
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-muted">Ingresos</div>
+              <div className="text-xs uppercase tracking-wide text-muted">Ingresos</div>
               <div className="text-base font-semibold" style={{ color: "#0f6b4e" }}>{formatMoney(er.totalIngresos)}</div>
             </div>
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-muted">Gastos</div>
+              <div className="text-xs uppercase tracking-wide text-muted">Gastos</div>
               <div className="text-base font-semibold" style={{ color: "#d44c3d" }}>{formatMoney(er.totalGastos)}</div>
             </div>
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-muted">Utilidad neta</div>
+              <div className="text-xs uppercase tracking-wide text-muted">Utilidad neta</div>
               <div className="text-base font-semibold" style={{ color: er.utilidadNeta >= 0 ? "#0f6b4e" : "#d44c3d" }}>
                 {formatMoney(er.utilidadNeta)}
               </div>
             </div>
             <div className="ml-auto flex items-end gap-3">
-              <a href={`/api/reportes/estado-resultados/excel?ownerId=${ownerId}&anio=${anio}`} className="text-xs font-medium hover:text-teal">
+              <a href={`/api/reportes/estado-resultados/excel?ownerId=${ownerId}&anio=${anio}`} className="text-sm font-medium hover:text-teal">
                 ↓ Excel
               </a>
-              <a href={`/api/reportes/estado-resultados/pdf?ownerId=${ownerId}&anio=${anio}`} className="text-xs font-medium hover:text-teal">
+              <a href={`/api/reportes/estado-resultados/pdf?ownerId=${ownerId}&anio=${anio}`} className="text-sm font-medium hover:text-teal">
                 ↓ PDF
               </a>
             </div>
@@ -473,7 +473,7 @@ export default async function CpaPersonalPage({
 
           <EstadoResultadosTabla er={er} anio={anio} />
 
-          <p className="mt-3 text-[11px] text-muted">
+          <p className="mt-3 text-xs text-muted">
             Excluye transferencias entre cuentas y transacciones duplicadas o pendientes. Detalle transacción por transacción:{" "}
             <a className="underline" href={`/api/transacciones/exportar/excel?ownerId=${ownerId}&desde=${anio}-01-01&hasta=${anio}-12-31`}>
               Excel

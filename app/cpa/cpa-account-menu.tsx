@@ -99,10 +99,10 @@ export default function CpaAccountMenu({ email }: { email: string | null }) {
       </button>
       {abierto && (
         <div className="vc-negocio-menu" style={{ left: "auto", right: 0, width: firma ? 260 : 220 }}>
-          {email && <p className="truncate px-2.5 pb-1 pt-0.5 text-[11px] text-muted">{email}</p>}
+          {email && <p className="truncate px-2.5 pb-1 pt-0.5 text-xs text-muted">{email}</p>}
           {firma && (
             <div className="border-b border-border px-2.5 pb-2 pt-1">
-              <p className="mb-1 text-[11px] font-medium">Logo de tu firma</p>
+              <p className="mb-1 text-xs font-medium">Logo de tu firma</p>
               <div className="flex items-center gap-2">
                 {firma.tieneLogo ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -124,12 +124,12 @@ export default function CpaAccountMenu({ email }: { email: string | null }) {
                     type="button"
                     disabled={subiendoLogo}
                     onClick={() => inputLogoRef.current?.click()}
-                    className="text-left text-xs font-medium text-teal"
+                    className="text-left text-sm font-medium text-teal"
                   >
                     {subiendoLogo ? "Subiendo..." : firma.tieneLogo ? "Cambiar logo" : "Subir logo"}
                   </button>
                   {firma.tieneLogo && !subiendoLogo && (
-                    <button type="button" onClick={quitarLogo} className="text-left text-xs text-muted">
+                    <button type="button" onClick={quitarLogo} className="text-left text-sm text-muted">
                       Quitar
                     </button>
                   )}
@@ -146,8 +146,8 @@ export default function CpaAccountMenu({ email }: { email: string | null }) {
                   e.target.value = "";
                 }}
               />
-              <p className="mt-1 text-[10px] text-muted">Lo ven tus clientes invitados en su cuenta.</p>
-              {errorLogo && <p className="mt-1 text-[10px] text-red">{errorLogo}</p>}
+              <p className="mt-1 text-xs text-muted">Lo ven tus clientes invitados en su cuenta.</p>
+              {errorLogo && <p className="mt-1 text-xs text-red">{errorLogo}</p>}
             </div>
           )}
           <Link href="/restablecer-contrasena" className="vc-negocio-item" onClick={() => setAbierto(false)}>

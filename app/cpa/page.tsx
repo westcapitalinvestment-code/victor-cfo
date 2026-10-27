@@ -289,30 +289,30 @@ export default async function CpaPortalPage() {
         <div className="flex items-center gap-2">
           <img src="/victor-avatar.png" alt="VICTOR" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" style={{ background: "#fff" }} />
           <span className="text-base font-medium">VICTOR</span>
-          <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-[10px] font-medium text-teal">
+          <span className="ml-1 rounded-full border border-teal px-2 py-0.5 text-xs font-medium text-teal">
             Portal Contable
           </span>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href="/cpa/perfil"
-            className="flex items-center gap-1.5 rounded-full border border-teal px-3 py-1.5 text-xs font-medium text-teal hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-full border border-teal px-4 py-2 text-sm font-medium text-teal hover:opacity-90"
           >
-            <i className="ti ti-building-store text-sm" /> Mi oficina
+            <i className="ti ti-building-store text-base" /> Mi oficina
           </Link>
           <Link
             href="/cpa/equipo"
-            className="flex items-center gap-1.5 rounded-full bg-teal px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-full bg-teal px-4 py-2 text-sm font-medium text-white hover:opacity-90"
           >
-            <i className="ti ti-users text-sm" /> Mi equipo
+            <i className="ti ti-users text-base" /> Mi equipo
           </Link>
           <Link
             href="/cpa/manual"
-            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm font-medium text-muted hover:opacity-90"
           >
-            <i className="ti ti-book text-sm" /> Manual
+            <i className="ti ti-book text-base" /> Manual
           </Link>
-          <span className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[10px] text-muted">
+          <span className="flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-sm text-muted">
             <i className="ti ti-lock" /> Solo lectura
           </span>
           <CpaAccountMenu email={user.email ?? null} />
@@ -329,16 +329,16 @@ export default async function CpaPortalPage() {
           className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-teal p-3.5 hover:opacity-90"
         >
           <div>
-            <p className="text-sm font-medium">Completa el perfil de tu oficina</p>
-            <p className="mt-0.5 text-xs text-muted">
+            <p className="text-base font-medium">Completa el perfil de tu oficina</p>
+            <p className="mt-0.5 text-sm text-muted">
               Así apareces en el directorio de contables de VICTOR y los usuarios que buscan contable pueden encontrarte.
             </p>
           </div>
-          <span className="shrink-0 rounded-full bg-teal px-3 py-1.5 text-xs font-medium text-white">Completar</span>
+          <span className="shrink-0 rounded-full bg-teal px-4 py-2 text-sm font-medium text-white">Completar</span>
         </Link>
       )}
 
-      {error && <p className="mb-3 text-xs text-red">No se pudieron cargar tus clientes: {error.message}</p>}
+      {error && <p className="mb-3 text-sm text-red">No se pudieron cargar tus clientes: {error.message}</p>}
 
       {/* Programa Firma Accountant (migración 0139, 4 oct 2026) — wholesale
           del plan Business, separado y excluyente del Programa de Socios.
@@ -355,7 +355,7 @@ export default async function CpaPortalPage() {
           alimentaba el contador por cliente de CpaClientList de abajo. */}
       {alertas.length > 0 && (
         <div className="vc-card mb-4">
-          <p className="mb-3 text-xs uppercase tracking-wide text-muted">Alertas Inteligentes</p>
+          <p className="mb-3 text-sm uppercase tracking-wide text-muted">Alertas Inteligentes</p>
           <AlertasAgrupadas alertas={alertas} emptyText="Todo se ve normal con tu cartera — sin pendientes urgentes." />
         </div>
       )}

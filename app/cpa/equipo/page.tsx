@@ -84,16 +84,16 @@ export default function EquipoCpaPage() {
 
       <div className="mb-4 rounded-lg p-3.5 text-sm text-white" style={{ background: "#1B3A5C" }}>
         <p className="font-medium">Comparte tus clientes con tu equipo</p>
-        <p className="mt-1 text-xs text-white/80">
+        <p className="mt-1 text-sm text-white/80">
           Invita a un colega y, en cuanto acepte, va a ver automáticamente los mismos clientes que tú — sin que
           nadie más tenga que hacer nada. Si consigues un cliente nuevo después, tu equipo lo ve solo.
         </p>
       </div>
 
       <div className="vc-card mb-4 flex flex-col gap-3">
-        {error && <p className="text-xs text-red">{error}</p>}
+        {error && <p className="text-sm text-red">{error}</p>}
         {resultado && (
-          <p className="text-xs text-grn">
+          <p className="text-sm text-grn">
             {resultado.emailSent
               ? "Invitación enviada — en cuanto tu colega la acepte, va a ver tus clientes."
               : "Guardamos la invitación, pero el correo automático no se pudo mandar — avísale tú mismo mientras tanto."}
@@ -101,12 +101,12 @@ export default function EquipoCpaPage() {
         )}
 
         <div>
-          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Nombre (opcional)</label>
+          <label className="mb-1 block text-sm uppercase tracking-wide text-muted">Nombre (opcional)</label>
           <input className="vc-input" placeholder="Nombre y apellidos" value={staffName} onChange={(e) => setStaffName(e.target.value)} />
         </div>
 
         <div>
-          <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Correo de tu colega</label>
+          <label className="mb-1 block text-sm uppercase tracking-wide text-muted">Correo de tu colega</label>
           <input
             className="vc-input"
             type="email"
@@ -122,22 +122,22 @@ export default function EquipoCpaPage() {
       </div>
 
       <div className="vc-card">
-        <p className="mb-3 text-xs uppercase tracking-wide text-muted">Tu equipo ({invitaciones.length})</p>
+        <p className="mb-3 text-sm uppercase tracking-wide text-muted">Tu equipo ({invitaciones.length})</p>
         {cargando ? (
-          <p className="text-xs text-muted">Cargando...</p>
+          <p className="text-sm text-muted">Cargando...</p>
         ) : invitaciones.length === 0 ? (
-          <p className="text-xs text-muted">Todavía no has invitado a nadie de tu equipo.</p>
+          <p className="text-sm text-muted">Todavía no has invitado a nadie de tu equipo.</p>
         ) : (
           <div className="flex flex-col divide-y divide-border">
             {invitaciones.map((inv) => (
               <div key={inv.id} className="flex items-center justify-between py-3">
                 <div>
                   <p className="text-sm font-medium">{inv.staff_name || inv.staff_email}</p>
-                  <p className="text-xs text-muted">{inv.staff_email}</p>
+                  <p className="text-sm text-muted">{inv.staff_email}</p>
                 </div>
                 <span
                   className={
-                    "rounded-full px-2 py-1 text-[10px] font-medium " +
+                    "rounded-full px-2 py-1 text-xs font-medium " +
                     (inv.status === "accepted" ? "bg-grn/10 text-grn" : "bg-amb/10 text-amb")
                   }
                 >
