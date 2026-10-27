@@ -10,7 +10,7 @@ export const metadata = { title: "Manual de Usuario · VICTOR CFO" };
 export default function ManualPublicoPage() {
   return (
     <div className="min-h-screen bg-bg">
-      <ManualViewer />
+      <ManualViewer volver={{ href: "/", label: "Ir a VICTOR CFO" }} />
     </div>
   );
 }

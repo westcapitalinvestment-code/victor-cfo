@@ -16,6 +16,8 @@ export default function ManualContablePage() {
         titulo="Manual del contable"
         subtitulo="Guía del portal: clientes, pestañas de cada entidad, tu equipo y tu perfil."
         fotos={false}
+        pie=""
+        volver={{ href: "/cpa", label: "Volver al portal" }}
       />
     </div>
   );

@@ -114,9 +114,11 @@ function Detalle({ m, mostrarPendientes, onVolver, fotos, pie }: { m: ModuloManu
         </div>
       )}
 
-      <p className="mt-4 text-center text-sm text-muted print:hidden">
-        {pie ?? "¿Algo no te quedó claro? Pregúntale a VICTOR: el chat verde de abajo conoce esta guía."}
-      </p>
+      {pie !== "" && (
+        <p className="mt-4 text-center text-sm text-muted print:hidden">
+          {pie ?? "¿Algo no te quedó claro? Pregúntale a VICTOR: el chat verde de abajo conoce esta guía."}
+        </p>
+      )}
     </div>
   );
 }
@@ -128,8 +130,10 @@ export default function ManualViewer({
   subtitulo = "Guías paso a paso de cada parte de VICTOR CFO.",
   fotos = true,
   pie,
+  volver,
 }: {
-  pie?: string;
+  pie?: string; // "" = sin pie (portales sin chat)
+  volver?: { href: string; label: string };
   modulos?: ModuloManual[];
   grupos?: readonly string[];
   titulo?: string;
@@ -169,6 +173,11 @@ export default function ManualViewer({
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 pb-32 pt-4">
+      {volver && (
+        <a href={volver.href} className="mb-3 inline-block text-sm font-medium text-teal print:hidden">
+          ← {volver.label}
+        </a>
+      )}
       <div className="mb-4 flex items-start justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">{titulo}</h1>

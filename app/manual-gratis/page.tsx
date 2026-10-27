@@ -13,6 +13,7 @@ export default function ManualGratisPublicoPage() {
         titulo="Manual del plan Gratis"
         subtitulo="Cómo usar VICTOR CFO paso a paso, tocando las tarjetas de tu inicio."
         fotos={false}
+        volver={{ href: "/", label: "Ir a VICTOR CFO" }}
         pie="¿Algo no te quedó claro? Escríbenos a soporte@victorcfo.com y te contestamos."
       />
     </div>

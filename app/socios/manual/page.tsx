@@ -18,6 +18,8 @@ export default function ManualVendedorPage() {
         titulo="Manual del vendedor"
         subtitulo="Uso interno: portal, prospectos, comisiones y programa de socios."
         fotos={false}
+        pie=""
+        volver={{ href: "/socios/portal", label: "Volver al portal" }}
       />
     </div>
   );

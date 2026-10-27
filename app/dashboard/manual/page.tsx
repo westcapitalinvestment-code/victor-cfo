@@ -6,5 +6,5 @@ export const metadata = { title: "Manual de Usuario · VICTOR CFO" };
 // vendedores. Es contenido estático (lib/manual-usuario.ts); no lee datos del
 // usuario. El layout del dashboard ya exige sesión.
 export default function ManualPage() {
-  return <ManualViewer />;
+  return <ManualViewer volver={{ href: "/dashboard", label: "Volver al inicio" }} />;
 }
