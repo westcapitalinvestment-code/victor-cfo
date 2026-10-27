@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { OFICINAS_DEMO } from "@/lib/demo-oficinas";
 
 // Directorio de contables para clientes de VICTOR (migración 0163). Muestra el
 // perfil público completo, incluido el contacto (teléfono, correo, web, IG,
@@ -14,6 +15,10 @@ export async function GET() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+
+  // Cuenta demo: directorio de ejemplo (12 oficinas ficticias, no se guardan).
+  const { data: perfil } = await supabase.from("users").select("is_demo").eq("id", user.id).maybeSingle();
+  if (perfil?.is_demo) return NextResponse.json({ ok: true, oficinas: OFICINAS_DEMO });
 
   const admin = createAdminClient();
   await admin.rpc("sincronizar_oficinas_contables");
