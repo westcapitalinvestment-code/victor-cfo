@@ -337,9 +337,12 @@ export default function TradingPage() {
     setMsg("Reglas guardadas.");
   }
 
-  async function guardarNota(t: FilaTrade, nota: string, cumpli: boolean | null) {
-    await supabase.from("trades").update({ nota: nota.trim() || null, cumpli_plan: cumpli }).eq("id", t.id);
+  // Devuelve un texto de error si falló (null = guardado), para que la tarjeta lo muestre.
+  async function guardarNota(t: FilaTrade, nota: string, cumpli: boolean | null): Promise<string | null> {
+    const { error: e } = await supabase.from("trades").update({ nota: nota.trim() || null, cumpli_plan: cumpli }).eq("id", t.id);
+    if (e) return e.message;
     setTrades((prev) => prev.map((x) => (x.id === t.id ? { ...x, nota: nota.trim() || null, cumpli_plan: cumpli } : x)));
+    return null;
   }
 
   // Si la cuenta está sincronizada, el balance real viene de MT5; si no, lo escribe el usuario.
@@ -973,12 +976,20 @@ export default function TradingPage() {
   );
 }
 
-function NotaTrade({ t, onGuardar }: { t: FilaTrade; onGuardar: (t: FilaTrade, nota: string, cumpli: boolean | null) => void }) {
+function NotaTrade({ t, onGuardar }: { t: FilaTrade; onGuardar: (t: FilaTrade, nota: string, cumpli: boolean | null) => Promise<string | null> }) {
   const [nota, setNota] = useState(t.nota ?? "");
   const [cumpli, setCumpli] = useState<boolean | null>(t.cumpli_plan);
+  const [estado, setEstado] = useState<"" | "guardando" | "ok" | string>("");
+  async function guardar() {
+    setEstado("guardando");
+    const err = await onGuardar(t, nota, cumpli);
+    if (err) return setEstado(`No se pudo guardar: ${err}`);
+    setEstado("ok");
+    setTimeout(() => setEstado((s) => (s === "ok" ? "" : s)), 2500);
+  }
   return (
     <div className="flex flex-col gap-2">
-      <textarea className="vc-input" rows={2} placeholder="Nota: ¿por qué entraste?" value={nota} onChange={(e) => setNota(e.target.value)} />
+      <textarea className="vc-input" rows={2} placeholder="Nota: ¿por qué entraste?" value={nota} onChange={(e) => { setNota(e.target.value); setEstado(""); }} />
       <div className="flex items-center gap-2">
         <span>¿Cumplí mi plan?</span>
         {[true, false].map((v) => (
@@ -991,8 +1002,11 @@ function NotaTrade({ t, onGuardar }: { t: FilaTrade; onGuardar: (t: FilaTrade, n
             {v ? "Sí" : "No"}
           </button>
         ))}
-        <button type="button" className="ml-auto text-teal" onClick={() => onGuardar(t, nota, cumpli)}>Guardar</button>
+        <button type="button" className="ml-auto text-teal disabled:opacity-50" disabled={estado === "guardando"} onClick={guardar}>
+          {estado === "guardando" ? "Guardando..." : estado === "ok" ? "✓ Guardado" : "Guardar"}
+        </button>
       </div>
+      {estado && estado !== "ok" && estado !== "guardando" && <p className="text-red">{estado}</p>}
     </div>
   );
 }
