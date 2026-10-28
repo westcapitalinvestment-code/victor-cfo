@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 // Barra superior compartida de todo el dashboard — calcada de la
 // .topbar de VICTOR — Dashboard Core.html: logo + nombre + badge de plan,
 // banner central para invitar al contable (gratis, para cualquier plan —
@@ -42,6 +43,75 @@ function ThemeToggle() {
       </span>
       <i className="ti ti-moon" style={{ fontSize: 12, color: "var(--muted)" }} />
     </button>
+  );
+}
+
+// Engranaje de la cuenta (28 oct 2026, pedido de Joel): atajos a lo personal
+// de la cuenta + salir, para que nadie se pierda buscando cómo cerrar sesión.
+// Los atajos llevan a secciones de /dashboard/config (ver los id="..." ahí).
+function GearMenu() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    function fuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", fuera);
+    return () => document.removeEventListener("mousedown", fuera);
+  }, []);
+
+  async function salir() {
+    setOpen(false);
+    await createClient().auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
+  const items = [
+    { icon: "ti-user", label: "Cuenta", href: "/dashboard/config#cuenta" },
+    { icon: "ti-lifebuoy", label: "Soporte", href: "/dashboard/config#soporte" },
+    { icon: "ti-clock-pause", label: "Inactividad", href: "/dashboard/config#inactividad" },
+    { icon: "ti-credit-card", label: "Gestionar plan", href: "/dashboard/config#plan" },
+  ];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-8 w-8 items-center justify-center rounded-full border border-border"
+        title="Mi cuenta"
+        aria-label="Mi cuenta"
+        aria-expanded={open}
+      >
+        <i className="ti ti-settings" style={{ fontSize: 16, color: "var(--muted)" }} />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-10 z-50 w-48 overflow-hidden rounded-xl border border-border py-1 text-sm shadow-lg"
+          style={{ background: "var(--card, var(--bg, #fff))" }}
+        >
+          {items.map((it) => (
+            <Link
+              key={it.label}
+              href={it.href}
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2 text-text no-underline hover:opacity-70"
+            >
+              <i className={`ti ${it.icon}`} style={{ fontSize: 15, color: "var(--muted)" }} />
+              {it.label}
+            </Link>
+          ))}
+          <div className="my-1 border-t border-border" />
+          <button type="button" onClick={salir} className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:opacity-70" style={{ color: "#C0392B" }}>
+            <i className="ti ti-logout" style={{ fontSize: 15 }} />
+            Salir
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -255,6 +325,7 @@ export default function Topbar({
               </button>
             )}
             <ThemeToggle />
+            <GearMenu />
           </div>
         </div>
 

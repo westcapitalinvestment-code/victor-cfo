@@ -111,7 +111,7 @@ export default async function ConfigPage() {
 
       {profile?.is_demo && <ReiniciarDemo />}
 
-      <div className="vc-card mb-4">
+      <div id="cuenta" className="vc-card mb-4 scroll-mt-24">
         <p className="text-sm font-semibold">Cuenta</p>
         <p className="mt-1 text-sm font-medium">{profile?.full_name || user.email}</p>
         <p className="text-xs text-muted">{user.email}</p>
@@ -128,7 +128,7 @@ export default async function ConfigPage() {
           usuario se sienta solo si algo falla — sobre todo el plan gratis,
           que no tiene acceso a VICTOR para preguntarle nada. Visible para
           todos, en un lugar fijo y fácil de encontrar. */}
-      <div className="vc-card mb-4">
+      <div id="soporte" className="vc-card mb-4 scroll-mt-24">
         <p className="text-sm font-semibold">Soporte</p>
         <p className="mt-1 text-sm">
           ¿Tienes una pregunta o algo no está funcionando? Escríbenos, te contestamos lo antes posible.
@@ -188,14 +188,18 @@ export default async function ConfigPage() {
 
       <PinConfig />
 
-      <SessionTimeoutConfig />
+      <div id="inactividad" className="scroll-mt-24">
+        <SessionTimeoutConfig />
+      </div>
 
-      <GestionarPlan
-        pagadoPorFirma={nombreFirmaQuePaga}
-        graciaHasta={graciaHasta}
-        firmaLiberadoNombre={firmaLiberadoNombre}
-        esGratis={profile?.plan === "gratis"}
-      />
+      <div id="plan" className="scroll-mt-24">
+        <GestionarPlan
+          pagadoPorFirma={nombreFirmaQuePaga}
+          graciaHasta={graciaHasta}
+          firmaLiberadoNombre={firmaLiberadoNombre}
+          esGratis={profile?.plan === "gratis"}
+        />
+      </div>
 
       <CreditosIA />
 
