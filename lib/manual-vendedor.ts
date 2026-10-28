@@ -293,34 +293,4 @@ export const MODULOS_VENDEDOR: ModuloVendedor[] = [
       { titulo: "Sigue tus bonos", texto: "Bonos por tus oficinas de contables muestra lo por cobrar en total, las que esperan su primer cliente y el neto estimado por trimestre, después de retención. Oficina activada: $20 una vez cuando su primer cliente ya pagó, y $10 una vez por cada cliente que traiga; se paga cada 3 meses.", foto: "Tarjeta de bonos por trimestre" },
     ],
   },
-  {
-    id: "socios",
-    grupo: "Tu portal y tus pagos",
-    titulo: "Programa de Socios y Embajadores",
-    icono: "ti-heart-handshake",
-    audiencia: ["vendedor"],
-    plan: "Abierto a contadores, influencers y cualquier persona con red",
-    resumen: "Cómo aplicar al programa, cómo se aprueba y cómo se cobra la comisión.",
-    donde: "victorcfo.com/socios",
-    pasos: [
-      {
-        titulo: "Aplica",
-        texto:
-          "Entra a victorcfo.com/socios (no necesitas cuenta). Llena nombre, correo, teléfono, tipo (contador, influencer u otro) y cómo piensas promocionar VICTOR; acepta los términos.",
-        foto: "Formulario público de socios",
-      },
-      {
-        titulo: "Espera la aprobación",
-        texto: "El equipo de VICTOR revisa cada solicitud a mano. Al aprobarte te llega tu código para compartir y, si eres vendedor, tu PIN del portal.",
-        foto: "Correo de aprobación con el código",
-      },
-      {
-        titulo: "Cobra",
-        texto:
-          "La comisión es en efectivo real, una vez por cliente que empiece a pagar. El pago se hace por fuera de la app (ACH o ATH Business) a los datos bancarios que llenas tú mismo en un link seguro de un solo uso. Si el cliente entra a Pro, la comisión se libera cuando hay actividad real de negocio.",
-        foto: "Página segura para los datos de pago",
-      },
-    ],
-    consejos: ["Pasados los primeros $1,500 al año a un mismo socio aplica retención de Hacienda (1062.03); eso se coordina por fuera de la app."],
-  },
 ];
