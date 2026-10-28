@@ -217,6 +217,27 @@ function ms(s: string): number {
   return new Date(s.replace(" ", "T") + "Z").getTime();
 }
 
+/**
+ * Convierte la hora del servidor del broker (formato "YYYY-MM-DD HH:MM:SS",
+ * como la guarda el reporte/guardián) a hora de Puerto Rico (GMT-4 todo el
+ * año). Brokers tipo AxiTrader usan GMT+2 en invierno y GMT+3 en verano de
+ * EE.UU. (2.º domingo de marzo al 1.er domingo de noviembre), así que la
+ * diferencia con PR es 7 h en verano y 6 h en invierno. Solo para MOSTRAR:
+ * en la base de datos y en las reglas se queda la hora del broker.
+ */
+export function aHoraPR(s: string): string {
+  const y = Number(s.slice(0, 4));
+  const domingo = (mes: number, n: number) => {
+    const primero = new Date(Date.UTC(y, mes, 1)).getUTCDay();
+    return 1 + ((7 - primero) % 7) + 7 * (n - 1);
+  };
+  const t = ms(s);
+  const ini = Date.UTC(y, 2, domingo(2, 2));
+  const fin = Date.UTC(y, 10, domingo(10, 1));
+  const horas = t >= ini && t < fin ? 7 : 6;
+  return new Date(t - horas * 3600_000).toISOString().replace("T", " ").slice(0, 19);
+}
+
 const neto = (t: Trade) => t.ganancia + t.comision + t.swap;
 
 export function evaluarCumplimiento(trades: Trade[], reglas: ReglasRiesgo, balanceInicial: number): TradeEvaluado[] {

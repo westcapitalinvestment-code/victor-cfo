@@ -12,6 +12,7 @@ import {
   calcularMetricas,
   infoSimbolo,
   SIMBOLOS,
+  aHoraPR,
   USD_POR_MONEDA,
   curvaCapital,
   evaluarCumplimiento,
@@ -80,8 +81,9 @@ const GUARDIAN_POR_DEFECTO: Guardian = {
   guard_block_manual_close: true,
 };
 
-const fechaCorta = (s: string) => `${s.slice(5, 7)}/${s.slice(8, 10)}`;
-const horaCorta = (s: string) => s.slice(11, 16);
+// Se muestra en hora de Puerto Rico (los datos guardados siguen en hora del broker).
+const fechaCorta = (s: string) => { const p = aHoraPR(s); return `${p.slice(5, 7)}/${p.slice(8, 10)}`; };
+const horaCorta = (s: string) => aHoraPR(s).slice(11, 16);
 const dur = (s: number) => (s < 90 ? `${s}s` : s < 5400 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`);
 const fechaCierre = (t: { hora_cierre: string | null; hora_apertura: string }) => (t.hora_cierre ?? t.hora_apertura).slice(0, 10);
 const DIAS_SEM = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -455,7 +457,7 @@ export default function TradingPage() {
           <span className={t.neto >= 0 ? "text-teal" : "text-red"}>{formatMoney(t.neto)}</span>
         </summary>
         <div className="mt-2 flex flex-col gap-2 text-[14px] text-muted">
-          <p>Duración {dur(t.duracionSeg)} · SL {t.sl ?? "no puso"} · TP {t.tp ?? "no puso"} · hora del broker</p>
+          <p>Duración {dur(t.duracionSeg)} · SL {t.sl ?? "no puso"} · TP {t.tp ?? "no puso"} · hora de Puerto Rico</p>
           {t.violaciones.map((v) => (
             <p key={v} className="text-red">• {NOMBRE_REGLA[v]}</p>
           ))}
