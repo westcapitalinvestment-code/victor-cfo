@@ -207,6 +207,23 @@ export async function POST(req: NextRequest) {
     if (existente.socio_id === socioId) {
       return NextResponse.json({ error: "Ya tienes registrada esta oficina." }, { status: 409 });
     }
+    if (status === "tiene_portal" && !existente.socio_id && existente.owner_expira_at) {
+      // Oficina con portal que quedó liberada (su vendedor se fue): este
+      // vendedor la reclama al visitarla. Solo toma la atribución; los datos
+      // de la ficha son del contable y no se tocan.
+      const { error: errL } = await admin
+        .from("oficinas_contables")
+        .update({
+          socio_id: socioId,
+          owner_expira_at: nuevoVence,
+          estado: c.estado,
+          notas_vendedor: c.notas_vendedor,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existente.id);
+      if (errL) return NextResponse.json({ error: "No se pudo reclamar la oficina." }, { status: 500 });
+      return NextResponse.json({ ok: true, id: existente.id, reclamada: true });
+    }
     if (status === "tiene_portal") {
       return NextResponse.json(
         { error: "Esta oficina ya tiene el portal de VICTOR. No hace falta visitarla.", status },

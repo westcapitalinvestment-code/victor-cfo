@@ -117,6 +117,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { error } = await admin.from("socios").update(datosActualizar).eq("id", params.id);
   if (error) return NextResponse.json({ error: "No se pudo actualizar el socio." }, { status: 500 });
 
+  // Si el vendedor deja de estar aprobado (suspendido/renunció), sus oficinas
+  // quedan LIBERADAS: sin vendedor y sin seguimiento. Nadie cobra bono por
+  // ellas hasta que otro vendedor las visite/reclame (con portal o sin él).
+  // owner_expira_at queda con la fecha de liberación: así una oficina con
+  // portal "liberada" se distingue de una que el contable abrió por su cuenta
+  // (esa nunca tuvo vendedor ni fecha) y solo la primera se puede reclamar.
+  // Los bonos ya generados (filas en bonos de oficinas) no se tocan.
+  if (estado !== "aprobado") {
+    await admin
+      .from("oficinas_contables")
+      .update({ socio_id: null, owner_expira_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("socio_id", params.id);
+  }
+
   // Si ya tenía código (reaprobación tras suspensión, o recién se le generó
   // el PIN por pasar a vendedor), también le mandamos el correo — puede que
   // haya perdido el código original o esta sea la primera vez que recibe PIN.

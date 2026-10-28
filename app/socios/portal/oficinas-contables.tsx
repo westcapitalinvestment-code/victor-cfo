@@ -447,6 +447,26 @@ export default function OficinasContables({ codigo = "" }: { codigo?: string } =
       )}
 
       {mias && mias.length > 0 && (
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { n: mias.filter((m) => m.status === "en_seguimiento").length, t: "En seguimiento", c: "text-teal" },
+            {
+              n: mias.filter((m) => m.status === "en_seguimiento" && m.diasRestantes !== null && m.diasRestantes <= 15).length,
+              t: "Vencen en 15 días o menos",
+              c: "text-amber-600",
+            },
+            { n: mias.filter((m) => m.status === "tiene_portal").length, t: "Con portal", c: "text-teal" },
+            { n: mias.filter((m) => m.status === "disponible").length, t: "Vencidas (visítalas)", c: "text-red-600" },
+          ].map((k) => (
+            <div key={k.t} className="vc-card py-2 text-center">
+              <p className={`text-lg font-semibold ${k.c}`}>{k.n}</p>
+              <p className="text-[11px] text-muted">{k.t}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {mias && mias.length > 0 && (
         <div className="mb-2 flex flex-col gap-2">
           <div className="flex flex-wrap gap-1.5">
             {(["todos", ...ESTADOS_SEGUIMIENTO] as const).map((e) => {
