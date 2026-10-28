@@ -1866,6 +1866,50 @@ async function categorizarUna(
   return { ok: true, message: `"${transaccion.description_raw}" ($${Math.abs(Number(transaccion.amount))}) categorizado como "${categoria.nombre}".` };
 }
 
+// Etiqueta de ORIGEN (cuenta + entidad) para una lista de transacciones.
+// Bug real (28 oct 2026): VICTOR afirmó que un pago de $2,330.59 venía de
+// una cuenta Mercury de WCV cuando venía de la Flexicuenta de VIP Medical,
+// porque las tools de búsqueda no devolvían la cuenta y el modelo la
+// inventó. Ahora cada línea trae el origen real, o "origen desconocido".
+async function etiquetasDeOrigen(
+  supabase: ReturnType<typeof createClient>,
+  ownerId: string,
+  txs: Array<{ id: string; plaid_account_id?: string | null; manual_account_id?: string | null }>
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const plaidIds = Array.from(new Set(txs.map((t) => t.plaid_account_id).filter((x): x is string => !!x)));
+  const manualIds = Array.from(new Set(txs.map((t) => t.manual_account_id).filter((x): x is string => !!x)));
+
+  const [plaidRes, manualRes, entRes] = await Promise.all([
+    plaidIds.length
+      ? supabase.from("plaid_accounts").select("id, name, nickname, mask, entity_id").eq("owner_id", ownerId).in("id", plaidIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string | null; nickname: string | null; mask: string | null; entity_id: string | null }> }),
+    manualIds.length
+      ? supabase.from("manual_accounts").select("id, name, mask, es_negocio, entity_id").eq("owner_id", ownerId).in("id", manualIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string | null; mask: string | null; es_negocio: boolean | null; entity_id: string | null }> }),
+    supabase.from("business_entities").select("id, name").eq("owner_id", ownerId),
+  ]);
+  const nombreEntidad = new Map((entRes.data ?? []).map((e) => [e.id as string, e.name as string]));
+
+  const plaidPorId = new Map((plaidRes.data ?? []).map((a) => [a.id as string, a]));
+  const manualPorId = new Map((manualRes.data ?? []).map((a) => [a.id as string, a]));
+
+  for (const t of txs) {
+    const p = t.plaid_account_id ? plaidPorId.get(t.plaid_account_id) : undefined;
+    const m = t.manual_account_id ? manualPorId.get(t.manual_account_id) : undefined;
+    if (p) {
+      const ent = p.entity_id ? nombreEntidad.get(p.entity_id as string) ?? "negocio" : "Personal";
+      out.set(t.id, `${p.nickname || p.name || "Cuenta"}${p.mask ? ` ···${p.mask}` : ""} (${ent})`);
+    } else if (m) {
+      const ent = m.entity_id ? nombreEntidad.get(m.entity_id as string) ?? "negocio" : m.es_negocio ? "negocio" : "Personal";
+      out.set(t.id, `${m.name || "Cuenta manual"}${m.mask ? ` ···${m.mask}` : ""} (${ent}, manual)`);
+    } else {
+      out.set(t.id, "origen desconocido");
+    }
+  }
+  return out;
+}
+
 export async function executeVictorTool(
   supabase: ReturnType<typeof createClient>,
   ownerId: string,
@@ -2114,7 +2158,7 @@ export async function executeVictorTool(
 
       const { data: encontradas, error } = await supabase
         .from("transactions")
-        .select("id, description_raw, amount, fecha, hacienda_category_id")
+        .select("id, description_raw, amount, fecha, hacienda_category_id, plaid_account_id, manual_account_id")
         .eq("owner_id", ownerId)
         .or(filtroOr)
         .order("fecha", { ascending: false })
@@ -2135,10 +2179,12 @@ export async function executeVictorTool(
         nombrePorCategoriaId = new Map((cats ?? []).map((c) => [c.id, c.nombre]));
       }
 
+      const origenes = await etiquetasDeOrigen(supabase, ownerId, (encontradas ?? []) as Array<{ id: string; plaid_account_id?: string | null; manual_account_id?: string | null }>);
+
       const lista = (encontradas ?? [])
         .map((t) => {
           const categoriaActual = t.hacienda_category_id ? nombrePorCategoriaId.get(t.hacienda_category_id) ?? "categoría desconocida" : "sin categoría";
-          return `- [${t.id}] "${t.description_raw}" · $${Math.abs(Number(t.amount))} · ${t.fecha} · actualmente: ${categoriaActual}`;
+          return `- [${t.id}] "${t.description_raw}" · $${Math.abs(Number(t.amount))} · ${t.fecha} · cuenta: ${origenes.get(t.id) ?? "origen desconocido"} · actualmente: ${categoriaActual}`;
         })
         .join("\n");
 
@@ -2198,7 +2244,7 @@ export async function executeVictorTool(
 
       let dataQuery = supabase
         .from("transactions")
-        .select("id, description_raw, amount, fecha, pending")
+        .select("id, description_raw, amount, fecha, pending, plaid_account_id, manual_account_id")
         .eq("owner_id", ownerId)
         .is("hacienda_category_id", null)
         .eq("es_duplicada", false);
@@ -2230,10 +2276,11 @@ export async function executeVictorTool(
       // igual si reconoces el comercio con confianza, pero avísale al
       // usuario que es un estimado y que podría cambiar cuando el banco lo
       // liquide — nunca lo presentes como un dato ya cerrado.
+      const origenesPend = await etiquetasDeOrigen(supabase, ownerId, (pendientes ?? []) as Array<{ id: string; plaid_account_id?: string | null; manual_account_id?: string | null }>);
       const lista = (pendientes ?? [])
         .map(
           (t) =>
-            `- [${t.id}] "${t.description_raw}" · $${Math.abs(Number(t.amount))} · ${t.fecha}${t.pending ? " (PENDIENTE)" : ""}`
+            `- [${t.id}] "${t.description_raw}" · $${Math.abs(Number(t.amount))} · ${t.fecha} · cuenta: ${origenesPend.get(t.id) ?? "origen desconocido"}${t.pending ? " (PENDIENTE)" : ""}`
         )
         .join("\n");
 
