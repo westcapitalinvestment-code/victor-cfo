@@ -286,6 +286,7 @@ export const MODULOS_VENDEDOR: ModuloVendedor[] = [
     donde: "Portal del vendedor → Oficinas de contables / Bonos",
     pasos: [
       { titulo: "Busca antes de registrar", texto: "El registro de oficinas es compartido. Busca por nombre, contacto, correo, teléfono o pueblo; si ya está registrada, verás “Ya está registrada” y evitas visitas repetidas.", foto: "Buscador de oficinas" },
+      { titulo: "Qué decirle al contable", texto: "Un solo plan de $60 al mes que lo incluye todo: facturas, pagos, equipo, nómina y secretaria. El contable no tiene que armar paquetes ni cobrar add-ons por separado. Se lo puede ofrecer a cualquier cliente suyo, aunque solo vaya a usar un módulo, o a todos a la vez. Mientras más clientes pase, más bonos de $10 ganas tú.", foto: "Oficinas de contables" },
       { titulo: "Registra la oficina", texto: "Pon el nombre de la oficina y escoge el pueblo (obligatorios). Si hay oficinas parecidas, el formulario te avisa. Opcional: contacto, web, Instagram, Facebook, sectores, especialidades y una descripción de lo que viste en la visita.", foto: "Formulario Registrar oficina" },
       { titulo: "Usa las notas internas", texto: "Las notas internas solo las ves tú; sirven para el seguimiento de la próxima visita.", foto: "Notas internas" },
       { titulo: "Mira cuáles ya tienen el portal", texto: "Las oficinas que activaron su portal muestran “Ya tiene el portal ✓”. Esas son las que generan bonos.", foto: "Oficina con el portal activo" },

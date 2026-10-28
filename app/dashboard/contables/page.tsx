@@ -71,6 +71,14 @@ export default function DirectorioContablesPage() {
     return Array.from(m.values()).sort((a, b) => a.localeCompare(b, "es"));
   }, [oficinas]);
 
+  // Cuántas oficinas hay físicamente en cada pueblo (para que el desplegable
+  // no parezca vacío ni engañe: los pueblos sin oficinas lo dicen).
+  const conteoPueblo = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const o of oficinas ?? []) m.set(o.pueblo, (m.get(o.pueblo) ?? 0) + 1);
+    return m;
+  }, [oficinas]);
+
   const lista = (oficinas ?? [])
     .filter((o) => !fPueblo || o.pueblo === fPueblo || o.remoto)
     .filter((o) => !fEsp || [...o.especialidades, ...o.sectores].some((e) => norm(e) === norm(fEsp)))
@@ -82,6 +90,13 @@ export default function DirectorioContablesPage() {
       const texto = norm([o.nombre, o.descripcion, o.pueblo, o.contacto_nombre ?? "", ...o.especialidades, ...o.sectores].join(" "));
       return palabras.every((p) => texto.includes(p));
     });
+
+  // Con un pueblo escogido: primero las oficinas de ese pueblo y, aparte,
+  // las que atienden a distancia (antes se mezclaban y parecía que el filtro
+  // no filtraba).
+  const locales = fPueblo ? lista.filter((o) => o.pueblo === fPueblo) : lista;
+  const aDistancia = fPueblo ? lista.filter((o) => o.pueblo !== fPueblo) : [];
+  const ordenada = [...locales, ...aDistancia];
 
   return (
     <div className="vc-shell">
@@ -110,7 +125,7 @@ export default function DirectorioContablesPage() {
                 <option value="">Todos los pueblos</option>
                 {pueblos.map((p) => (
                   <option key={p} value={p}>
-                    {p}
+                    {p} ({conteoPueblo.get(p) ?? 0})
                   </option>
                 ))}
               </select>
@@ -124,7 +139,14 @@ export default function DirectorioContablesPage() {
               </select>
             </div>
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar: nombre, especialidad, sector (ej. farmacia, agrícola, decretos)..." className="rounded-lg border border-border p-2 text-[13px]" />
-            {fPueblo && <p className="text-[11px] text-muted">Incluye oficinas que atienden a distancia.</p>}
+            {fPueblo && (
+              <p className="text-[11px] text-muted">
+                {locales.length === 0
+                  ? `No hay oficinas en ${fPueblo} todavía.`
+                  : `${locales.length} en ${fPueblo}.`}
+                {aDistancia.length > 0 ? ` Más abajo, ${aDistancia.length} que atienden a distancia.` : ""}
+              </p>
+            )}
           </div>
 
           {lista.length === 0 ? (
@@ -135,7 +157,7 @@ export default function DirectorioContablesPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {lista.map((o) => {
+              {ordenada.map((o, idx) => {
                 const tel = o.telefono && o.telefono.length === 10 ? o.telefono : null;
                 const links = [
                   tel ? { n: "Llamar", u: `tel:+1${tel}` } : null,
@@ -146,7 +168,11 @@ export default function DirectorioContablesPage() {
                   urlSocial("facebook", o.facebook) ? { n: "Facebook", u: urlSocial("facebook", o.facebook)! } : null,
                 ].filter((l): l is { n: string; u: string } => !!l);
                 return (
-                  <div key={o.id} className="vc-card flex flex-col gap-2">
+                  <div key={o.id} className="flex flex-col gap-3">
+                    {fPueblo && idx === locales.length && aDistancia.length > 0 && (
+                      <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted">Atienden a distancia</p>
+                    )}
+                  <div className="vc-card flex flex-col gap-2">
                     <div>
                       <p className="text-sm font-medium">{o.nombre}</p>
                       <p className="text-[11px] text-muted">
@@ -187,6 +213,7 @@ export default function DirectorioContablesPage() {
                         ))}
                       </div>
                     )}
+                  </div>
                   </div>
                 );
               })}
