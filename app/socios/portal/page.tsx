@@ -338,7 +338,7 @@ export default function SocioPortalPage() {
           {/* Resumen desplegable: debajo del QR para que enseñarlo no pase por los números */}
           <ResumenVendedor datos={datos} />
 
-          <OficinasContables />
+          <OficinasContables codigo={codigoSocio} />
           <BonosOficinas />
 
           {/* Prospectos: protege tu comisión si el cliente se registra después

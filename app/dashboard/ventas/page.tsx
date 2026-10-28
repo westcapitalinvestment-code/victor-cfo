@@ -5,6 +5,7 @@ import { esFounder } from "@/lib/founder";
 import SociosPanel from "../cfo/socios-panel";
 import ContablesPanel from "./contables-panel";
 import BonosOficinasPanel from "./bonos-oficinas-panel";
+import OficinasDuplicadosPanel from "./oficinas-duplicados-panel";
 
 // Ventas (13 oct 2026, pedido de Joel: "sácalo de CFO y ponme Ventas como
 // penúltimo; ahí va todo lo que tenga que ver con ventas, socios y
@@ -165,6 +166,9 @@ export default async function VentasPage() {
 
       {/* Bonos de oficinas de contables (migración 0164) */}
       <BonosOficinasPanel />
+
+      {/* Fichas de oficinas que parecen duplicadas (vendedor vs. contable con portal) */}
+      <OficinasDuplicadosPanel />
 
       {/* Programa de Socios: solicitudes, vendedores, comisiones, prospectos y pagos */}
       <SociosPanel

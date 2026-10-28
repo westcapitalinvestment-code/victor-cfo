@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { contableAutenticado, fichaDelContable } from "@/lib/oficina-contable-server";
+import { contableAutenticado, fichaDelContable, fusionarPorTelefono } from "@/lib/oficina-contable-server";
 import { createClient } from "@/lib/supabase/server";
 import { esCuentaDemo } from "@/lib/demo";
 import {
@@ -91,6 +91,9 @@ export async function PUT(req: NextRequest) {
     publicar: body.publicar !== false,
     updated_at: new Date().toISOString(),
   };
+
+  // Si el teléfono ya estaba en una ficha creada por un vendedor, se unen (sin duplicar).
+  if (telefono && telefono !== ficha.telefono) await fusionarPorTelefono(ctx.admin, ficha, telefono);
 
   const { data, error } = await ctx.admin.from("oficinas_contables").update(upd).eq("id", ficha.id).select("*").maybeSingle();
   if (error) {

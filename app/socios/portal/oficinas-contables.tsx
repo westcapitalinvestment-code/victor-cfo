@@ -113,7 +113,9 @@ function Chips({
   );
 }
 
-export default function OficinasContables() {
+export default function OficinasContables({ codigo = "" }: { codigo?: string } = {}) {
+  const [linkCopiado, setLinkCopiado] = useState(false);
+  const linkContable = codigo ? `https://www.victorcfo.com/registro/cpa?v=${encodeURIComponent(codigo)}` : "";
   const [mias, setMias] = useState<Mia[] | null>(null);
   const [otras, setOtras] = useState<Otra[]>([]);
   const [abierto, setAbierto] = useState(false);
@@ -266,6 +268,30 @@ export default function OficinasContables() {
           (cada actualización renueva el plazo). Cuando el contable entra al portal, el status cambia solo a «Tiene el
           portal».
         </p>
+        {linkContable && (
+          <div className="rounded-lg border border-teal/30 bg-teal/[.06] p-2">
+            <p className="text-sm font-medium">Link para que el contable abra su portal</p>
+            <p className="mt-0.5 text-xs text-muted">
+              Si el contable abre su cuenta con este link, la oficina queda a tu nombre y cuentas el bono cuando traiga
+              clientes (aunque no la hayas registrado antes).
+            </p>
+            <div className="mt-1.5 flex items-center gap-2">
+              <input readOnly value={linkContable} className="min-w-0 flex-1 rounded-lg border border-border p-2 text-xs" />
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(linkContable).then(() => {
+                    setLinkCopiado(true);
+                    setTimeout(() => setLinkCopiado(false), 2000);
+                  });
+                }}
+                className="shrink-0 rounded-pill border border-teal px-3 py-1.5 text-xs font-medium text-teal"
+              >
+                {linkCopiado ? "Copiado" : "Copiar"}
+              </button>
+            </div>
+          </div>
+        )}
         {!abierto && (
           <button
             type="button"

@@ -14,6 +14,8 @@ import { createClient } from "@/lib/supabase/client";
 // /cpa. Si la cuenta requiere confirmar el correo, los datos del formulario
 // se guardan en sessionStorage y se activan al volver por el link.
 const CLAVE_PENDIENTE = "vc_cpa_pendiente";
+// Código del vendedor que le pasó el link (?v=CÓDIGO), guardado para después del registro.
+const CLAVE_VENDEDOR = "vc_cpa_vendedor";
 
 export default function RegistroCpaPage() {
   const router = useRouter();
@@ -68,6 +70,19 @@ export default function RegistroCpaPage() {
         return;
       }
     }
+    // Si llegó por el link de un vendedor (?v=CÓDIGO), deja su ficha a nombre
+    // del vendedor para que cuente el bono. Si falla, no bloquea el registro.
+    try {
+      const cod = sessionStorage.getItem(CLAVE_VENDEDOR);
+      if (cod) {
+        await fetch("/api/cpa/oficina/vincular", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ codigo: cod }),
+        }).catch(() => {});
+        sessionStorage.removeItem(CLAVE_VENDEDOR);
+      }
+    } catch {}
     try {
       sessionStorage.removeItem(CLAVE_PENDIENTE);
     } catch {}
@@ -76,6 +91,10 @@ export default function RegistroCpaPage() {
   }
 
   useEffect(() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get("v");
+      if (v) sessionStorage.setItem(CLAVE_VENDEDOR, v.trim().toUpperCase().slice(0, 40));
+    } catch {}
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
