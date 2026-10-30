@@ -2475,3 +2475,65 @@ export async function sendTalonarioEmail(params: {
     return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
   }
 }
+
+// Aviso oficial automático (30 oct 2026, pedido de Joel) — lo manda el cron
+// /api/cron/avisos-oficiales cuando una fuente oficial (DTRH, Hacienda,
+// Colegio de CPA, IRS) publica algo urgente que toca a lo que VICTOR cubre.
+// VICTOR CFO NO emite el aviso: solo filtra y enlaza. Por eso el correo lo
+// dice arriba, abajo y en el asunto no se presenta como "de VICTOR".
+export async function sendAvisoOficialEmail(params: {
+  toEmail: string;
+  toName: string | null;
+  userId: string;
+  titulo: string;
+  resumen: string;
+  fuenteNombre: string;
+  fuenteUrl: string;
+  fechaLimite: string | null; // YYYY-MM-DD
+  esContable: boolean;
+}): Promise<{ sent: boolean; reason?: string }> {
+  if (!resend) return { sent: false, reason: "RESEND_API_KEY no está configurada en el servidor." };
+
+  const { toEmail, toName, userId, titulo, resumen, fuenteNombre, fuenteUrl, fechaLimite, esContable } = params;
+  const bajaUrl = urlBajaCorreos(SITE_URL, userId);
+  const verEnApp = `${SITE_URL}${esContable ? "/cpa" : "/dashboard"}`;
+  const limiteTxt = fechaLimite ? `Fecha límite indicada por la fuente: ${fechaLimite.split("-").reverse().join("/")}` : "";
+  const disclaimer =
+    "VICTOR CFO no redacta ni emite este aviso. Es un resumen automático de información publicada por una fuente oficial, filtrado por relevancia. Puede contener errores u omisiones y no constituye asesoría legal, contributiva ni contable. Verifica siempre en la fuente oficial y con tu contador antes de actuar.";
+
+  const textoPlano =
+    (toName ? `Hola ${toName},\n\n` : `Hola,\n\n`) +
+    `Aviso de ${fuenteNombre}:\n\n${titulo}\n\n${resumen}\n\n${limiteTxt ? limiteTxt + "\n\n" : ""}Fuente oficial: ${fuenteUrl}\n\n` +
+    `${disclaimer}\n\n— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}\n\nDejar de recibir estos avisos: ${bajaUrl}`;
+
+  const html = `
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 20px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  <p style="font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: #0F766E; margin: 0 0 6px 0;">Aviso publicado por ${escapeHtml(fuenteNombre)}</p>
+  <h2 style="font-size: 20px; margin: 0 0 12px 0;">${escapeHtml(titulo)}</h2>
+  <p style="color: #333;">${escapeHtml(resumen)}</p>
+  ${limiteTxt ? `<p style="background: #FEF3C7; border-radius: 6px; padding: 8px 12px; font-size: 14px;"><strong>${escapeHtml(limiteTxt)}</strong></p>` : ""}
+  <p style="text-align: center; margin: 22px 0;"><a href="${escapeHtml(fuenteUrl)}" style="background: #0F766E; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">Ver la fuente oficial</a></p>
+  <p style="text-align: center; font-size: 13px;"><a href="${verEnApp}" style="color: #0F766E;">Abrir VICTOR CFO</a></p>
+  <p style="font-size: 12px; color: #666; background: #fafafa; border-left: 3px solid #ccc; padding: 10px 14px; border-radius: 4px; margin-top: 22px;">${escapeHtml(disclaimer)}</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 20px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${bajaUrl}" style="color: #999;">Dejar de recibir estos avisos</a></p>
+</div>`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: `Aviso oficial: ${titulo}`.slice(0, 150),
+      text: textoPlano,
+      html,
+    });
+    if (error) return { sent: false, reason: error.message };
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err instanceof Error ? err.message : "Error desconocido enviando el correo." };
+  }
+}

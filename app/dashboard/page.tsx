@@ -7,6 +7,7 @@ import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import GastosPendientesCard from "./gastos-pendientes-card";
 import ResumenCard from "./resumen-card";
 import ResumenReglasCard from "./resumen-reglas-card";
+import AvisosOficialesCard from "../avisos-oficiales-card";
 import AlertasPatronCard, { type AlertaRegla } from "./alertas-patron-card";
 import ImpuestosEstimadosCard from "./impuestos-estimados-card";
 import Regla503020Card from "./regla-503020-card";
@@ -842,6 +843,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <p className="text-xl font-medium">{saludoPorHora(hoy)}, {firstName} 👋</p>
         <p className="mt-0.5 text-xs capitalize text-muted">{fechaLbl} · Personal</p>
       </div>
+
+      {/* Avisos oficiales automáticos (30 oct 2026): resumen filtrado de lo que
+          publican DTRH, Hacienda, Colegio de CPA e IRS, solo lo que aplica a
+          los módulos que este usuario usa. VICTOR CFO no los emite. */}
+      <AvisosOficialesCard modo="usuario" />
 
       {/* BALANCE — real si ya conectó banco por Plaid, si no estado vacío honesto */}
       <div className="vc-bal">

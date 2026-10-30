@@ -7,6 +7,7 @@ import CpaClientList, { type ClienteCpa } from "./cpa-client-list";
 import FirmaAccountantPanel from "./firma-accountant-panel";
 import AlertasAgrupadas, { type AlertaCpa } from "./alertas-agrupadas";
 import CpaAccountMenu from "./cpa-account-menu";
+import AvisosOficialesCard from "../avisos-oficiales-card";
 import CpaPersonalList, { type ClientePersonal } from "./cpa-personal-list";
 import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -353,6 +354,11 @@ export default async function CpaPortalPage() {
           vencimiento (4 oct 2026, pedido de Joel a nombre de su esposa) —
           antes esta lista se calculaba pero NUNCA se mostraba aquí, solo
           alimentaba el contador por cliente de CpaClientList de abajo. */}
+      {/* Avisos oficiales automáticos (30 oct 2026): resumen filtrado de lo que
+          publican DTRH, Hacienda, Colegio de CPA e IRS. Lo alimenta un cron;
+          VICTOR CFO no los emite (ver app/avisos-oficiales-card.tsx). */}
+      <AvisosOficialesCard modo="cpa" />
+
       {alertas.length > 0 && (
         <div className="vc-card mb-4">
           <p className="mb-3 text-sm uppercase tracking-wide text-muted">Alertas Inteligentes</p>
