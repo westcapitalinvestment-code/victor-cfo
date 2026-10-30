@@ -187,6 +187,29 @@ bool CanOpenNew(string &why)
    if(IsBlocked(why)) return false;
    int losers, manual, closed; double pl; datetime lastLoss;
    DayStats(losers, pl, manual, closed, lastLoss);
+
+   // presupuesto de riesgo del dia: lo que pierden los trades abiertos si tocan su SL
+   // + el nuevo trade no puede pasar la perdida diaria maxima (con varios trades abiertos).
+   double startBal = AccountInfoDouble(ACCOUNT_BALANCE) - pl;
+   double maxLoss  = (MaxDailyLossUSD > 0) ? MaxDailyLossUSD : startBal * MaxDailyLossPct / 100.0;
+   double ts = SymbolInfoDouble(AllowedSymbol, SYMBOL_TRADE_TICK_SIZE);
+   double tv = SymbolInfoDouble(AllowedSymbol, SYMBOL_TRADE_TICK_VALUE);
+   double openRisk = 0;
+   for(int i = 0; i < PositionsTotal(); i++)
+   {
+      ulong ptk = PositionGetTicket(i);
+      if(ptk == 0 || ts <= 0) continue;
+      double popen = PositionGetDouble(POSITION_PRICE_OPEN);
+      double psl   = PositionGetDouble(POSITION_SL);
+      double pvol  = PositionGetDouble(POSITION_VOLUME);
+      bool pbuy    = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY);
+      double d = (psl == 0) ? SLDistance : (pbuy ? popen - psl : psl - popen);
+      if(d > 0) openRisk += d / ts * tv * pvol;
+   }
+   double newRisk = CalcLot(SLDistance) * LossPerLot(SLDistance);
+   if(maxLoss > 0 && openRisk + newRisk > maxLoss + pl + 0.01)
+   { why = "Riesgo del dia completo (abiertos $" + DoubleToString(openRisk, 2) + " + nuevo $" + DoubleToString(newRisk, 2) + ")"; return false; }
+
    if(MaxTradesPerDay > 0 && closed + PositionsTotal() >= MaxTradesPerDay)
    { why = "Limite de trades del dia (" + IntegerToString(MaxTradesPerDay) + ")"; return false; }
    if(CooldownMin > 0 && lastLoss > 0)
