@@ -37,7 +37,8 @@ export function generarGuardianMQ5(p: ParametrosGuardian): string {
   return String.raw`//+------------------------------------------------------------------+
 //|  VictorGuard.mq5 - Guardian de riesgo (generado por VICTOR CFO)   |
 //|  Generado: ${fecha}                                               |
-//|  NO decide entradas. Tu decides; el guardian impone TUS reglas:  |
+//|  Tu decides las entradas (o activas AutoEntry: retroceso a la     |
+//|  media en tendencia). El guardian impone TUS reglas:              |
 //|   - calcula el lote segun tu riesgo                               |
 //|   - pone SL (obligatorio) y TP a todo trade                       |
 //|   - SL solo se mueve a tu favor; TP libre (modo flexible)         |
@@ -73,8 +74,20 @@ input string SyncURL            = "${q(p.syncUrl ?? "")}"; // direccion de VICTO
 input string SyncToken          = "${q(p.syncToken ?? "")}"; // token de tu cuenta de trading. No lo compartas.
 input int    SyncDays           = 30;       // dias de historial a revisar al sincronizar
 
+// --- Entrada automatica: retroceso a la media en tendencia (APAGADA por defecto) ---
+// Vende cuando la media baja y el precio retrocede hacia arriba y la toca; compra al reves.
+// Una entrada por vela. SL/TP/lote/limites vienen de las reglas de arriba.
+input bool   AutoEntry          = false;    // true = el guardian entra solo con esta regla
+input int    MaPeriod           = 50;       // periodo de la media movil
+input ENUM_MA_METHOD MaMethod   = MODE_EMA; // tipo de media (EMA, SMA...)
+input ENUM_TIMEFRAMES MaTF      = PERIOD_M15; // temporalidad de la media y de la tendencia
+input int    SlopeBars          = 10;       // velas para medir la pendiente de la media
+input double MinSlopeUSD        = 1.0;      // pendiente minima (en precio) en esas velas: filtra rangos
+
 string P = "VG_";
 double SLDistance = 0;   // = SLPips x PipSize (se calcula al iniciar)
+int      hMA = INVALID_HANDLE;
+datetime lastAutoBar = 0;
 
 //------------------------------------------------------------------
 double LossPerLot(double dist)
@@ -186,6 +199,28 @@ bool CanOpenNew(string &why)
 }
 
 //------------------------------------------------------------------
+// Cierre robusto: 1 intento cada 3 s por ticket, prueba los 3 modos de llenado
+// (un modo no aceptado por el broker deja ordenes de cierre atascadas).
+datetime lastCloseTry = 0;
+ulong    lastCloseTk  = 0;
+bool SafeClose(ulong tk)
+{
+   if(tk == lastCloseTk && TimeCurrent() - lastCloseTry < 3) return false;
+   lastCloseTk = tk; lastCloseTry = TimeCurrent();
+   ENUM_ORDER_TYPE_FILLING modes[3] = {ORDER_FILLING_IOC, ORDER_FILLING_FOK, ORDER_FILLING_RETURN};
+   for(int m = 0; m < 3; m++)
+   {
+      trade.SetTypeFilling(modes[m]);
+      if(trade.PositionClose(tk)) return true;
+      uint rc = trade.ResultRetcode();
+      if(rc == TRADE_RETCODE_MARKET_CLOSED || rc == TRADE_RETCODE_NO_CONNECTION ||
+         rc == TRADE_RETCODE_TRADE_DISABLED) break;
+   }
+   Print("VictorGuard: no pude cerrar #", tk, " retcode=", trade.ResultRetcode(), " ", trade.ResultRetcodeDescription());
+   return false;
+}
+
+//------------------------------------------------------------------
 void Guard()
 {
    string why;
@@ -208,7 +243,7 @@ void Guard()
       // reglas que cierran el trade
       if(blocked || sym != AllowedSymbol || kept >= MaxOpenPositions || vol > maxLot + 0.0000001)
       {
-         trade.PositionClose(tk);
+         SafeClose(tk);
          continue;
       }
       kept++;
@@ -275,6 +310,85 @@ void OpenTrade(bool buy)
    bool ok = buy ? trade.Buy(lot, _Symbol, 0, sl, tp, "VictorGuard")
                  : trade.Sell(lot, _Symbol, 0, sl, tp, "VictorGuard");
    if(!ok) Alert("VictorGuard: error al abrir (", trade.ResultRetcode(), ")");
+}
+
+//------------------------------------------------------------------
+// Ordenes pendientes (limit/stop): al ponerlas reciben SL y TP segun tus reglas,
+// medidos desde el PRECIO DE LA ORDEN, asi abren ya con SL/TP. Si pones tu propio
+// SL/TP y respeta la regla, se respeta. Si el guardian esta bloqueado, se borran.
+void GuardOrders()
+{
+   string why;
+   bool blocked = IsBlocked(why);
+   int digits = (int)SymbolInfoInteger(AllowedSymbol, SYMBOL_DIGITS);
+
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      ulong tk = OrderGetTicket(i);
+      if(tk == 0) continue;
+      if(blocked || OrderGetString(ORDER_SYMBOL) != AllowedSymbol)
+      {
+         trade.OrderDelete(tk);
+         continue;
+      }
+
+      ENUM_ORDER_TYPE t = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+      bool buy  = (t == ORDER_TYPE_BUY_LIMIT  || t == ORDER_TYPE_BUY_STOP  || t == ORDER_TYPE_BUY_STOP_LIMIT);
+      bool sell = (t == ORDER_TYPE_SELL_LIMIT || t == ORDER_TYPE_SELL_STOP || t == ORDER_TYPE_SELL_STOP_LIMIT);
+      if(!buy && !sell) continue;
+
+      double price = OrderGetDouble(ORDER_PRICE_OPEN);
+      double sl = OrderGetDouble(ORDER_SL);
+      double tp = OrderGetDouble(ORDER_TP);
+      double nsl = sl, ntp = tp;
+      if(sl == 0 || MathAbs(price - sl) > SLDistance * 1.5)
+         nsl = buy ? price - SLDistance : price + SLDistance;
+      if(tp == 0 && RewardRatio > 0)
+         ntp = buy ? price + SLDistance * RewardRatio : price - SLDistance * RewardRatio;
+      nsl = NormalizeDouble(nsl, digits);
+      ntp = NormalizeDouble(ntp, digits);
+
+      if(nsl != sl || ntp != tp)
+      {
+         ENUM_ORDER_TYPE_TIME tt = (ENUM_ORDER_TYPE_TIME)OrderGetInteger(ORDER_TYPE_TIME);
+         datetime exp = (datetime)OrderGetInteger(ORDER_TIME_EXPIRATION);
+         double stoplimit = OrderGetDouble(ORDER_PRICE_STOPLIMIT);
+         if(!trade.OrderModify(tk, price, nsl, ntp, tt, exp, stoplimit))
+            Print("VictorGuard: no pude poner SL/TP a la orden #", tk, " ", trade.ResultRetcodeDescription());
+      }
+   }
+}
+
+//------------------------------------------------------------------
+// Entrada automatica: tendencia bajista = la media cae y la ultima vela cerrada esta
+// bajo la media; el precio retrocede hacia arriba y la TOCA -> VENDE (espejo: compra).
+void AutoEntryCheck()
+{
+   if(!AutoEntry || _Symbol != AllowedSymbol || hMA == INVALID_HANDLE) return;
+   datetime bar = iTime(_Symbol, MaTF, 0);
+   if(bar == lastAutoBar) return;
+   if(PositionsTotal() >= MaxOpenPositions) return;
+   string why;
+   if(!CanOpenNew(why)) return;
+
+   double ma[];
+   ArraySetAsSeries(ma, true);
+   if(CopyBuffer(hMA, 0, 0, SlopeBars + 2, ma) < SlopeBars + 2) return;
+   double ma0 = ma[0];
+   double slope = ma[1] - ma[1 + SlopeBars];
+   double c1  = iClose(_Symbol, MaTF, 1);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+
+   bool sell = (slope <= -MinSlopeUSD && c1 < ma[1] && bid >= ma0 && bid <= ma0 + SLDistance);
+   bool buy  = (slope >=  MinSlopeUSD && c1 > ma[1] && ask <= ma0 && ask >= ma0 - SLDistance);
+   if(!sell && !buy) return;
+
+   lastAutoBar = bar;   // una sola entrada por vela
+   double lot = CalcLot(SLDistance);
+   if(lot <= 0 || RiskTooHigh(lot, SLDistance))
+   { Print("VictorGuard AutoEntry: el lote minimo arriesga demasiado para esta cuenta."); return; }
+   OpenTrade(buy);
 }
 
 //------------------------------------------------------------------
@@ -503,6 +617,7 @@ int OnInit()
    trade.SetDeviationInPoints(DeviationPts);
    SLDistance = SLPips * PipSize;
    if(SLDistance <= 0) { Alert("VictorGuard: SLPips y PipSize deben ser mayores que 0"); return INIT_PARAMETERS_INCORRECT; }
+   hMA = iMA(AllowedSymbol, MaTF, MaPeriod, 0, MaMethod, PRICE_CLOSE);
    MakeButton(P + "BUY",  "COMPRAR", 10, 30, clrSeaGreen);
    MakeButton(P + "SELL", "VENDER",  130, 30, clrFireBrick);
    ObjectCreate(0, P + "ST", OBJ_LABEL, 0, 0, 0);
@@ -533,11 +648,12 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
+   if(hMA != INVALID_HANDLE) IndicatorRelease(hMA);
    ObjectsDeleteAll(0, P);
 }
 
-void OnTimer()  { Guard(); UpdatePanel(); SyncTick(); }
-void OnTick()   { Guard(); }
+void OnTimer()  { Guard(); GuardOrders(); UpdatePanel(); SyncTick(); }
+void OnTick()   { Guard(); GuardOrders(); AutoEntryCheck(); }
 
 void OnChartEvent(const int id, const long &lp, const double &dp, const string &sp)
 {
@@ -549,7 +665,7 @@ void OnChartEvent(const int id, const long &lp, const double &dp, const string &
       ObjectSetInteger(0, sp, OBJPROP_STATE, false);
       ulong tk = (ulong)StringToInteger(StringSubstr(sp, StringLen(P) + 2));
       // cierre con la X del grafico: NO bloquea el dia (lo hace el EA, no cuenta como cierre manual)
-      if(PositionSelectByTicket(tk)) trade.PositionClose(tk);
+      if(PositionSelectByTicket(tk)) SafeClose(tk);
    }
 }
 `;
