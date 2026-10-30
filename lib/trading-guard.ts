@@ -213,7 +213,7 @@ bool SafeClose(ulong tk)
       trade.SetTypeFilling(modes[m]);
       if(trade.PositionClose(tk)) return true;
       uint rc = trade.ResultRetcode();
-      if(rc == TRADE_RETCODE_MARKET_CLOSED || rc == TRADE_RETCODE_NO_CONNECTION ||
+      if(rc == TRADE_RETCODE_MARKET_CLOSED || rc == TRADE_RETCODE_CONNECTION ||
          rc == TRADE_RETCODE_TRADE_DISABLED) break;
    }
    Print("VictorGuard: no pude cerrar #", tk, " retcode=", trade.ResultRetcode(), " ", trade.ResultRetcodeDescription());
