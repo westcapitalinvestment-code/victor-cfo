@@ -13,6 +13,7 @@ import ImpuestosEstimadosCard from "./impuestos-estimados-card";
 import Regla503020Card from "./regla-503020-card";
 import MetricasGratis from "./metricas-gratis";
 import BotonBalance from "./boton-balance";
+import PrimerPasoGratis from "./primer-paso-gratis";
 import AlertasGratisCard from "./alertas-gratis-card";
 import PlanGratisCard, { type AporteFila } from "./plan-gratis-card";
 import { respuestasValidas, type DatosPlan, type Respuestas } from "@/lib/plan-gratis";
@@ -737,6 +738,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         }
       : null;
 
+  // Cuenta totalmente vacía (nada anotado, sin balance, deudas, aportes ni archivo
+  // ni cuestionario): se muestra "Tu primer paso" en vez del cuestionario.
+  const cuentaVaciaGratis =
+    !!datosPlanGratis &&
+    !respuestasGratis &&
+    !datosPlanGratis.tieneBalance &&
+    datosPlanGratis.numDeudas === 0 &&
+    datosPlanGratis.txMes === 0 &&
+    !datosPlanGratis.haSubidoArchivo &&
+    aportesGratis.length === 0;
+
   if (ingresoMesActualResumen > 0 && gastoMesActualResumen > ingresoMesActualResumen) {
     alertasReglas.push({
       tipo: "salud",
@@ -897,7 +909,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* TU PLAN (plan gratis): justo debajo del balance, con color; se reduce a
           una línea cuando todo está hecho y reaparece sola si algo cambia. */}
-      {datosPlanGratis && <PlanGratisCard respuestas={respuestasGratis} datos={datosPlanGratis} aportes={aportesGratis} />}
+      {datosPlanGratis && cuentaVaciaGratis && <PrimerPasoGratis nombre={(profile.full_name ?? "").split(" ")[0] || null} />}
+      {datosPlanGratis && !cuentaVaciaGratis && <PlanGratisCard respuestas={respuestasGratis} datos={datosPlanGratis} aportes={aportesGratis} />}
 
       {/* Tarjeta de referidos (4 sept 2026, pedido de Joel): llamativa a
           propósito — la mayoría de la gente no sabe que existe el sistema
