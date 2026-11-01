@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { DISCLAIMER_AVISOS_CORTO, avisoAplicaA, type Segmentos } from "@/lib/avisos-comun";
+import AvisosOficialesLista from "./avisos-oficiales-lista";
 
 // Banner "Avisos oficiales" (30 oct 2026, pedido de Joel). Lo alimenta el cron
 // /api/cron/avisos-oficiales, sin intervención de nadie. VICTOR CFO NO emite
@@ -22,11 +23,6 @@ type Aviso = {
   temas: string[];
   urgencia: "baja" | "media" | "alta";
 };
-
-function fmtFecha(iso: string): string {
-  const [a, m, d] = iso.split("-");
-  return `${d}/${m}/${a}`;
-}
 
 function diasHasta(iso: string): number {
   const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Puerto_Rico" });
@@ -64,42 +60,21 @@ export default async function AvisosOficialesCard({ modo }: { modo: "cpa" | "usu
     avisos = avisos.filter((a) => !a.fecha_limite || diasHasta(a.fecha_limite) >= -3).slice(0, 3);
     if (avisos.length === 0) return null;
 
-    return (
-      <div className="vc-card mb-4">
-        <p className="mb-3 text-sm uppercase tracking-wide text-muted">Avisos oficiales</p>
-        <div className="space-y-3">
-          {avisos.map((a) => {
-            const dias = a.fecha_limite ? diasHasta(a.fecha_limite) : null;
-            return (
-              <div key={a.id} className="border-l-2 border-teal pl-3">
-                <p className="text-xs text-muted">
-                  {a.fuente_nombre}
-                  {a.fecha_publicacion ? ` · ${fmtFecha(a.fecha_publicacion)}` : ""}
-                </p>
-                <p className="mt-0.5 text-sm font-medium">{a.titulo}</p>
-                <p className="mt-1 text-sm">{a.resumen}</p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                  {a.fecha_limite && (
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        dias !== null && dias <= 7 ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      Fecha límite según la fuente: {fmtFecha(a.fecha_limite)}
-                      {dias !== null && dias >= 0 ? ` (${dias === 0 ? "hoy" : `en ${dias} día${dias === 1 ? "" : "s"}`})` : ""}
-                    </span>
-                  )}
-                  <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-teal underline">
-                    Ver fuente oficial →
-                  </a>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <p className="mt-3 text-[11px] leading-snug text-muted">{DISCLAIMER_AVISOS_CORTO}</p>
-      </div>
-    );
+    // Avisos que este usuario ya marcó como vistos (tabla avisos_vistos, 0198).
+    // Si la tabla aún no existe, la consulta falla y todos salen como pendientes.
+    let vistos: string[] = [];
+    try {
+      const { data: v, error: ev } = await supabase
+        .from("avisos_vistos")
+        .select("aviso_id")
+        .eq("user_id", user.id)
+        .in("aviso_id", avisos.map((a) => a.id));
+      if (!ev && v) vistos = v.map((r: { aviso_id: string }) => r.aviso_id);
+    } catch {
+      /* sin migración 0198 */
+    }
+
+    return <AvisosOficialesLista avisos={avisos} vistosIniciales={vistos} disclaimer={DISCLAIMER_AVISOS_CORTO} />;
   } catch {
     return null;
   }

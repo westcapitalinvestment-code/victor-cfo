@@ -130,14 +130,22 @@ export async function enviarCorreoContacto(p: {
   const motivo =
     "Recibes este mensaje porque nos diste tu correo y tu permiso durante una visita de un representante de VICTOR CFO. " +
     "Es un mensaje comercial de VICTOR CFO, un producto de West Capital Ventures LLC.";
-  const texto = [...p.lineas, `${p.boton.texto}: ${p.boton.url}`].join("\n\n");
+  const texto = [...p.lineas, `${p.boton.texto}: ${p.boton.url}`, `— VICTOR CFO\nUn producto de West Capital Ventures LLC · ${SITE_URL}`].join("\n\n");
 
+  // Mismo formato que el resto de correos de VICTOR: avatar + nombre arriba,
+  // botón teal, firma "— VICTOR" y pie de West Capital Ventures LLC.
   const html = `
-<div style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:520px;color:#1a1a1a;line-height:1.55;font-size:15px">
-  ${p.lineas.map((l) => `<p style="margin:0 0 12px">${esc(l)}</p>`).join("")}
-  <p style="margin:18px 0"><a href="${esc(p.boton.url)}" style="background:#0b6b4f;color:#fff;text-decoration:none;padding:11px 18px;border-radius:8px;display:inline-block;font-weight:600">${esc(p.boton.texto)}</a></p>
-  <hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0 12px" />
-  <p style="font-size:11px;color:#888;margin:0">${esc(motivo)}<br/>${esc(p.direccionFisica.trim())}<br/><a href="${baja}" style="color:#888">No quiero recibir más correos</a></p>
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a; line-height: 1.5;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="${SITE_URL}/victor-avatar.png" width="32" height="32" style="border-radius: 9999px; vertical-align: middle; display: inline-block;" alt="VICTOR" />
+    <span style="font-size: 18px; font-weight: 600; vertical-align: middle; margin-left: 8px;">VICTOR CFO</span>
+  </div>
+  ${p.lineas.map((l) => `<p>${esc(l)}</p>`).join("")}
+  <p style="text-align: center; margin: 24px 0;"><a href="${esc(p.boton.url)}" style="background: #0F766E; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">${esc(p.boton.texto)}</a></p>
+  <p style="font-size: 14px; margin-top: 20px;">— VICTOR</p>
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+  <p style="font-size: 12px; color: #999;">VICTOR CFO — un producto de West Capital Ventures LLC<br/><a href="${SITE_URL}" style="color: #999;">victorcfo.com</a></p>
+  <p style="font-size: 11px; color: #999;">${esc(motivo)}<br/>${esc(p.direccionFisica.trim())}<br/><a href="${baja}" style="color: #999;">No quiero recibir más correos</a></p>
 </div>`.trim();
 
   try {
