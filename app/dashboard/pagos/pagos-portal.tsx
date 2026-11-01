@@ -1736,6 +1736,51 @@ function ContratistasTab({
     setError(null);
   }
 
+  // Traer un vendedor del Programa de Socios como contratista (1 nov 2026,
+  // pedido de Joel): sus datos y su cuenta bancaria se copian en el servidor,
+  // sin volver a escribirlos. Solo aparece para el founder (la API responde 403
+  // a los demás y el selector queda oculto).
+  const [sociosDisp, setSociosDisp] = useState<{ id: string; nombre: string; email: string; codigo: string; banco: string | null }[]>([]);
+  const [socioSel, setSocioSel] = useState("");
+  const [trayendo, setTrayendo] = useState(false);
+  const [avisoSocio, setAvisoSocio] = useState<string | null>(null);
+  useEffect(() => {
+    fetch("/api/pagos/vendors/desde-socio")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j?.socios) setSociosDisp(j.socios);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function traerDeSocio() {
+    if (!socioSel) return;
+    setTrayendo(true);
+    setAvisoSocio(null);
+    setError(null);
+    const res = await fetch("/api/pagos/vendors/desde-socio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ socioId: socioSel, entityId: entidadId, retentionType: "480.6B", pct: retencionDefault }),
+    });
+    const json = await res.json().catch(() => ({}));
+    setTrayendo(false);
+    if (!res.ok || !json?.vendor) {
+      setAvisoSocio(json?.error ?? "No se pudo traer al socio.");
+      return;
+    }
+    const v = json.vendor as Vendor;
+    setLista((prev) => (prev.some((x) => x.id === v.id) ? prev.map((x) => (x.id === v.id ? { ...x, ...v } : x)) : [v, ...prev]));
+    setAvisoSocio(
+      `${v.name}: ${json.existente ? "ya estaba en Contratistas, se completaron los datos que faltaban" : "agregado a Contratistas"}${
+        json.bancoCopiado ? " y se copió su cuenta bancaria." : ". Todavía no tiene cuenta bancaria en el Programa de Socios."
+      }`
+    );
+    setSocioSel("");
+    abrirEditar(v);
+    router.refresh();
+  }
+
   function abrirEditar(v: Vendor) {
     setFormAbierto(v.id);
     setName(v.name);
@@ -1970,6 +2015,37 @@ function ContratistasTab({
           Importaciones anteriores
         </Link>
       </div>
+
+      {sociosDisp.length > 0 && (
+        <div className="vc-card mb-3 flex flex-col gap-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Traer del Programa de Socios</p>
+          <p className="text-xs text-muted">
+            Escoge un vendedor y se agrega como contratista con sus datos y su cuenta bancaria, sin escribirlos otra vez.
+          </p>
+          <div className="flex gap-1.5">
+            <select className="vc-input min-w-0 flex-1" value={socioSel} onChange={(e) => setSocioSel(e.target.value)}>
+              <option value="">Escoge un vendedor…</option>
+              {sociosDisp.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre}
+                  {s.codigo ? ` · ${s.codigo}` : ""}
+                  {s.banco ? ` · ${s.banco}` : " · sin banco"}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={traerDeSocio}
+              disabled={!socioSel || trayendo}
+              className="flex-shrink-0 rounded-lg px-3 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+              style={{ background: "#1D9E75" }}
+            >
+              {trayendo ? "Trayendo…" : "Traer"}
+            </button>
+          </div>
+          {avisoSocio && <p className="text-xs text-muted">{avisoSocio}</p>}
+        </div>
+      )}
 
       <div className="mb-3 flex gap-1.5">
         <div className="relative min-w-0 flex-1">
