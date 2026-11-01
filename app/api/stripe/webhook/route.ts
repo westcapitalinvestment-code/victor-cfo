@@ -1019,7 +1019,10 @@ async function procesarComisionSocio(
     .maybeSingle();
   if (!socio) return;
 
-  if (socio.tipo === "vendedor") {
+  // 1 nov 2026 (pedido de Joel): un solo programa de Vendedores — todos los
+  // tipos (vendedor, influencer, otro) ganan igual: 70% al primer pago real
+  // + 30% al 3er pago. Solo 'cpa' sigue sin comisión (ver bloque de abajo).
+  if (socio.tipo !== "cpa") {
     await procesarComisionVendedor(admin, socio, referido, invoice);
     return;
   }

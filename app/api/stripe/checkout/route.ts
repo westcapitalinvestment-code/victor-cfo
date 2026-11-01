@@ -90,7 +90,9 @@ export async function POST(req: NextRequest) {
   // recibiendo los 30 días exactamente igual que siempre; esto solo afecta
   // al tipo 'vendedor'.
   const esReferidoPeerOEmbajador =
-    !!perfil?.referred_by || (!!perfil?.referido_por_socio_id && socioTipo !== "vendedor");
+    // 1 nov 2026: todos los vendedores (vendedor/influencer/otro) pagan como
+    // cualquier cliente nuevo, con 7 días de prueba; solo 'cpa' conserva los 30.
+    !!perfil?.referred_by || (!!perfil?.referido_por_socio_id && socioTipo === "cpa");
   const priceId = priceIdPara(plan, ciclo);
   if (!priceId) {
     return NextResponse.json(

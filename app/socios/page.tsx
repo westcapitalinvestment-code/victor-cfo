@@ -13,7 +13,10 @@ export default function SociosPage() {
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [telefono, setTelefono] = useState("");
-  const [tipo, setTipo] = useState<"cpa" | "influencer" | "otro">("otro");
+  // 1 nov 2026: un solo programa de Vendedores. "calle" y "redes" son solo
+  // para saber cómo piensa vender; ambos nacen como tipo='vendedor' y ganan
+  // igual (ver app/api/socios/route.ts). "cpa" se queda aparte (sin comisión).
+  const [tipo, setTipo] = useState<"calle" | "redes" | "cpa">("calle");
   const [comoPromociona, setComoPromociona] = useState("");
   const [aceptaTerminos, setAceptaTerminos] = useState(false);
   const [resume, setResume] = useState<File | null>(null);
@@ -115,32 +118,31 @@ export default function SociosPage() {
                 entrada tanto para embajadores como para el equipo de ventas
                 (Joel reclasifica a "vendedor" al aprobar — tipo no es
                 auto-seleccionable, ver app/api/socios/route.ts). */}
-            Seas CPA, contador, influencer, o simplemente alguien con la red y las ganas de promocionar
-            VICTOR CFO activamente en Puerto Rico: completa el formulario y te contactamos directamente
-            para explicarte cómo puedes colaborar con nosotros.
+            Vendas en la calle, desde tus redes o con tu comunidad, todos los vendedores de VICTOR CFO
+            ganan igual. Completa el formulario y te contactamos para explicarte cómo funciona.
           </p>
 
           <div className="mb-1 flex gap-2 text-sm">
             <button
               type="button"
+              onClick={() => setTipo("calle")}
+              className={`flex-1 rounded-lg border p-2 font-medium ${tipo === "calle" ? "border-teal text-teal" : "border-border text-muted"}`}
+            >
+              En la calle
+            </button>
+            <button
+              type="button"
+              onClick={() => setTipo("redes")}
+              className={`flex-1 rounded-lg border p-2 font-medium ${tipo === "redes" ? "border-teal text-teal" : "border-border text-muted"}`}
+            >
+              Desde mis redes
+            </button>
+            <button
+              type="button"
               onClick={() => setTipo("cpa")}
               className={`flex-1 rounded-lg border p-2 font-medium ${tipo === "cpa" ? "border-teal text-teal" : "border-border text-muted"}`}
             >
-              CPA / Contador
-            </button>
-            <button
-              type="button"
-              onClick={() => setTipo("influencer")}
-              className={`flex-1 rounded-lg border p-2 font-medium ${tipo === "influencer" ? "border-teal text-teal" : "border-border text-muted"}`}
-            >
-              Influencer
-            </button>
-            <button
-              type="button"
-              onClick={() => setTipo("otro")}
-              className={`flex-1 rounded-lg border p-2 font-medium ${tipo === "otro" ? "border-teal text-teal" : "border-border text-muted"}`}
-            >
-              Otro
+              Soy CPA
             </button>
           </div>
 

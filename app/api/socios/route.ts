@@ -34,8 +34,13 @@ export async function POST(req: NextRequest) {
   const email = texto("email").toLowerCase();
   const telefono = texto("telefono") || null;
   const tipoRaw = texto("tipo");
-  const tipo = tipoRaw === "cpa" || tipoRaw === "influencer" ? tipoRaw : "otro";
-  const comoPromociona = texto("comoPromociona") || null;
+  // 1 nov 2026 (pedido de Joel): un solo programa de Vendedores — calle,
+  // redes, influencer u otro, todos nacen como tipo='vendedor' y ganan igual
+  // (70/30). Solo "cpa" queda aparte (sin comisión, ver webhook). Cómo piensa
+  // vender se guarda como prefijo en como_promociona para que Joel lo vea.
+  const tipo = tipoRaw === "cpa" ? "cpa" : "vendedor";
+  const canal = tipoRaw === "calle" ? "[Calle] " : tipoRaw === "redes" || tipoRaw === "influencer" ? "[Redes] " : "";
+  const comoPromociona = (canal + texto("comoPromociona")).trim() || null;
   const aceptaTerminos = texto("aceptaTerminos") === "true";
   const archivo = form.get("resume");
 
