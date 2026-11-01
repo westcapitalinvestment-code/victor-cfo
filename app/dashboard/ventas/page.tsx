@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { esFounder } from "@/lib/founder";
 import SociosPanel from "../cfo/socios-panel";
+import { calcularEmbudo, sumarEmbudo } from "@/lib/embudo-socios";
 import ContablesPanel from "./contables-panel";
 import BonosOficinasPanel from "./bonos-oficinas-panel";
 import OficinasDuplicadosPanel from "./oficinas-duplicados-panel";
@@ -118,6 +119,19 @@ export default async function VentasPage() {
   const prosVigentes = prospectosDeVendedores.filter((p) => p.estado === "vigente").length;
   const prosConvertidos = prospectosDeVendedores.filter((p) => p.estado === "convertido").length;
 
+  // ---- Productividad y alcance (0197) ----
+  // "Conocen VICTOR" = contactos visitados por los vendedores; "forman parte" =
+  // usuarios que se registraron con un vendedor. Si la migración 0197 aún no
+  // corrió, las consultas vienen vacías y todo muestra ceros.
+  const embudoMapa = await calcularEmbudo(admin, Array.from(vendedoresIds) as string[]);
+  const embudoTotal = sumarEmbudo(Array.from(embudoMapa.values()));
+  const embudos = Object.fromEntries(embudoMapa);
+  const { count: totalUsuarios } = await admin.from("users").select("id", { count: "exact", head: true });
+  const { count: contactosConPermiso } = await admin
+    .from("socios_contactos_correo")
+    .select("id", { count: "exact", head: true })
+    .is("baja_at", null);
+
   // ---- Tarjetas de producción (contables) ----
   const PRECIO_FIRMA_CENTAVOS = 6000; // $60/mes (40% menos que $99.99), ver lib/stripe.ts
   const contablesFilas = (firmas ?? []).map((f) => {
@@ -154,6 +168,38 @@ export default async function VentasPage() {
         <Tarjeta titulo="Vendedores activos" valor={String(vendedoresIds.size)} nota="aprobados" />
         <Tarjeta titulo="Prospectos vigentes" valor={String(prosVigentes)} nota="en ventana de 60 días" />
         <Tarjeta titulo="Prospectos convertidos" valor={String(prosConvertidos)} nota="se hicieron clientes" />
+      </div>
+
+      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">Productividad y alcance — Vendedores</p>
+      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <Tarjeta titulo="Contactos nuevos (7 días)" valor={String(embudoTotal.semana.nuevos)} nota={`${embudoTotal.mes.nuevos} en 30 días`} />
+        <Tarjeta titulo="Avances de estado (7 días)" valor={String(embudoTotal.semana.avances)} nota={`${embudoTotal.semana.interesados} interesados · ${embudoTotal.semana.demos} demos`} />
+        <Tarjeta
+          titulo="Conocen VICTOR"
+          valor={String(embudoTotal.contactos.total)}
+          nota={`${embudoTotal.contactos.oficinas} oficinas · ${embudoTotal.contactos.negocios} negocios visitados`}
+        />
+        <Tarjeta
+          titulo="Forman parte"
+          valor={String(embudoTotal.registrados)}
+          nota={`${embudoTotal.pagan} pagan o en prueba · ${totalUsuarios ?? 0} usuarios en total`}
+        />
+        <Tarjeta
+          titulo="Embudo (estado actual)"
+          valor={`${embudoTotal.porEstado.interesado + embudoTotal.porEstado.demo_hecha}`}
+          nota={`interesados/demo · ${embudoTotal.porEstado.visitado} visitados · ${embudoTotal.porEstado.pendiente} pendientes · ${embudoTotal.porEstado.rechazo} rechazos`}
+        />
+        <Tarjeta
+          titulo="Conversión visita → registro"
+          valor={embudoTotal.contactos.total > 0 ? `${Math.round((embudoTotal.registrados / embudoTotal.contactos.total) * 100)}%` : "—"}
+          nota="registrados ÷ contactos visitados"
+        />
+        <Tarjeta
+          titulo="Correos con permiso"
+          valor={String(contactosConPermiso ?? 0)}
+          nota={`${embudoTotal.correo.enviados} ya recibieron correo · ${embudoTotal.correo.bajas} bajas`}
+        />
+        <Tarjeta titulo="Oficinas con portal" valor={String(embudoTotal.oficinasConPortal)} nota="de las visitadas" />
       </div>
 
       <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">Producción — Contables</p>
@@ -218,6 +264,7 @@ export default async function VentasPage() {
           socioId: p.socio_id as string,
           estado: p.estado as string,
         }))}
+        embudos={embudos}
       />
 
       {/* Contables: VICTOR Accountant (40% menos en Business para clientes que invitan) */}

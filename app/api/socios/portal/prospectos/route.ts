@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarSesionSocio, COOKIE_SESION_SOCIO } from "@/lib/socio-session";
 import { MUNICIPIOS_PR, esEstadoSeguimiento } from "@/lib/oficinas-contables";
+import { PASOS_TOTAL, registrarPermisoCorreo } from "@/lib/email-contactos";
 
 // Prospectos del vendedor (migración 0150, 13 oct 2026). El vendedor registra
 // a quien le presentó VICTOR (email y/o teléfono); si esa persona se registra
@@ -21,6 +22,16 @@ function normalizarTelefono(raw: unknown): string | null {
   let d = raw.replace(/\D/g, "");
   if (d.length === 11 && d.startsWith("1")) d = d.slice(1);
   return d.length === 10 ? d : null;
+}
+
+// Estado del permiso de correo que ve el vendedor:
+//   null = no dio permiso; "activo" = recibirá/está recibiendo la serie;
+//   "completo" = ya recibió los 3; "baja" = pidió no recibir más (no se puede revertir).
+function estadoCorreo(c?: { baja_at: string | null; paso: number; detenido_razon: string | null }): "activo" | "completo" | "baja" | null {
+  if (!c) return null;
+  if (c.baja_at) return c.detenido_razon === "permiso_retirado" ? null : "baja";
+  if (c.detenido_razon) return "baja";
+  return c.paso >= PASOS_TOTAL ? "completo" : "activo";
 }
 
 async function socioDeSesion(req: NextRequest) {
@@ -47,6 +58,13 @@ export async function GET(req: NextRequest) {
     .limit(300);
   if (error) return NextResponse.json({ error: "No se pudieron cargar tus prospectos." }, { status: 500 });
 
+  // 0197: ¿dio permiso para recibir correos? (activo = permiso y sin baja)
+  const emails = (data ?? []).map((p) => p.email as string | null).filter((e): e is string => !!e);
+  const { data: contactos } = emails.length
+    ? await admin.from("socios_contactos_correo").select("email, baja_at, paso, detenido_razon").in("email", emails)
+    : { data: [] as { email: string; baja_at: string | null; paso: number; detenido_razon: string | null }[] };
+  const correoPor = new Map((contactos ?? []).map((c) => [String(c.email).toLowerCase(), c]));
+
   const ahora = Date.now();
   const prospectos = (data ?? []).map((p) => ({
     id: p.id as string,
@@ -63,6 +81,7 @@ export async function GET(req: NextRequest) {
       p.estado === "vigente" ? Math.max(0, Math.ceil((new Date(p.expira_at as string).getTime() - ahora) / 86400000)) : null,
     creadoEn: p.created_at as string,
     convertidoEn: (p.convertido_at as string | null) ?? null,
+    permisoCorreo: estadoCorreo(correoPor.get(String(p.email || "").toLowerCase())),
   }));
 
   return NextResponse.json({ ok: true, prospectos });
@@ -158,6 +177,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No se pudo guardar el prospecto." }, { status: 500 });
   }
 
+  // 0197: el vendedor marcó que la persona dio permiso para recibir correos.
+  if (body?.permisoCorreo === true && email) {
+    await registrarPermisoCorreo(admin, { permiso: true, email, nombre, tipo: "negocio", socioId, origen: "prospecto", refId: nuevo.id });
+  }
+
   return NextResponse.json({ ok: true, id: nuevo.id });
 }
 
@@ -185,10 +209,20 @@ export async function PATCH(req: NextRequest) {
     }
     upd.pueblo = body.pueblo || null;
   }
-  if (Object.keys(upd).length === 0) return NextResponse.json({ error: "Nada que cambiar." }, { status: 400 });
+  const cambiaPermiso = typeof body.permisoCorreo === "boolean";
+  if (Object.keys(upd).length === 0 && !cambiaPermiso) return NextResponse.json({ error: "Nada que cambiar." }, { status: 400 });
 
-  const { error } = await admin.from("socios_prospectos").update(upd).eq("id", id).eq("socio_id", socioId);
-  if (error) return NextResponse.json({ error: "No se pudo guardar." }, { status: 500 });
+  if (Object.keys(upd).length > 0) {
+    const { error } = await admin.from("socios_prospectos").update(upd).eq("id", id).eq("socio_id", socioId);
+    if (error) return NextResponse.json({ error: "No se pudo guardar." }, { status: 500 });
+  }
+
+  // 0197: dar o retirar el permiso de correo (solo si el prospecto es de este vendedor).
+  if (cambiaPermiso) {
+    const { data: p } = await admin.from("socios_prospectos").select("id, nombre, email").eq("id", id).eq("socio_id", socioId).maybeSingle();
+    if (!p?.email) return NextResponse.json({ error: "Este prospecto no tiene email." }, { status: 400 });
+    await registrarPermisoCorreo(admin, { permiso: body.permisoCorreo, email: p.email, nombre: p.nombre, tipo: "negocio", socioId, origen: "prospecto", refId: p.id });
+  }
   return NextResponse.json({ ok: true });
 }
 

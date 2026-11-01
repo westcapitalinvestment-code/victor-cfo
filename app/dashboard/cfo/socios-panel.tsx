@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { EmbudoSocio } from "@/lib/embudo-socios";
 
 // Panel de "Programa de Socios" del Dashboard de Operaciones (migración
 // 0070/0071, 5 sept 2026) — mismo patrón que usuarios-panel.tsx: recibe los
@@ -158,11 +159,14 @@ export default function SociosPanel({
   comisiones: comisionesIniciales,
   vendedorClientes = [],
   prospectos = [],
+  embudos = {},
 }: {
   socios: SocioFila[];
   comisiones: ComisionFila[];
   vendedorClientes?: VendedorClienteFila[];
   prospectos?: { socioId: string; estado: string }[];
+  // 0197: productividad por vendedor (id del socio → embudo)
+  embudos?: Record<string, EmbudoSocio>;
 }) {
   // Abierto por defecto: ahora vive en su propia pantalla (/dashboard/ventas).
   const [abierto, setAbierto] = useState(true);
@@ -488,6 +492,32 @@ export default function SociosPanel({
                           WCV vs. la comisión pagada/pendiente. El vendedor mismo nunca ve
                           este desglose ni el ingreso de WCV — su portal (/socios/portal)
                           solo muestra su propia comisión. */}
+                      {s.tipo === "vendedor" && embudos[s.id] && (() => {
+                        const e = embudos[s.id];
+                        return (
+                          <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2 text-[11px]">
+                            <span className="font-medium uppercase tracking-wide text-muted">Productividad</span>
+                            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted">
+                              <span>Esta semana: <span className="font-medium text-white">{e.semana.nuevos}</span> contactos nuevos · <span className="font-medium text-white">{e.semana.avances}</span> avances</span>
+                              <span>30 días: {e.mes.nuevos} nuevos · {e.mes.avances} avances</span>
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted">
+                              <span>{e.contactos.total} contactos ({e.contactos.oficinas} oficinas, {e.contactos.negocios} negocios)</span>
+                              <span>Pendiente {e.porEstado.pendiente}</span>
+                              <span>Visitado {e.porEstado.visitado}</span>
+                              <span>Interesado {e.porEstado.interesado}</span>
+                              <span>Demo {e.porEstado.demo_hecha}</span>
+                              <span>Rechazo {e.porEstado.rechazo}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted">
+                              <span>Se registraron: <span className="font-medium text-white">{e.registrados}</span></span>
+                              <span>Pagan / en prueba: <span className="font-medium text-white">{e.pagan}</span></span>
+                              <span>Oficinas con portal: {e.oficinasConPortal}</span>
+                              <span>Correos: {e.correo.permisos} con permiso · {e.correo.enviados} enviados · {e.correo.bajas} bajas</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {s.tipo === "vendedor" && (() => {
                         const clientesDeEsteVendedor = vendedorClientesPorSocio.get(s.id) ?? [];
                         if (clientesDeEsteVendedor.length === 0) return null;

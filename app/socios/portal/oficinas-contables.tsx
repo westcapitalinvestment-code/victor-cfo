@@ -14,6 +14,7 @@ import {
   type EstadoSeguimiento,
   type StatusOficina,
 } from "@/lib/oficinas-contables";
+import { PermisoCorreoCheck, PermisoCorreoFila, type EstadoPermisoCorreo } from "./permiso-correo";
 
 // Oficinas de contables del portal del vendedor (migración 0163). Un registro
 // compartido para no repetir visitas: lo tuyo se ve completo; lo de los demás
@@ -37,6 +38,7 @@ type Mia = {
   descripcion: string | null;
   notas: string | null;
   diasRestantes: number | null;
+  permisoCorreo: EstadoPermisoCorreo;
 };
 type Otra = { id: string; nombre: string; pueblo: string | null; status: StatusOficina };
 
@@ -61,6 +63,7 @@ type Form = {
   descripcion: string;
   notas: string;
   estado: EstadoSeguimiento;
+  permisoCorreo: boolean;
 };
 const VACIO: Form = {
   nombre: "",
@@ -77,6 +80,7 @@ const VACIO: Form = {
   descripcion: "",
   notas: "",
   estado: "visitado",
+  permisoCorreo: false,
 };
 
 function fmtTel(d: string) {
@@ -192,6 +196,7 @@ export default function OficinasContables({ codigo = "" }: { codigo?: string } =
       descripcion: m.descripcion ?? "",
       notas: m.notas ?? "",
       estado: m.estado,
+      permisoCorreo: m.permisoCorreo === "activo" || m.permisoCorreo === "completo",
     });
     setAbierto(true);
     setError(null);
@@ -213,7 +218,8 @@ export default function OficinasContables({ codigo = "" }: { codigo?: string } =
     const res = await fetch("/api/socios/portal/oficinas", {
       method: editId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editId ? { id: editId, ...f } : f),
+      // El permiso solo se envía si hay email; en edición, una baja del contacto no se revierte (lo decide el servidor).
+      body: JSON.stringify(editId ? { id: editId, ...f, permisoCorreo: f.email.trim() ? f.permisoCorreo : false } : { ...f, permisoCorreo: f.permisoCorreo && !!f.email.trim() }),
     });
     const json = await res.json().catch(() => null);
     setGuardando(false);
@@ -234,6 +240,19 @@ export default function OficinasContables({ codigo = "" }: { codigo?: string } =
     });
     if (!res.ok) await cargar();
     else await cargar(); // refresca los días restantes (la edición renueva los 60)
+  }
+
+  async function cambiarPermisoCorreo(m: Mia, dar: boolean) {
+    const res = await fetch("/api/socios/portal/oficinas", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: m.id, permisoCorreo: dar }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      window.alert(j?.error || "No se pudo cambiar el permiso.");
+    }
+    await cargar();
   }
 
   async function quitar(m: Mia) {
@@ -373,6 +392,12 @@ export default function OficinasContables({ codigo = "" }: { codigo?: string } =
                 className="w-1/2 rounded-lg border border-border p-2 text-sm"
               />
             </div>
+            <PermisoCorreoCheck
+              tipo="contable"
+              checked={f.permisoCorreo && !!f.email.trim()}
+              disabled={!f.email.trim()}
+              onChange={(v) => set("permisoCorreo", v)}
+            />
             <input
               value={f.web}
               onChange={(e) => set("web", e.target.value)}
@@ -552,6 +577,11 @@ export default function OficinasContables({ codigo = "" }: { codigo?: string } =
                   {m.especialidades.length > 0 && <p className="text-muted">Especialidades: {m.especialidades.join(", ")}</p>}
                   {m.sectores.length > 0 && <p className="text-muted">Sectores: {m.sectores.join(", ")}</p>}
                   {m.notas && <p className="text-muted">Notas: {m.notas}</p>}
+                  {m.email && m.status !== "tiene_portal" && (
+                    <div className="pt-1">
+                      <PermisoCorreoFila estado={m.permisoCorreo} tieneEmail onToggle={(dar) => cambiarPermisoCorreo(m, dar)} />
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-3 pt-1">
                     {m.telefono && (
                       <a href={`tel:+1${m.telefono}`} className="font-medium text-teal">

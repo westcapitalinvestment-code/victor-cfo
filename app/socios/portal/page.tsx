@@ -11,6 +11,8 @@ import {
 import OficinasContables from "./oficinas-contables";
 import BonosOficinas from "./bonos-oficinas";
 import ResumenVendedor from "./resumen-vendedor";
+import MiEmbudo from "./mi-embudo";
+import { PermisoCorreoCheck, PermisoCorreoFila, type EstadoPermisoCorreo } from "./permiso-correo";
 
 const SITE_URL = "https://www.victorcfo.com";
 
@@ -62,6 +64,7 @@ type Prospecto = {
   diasRestantes: number | null;
   creadoEn: string;
   convertidoEn: string | null;
+  permisoCorreo: EstadoPermisoCorreo;
 };
 
 const PROSPECTO_ESTADO: Record<Prospecto["estado"], { texto: string; color: string }> = {
@@ -105,6 +108,7 @@ export default function SocioPortalPage() {
   const [pNotas, setPNotas] = useState("");
   const [pSeguimiento, setPSeguimiento] = useState<EstadoSeguimiento>("pendiente");
   const [pPueblo, setPPueblo] = useState("");
+  const [pPermiso, setPPermiso] = useState(false);
   // Filtros de la lista de prospectos (seguimiento).
   const [fSeg, setFSeg] = useState<"todos" | EstadoSeguimiento>("todos");
   const [fPueblo, setFPueblo] = useState("");
@@ -196,7 +200,7 @@ export default function SocioPortalPage() {
     const res = await fetch("/api/socios/portal/prospectos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre: pNombre, email: pEmail, telefono: pTelefono, notas: pNotas, seguimiento: pSeguimiento, pueblo: pPueblo }),
+      body: JSON.stringify({ nombre: pNombre, email: pEmail, telefono: pTelefono, notas: pNotas, seguimiento: pSeguimiento, pueblo: pPueblo, permisoCorreo: pPermiso && !!pEmail.trim() }),
     });
     const json = await res.json().catch(() => null);
     setPGuardando(false);
@@ -210,6 +214,20 @@ export default function SocioPortalPage() {
     setPNotas("");
     setPSeguimiento("pendiente");
     setPPueblo("");
+    setPPermiso(false);
+    await cargarDatos();
+  }
+
+  async function cambiarPermisoCorreo(id: string, dar: boolean) {
+    const res = await fetch("/api/socios/portal/prospectos", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, permisoCorreo: dar }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      window.alert(j?.error || "No se pudo cambiar el permiso.");
+    }
     await cargarDatos();
   }
 
@@ -337,6 +355,7 @@ export default function SocioPortalPage() {
 
           {/* Resumen desplegable: debajo del QR para que enseñarlo no pase por los números */}
           <ResumenVendedor datos={datos} />
+          <MiEmbudo />
 
           <OficinasContables codigo={codigoSocio} />
           <BonosOficinas />
@@ -407,6 +426,7 @@ export default function SocioPortalPage() {
               placeholder="Nota (opcional)"
               className="rounded-lg border border-border p-2 text-sm"
             />
+            <PermisoCorreoCheck tipo="negocio" checked={pPermiso && !!pEmail.trim()} disabled={!pEmail.trim()} onChange={setPPermiso} />
             <button type="submit" disabled={pGuardando} className="rounded-pill bg-teal p-2 text-sm font-medium text-white">
               {pGuardando ? "Guardando..." : "Registrar prospecto"}
             </button>
@@ -494,6 +514,11 @@ export default function SocioPortalPage() {
                         ))}
                       </select>
                     </div>
+                    {p.email && p.estado === "vigente" && (
+                      <div className="mt-2 border-t border-border pt-2">
+                        <PermisoCorreoFila estado={p.permisoCorreo} tieneEmail onToggle={(dar) => cambiarPermisoCorreo(p.id, dar)} />
+                      </div>
+                    )}
                     {p.estado === "vigente" && (
                       <div className="mt-2 flex flex-wrap gap-3 border-t border-border pt-2 text-sm">
                         {p.telefono && (

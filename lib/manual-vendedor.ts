@@ -213,6 +213,7 @@ export const MODULOS_VENDEDOR: ModuloVendedor[] = [
     donde: "Dentro de las 24 horas posteriores a la visita",
     pasos: [
       { titulo: "Sal siempre con tres datos", texto: "El nombre de quien te atendió, un correo o teléfono para escribirle y el día en que vas a volver o escribir. Si te falta alguno, pregúntalo antes de irte: ¿Me regala el correo del licenciado para escribirle hoy?" },
+      { titulo: "Pide permiso para que VICTOR le escriba", texto: "Pregunta: ¿Le parece bien que VICTOR le escriba unos correos cortos con información? Solo si dice que sí, marca la casilla de permiso al registrar la oficina o el prospecto (necesitas su email). VICTOR le envía solo 3 correos, separados por varios días, y cada uno trae su enlace para darse de baja. Si la persona se da de baja, no se le vuelve a escribir y no puedes reactivarlo. Si no dijo que sí, no marques la casilla." },
       { titulo: "Anota apenas salgas", texto: "En el carro, antes de arrancar, registra la oficina en tu portal con el nombre de la recepcionista, lo que dijo el contable y cuándo regresas. Con 20 visitas en la semana, lo que no anotas lo olvidas." },
       { titulo: "Mensaje de agradecimiento el mismo día", texto: "Corto, personal y sin adjuntos. Menciona algo de la conversación. Agradece, repite el día en que quedaron y enlaza tu QR. No lo conviertas en un anuncio." },
       { titulo: "Segundo contacto en 3 o 4 días", texto: "Una llamada o una visita corta. Una sola pregunta: ¿Pudo ver el portal? ¿Qué le faltó? Si no contestan, no insistas todos los días; espera una semana y vuelve con algo nuevo." },
@@ -319,7 +320,7 @@ export const MODULOS_VENDEDOR: ModuloVendedor[] = [
       { titulo: "No des asesoría contributiva", texto: "VICTOR y tú no sustituyen a un contador ni a un abogado. Cuando el cliente pregunte algo de impuestos, remítelo a su contable." },
       { titulo: "Sin presión", texto: "Presenta, resuelve dudas y propón el siguiente paso. Si el cliente dice que no, déjale la puerta abierta." },
       { titulo: "Registra todo", texto: "Cada prospecto y cada oficina se anota en el portal el día de la visita. Sin registro no hay protección ni bono." },
-      { titulo: "Mide tu semana", texto: "Cuántas oficinas visitaste, cuántas activaron el portal, cuántos negocios calificados conociste y cuántos pasaron a pago. Lo que no se mide no mejora." },
+      { titulo: "Mide tu semana", texto: "En tu portal, abre «Mi semana y mi embudo»: ahí ves cuántos contactos nuevos hiciste, cuántos cambiaron de estado (visitado, interesado, demo hecha, rechazo), cómo va tu ritmo de las últimas 8 semanas y cuántos ya se registraron o pagan. Se calcula solo con los estados que vas actualizando, así que mantenlos al día. Lo que no se mide no mejora." },
     ],
   },
   // ───────────────────── PORTAL Y PAGOS ─────────────────────

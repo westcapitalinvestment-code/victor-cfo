@@ -13,6 +13,7 @@ import {
   normalizarTelefono,
   type StatusOficina,
 } from "@/lib/oficinas-contables";
+import { PASOS_TOTAL, registrarPermisoCorreo } from "@/lib/email-contactos";
 
 // Oficinas de contables visitadas por los vendedores (migración 0163,
 // 18 oct 2026). Registro COMPARTIDO para no repetir visitas:
@@ -108,11 +109,26 @@ export async function GET(req: NextRequest) {
   const ahora = Date.now();
   const filas = (data ?? []) as Fila[];
 
+  // 0197: estado del permiso de correo de mis oficinas (activo / completo / baja / null)
+  const misEmails = filas.filter((f) => f.socio_id === socioId && f.email).map((f) => f.email as string);
+  const { data: contactos } = misEmails.length
+    ? await admin.from("socios_contactos_correo").select("email, baja_at, paso, detenido_razon").in("email", misEmails)
+    : { data: [] as { email: string; baja_at: string | null; paso: number; detenido_razon: string | null }[] };
+  const correoPor = new Map((contactos ?? []).map((c) => [String(c.email).toLowerCase(), c]));
+  const estadoCorreo = (email: string | null): "activo" | "completo" | "baja" | null => {
+    const c = email ? correoPor.get(email.toLowerCase()) : undefined;
+    if (!c) return null;
+    if (c.baja_at) return c.detenido_razon === "permiso_retirado" ? null : "baja";
+    if (c.detenido_razon) return "baja";
+    return c.paso >= PASOS_TOTAL ? "completo" : "activo";
+  };
+
   const mias = filas
     .filter((f) => f.socio_id === socioId)
     .map((f) => {
       const status = statusDe(f, ahora);
       return {
+        permisoCorreo: estadoCorreo(f.email),
         id: f.id,
         nombre: f.nombre,
         status,
@@ -223,6 +239,7 @@ export async function POST(req: NextRequest) {
         .eq("id", existente.id);
       if (errL) return NextResponse.json({ error: "No se pudo reclamar la oficina." }, { status: 500 });
       return NextResponse.json({ ok: true, id: existente.id, reclamada: true });
+      // (con portal: no se pide permiso de correo, ya es parte de VICTOR)
     }
     if (status === "tiene_portal") {
       return NextResponse.json(
@@ -259,6 +276,9 @@ export async function POST(req: NextRequest) {
       })
       .eq("id", existente.id);
     if (errR) return NextResponse.json({ error: "No se pudo reclamar la oficina." }, { status: 500 });
+    if (body.permisoCorreo === true) {
+      await registrarPermisoCorreo(admin, { permiso: true, email: email ?? existente.email, nombre: c.contacto_nombre || c.nombre, tipo: "contable", socioId, origen: "oficina", refId: existente.id });
+    }
     return NextResponse.json({ ok: true, id: existente.id, reclamada: true });
   }
 
@@ -290,6 +310,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Esta oficina ya está registrada (email o teléfono repetido)." }, { status: 409 });
     }
     return NextResponse.json({ error: "No se pudo guardar la oficina." }, { status: 500 });
+  }
+
+  // 0197: permiso de correo dado en la visita.
+  if (body.permisoCorreo === true && email) {
+    await registrarPermisoCorreo(admin, { permiso: true, email, nombre: c.contacto_nombre || c.nombre, tipo: "contable", socioId, origen: "oficina", refId: nueva.id });
   }
 
   // Si el contable ya tenía cuenta, enlaza de una vez para mostrar "tiene el portal".
@@ -364,6 +389,21 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Ese email o teléfono ya pertenece a otra oficina." }, { status: 409 });
     }
     return NextResponse.json({ error: "No se pudo guardar." }, { status: 500 });
+  }
+
+  // 0197: dar o retirar el permiso de correo (con el email ya guardado o recién editado).
+  if (typeof body.permisoCorreo === "boolean") {
+    const emailFinal = (upd.email as string | null | undefined) !== undefined ? (upd.email as string | null) : f.email;
+    if (!emailFinal) return NextResponse.json({ error: "Esta oficina no tiene email." }, { status: 400 });
+    await registrarPermisoCorreo(admin, {
+      permiso: body.permisoCorreo,
+      email: emailFinal,
+      nombre: f.contacto_nombre || f.nombre,
+      tipo: "contable",
+      socioId,
+      origen: "oficina",
+      refId: f.id,
+    });
   }
   return NextResponse.json({ ok: true });
 }
