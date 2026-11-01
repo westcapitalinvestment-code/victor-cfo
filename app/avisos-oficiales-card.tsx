@@ -60,12 +60,12 @@ export default async function AvisosOficialesCard({ modo }: { modo: "cpa" | "usu
     avisos = avisos.filter((a) => !a.fecha_limite || diasHasta(a.fecha_limite) >= -3).slice(0, 3);
     if (avisos.length === 0) return null;
 
-    // Avisos que este usuario ya marcó como vistos (tabla avisos_vistos, 0198).
+    // Avisos que este usuario ya marcó como vistos (tabla avisos_archivados_usuario, 0198).
     // Si la tabla aún no existe, la consulta falla y todos salen como pendientes.
     let vistos: string[] = [];
     try {
       const { data: v, error: ev } = await supabase
-        .from("avisos_vistos")
+        .from("avisos_archivados_usuario")
         .select("aviso_id")
         .eq("user_id", user.id)
         .in("aviso_id", avisos.map((a) => a.id));

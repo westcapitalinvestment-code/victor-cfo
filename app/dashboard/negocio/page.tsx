@@ -7,6 +7,7 @@ import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 import GastosPendientesCard from "../gastos-pendientes-card";
 import ResumenCard from "../resumen-card";
+import AvisosOficialesCard from "../../avisos-oficiales-card";
 
 // Fix (30 sept 2026): new Date().toISOString() es UTC — en PR, después de
 // las 8pm esto ya da la fecha de mañana. fechaHoyPR() (ya importado arriba)
@@ -419,6 +420,9 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
           + Factura
         </Link>
       </div>
+
+      {/* Avisos oficiales (DTRH, Hacienda…): mismo banner que Inicio Personal. */}
+      <AvisosOficialesCard modo="usuario" />
 
       {/* BALANCE — mismo componente vc-bal que usa Personal (dashboard/page.tsx),
           para que el Inicio de negocio se vea y se sienta igual. Si la entidad

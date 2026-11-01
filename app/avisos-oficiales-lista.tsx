@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 // Lista del banner "Avisos oficiales" con "Visto" por aviso (1 nov 2026, pedido
-// de Joel). Marcar visto guarda en avisos_vistos (por usuario) y lo saca del
+// de Joel). Marcar visto guarda en avisos_archivados_usuario (por usuario) y lo saca del
 // banner; "Ver archivados" los muestra de nuevo y permite restaurarlos.
 // Si la tabla aún no existe (migración 0198 sin correr) el aviso se oculta
 // igual en esta sesión y no se rompe nada.
@@ -38,8 +39,32 @@ export default function AvisosOficialesLista({
   vistosIniciales: string[];
   disclaimer: string;
 }) {
+  const router = useRouter();
   const [vistos, setVistos] = useState<Set<string>>(new Set(vistosIniciales));
   const [verArchivados, setVerArchivados] = useState(false);
+
+  // Respaldo en este dispositivo: Next guarda en caché la página al cambiar de
+  // pantalla y puede volver a mostrar el aviso aunque ya se guardó. Se lee al
+  // montar y se mezcla con lo que vino del servidor.
+  useEffect(() => {
+    try {
+      const local = JSON.parse(localStorage.getItem("avisos_vistos_local") || "[]") as string[];
+      if (local.length) setVistos((prev) => new Set([...Array.from(prev), ...local]));
+    } catch {
+      /* sin localStorage */
+    }
+  }, []);
+
+  function guardarLocal(id: string, visto: boolean) {
+    try {
+      const actual = new Set<string>(JSON.parse(localStorage.getItem("avisos_vistos_local") || "[]"));
+      if (visto) actual.add(id);
+      else actual.delete(id);
+      localStorage.setItem("avisos_vistos_local", JSON.stringify(Array.from(actual)));
+    } catch {
+      /* sin localStorage */
+    }
+  }
 
   async function marcar(id: string, visto: boolean) {
     setVistos((prev) => {
@@ -48,16 +73,22 @@ export default function AvisosOficialesLista({
       else n.delete(id);
       return n;
     });
+    guardarLocal(id, visto);
     try {
       const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-      if (visto) await supabase.from("avisos_vistos").upsert({ user_id: user.id, aviso_id: id });
-      else await supabase.from("avisos_vistos").delete().eq("user_id", user.id).eq("aviso_id", id);
+      if (visto) {
+        const { error } = await supabase.from("avisos_archivados_usuario").insert({ user_id: user.id, aviso_id: id });
+        if (error && error.code !== "23505") console.warn("avisos: no se pudo guardar", error.message);
+      } else {
+        await supabase.from("avisos_archivados_usuario").delete().eq("user_id", user.id).eq("aviso_id", id);
+      }
+      router.refresh(); // invalida la caché de la página para que no vuelva a salir
     } catch {
-      /* sin tabla o sin red: el cambio queda solo en esta sesión */
+      /* sin tabla o sin red: queda el respaldo local */
     }
   }
 
