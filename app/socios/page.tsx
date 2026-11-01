@@ -19,6 +19,7 @@ export default function SociosPage() {
   const [tipo, setTipo] = useState<"calle" | "redes" | "cpa">("calle");
   const [comoPromociona, setComoPromociona] = useState("");
   const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [tieneNegocio, setTieneNegocio] = useState(false);
   const [resume, setResume] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [enviado, setEnviado] = useState(false);
@@ -58,6 +59,7 @@ export default function SociosPage() {
     datos.append("tipo", tipo);
     datos.append("comoPromociona", comoPromociona.trim());
     datos.append("aceptaTerminos", String(aceptaTerminos));
+    datos.append("tieneNegocio", String(tieneNegocio));
     datos.append("resume", resume);
     const res = await fetch("/api/socios", { method: "POST", body: datos });
     const json = await res.json().catch(() => null);
@@ -190,6 +192,16 @@ export default function SociosPage() {
             />
             {resume && <p className="mt-1 truncate text-xs text-teal">{resume.name}</p>}
           </div>
+
+          <label className="flex items-start gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={tieneNegocio}
+              onChange={(e) => setTieneNegocio(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>Tengo un negocio (LLC, corporación o DBA). Así podrás recibir VICTOR Pro gratis como vendedor.</span>
+          </label>
 
           <label className="flex items-start gap-2 text-sm text-muted">
             <input

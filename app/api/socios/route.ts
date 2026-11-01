@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
     email,
     telefono,
     tipo,
+    tiene_negocio: texto("tieneNegocio") === "true",
     como_promociona: comoPromociona,
     terminos_aceptados_at: new Date().toISOString(),
     resume_key: resumeKey,

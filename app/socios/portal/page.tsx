@@ -12,6 +12,7 @@ import OficinasContables from "./oficinas-contables";
 import BonosOficinas from "./bonos-oficinas";
 import ResumenVendedor from "./resumen-vendedor";
 import MiEmbudo from "./mi-embudo";
+import BeneficioPlan from "./beneficio-plan";
 import { PermisoCorreoCheck, PermisoCorreoFila, type EstadoPermisoCorreo } from "./permiso-correo";
 
 const SITE_URL = "https://www.victorcfo.com";
@@ -355,6 +356,7 @@ export default function SocioPortalPage() {
 
           {/* Resumen desplegable: debajo del QR para que enseñarlo no pase por los números */}
           <ResumenVendedor datos={datos} />
+          <BeneficioPlan />
           <MiEmbudo />
 
           <OficinasContables codigo={codigoSocio} />
