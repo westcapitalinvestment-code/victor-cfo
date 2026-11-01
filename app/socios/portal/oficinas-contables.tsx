@@ -294,6 +294,19 @@ export default function OficinasContables({ codigo = "" }: { codigo?: string } =
               Si el contable abre su cuenta con este link, la oficina queda a tu nombre y cuentas el bono cuando traiga
               clientes (aunque no la hayas registrado antes).
             </p>
+            <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-xs text-muted">
+              <li>
+                <b>Tú registras la oficina</b> con lo que te den en la visita (mínimo: nombre y pueblo; si logras el email y
+                el teléfono, mejor). No tienes que llenarlo todo.
+              </li>
+              <li>
+                <b>Le mandas este link al contable</b> (WhatsApp o email) antes de irte. Tú no puedes abrir el portal por él.
+              </li>
+              <li>
+                <b>Él crea su cuenta y completa su perfil.</b> Lo que tú pusiste le sirve de punto de partida; los clientes
+                solo verán lo que el contable publique.
+              </li>
+            </ol>
             <div className="mt-1.5 flex items-center gap-2">
               <input readOnly value={linkContable} className="min-w-0 flex-1 rounded-lg border border-border p-2 text-xs" />
               <button
