@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BANCOS_PR, BANCOS_EEUU, bancoPorNombre, routingValido } from "@/lib/bancos-ach";
+
+const OTRO = "__otro__";
 
 // Página pública protegida por token (migración 0071, 5 sept 2026) donde un
 // socio APROBADO completa sus documentos — sin cuenta ni login de por medio
@@ -47,6 +50,22 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
   const [routingNumber, setRoutingNumber] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [confirmarAccountNumber, setConfirmarAccountNumber] = useState("");
+  const [bancoSel, setBancoSel] = useState(""); // nombre de la lista, OTRO o ""
+  const [routingPrellenado, setRoutingPrellenado] = useState(false);
+
+  function escogerBanco(valor: string) {
+    setBancoSel(valor);
+    if (valor === OTRO || valor === "") {
+      setBankName("");
+      setRoutingNumber("");
+      setRoutingPrellenado(false);
+      return;
+    }
+    setBankName(valor);
+    const preset = bancoPorNombre(valor)?.routing;
+    setRoutingNumber(preset ?? "");
+    setRoutingPrellenado(!!preset);
+  }
 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +124,7 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
     if (!bankName.trim() || !routingNumber.trim() || !accountNumber.trim()) return setError("Completa todos los campos.");
     if (accountNumber !== confirmarAccountNumber) return setError("El número de cuenta no coincide en los dos campos — revísalo.");
     if (!/^\d{9}$/.test(routingNumber.trim())) return setError("El routing number debe tener exactamente 9 dígitos.");
+    if (!routingValido(routingNumber.trim())) return setError("Ese routing number no es válido — revisa los dígitos en tu cheque o en la app de tu banco.");
     const r = await enviar({ paso: "pago", bankName: bankName.trim(), routingNumber: routingNumber.trim(), accountNumber: accountNumber.trim() });
     if (r) {
       setEstado((s) => (s ? { ...s, datosPagoCompletados: true } : s));
@@ -236,14 +256,34 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
               cifrada y solo la usamos para transferirte tu dinero.
             </p>
 
-            <input
-              className="vc-input"
-              type="text"
-              placeholder="Nombre del banco (ej. Banco Popular, Oriental, Mercury)"
-              value={bankName}
-              onChange={(e) => setBankName(e.target.value)}
-              required
-            />
+            <select className="vc-input" value={bancoSel} onChange={(e) => escogerBanco(e.target.value)} required>
+              <option value="">Escoge tu banco…</option>
+              <optgroup label="Puerto Rico">
+                {BANCOS_PR.map((b) => (
+                  <option key={b.nombre} value={b.nombre}>
+                    {b.nombre}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Estados Unidos">
+                {BANCOS_EEUU.map((b) => (
+                  <option key={b.nombre} value={b.nombre}>
+                    {b.nombre}
+                  </option>
+                ))}
+              </optgroup>
+              <option value={OTRO}>Otro banco / cooperativa…</option>
+            </select>
+            {bancoSel === OTRO && (
+              <input
+                className="vc-input"
+                type="text"
+                placeholder="Nombre de tu banco o cooperativa"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                required
+              />
+            )}
             <input
               className="vc-input"
               type="text"
@@ -254,6 +294,13 @@ export default function PagoSocioPage({ params }: { params: { token: string } })
               maxLength={9}
               required
             />
+            {bancoSel && (
+              <p className="-mt-1 text-xs text-muted">
+                {routingPrellenado
+                  ? "Routing prellenado. Confirma que es el de tu cuenta (sale en tu cheque o en la app de tu banco)."
+                  : "Escribe el routing de tu cuenta: sale en tu cheque o en la app de tu banco. En bancos de EE. UU. cambia según el estado donde abriste la cuenta."}
+              </p>
+            )}
             <input
               className="vc-input"
               type="text"

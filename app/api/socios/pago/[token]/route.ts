@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptSecret } from "@/lib/crypto";
 import { hashPin } from "@/lib/pin";
 import { sendSocioAprobadoEmail } from "@/lib/email";
+import { routingValido } from "@/lib/bancos-ach";
 
 // Página pública protegida por token (migración 0071, 5 sept 2026) donde un
 // socio APROBADO completa sus documentos — sin sesión, mismo espíritu que
@@ -100,6 +101,9 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     const accountNumber = typeof body?.accountNumber === "string" ? body.accountNumber.trim() : "";
     if (!bankName || !/^\d{9}$/.test(routingNumber) || accountNumber.length < 4) {
       return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
+    }
+    if (!routingValido(routingNumber)) {
+      return NextResponse.json({ error: "Ese routing number no es válido — revisa los dígitos." }, { status: 400 });
     }
 
     // Cifrado con lib/crypto.ts (AES-256-GCM, mismo mecanismo que ya protege
