@@ -40,10 +40,15 @@ export default function TerminosSociosPage() {
 
       <h2 className="mb-2 mt-6 text-base font-semibold">1. Qué es el Programa de Socios</h2>
       <p className="mb-4">
-        Es un programa de referidos con comisión real para CPAs, contadores, influencers y cualquier persona en
-        Puerto Rico que quiera recomendar VICTOR CFO. No requiere que seas cliente de VICTOR CFO. Al ser
-        aprobado, recibes un código único para compartir; cuando alguien se registra con tu código y empieza
-        a pagar de verdad, ganas una comisión.
+        Es un programa de ventas por comisión para quien quiera recomendar VICTOR CFO en Puerto Rico, ya sea en
+        persona o desde sus redes y su comunidad. Todos los Vendedores participan bajo las mismas reglas. No
+        requiere que seas cliente de VICTOR CFO. Al ser aprobado, recibes un código único para compartir; cuando
+        alguien se registra con tu código y empieza a pagar de verdad, ganas una comisión.
+      </p>
+      <p className="mb-4">
+        Los Vendedores aprobados pueden recibir, a discreción de WCV, un plan de VICTOR CFO sin costo mientras
+        se mantengan activos en el programa. WCV puede cambiar o retirar este beneficio, y sus condiciones se
+        comunican al aprobar tu solicitud.
       </p>
 
       <h2 className="mb-2 mt-6 text-base font-semibold">2. Eres un contratista independiente</h2>

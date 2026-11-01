@@ -49,6 +49,33 @@ export const MODULOS_VENDEDOR: ModuloVendedor[] = [
       "Empieza cada día repasando el guion del módulo que vas a usar.",
     ],
   },
+  // ───────────────────── PLAN GRATIS DEL VENDEDOR (1 nov 2026) ─────────────────────
+  {
+    id: "vendedor-plan-gratis",
+    grupo: "Empieza aquí",
+    titulo: "Tu plan de VICTOR gratis",
+    icono: "ti-gift",
+    audiencia: ["vendedor"],
+    plan: "Para vendedores aprobados",
+    resumen: "Usa VICTOR gratis para conocerlo a fondo y poder enseñarlo.",
+    donde: "Portal del vendedor → tarjeta \"Tu plan de VICTOR gratis\"",
+    pasos: [
+      { titulo: "Qué recibes", texto: "Un plan de VICTOR gratis en tu propia cuenta: Core, o Pro si tienes un negocio (LLC, corporación o DBA) y creaste tu entidad en la app. Es para que lo uses de verdad y puedas hablar de él con confianza." },
+      { titulo: "Cómo se activa", texto: "Crea tu cuenta de VICTOR con el mismo email que usaste en tu solicitud. El plan se activa solo, no tienes que pedirlo." },
+      { titulo: "30 días de gracia", texto: "Los primeros 30 días son tuyos sin condiciones. Úsalos para aprender el producto y hacer tus primeras ventas." },
+      { titulo: "Cómo lo conservas: 3 puntos al mes", texto: "Cada cliente que paga suma puntos: Core vale 1, Pro vale 1.5 y Business vale 3. Con 3 puntos en el mes conservas tu plan. Por ejemplo: 3 Core, 2 Pro o 1 Business." },
+      { titulo: "La reserva", texto: "Si en un mes pasas de 3 puntos, lo que sobra se guarda como reserva (hasta 12 meses). Así un mes flojo no te quita el plan. Si un cliente cancela antes de su tercer pago, se restan sus puntos." },
+      { titulo: "Si quieres subir de plan", texto: "Si quieres un plan mayor al que te toca, te suscribes normal desde tu cuenta y pagas el plan que escojas. Tus comisiones no cambian." },
+    ],
+    consejos: [
+      "Revisa la tarjeta en tu portal: te muestra tus puntos del mes y tu reserva.",
+      "Si ya pagas tu propio plan, no hace falta activar el regalo.",
+    ],
+    preguntas: [
+      { p: "¿Qué pasa si un mes no llego a 3 puntos y no tengo reserva?", r: "Tu plan queda en pausa y vuelve a gratis. Se reactiva en cuanto sumes los 3 puntos, incluso a mitad de mes." },
+      { p: "¿Esto cambia mi comisión?", r: "No. La comisión es igual para todos los vendedores (70% al primer pago y 30% al tercer pago). El plan gratis es aparte." },
+    ],
+  },
   // ───────────────────── PRIMER ACERCAMIENTO (1 nov 2026) ─────────────────────
   // Guía general para cualquier vendedor. Sin tarjetas de presentación: la
   // presencia, el lenguaje corporal y la forma de hablar son lo que se lleva
