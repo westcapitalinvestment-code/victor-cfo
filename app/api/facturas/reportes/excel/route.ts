@@ -82,6 +82,14 @@ export async function GET(req: NextRequest) {
       if (categoria && it.services?.tipo !== categoria) return false;
       return true;
     });
+    // 2 nov 2026 (bug de Joel: filtraba CHRA y el reporte traía todo): las
+    // facturas también se restringen a las que tienen al menos una línea que
+    // pasa el filtro, igual que la pantalla — antes solo se filtraban las
+    // líneas y los totales por cliente/resumen seguían mostrando todo.
+    if (servicioId || categoria) {
+      const ids = new Set(items.map((it: any) => it.invoice_id));
+      facturas = facturas.filter((f) => ids.has(f.id));
+    }
   }
 
   const TITULOS_VISTA: Record<string, string> = {

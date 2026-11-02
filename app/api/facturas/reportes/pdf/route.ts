@@ -60,6 +60,27 @@ export async function GET(req: NextRequest) {
   if (estadoFiltro) facturas = facturas.filter((f) => estadoMostrado(f.estado, f.fecha_vencimiento) === estadoFiltro);
   if (email) facturas = facturas.filter((f) => (f.clients?.email ?? "").toLowerCase().includes(email.toLowerCase()));
 
+  // Filtros de servicio/categoría (2 nov 2026, bug de Joel: pedía solo CHRA
+  // y el PDF traía TODO — la pantalla los mandaba pero esta ruta los
+  // ignoraba). Mismo criterio que la pantalla: solo quedan las facturas con
+  // al menos una línea que pase el filtro, y solo esas líneas.
+  const servicioId = searchParams.get("servicioId");
+  const categoria = searchParams.get("categoria");
+  let itemsFiltrados: any[] | null = null;
+  if ((servicioId || categoria) && facturas.length) {
+    const { data: todos } = await supabase
+      .from("invoice_items")
+      .select("invoice_id, descripcion, service_id, subtotal_linea, cantidad, precio_unitario, services(nombre, tipo)")
+      .in("invoice_id", facturas.map((f) => f.id));
+    itemsFiltrados = (todos ?? []).filter((it: any) => {
+      if (servicioId && it.service_id !== servicioId) return false;
+      if (categoria && it.services?.tipo !== categoria) return false;
+      return true;
+    });
+    const ids = new Set(itemsFiltrados.map((it: any) => it.invoice_id));
+    facturas = facturas.filter((f) => ids.has(f.id));
+  }
+
   const { data: entidad } = entityId
     ? await supabase.from("business_entities").select("name, logo_r2_key").eq("id", entityId).eq("owner_id", user.id).maybeSingle()
     : { data: null };
@@ -137,7 +158,9 @@ export async function GET(req: NextRequest) {
   })();
   const totalRetenido = porRetencion.reduce((s, c) => s + c.retenido, 0);
 
-  const { data: itemsData } = facturas.length
+  const { data: itemsData } = itemsFiltrados
+    ? { data: itemsFiltrados }
+    : facturas.length
     ? await supabase
         .from("invoice_items")
         .select("invoice_id, descripcion, service_id, subtotal_linea, cantidad, precio_unitario, services(nombre)")
