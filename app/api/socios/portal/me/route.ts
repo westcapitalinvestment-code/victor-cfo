@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient();
 
-  const { data: socio } = await admin.from("socios").select("id, nombre, tipo, estado, proxima_fecha_pago").eq("id", socioId).maybeSingle();
+  const { data: socio } = await admin.from("socios").select("id, nombre, codigo, tipo, estado, proxima_fecha_pago").eq("id", socioId).maybeSingle();
   if (!socio || socio.tipo !== "vendedor" || socio.estado !== "aprobado") {
     return NextResponse.json({ error: "Portal no disponible." }, { status: 403 });
   }
@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    socio: { nombre: socio.nombre },
+    socio: { nombre: socio.nombre, codigo: (socio as { codigo?: string | null }).codigo ?? null },
     totalCobradoCentavos,
     totalPendienteCentavos,
     totalRetenidoCentavos,

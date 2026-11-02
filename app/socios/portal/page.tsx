@@ -140,6 +140,33 @@ export default function SocioPortalPage() {
     };
   }, [linkPersonal]);
 
+  // Si la sesión (cookie) sigue vigente —por ejemplo al volver del manual—
+  // entra directo, sin pedir código y PIN otra vez.
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/socios/portal/me");
+        if (!res.ok || cancelado) return;
+        const json = await res.json();
+        if (cancelado) return;
+        setSesion({ nombre: json?.socio?.nombre ?? "" });
+        if (json?.socio?.codigo) setCodigoSocio(String(json.socio.codigo).toUpperCase());
+        setDatos(json);
+        const resP = await fetch("/api/socios/portal/prospectos");
+        if (resP.ok && !cancelado) {
+          const jsonP = await resP.json().catch(() => null);
+          setProspectos(jsonP?.prospectos ?? []);
+        }
+      } catch {
+        /* sin sesión: se queda en el login */
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
   async function copiarLink() {
     try {
       await navigator.clipboard.writeText(linkPersonal);
