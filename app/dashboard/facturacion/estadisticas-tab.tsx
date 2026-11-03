@@ -27,6 +27,7 @@ type Fac = {
   es_recurrente: boolean | null;
   frecuencia_recurrente: string | null;
   factura_padre_id: string | null;
+  fecha_vencimiento: string | null;
 };
 type Nota = { monto: number; fecha: string; client_id: string | null; numero: string | null };
 type Cot = { estado: string; total: number; fecha_emision: string; client_id: string | null };
@@ -47,6 +48,13 @@ const FUENTE_LABEL: Record<string, string> = {
   tecnico: "Creado por un técnico",
   stripe: "Stripe (cobro directo)",
 };
+
+const SEGMENTOS = [
+  { k: "activos", t: "Activos", d: "pagaron en los últimos 90 días", color: "#1D9E75" },
+  { k: "riesgo", t: "En riesgo", d: "entre 90 y 180 días sin pagar", color: "#EF9F27" },
+  { k: "inactivos", t: "Inactivos", d: "entre 6 y 12 meses sin pagar", color: "#D85A30" },
+  { k: "perdidos", t: "Perdidos", d: "más de 12 meses sin pagar", color: "#888780" },
+] as const;
 
 const COLORES = ["#534AB7", "#7F77DD", "#1D9E75", "#AFA9EC", "#5DCAA5"];
 const TEAL = "#1D9E75";
@@ -98,7 +106,7 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
         filtrar(
           supabase
             .from("invoices")
-            .select("id, client_id, total, estado, fecha_emision, fecha_pago, origen, es_recurrente, frecuencia_recurrente, factura_padre_id")
+            .select("id, client_id, total, estado, fecha_emision, fecha_pago, origen, es_recurrente, frecuencia_recurrente, factura_padre_id, fecha_vencimiento")
         ),
         filtrar(supabase.from("cotizaciones").select("estado, total, fecha_emision, client_id").gte("fecha_emision", desde)),
         filtrar(supabase.from("seguimientos_clientes").select("estado, fecha_proximo, client_id")),
@@ -141,8 +149,22 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
       serie[i] += Number(x.total || 0);
     });
 
-    const nuevos = clientes.filter((x) => x.created_at.slice(0, 10) >= ini);
-    const nuevosPrev = clientes.filter((x) => x.created_at.slice(0, 10) >= iniPrev && x.created_at.slice(0, 10) < ini);
+    // "Cliente desde": la fecha más antigua entre cuándo se creó y su primera
+    // factura, para que clientes importados (Stripe, CSV) con facturas viejas
+    // no cuenten como nuevos solo porque se importaron hoy.
+    const primeraFactura = new Map<string, string>();
+    facturas.forEach((x) => {
+      if (!x.client_id) return;
+      const p = primeraFactura.get(x.client_id);
+      if (!p || x.fecha_emision < p) primeraFactura.set(x.client_id, x.fecha_emision);
+    });
+    const desdeCliente = (x: Cli) => {
+      const c = x.created_at.slice(0, 10);
+      const p = primeraFactura.get(x.id);
+      return p && p < c ? p : c;
+    };
+    const nuevos = clientes.filter((x) => desdeCliente(x) >= ini);
+    const nuevosPrev = clientes.filter((x) => desdeCliente(x) >= iniPrev && desdeCliente(x) < ini);
 
     const primeraConOrigen = new Map<string, string>();
     [...facturas]
@@ -206,6 +228,58 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
     const fm = (n: number) => formatMoney(n);
     const parte = (v: number) => `${fm(v)} · ${cobrado > 0 ? Math.round((v / cobrado) * 100) : 0}%`;
 
+    // ── Salud de la cartera: segmentos por tiempo desde el último pago.
+    const diasDesde = (f: string) => Math.floor((Date.now() - new Date(f + "T00:00:00Z").getTime()) / 86400000);
+    const segs = { activos: [] as [string, string][], riesgo: [] as [string, string][], inactivos: [] as [string, string][], perdidos: [] as [string, string][] };
+    pagosPorCliente.forEach((l, id) => {
+      const u = ultimoPago(l);
+      const d = diasDesde(u);
+      const k = d <= 90 ? "activos" : d <= 180 ? "riesgo" : d <= 365 ? "inactivos" : "perdidos";
+      segs[k].push([id, u]);
+    });
+    const filaUlt = ([id, u]: [string, string]) => fila(id, `último pago ${fFecha(u)} · hace ${diasDesde(u)} días`);
+
+    // ── Churn de clientes: de los que pagaron en los 180 días previos al período,
+    //    cuántos no han vuelto a pagar dentro del período.
+    const base = [...pagosPorCliente.entries()].filter(([, l]) => l.some((x) => fechaCobro(x) >= dias(periodo + 180) && fechaCobro(x) < ini));
+    const idsChurn = base.filter(([, l]) => !l.some((x) => fechaCobro(x) >= ini));
+    const churnPct = pct(idsChurn.length, base.length);
+
+    // ── Cuentas por cobrar.
+    const pendientes = facturas.filter((x) => ["enviada", "vista", "vencida"].includes(x.estado));
+    const porCobrar = pendientes.reduce((a, x) => a + Number(x.total || 0), 0);
+    const vencidas = pendientes.filter((x) => x.fecha_vencimiento && x.fecha_vencimiento < hoy);
+    const montoVencido = vencidas.reduce((a, x) => a + Number(x.total || 0), 0);
+    const conDias = pagadasPer.filter((x) => x.fecha_pago);
+    const dso = conDias.length
+      ? Math.round(
+          conDias.reduce((a, x) => a + Math.max(0, (new Date((x.fecha_pago as string) + "T00:00:00Z").getTime() - new Date(x.fecha_emision + "T00:00:00Z").getTime()) / 86400000), 0) /
+            conDias.length
+        )
+      : null;
+    const facturadoPer = facturas.filter((x) => !["borrador", "anulada"].includes(x.estado) && x.fecha_emision >= ini);
+    const facturadoMonto = facturadoPer.reduce((a, x) => a + Number(x.total || 0), 0);
+    const cobradoDeFacturado = facturadoPer.filter((x) => x.estado === "pagada").reduce((a, x) => a + Number(x.total || 0), 0);
+
+    // ── Ingreso de clientes nuevos vs. existentes, y valor por cliente.
+    const idsNuevos = new Set(nuevos.map((x) => x.id));
+    const cobradoNuevos = pagadasPer.filter((x) => x.client_id && idsNuevos.has(x.client_id)).reduce((a, x) => a + Number(x.total || 0), 0);
+    const totalHistorico = pagadas.filter((x) => x.client_id).reduce((a, x) => a + Number(x.total || 0), 0);
+    const nPagosConCliente = pagadas.filter((x) => x.client_id).length;
+
+    const extra = {
+      activos: segs.activos.map(filaUlt),
+      riesgo: segs.riesgo.map(filaUlt),
+      inactivos: segs.inactivos.map(filaUlt),
+      perdidos: segs.perdidos.map(filaUlt),
+      churn: idsChurn.map(([id, l]) => fila(id, `último pago ${fFecha(ultimoPago(l))}`)),
+      vencidas: vencidas.map((x) =>
+        fila(x.client_id, `${fm(Number(x.total || 0))} · ${diasDesde(x.fecha_vencimiento as string)} días de atraso`)
+      ),
+      porCobrar: pendientes.map((x) => fila(x.client_id, `${fm(Number(x.total || 0))} · vence ${x.fecha_vencimiento ? fFecha(x.fecha_vencimiento) : "—"}`)),
+      ingresoNuevos: pagadasPer.filter((x) => x.client_id && idsNuevos.has(x.client_id)).map((x) => fila(x.client_id, fm(Number(x.total || 0)))),
+    };
+
     const listas = {
       nuevos: nuevos.map((x) => fila(x.id, canalDeCliente(x))),
       top: top.slice(0, 15).map(([id, v]) => fila(id, parte(v))),
@@ -256,7 +330,21 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
       top3Share: cobrado > 0 ? top3Monto / cobrado : 0,
       top1Share: top[0] && cobrado > 0 ? top[0][1] / cobrado : 0,
       seg,
-      listas,
+      segCounts: { activos: segs.activos.length, riesgo: segs.riesgo.length, inactivos: segs.inactivos.length, perdidos: segs.perdidos.length },
+      nBase: base.length,
+      nChurn: idsChurn.length,
+      churnPct,
+      porCobrar,
+      nPendientes: pendientes.length,
+      montoVencido,
+      nVencidas: vencidas.length,
+      dso,
+      tasaCobro: pct(cobradoDeFacturado, facturadoMonto),
+      facturadoMonto,
+      cobradoNuevos,
+      ltv: conPago > 0 ? totalHistorico / conPago : 0,
+      pagosPorCliente: conPago > 0 ? nPagosConCliente / conPago : 0,
+      listas: { ...listas, ...extra },
     };
   }, [clientes, facturas, cotizaciones, seguimientos, gastoMercadeo, notas, periodo]);
 
@@ -293,6 +381,20 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
       texto: `Un solo cliente aporta ${Math.round(m.top1Share * 100)}% de lo cobrado`,
       color: "warn",
       detalle: { titulo: "Cliente que más aporta", filas: m.listas.top.slice(0, 1) },
+    });
+  if (m.nVencidas > 0)
+    avisos.push({
+      icono: "ti-clock-exclamation",
+      texto: `${formatMoney(m.montoVencido)} vencido en ${m.nVencidas} factura${m.nVencidas > 1 ? "s" : ""}: cobrar a tiempo es parte del servicio`,
+      color: "warn",
+      detalle: { titulo: "Facturas vencidas", filas: m.listas.vencidas },
+    });
+  if (m.nChurn > 0)
+    avisos.push({
+      icono: "ti-user-minus",
+      texto: `${m.nChurn} cliente${m.nChurn > 1 ? "s" : ""} que pagaba${m.nChurn > 1 ? "n" : ""} no ha vuelto en este período`,
+      color: "info",
+      detalle: { titulo: "Clientes que se fueron (churn)", nota: "Pagaron en los 6 meses previos al período y no han vuelto.", filas: m.listas.churn },
     });
   if (m.nSegVenc > 0)
     avisos.push({
@@ -546,6 +648,95 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
             </div>
           )}
         </div>
+
+        {/* Salud de la cartera de clientes */}
+        {m.conPago > 0 && (
+          <div style={card}>
+            <p style={etiqueta}>Salud de tu cartera de clientes</p>
+            <div style={{ display: "flex", height: 16, borderRadius: 8, overflow: "hidden", margin: "10px 0", background: "var(--border)" }}>
+              {SEGMENTOS.map((sg) => (
+                <div key={sg.k} style={{ width: `${(m.segCounts[sg.k] / m.conPago) * 100}%`, background: sg.color }} />
+              ))}
+            </div>
+            {SEGMENTOS.map((sg) => (
+              <div
+                key={sg.k}
+                className="vc-st-tap"
+                onClick={() => abrir({ titulo: sg.t, nota: sg.d, filas: (m.listas as any)[sg.k] })}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderTop: "1px solid var(--border)", cursor: m.segCounts[sg.k] ? "pointer" : "default" }}
+              >
+                <span style={{ width: 9, height: 9, borderRadius: 99, background: sg.color, flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 13 }}>
+                  {sg.t} <span style={{ fontSize: 11, color: "var(--muted)" }}>· {sg.d}</span>
+                </span>
+                <b style={{ fontWeight: 600 }}>{m.segCounts[sg.k]}</b>
+                {m.segCounts[sg.k] > 0 && <i className="ti ti-chevron-right" style={{ fontSize: 14, color: "var(--muted)" }} />}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Churn y valor del cliente */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div className="vc-st-tap" style={{ ...card, marginBottom: 0, ...(m.nChurn ? tocable : {}) }} onClick={m.nChurn ? () => abrir({ titulo: "Clientes que se fueron (churn)", nota: "Pagaron en los 6 meses previos al período y no han vuelto.", filas: m.listas.churn }) : undefined}>
+            <p style={etiqueta}>Churn de clientes</p>
+            <p style={{ fontSize: 26, fontWeight: 600, margin: "4px 0 2px", color: m.churnPct >= 30 ? "#A32D2D" : "inherit" }}>{m.nBase > 0 ? `${m.churnPct}%` : "—"}</p>
+            <p style={etiqueta}>{m.nBase > 0 ? `${m.nChurn} de ${m.nBase} no volvieron · retención ${100 - m.churnPct}%` : "Aparece cuando hay clientes con pagos previos."}</p>
+          </div>
+          <div style={{ ...card, marginBottom: 0 }}>
+            <p style={etiqueta}>Valor por cliente</p>
+            <p style={{ fontSize: 26, fontWeight: 600, margin: "4px 0 2px" }}>{m.conPago > 0 ? formatMoney(m.ltv) : "—"}</p>
+            <p style={etiqueta}>{m.conPago > 0 ? `${m.pagosPorCliente.toFixed(1)} pagos por cliente en promedio` : ""}</p>
+          </div>
+        </div>
+
+        {/* Por cobrar */}
+        {(m.nPendientes > 0 || m.dso !== null) && (
+          <div style={card}>
+            <p style={etiqueta}>Cuentas por cobrar</p>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <div className="vc-st-tap" onClick={() => abrir({ titulo: "Por cobrar", filas: m.listas.porCobrar })} style={{ flex: 1, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, padding: "9px 11px", cursor: m.nPendientes ? "pointer" : "default" }}>
+                <p style={etiqueta}>Te deben</p>
+                <p style={{ margin: 0, fontWeight: 600, fontSize: 17 }}>{formatMoney(m.porCobrar)}</p>
+                <p style={etiqueta}>{m.nPendientes} facturas</p>
+              </div>
+              <div className="vc-st-tap" onClick={() => abrir({ titulo: "Facturas vencidas", filas: m.listas.vencidas })} style={{ flex: 1, background: m.nVencidas ? "rgba(226,75,74,.10)" : "var(--bg)", border: `1px solid ${m.nVencidas ? "rgba(226,75,74,.35)" : "var(--border)"}`, borderRadius: 14, padding: "9px 11px", cursor: m.nVencidas ? "pointer" : "default" }}>
+                <p style={etiqueta}>Vencido</p>
+                <p style={{ margin: 0, fontWeight: 600, fontSize: 17, color: m.nVencidas ? "#A32D2D" : "inherit" }}>{formatMoney(m.montoVencido)}</p>
+                <p style={etiqueta}>{m.nVencidas} facturas</p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 12 }}>
+              <span>
+                Cobras en promedio en <b style={{ fontWeight: 600 }}>{m.dso !== null ? `${m.dso} días` : "—"}</b>
+              </span>
+              <span>
+                Cobrado de lo facturado <b style={{ fontWeight: 600 }}>{m.facturadoMonto > 0 ? `${m.tasaCobro}%` : "—"}</b>
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Ingreso de clientes nuevos vs existentes */}
+        {m.cobrado > 0 && (
+          <div className="vc-st-tap" style={{ ...card, ...(m.cobradoNuevos ? tocable : {}) }} onClick={m.cobradoNuevos ? () => abrir({ titulo: "Ingreso de clientes nuevos", filas: m.listas.ingresoNuevos }) : undefined}>
+            <p style={etiqueta}>De dónde viene lo cobrado</p>
+            <div style={{ display: "flex", height: 14, borderRadius: 7, overflow: "hidden", margin: "10px 0 8px", background: "var(--border)" }}>
+              <div style={{ width: `${(m.cobradoNuevos / m.cobrado) * 100}%`, background: VIOLETA }} />
+              <div style={{ flex: 1, background: TEAL }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 99, background: VIOLETA }} />
+                Clientes nuevos <b style={{ fontWeight: 600 }}>{formatMoney(m.cobradoNuevos)}</b>
+              </span>
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 99, background: TEAL }} />
+                Clientes existentes <b style={{ fontWeight: 600 }}>{formatMoney(m.cobrado - m.cobradoNuevos)}</b>
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Clientes nuevos y canales */}
         <div style={card}>
