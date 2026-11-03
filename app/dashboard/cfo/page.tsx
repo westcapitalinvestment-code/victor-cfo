@@ -61,7 +61,7 @@ export default async function CfoPage() {
   ] = await Promise.all([
     admin
       .from("users")
-      .select("id, full_name, email, plan, plan_status, es_contable, created_at, cancelled_at, cancellation_reason, cancellation_comment")
+      .select("id, full_name, email, plan, plan_status, es_contable, is_demo, created_at, cancelled_at, cancellation_reason, cancellation_comment")
       .order("created_at", { ascending: false }),
     admin.from("uso_ia_mensual").select("owner_id, costo_centavos"),
     admin
@@ -99,8 +99,33 @@ export default async function CfoPage() {
     (!!u.es_contable || (!!u.email && emailsCpa.has(u.email.toLowerCase()))) &&
     u.plan_status !== "active" && u.plan_status !== "trialing";
   const contables = todosConContables.filter(esContable);
-  // Todas las métricas de abajo usan SOLO usuarios reales (sin contables).
-  const todos = todosConContables.filter((u) => !esContable(u));
+  // Cuentas propias / de prueba (3 nov 2026, pedido de Joel: el MRR de $14.99
+  // era su propia cuenta, no un cliente que pagó, y dejaba el margen bruto en
+  // -7619%). No cuentan en MRR, usuarios, planes ni churn. Se reconocen por:
+  // users.is_demo, los correos de Joel, correos de la variable de entorno
+  // CUENTAS_INTERNAS_EMAILS (separados por coma) y correos con la palabra
+  // demo/test/prueba como parte separada (ej. soporte+demo@...). El gasto de
+  // IA SÍ las incluye: es costo real aunque no sea de un cliente.
+  const EMAILS_INTERNOS = new Set(
+    [
+      "joela154@hotmail.com",
+      "dr.jvalentin@gmail.com",
+      ...(process.env.CUENTAS_INTERNAS_EMAILS ?? "").split(","),
+    ]
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const esInterna = (u: { email: string | null; plan_status: string | null; is_demo?: boolean | null }) => {
+    const email = (u.email ?? "").toLowerCase();
+    return (
+      !!u.is_demo ||
+      EMAILS_INTERNOS.has(email) ||
+      /(^|[+._-])(demo|test|prueba)([+._@-]|$)/.test(email)
+    );
+  };
+  const internas = todosConContables.filter((u) => !esContable(u) && esInterna(u));
+  // Todas las métricas de abajo usan SOLO usuarios reales (sin contables ni cuentas internas/de prueba).
+  const todos = todosConContables.filter((u) => !esContable(u) && !esInterna(u));
   const activos = todos.filter((u) => u.plan_status === "active");
   const nuevosEsteMes = todos.filter((u) => u.created_at && new Date(u.created_at) >= inicioMesPR);
   const canceladosEsteMes = todos.filter((u) => u.cancelled_at && new Date(u.cancelled_at) >= inicioMesPR);
@@ -284,6 +309,11 @@ export default async function CfoPage() {
           {contables.length} contable{contables.length === 1 ? "" : "s"} no se cuenta{contables.length === 1 ? "" : "n"} en las estadísticas de abajo.
         </p>
       )}
+      {internas.length > 0 && (
+        <p className="mb-2 text-[11px] text-muted">
+          {internas.length} cuenta{internas.length === 1 ? "" : "s"} propia{internas.length === 1 ? "" : "s"} o de prueba no se cuenta{internas.length === 1 ? "" : "n"} (MRR, usuarios, planes).
+        </p>
+      )}
 
       {/* Hero: MRR / usuarios activos / nuevos este mes */}
       <div className="vc-bal mb-3 grid grid-cols-3 gap-4">
@@ -376,7 +406,7 @@ export default async function CfoPage() {
       {/* Usuarios — colapsable, con búsqueda por nombre/email */}
       <UsuariosPanel
         usuarios={todosConContables.map((u) => ({
-          esContable: esContable(u),
+          esContable: esContable(u) || esInterna(u),
           id: u.id,
           nombre: u.full_name ?? "",
           email: u.email,
