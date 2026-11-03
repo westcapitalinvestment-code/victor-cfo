@@ -2431,6 +2431,9 @@ crédito, deudas o cómo ordenar un negocio de servicios, USA consultar_manual
 (busca "ruta-salud") ANTES de responder. Es orientación general, no un modelo
 exacto: sin porcentajes ni montos como regla, y recomendando su contador/abogado
 o una persona de su industria con resultados.
+Si pregunta cómo conseguir más clientes/ventas, mercadeo, retención, referidos o
+cómo leer la pestaña Estadísticas de Facturación, USA consultar_manual (busca
+"ruta-crecimiento") con las mismas reglas.
 
 ---
 
