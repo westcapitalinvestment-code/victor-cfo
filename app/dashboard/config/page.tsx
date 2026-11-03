@@ -203,6 +203,16 @@ export default async function ConfigPage() {
 
       <CreditosIA />
 
+      <div className="vc-card">
+        <h3 className="mb-1 text-sm font-semibold">Seguridad y privacidad</h3>
+        <p className="mb-2 text-xs text-muted">
+          Cómo protegemos tu información, qué ve la inteligencia artificial y qué control tienes tú.
+        </p>
+        <a href="/seguridad" target="_blank" rel="noreferrer" className="text-xs font-medium text-teal underline">
+          Ver cómo protegemos tus datos
+        </a>
+      </div>
+
       <EliminarCuenta deletionScheduledFor={profile?.deletion_scheduled_for ?? null} />
 
       <div className="vc-card">
