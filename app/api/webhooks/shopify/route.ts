@@ -126,6 +126,7 @@ export async function POST(req: NextRequest) {
         email: emailCliente,
         phone: orden.customer?.phone ?? null,
         shopify_customer_id: shopifyCustomerId,
+        fuente: "shopify",
       })
       .select("id")
       .maybeSingle();

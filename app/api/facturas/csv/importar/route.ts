@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     if (!clientId) {
       const { data: nuevoCliente, error: errCliente } = await supabase
         .from("clients")
-        .insert({ owner_id: userId, entity_id: entityId, name: f.nombreCliente, es_negocio: false, retention_pct: 0 })
+        .insert({ owner_id: userId, entity_id: entityId, name: f.nombreCliente, es_negocio: false, retention_pct: 0, fuente: "importacion" })
         .select("id")
         .single();
       if (errCliente || !nuevoCliente) {

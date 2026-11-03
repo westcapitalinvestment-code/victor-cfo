@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatMoney, formatFecha } from "@/lib/format";
 import { fechaHoyPR } from "@/lib/hora-pr";
 import ConfirmarPagoModal, { type LineaConfirmacion } from "../confirmar-pago-modal";
+import EstadisticasTab from "./estadisticas-tab";
 
 type Cliente = {
   id: string;
@@ -162,6 +163,9 @@ const TABS = [
   // cada X meses") y factura-detalle.tsx (crearSeguimientosSiAplica).
   { id: "seguimientos", label: "Seguimientos", icon: "ti-bell-ringing" },
   { id: "reportes", label: "Reportes", icon: "ti-chart-bar" },
+  // Estadísticas (3 nov 2026, pedido de Joel): números de ventas/clientes
+  // calculados solo con datos existentes, ver estadisticas-tab.tsx.
+  { id: "estadisticas", label: "Estadísticas", icon: "ti-chart-line" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -332,12 +336,14 @@ export default function FacturacionPortal({
             gap: 3,
           }}
         >
-          {tabsVisibles.map((t) => (
+          {tabsVisibles.map((t, i) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               className="flex flex-col items-center gap-0.5"
               style={{
+                // 7 pestañas en 3 columnas: la última ocupa la fila completa.
+                gridColumn: tabsVisibles.length > 3 && tabsVisibles.length % 3 === 1 && i === tabsVisibles.length - 1 ? "1 / -1" : undefined,
                 padding: "9px 4px",
                 fontSize: 11,
                 fontWeight: 500,
@@ -379,6 +385,7 @@ export default function FacturacionPortal({
           addonTecnicosActivo={addonTecnicosActivo}
         />
       )}
+      {!modoAdmin && tab === "estadisticas" && <EstadisticasTab entidadId={entidadId} />}
       {!modoAdmin && tab === "reportes" && (
         <ReportesTab
           facturas={facturas}

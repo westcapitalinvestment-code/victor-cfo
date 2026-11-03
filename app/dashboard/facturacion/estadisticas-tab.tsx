@@ -1,0 +1,243 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { formatMoney } from "@/lib/format";
+
+// Pestaña "Estadísticas" del portal de Facturación (3 nov 2026, pedido de
+// Joel, a raíz del video de los 6 sistemas de un negocio): números del
+// negocio estilo dashboard CFO, para ver cómo van las ventas y los clientes.
+// REGLA DE JOEL: nada se escribe a mano. Todo sale de lo que ya existe:
+// clientes, cotizaciones, facturas, seguimientos y los gastos categorizados
+// como "Publicidad y mercadeo". Es orientación con los datos reales del
+// usuario, no una meta ni una promesa de resultados.
+
+type Cli = { id: string; name: string; fuente: string | null; created_at: string };
+type Fac = { client_id: string | null; total: number; estado: string; fecha_emision: string; fecha_pago: string | null };
+type Cot = { estado: string; total: number; fecha_emision: string };
+type Seg = { estado: string; fecha_proximo: string };
+
+const PERIODOS = [
+  { value: 30, label: "Últimos 30 días" },
+  { value: 90, label: "Últimos 90 días" },
+  { value: 365, label: "Últimos 12 meses" },
+] as const;
+
+const FUENTE_LABEL: Record<string, string> = {
+  shopify: "Tienda en línea (Shopify)",
+  api: "Integración (Zapier / API)",
+  importacion: "Importado (CSV / otro sistema)",
+  tecnico: "Creado por un técnico",
+};
+
+const dias = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : "—");
+
+export default function EstadisticasTab({ entidadId }: { entidadId: string | null }) {
+  const supabase = createClient();
+  const [periodo, setPeriodo] = useState<number>(90);
+  const [cargando, setCargando] = useState(true);
+  const [clientes, setClientes] = useState<Cli[]>([]);
+  const [facturas, setFacturas] = useState<Fac[]>([]);
+  const [cotizaciones, setCotizaciones] = useState<Cot[]>([]);
+  const [seguimientos, setSeguimientos] = useState<Seg[]>([]);
+  const [gastoMercadeo, setGastoMercadeo] = useState(0);
+
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      setCargando(true);
+      const desde = dias(periodo * 2); // el período actual + el anterior, para comparar
+      const filtrar = (q: any) => (entidadId ? q.eq("entity_id", entidadId) : q);
+      const [c, f, q, s, t] = await Promise.all([
+        filtrar(supabase.from("clients").select("id, name, fuente, created_at")),
+        filtrar(supabase.from("invoices").select("client_id, total, estado, fecha_emision, fecha_pago")),
+        filtrar(supabase.from("cotizaciones").select("estado, total, fecha_emision").gte("fecha_emision", desde)),
+        filtrar(supabase.from("seguimientos_clientes").select("estado, fecha_proximo")),
+        filtrar(
+          supabase
+            .from("transactions")
+            .select("amount")
+            .eq("category", "Publicidad y mercadeo")
+            .eq("tipo_flujo", "gasto")
+            .gte("fecha", dias(periodo))
+        ),
+      ]);
+      if (!activo) return;
+      setClientes((c.data as any) ?? []);
+      setFacturas((f.data as any) ?? []);
+      setCotizaciones((q.data as any) ?? []);
+      setSeguimientos((s.data as any) ?? []);
+      setGastoMercadeo(((t.data as any[]) ?? []).reduce((a, x) => a + Math.abs(Number(x.amount) || 0), 0));
+      setCargando(false);
+    })();
+    return () => {
+      activo = false;
+    };
+  }, [entidadId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const m = useMemo(() => {
+    const ini = dias(periodo);
+    const iniPrev = dias(periodo * 2);
+    const fechaCobro = (x: Fac) => x.fecha_pago ?? x.fecha_emision;
+    const pagadas = facturas.filter((x) => x.estado === "pagada");
+    const pagadasPer = pagadas.filter((x) => fechaCobro(x) >= ini);
+
+    const nuevos = clientes.filter((x) => x.created_at.slice(0, 10) >= ini);
+    const nuevosPrev = clientes.filter((x) => x.created_at.slice(0, 10) >= iniPrev && x.created_at.slice(0, 10) < ini);
+
+    const porFuente = new Map<string, number>();
+    nuevos.forEach((x) => {
+      const k = x.fuente ? FUENTE_LABEL[x.fuente] ?? x.fuente : "Manual / sin identificar";
+      porFuente.set(k, (porFuente.get(k) ?? 0) + 1);
+    });
+
+    const cots = cotizaciones.filter((x) => x.fecha_emision >= ini);
+    const ganadas = cots.filter((x) => x.estado === "aprobada" || x.estado === "convertida");
+    const perdidas = cots.filter((x) => x.estado === "rechazada");
+    const abiertas = cots.filter((x) => x.estado === "enviada");
+
+    const cobrado = pagadasPer.reduce((a, x) => a + Number(x.total || 0), 0);
+
+    // Retención: de los clientes que han pagado alguna vez, cuántos han vuelto a pagar.
+    const pagosPorCliente = new Map<string, Fac[]>();
+    pagadas.forEach((x) => {
+      if (!x.client_id) return;
+      pagosPorCliente.set(x.client_id, [...(pagosPorCliente.get(x.client_id) ?? []), x]);
+    });
+    const conPago = pagosPorCliente.size;
+    const repiten = [...pagosPorCliente.values()].filter((l) => l.length >= 2).length;
+    const limiteDormido = dias(180);
+    const dormidos = [...pagosPorCliente.values()].filter(
+      (l) => l.reduce((mx, x) => (fechaCobro(x) > mx ? fechaCobro(x) : mx), "") < limiteDormido
+    ).length;
+
+    // Concentración: cuánto del cobrado del período depende de pocos clientes.
+    const cobradoPorCliente = new Map<string, number>();
+    pagadasPer.forEach((x) => {
+      if (!x.client_id) return;
+      cobradoPorCliente.set(x.client_id, (cobradoPorCliente.get(x.client_id) ?? 0) + Number(x.total || 0));
+    });
+    const top = [...cobradoPorCliente.entries()].sort((a, b) => b[1] - a[1]);
+    const nombre = (id: string) => clientes.find((x) => x.id === id)?.name ?? "Cliente";
+
+    const hoy = dias(0);
+    const segVencidos = seguimientos.filter((x) => x.estado === "pendiente" && x.fecha_proximo < hoy).length;
+
+    return {
+      nuevos: nuevos.length,
+      nuevosPrev: nuevosPrev.length,
+      porFuente: [...porFuente.entries()].sort((a, b) => b[1] - a[1]),
+      cots: cots.length,
+      ganadas: ganadas.length,
+      perdidas: perdidas.length,
+      abiertas: abiertas.length,
+      montoGanado: ganadas.reduce((a, x) => a + Number(x.total || 0), 0),
+      cobrado,
+      nPagadas: pagadasPer.length,
+      ticket: pagadasPer.length ? cobrado / pagadasPer.length : 0,
+      conPago,
+      repiten,
+      dormidos,
+      segVencidos,
+      costoPorNuevo: nuevos.length > 0 && gastoMercadeo > 0 ? gastoMercadeo / nuevos.length : null,
+      top1: top[0] ? { nombre: nombre(top[0][0]), share: cobrado > 0 ? top[0][1] / cobrado : 0 } : null,
+      top3Share: cobrado > 0 ? top.slice(0, 3).reduce((a, x) => a + x[1], 0) / cobrado : 0,
+    };
+  }, [clientes, facturas, cotizaciones, seguimientos, gastoMercadeo, periodo]);
+
+  if (cargando) return <p className="text-sm text-muted">Calculando estadísticas…</p>;
+
+  const dif = m.nuevos - m.nuevosPrev;
+  const Kpi = ({ titulo, valor, nota }: { titulo: string; valor: string; nota?: string }) => (
+    <div className="vc-card">
+      <p className="text-xs text-muted">{titulo}</p>
+      <p className="mt-1 text-xl font-semibold">{valor}</p>
+      {nota && <p className="mt-1 text-xs text-muted">{nota}</p>}
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-xs text-muted">Calculado solo con lo que ya está en tu cuenta. Nada que escribir a mano.</p>
+        <select className="vc-input" style={{ width: "auto" }} value={periodo} onChange={(e) => setPeriodo(Number(e.target.value))}>
+          {PERIODOS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <h3 className="mb-2 text-sm font-semibold">Clientes nuevos</h3>
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <Kpi
+          titulo="Clientes nuevos"
+          valor={String(m.nuevos)}
+          nota={m.nuevosPrev || m.nuevos ? `${dif >= 0 ? "+" : ""}${dif} vs. el período anterior (${m.nuevosPrev})` : undefined}
+        />
+        <Kpi
+          titulo="Costo por cliente nuevo"
+          valor={m.costoPorNuevo !== null ? formatMoney(m.costoPorNuevo) : "—"}
+          nota={
+            m.costoPorNuevo !== null
+              ? `Gasto en "Publicidad y mercadeo": ${formatMoney(gastoMercadeo)}`
+              : 'Aparece cuando hay gastos categorizados como "Publicidad y mercadeo" y clientes nuevos.'
+          }
+        />
+      </div>
+      <div className="vc-card mb-5">
+        <p className="mb-2 text-xs text-muted">Por dónde entraron los clientes nuevos</p>
+        {m.porFuente.length === 0 ? (
+          <p className="text-sm">Sin clientes nuevos en este período.</p>
+        ) : (
+          m.porFuente.map(([k, n]) => (
+            <div key={k} className="flex justify-between py-1 text-sm">
+              <span>{k}</span>
+              <span className="font-medium">{n}</span>
+            </div>
+          ))
+        )}
+        <p className="mt-2 text-xs text-muted">
+          Los clientes creados a mano no traen su origen: aparecen como "Manual / sin identificar". VICTOR puede preguntarte cómo te
+          conocieron cuando creas uno por el chat.
+        </p>
+      </div>
+
+      <h3 className="mb-2 text-sm font-semibold">Ventas</h3>
+      <div className="mb-5 grid grid-cols-2 gap-3">
+        <Kpi titulo="Cotizaciones enviadas" valor={String(m.cots)} nota={`${m.abiertas} sin respuesta`} />
+        <Kpi
+          titulo="Tasa de cierre"
+          valor={pct(m.ganadas, m.cots)}
+          nota={`${m.ganadas} aprobadas · ${m.perdidas} rechazadas · ${formatMoney(m.montoGanado)} aprobado`}
+        />
+        <Kpi titulo="Cobrado" valor={formatMoney(m.cobrado)} nota={`${m.nPagadas} facturas pagadas`} />
+        <Kpi titulo="Ticket promedio" valor={m.nPagadas ? formatMoney(m.ticket) : "—"} />
+      </div>
+
+      <h3 className="mb-2 text-sm font-semibold">Retención</h3>
+      <div className="mb-5 grid grid-cols-2 gap-3">
+        <Kpi titulo="Clientes que repiten" valor={pct(m.repiten, m.conPago)} nota={`${m.repiten} de ${m.conPago} clientes que han pagado`} />
+        <Kpi titulo="Clientes dormidos" valor={String(m.dormidos)} nota="Pagaron antes, pero llevan más de 6 meses sin volver." />
+        <Kpi titulo="Seguimientos vencidos" valor={String(m.segVencidos)} nota="Clientes a quienes ya les tocaba volver y no se les ha contactado." />
+      </div>
+
+      <h3 className="mb-2 text-sm font-semibold">Dependencia de clientes</h3>
+      <div className="grid grid-cols-2 gap-3">
+        <Kpi
+          titulo="Cliente que más aporta"
+          valor={m.top1 ? `${Math.round(m.top1.share * 100)}%` : "—"}
+          nota={m.top1 ? m.top1.nombre : "Sin cobros en el período."}
+        />
+        <Kpi titulo="Tus 3 mejores clientes" valor={m.cobrado > 0 ? `${Math.round(m.top3Share * 100)}%` : "—"} nota="Del total cobrado en el período." />
+      </div>
+
+      <p className="mt-4 text-xs text-muted">
+        Son referencias de tu propio negocio, no metas. Cada negocio es distinto: coméntalo con tu contador o con alguien de tu industria con
+        resultados.
+      </p>
+    </div>
+  );
+}

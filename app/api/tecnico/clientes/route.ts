@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await ctx.admin
     .from("clients")
-    .insert({ owner_id: ctx.tecnico.owner_id, entity_id: ctx.tecnico.entity_id, name, phone: phone || null, active: true })
+    .insert({ owner_id: ctx.tecnico.owner_id, entity_id: ctx.tecnico.entity_id, name, phone: phone || null, active: true, fuente: "tecnico" })
     .select("id, name, phone")
     .single();
 

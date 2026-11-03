@@ -118,6 +118,7 @@ export async function POST(request: Request) {
       address: typeof body.direccion === "string" ? body.direccion : null,
       es_negocio: esNegocio,
       retention_pct: retencionPct,
+      fuente: "api",
     })
     .select("id, name, email, telefono, tax_id, address, es_negocio, retention_pct, active, created_at")
     .maybeSingle();

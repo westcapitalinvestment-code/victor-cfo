@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
     address: string | null;
     es_negocio: boolean;
     retention_pct: number;
+    fuente: string;
   }[] = [];
 
   for (const fila of filasDatos) {
@@ -110,6 +111,7 @@ export async function POST(req: NextRequest) {
       // a mano en los que sí apliquen, igual que si lo creara manual.
       es_negocio: false,
       retention_pct: 0,
+      fuente: "importacion",
     });
   }
 
