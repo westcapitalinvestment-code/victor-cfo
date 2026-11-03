@@ -117,4 +117,41 @@ export type ShopifyOrderPaidPayload = {
   } | null;
   email?: string | null;
   line_items?: { title: string; quantity: number; price: string }[];
+  // Datos de atribución que Shopify ya manda en la orden (pueden venir null).
+  source_name?: string | null;
+  referring_site?: string | null;
+  landing_site?: string | null;
 };
+
+// Canal de la venta según los datos de la orden, sin que nadie lo escriba:
+// 1) utm_source del landing_site, 2) dominio del referring_site, 3)
+// source_name si no es el web normal, 4) "Directo / sin dato".
+export function origenDeOrdenShopify(o: Pick<ShopifyOrderPaidPayload, "source_name" | "referring_site" | "landing_site">): string {
+  const bonito = (s: string) => s.trim().charAt(0).toUpperCase() + s.trim().slice(1).toLowerCase();
+  const porDominio = (h: string): string | null => {
+    const d = h.toLowerCase();
+    if (d.includes("instagram")) return "Instagram";
+    if (d.includes("facebook") || d.includes("fb.")) return "Facebook";
+    if (d.includes("tiktok")) return "TikTok";
+    if (d.includes("youtube") || d.includes("youtu.be")) return "YouTube";
+    if (d.includes("google")) return "Google";
+    if (d.includes("whatsapp") || d.includes("wa.me")) return "WhatsApp";
+    if (d.includes("linktr") || d.includes("beacons")) return "Link en bio";
+    return null;
+  };
+  try {
+    if (o.landing_site) {
+      const utm = new URL(o.landing_site, "https://x.local").searchParams.get("utm_source");
+      if (utm) return porDominio(utm) ?? bonito(utm);
+    }
+  } catch {}
+  try {
+    if (o.referring_site) {
+      const host = new URL(o.referring_site).hostname;
+      return porDominio(host) ?? host.replace(/^www\./, "");
+    }
+  } catch {}
+  const sn = (o.source_name ?? "").toLowerCase();
+  if (sn && sn !== "web" && sn !== "shopify_draft_order" && sn !== "checkout") return porDominio(sn) ?? bonito(sn);
+  return "Directo / sin dato";
+}

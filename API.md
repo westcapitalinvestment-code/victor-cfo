@@ -195,6 +195,7 @@ nunca los mandes calculados desde afuera.
   "cliente_id": "uuid (requerido)",
   "entity_id": "uuid (opcional, solo si tu key no está fija a una entidad y tu cuenta tiene varias)",
   "fecha_vencimiento": "2026-04-15 (opcional, YYYY-MM-DD — si no se manda usa los términos de pago default de la entidad)",
+  "origen": "Instagram (opcional — canal de la venta, aparece en Estadísticas)",
   "lineas": [
     {
       "descripcion": "Consulta inicial (requerido)",

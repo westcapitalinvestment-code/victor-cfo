@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptSecret } from "@/lib/crypto";
-import { verificarFirmaWebhook, type ShopifyOrderPaidPayload } from "@/lib/shopify";
+import { verificarFirmaWebhook, origenDeOrdenShopify, type ShopifyOrderPaidPayload } from "@/lib/shopify";
 import { fechaHoyPR } from "@/lib/hora-pr";
 
 // Receptor público del webhook orders/paid de Shopify (migración 0109, 30
@@ -174,6 +174,7 @@ export async function POST(req: NextRequest) {
       fecha_vencimiento: fechaOrden,
       fecha_pago: fechaOrden,
       shopify_order_id: shopifyOrderId,
+      origen: origenDeOrdenShopify(orden),
     })
     .select("id")
     .maybeSingle();

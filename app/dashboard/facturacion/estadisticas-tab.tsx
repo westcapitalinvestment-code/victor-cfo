@@ -13,7 +13,19 @@ import { formatMoney } from "@/lib/format";
 // usuario, no una meta ni una promesa de resultados.
 
 type Cli = { id: string; name: string; fuente: string | null; created_at: string };
-type Fac = { client_id: string | null; total: number; estado: string; fecha_emision: string; fecha_pago: string | null };
+type Fac = {
+  id: string;
+  client_id: string | null;
+  total: number;
+  estado: string;
+  fecha_emision: string;
+  fecha_pago: string | null;
+  origen: string | null;
+  es_recurrente: boolean | null;
+  frecuencia_recurrente: string | null;
+  factura_padre_id: string | null;
+};
+type Nota = { monto: number; fecha: string };
 type Cot = { estado: string; total: number; fecha_emision: string };
 type Seg = { estado: string; fecha_proximo: string };
 
@@ -42,6 +54,7 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
   const [cotizaciones, setCotizaciones] = useState<Cot[]>([]);
   const [seguimientos, setSeguimientos] = useState<Seg[]>([]);
   const [gastoMercadeo, setGastoMercadeo] = useState(0);
+  const [notas, setNotas] = useState<Nota[]>([]);
 
   useEffect(() => {
     let activo = true;
@@ -49,9 +62,11 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
       setCargando(true);
       const desde = dias(periodo * 2); // el período actual + el anterior, para comparar
       const filtrar = (q: any) => (entidadId ? q.eq("entity_id", entidadId) : q);
-      const [c, f, q, s, t] = await Promise.all([
+      const [c, f, q, s, t, n] = await Promise.all([
         filtrar(supabase.from("clients").select("id, name, fuente, created_at")),
-        filtrar(supabase.from("invoices").select("client_id, total, estado, fecha_emision, fecha_pago")),
+        filtrar(supabase
+            .from("invoices")
+            .select("id, client_id, total, estado, fecha_emision, fecha_pago, origen, es_recurrente, frecuencia_recurrente, factura_padre_id")),
         filtrar(supabase.from("cotizaciones").select("estado, total, fecha_emision").gte("fecha_emision", desde)),
         filtrar(supabase.from("seguimientos_clientes").select("estado, fecha_proximo")),
         filtrar(
@@ -62,12 +77,14 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
             .eq("tipo_flujo", "gasto")
             .gte("fecha", dias(periodo))
         ),
+        filtrar(supabase.from("notas_credito").select("monto, fecha").gte("fecha", dias(periodo))),
       ]);
       if (!activo) return;
       setClientes((c.data as any) ?? []);
       setFacturas((f.data as any) ?? []);
       setCotizaciones((q.data as any) ?? []);
       setSeguimientos((s.data as any) ?? []);
+      setNotas((n.data as any) ?? []);
       setGastoMercadeo(((t.data as any[]) ?? []).reduce((a, x) => a + Math.abs(Number(x.amount) || 0), 0));
       setCargando(false);
     })();
@@ -86,11 +103,38 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
     const nuevos = clientes.filter((x) => x.created_at.slice(0, 10) >= ini);
     const nuevosPrev = clientes.filter((x) => x.created_at.slice(0, 10) >= iniPrev && x.created_at.slice(0, 10) < ini);
 
+    // Origen de cada cliente nuevo: el canal de su primera factura con origen
+    // (Shopify/Zapier), o si no, cómo entró al sistema (importado, técnico…).
+    const primeraConOrigen = new Map<string, string>();
+    [...facturas]
+      .filter((x) => x.client_id && x.origen)
+      .sort((a, b) => a.fecha_emision.localeCompare(b.fecha_emision))
+      .forEach((x) => {
+        if (!primeraConOrigen.has(x.client_id as string)) primeraConOrigen.set(x.client_id as string, x.origen as string);
+      });
     const porFuente = new Map<string, number>();
     nuevos.forEach((x) => {
-      const k = x.fuente ? FUENTE_LABEL[x.fuente] ?? x.fuente : "Manual / sin identificar";
+      const k = primeraConOrigen.get(x.id) ?? (x.fuente ? FUENTE_LABEL[x.fuente] ?? x.fuente : "Manual / sin identificar");
       porFuente.set(k, (porFuente.get(k) ?? 0) + 1);
     });
+
+    // Ventas por canal (cobrado en el período).
+    const ventasCanal = new Map<string, { n: number; monto: number }>();
+    pagadasPer.forEach((x) => {
+      const k = x.origen ?? (x.factura_padre_id ? "Recurrente (automática)" : "Factura directa");
+      const v = ventasCanal.get(k) ?? { n: 0, monto: 0 };
+      ventasCanal.set(k, { n: v.n + 1, monto: v.monto + Number(x.total || 0) });
+    });
+
+    // Ingreso recurrente: plantillas activas (es_recurrente) llevadas a mes.
+    const factorMes = (f: string | null) => (f === "semanal" ? 52 / 12 : f === "quincenal" ? 2 : 1);
+    const plantillas = facturas.filter((x) => x.es_recurrente && x.estado !== "borrador");
+    const mrr = plantillas.reduce((a, x) => a + Number(x.total || 0) * factorMes(x.frecuencia_recurrente), 0);
+    const padresConHijas = new Set(facturas.filter((x) => x.factura_padre_id).map((x) => x.factura_padre_id as string));
+    const detenidas = facturas.filter((x) => !x.es_recurrente && padresConHijas.has(x.id)).length;
+
+    // Reembolsos / notas de crédito del período.
+    const reembolsado = notas.reduce((a, x) => a + Number(x.monto || 0), 0);
 
     const cots = cotizaciones.filter((x) => x.fecha_emision >= ini);
     const ganadas = cots.filter((x) => x.estado === "aprobada" || x.estado === "convertida");
@@ -128,6 +172,12 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
       nuevos: nuevos.length,
       nuevosPrev: nuevosPrev.length,
       porFuente: [...porFuente.entries()].sort((a, b) => b[1] - a[1]),
+      ventasCanal: [...ventasCanal.entries()].sort((a, b) => b[1].monto - a[1].monto),
+      mrr,
+      nRecurrentes: plantillas.length,
+      detenidas,
+      reembolsado,
+      nNotas: notas.length,
       cots: cots.length,
       ganadas: ganadas.length,
       perdidas: perdidas.length,
@@ -144,7 +194,7 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
       top1: top[0] ? { nombre: nombre(top[0][0]), share: cobrado > 0 ? top[0][1] / cobrado : 0 } : null,
       top3Share: cobrado > 0 ? top.slice(0, 3).reduce((a, x) => a + x[1], 0) / cobrado : 0,
     };
-  }, [clientes, facturas, cotizaciones, seguimientos, gastoMercadeo, periodo]);
+  }, [clientes, facturas, cotizaciones, seguimientos, gastoMercadeo, notas, periodo]);
 
   if (cargando) return <p className="text-sm text-muted">Calculando estadísticas…</p>;
 
@@ -200,27 +250,59 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
           ))
         )}
         <p className="mt-2 text-xs text-muted">
-          Los clientes creados a mano no traen su origen: aparecen como "Manual / sin identificar". VICTOR puede preguntarte cómo te
-          conocieron cuando creas uno por el chat.
+          El canal se toma solo de tu tienda Shopify (red social, buscador, directo) o de lo que envíe tu Zap con el campo "origen". Los
+          clientes creados a mano aparecen como "Manual / sin identificar".
         </p>
       </div>
 
       <h3 className="mb-2 text-sm font-semibold">Ventas</h3>
-      <div className="mb-5 grid grid-cols-2 gap-3">
-        <Kpi titulo="Cotizaciones enviadas" valor={String(m.cots)} nota={`${m.abiertas} sin respuesta`} />
-        <Kpi
-          titulo="Tasa de cierre"
-          valor={pct(m.ganadas, m.cots)}
-          nota={`${m.ganadas} aprobadas · ${m.perdidas} rechazadas · ${formatMoney(m.montoGanado)} aprobado`}
-        />
+      <div className="mb-3 grid grid-cols-2 gap-3">
         <Kpi titulo="Cobrado" valor={formatMoney(m.cobrado)} nota={`${m.nPagadas} facturas pagadas`} />
         <Kpi titulo="Ticket promedio" valor={m.nPagadas ? formatMoney(m.ticket) : "—"} />
+        {m.cots > 0 && (
+          <>
+            <Kpi titulo="Cotizaciones enviadas" valor={String(m.cots)} nota={`${m.abiertas} sin respuesta`} />
+            <Kpi
+              titulo="Tasa de cierre"
+              valor={pct(m.ganadas, m.cots)}
+              nota={`${m.ganadas} aprobadas · ${m.perdidas} rechazadas · ${formatMoney(m.montoGanado)} aprobado`}
+            />
+          </>
+        )}
       </div>
+      {m.ventasCanal.length > 0 && (
+        <div className="vc-card mb-5">
+          <p className="mb-2 text-xs text-muted">Cobrado por canal</p>
+          {m.ventasCanal.map(([k, v]) => (
+            <div key={k} className="flex justify-between py-1 text-sm">
+              <span>
+                {k} <span className="text-xs text-muted">({v.n})</span>
+              </span>
+              <span className="font-medium">{formatMoney(v.monto)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {m.nNotas > 0 && (
+        <div className="mb-5 grid grid-cols-2 gap-3">
+          <Kpi
+            titulo="Reembolsos y créditos"
+            valor={formatMoney(m.reembolsado)}
+            nota={`${m.nNotas} en el período · ${pct(m.reembolsado, m.cobrado)} de lo cobrado`}
+          />
+        </div>
+      )}
 
       <h3 className="mb-2 text-sm font-semibold">Retención</h3>
       <div className="mb-5 grid grid-cols-2 gap-3">
         <Kpi titulo="Clientes que repiten" valor={pct(m.repiten, m.conPago)} nota={`${m.repiten} de ${m.conPago} clientes que han pagado`} />
         <Kpi titulo="Clientes dormidos" valor={String(m.dormidos)} nota="Pagaron antes, pero llevan más de 6 meses sin volver." />
+        {(m.nRecurrentes > 0 || m.detenidas > 0) && (
+          <>
+            <Kpi titulo="Ingreso mensual recurrente" valor={formatMoney(m.mrr)} nota={`${m.nRecurrentes} cobros recurrentes activos`} />
+            <Kpi titulo="Recurrentes detenidos" valor={String(m.detenidas)} nota="Cobros recurrentes que ya se apagaron (cancelaciones)." />
+          </>
+        )}
         <Kpi titulo="Seguimientos vencidos" valor={String(m.segVencidos)} nota="Clientes a quienes ya les tocaba volver y no se les ha contactado." />
       </div>
 

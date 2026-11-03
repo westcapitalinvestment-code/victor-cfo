@@ -259,6 +259,9 @@ export async function POST(request: Request) {
       estado: "borrador",
       fecha_emision: hoyStr,
       fecha_vencimiento: fechaVencimiento,
+      // Canal opcional de la venta (ej. "Instagram", "Gumroad"): permite que
+      // un Zap etiquete de dónde vino y salga en Estadísticas.
+      origen: typeof body.origen === "string" && body.origen.trim() ? body.origen.trim().slice(0, 60) : null,
     })
     .select("id, numero, total, estado, fecha_emision, fecha_vencimiento")
     .maybeSingle();
