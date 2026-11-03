@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { registrarCargoStripe } from "@/lib/stripe-ventas";
 
 // Webhook APARTE del de suscripciones (app/api/stripe/webhook/route.ts) —
 // Stripe Connect (migración 0065, 3 sept 2026) manda los eventos de las
@@ -128,6 +129,17 @@ export async function POST(req: NextRequest) {
           })
           .eq("id", invoiceId);
 
+        break;
+      }
+
+      // Ventas cobradas en la cuenta del usuario FUERA de VICTOR (link de pago,
+      // suscripción, checkout propio…): se importan como factura pagada para
+      // que las Estadísticas funcionen sin crear facturas a mano. Los reembolsos
+      // llegan como charge.refunded (mismo cargo, amount_refunded actualizado).
+      case "charge.succeeded":
+      case "charge.refunded": {
+        if (!event.account) break;
+        await registrarCargoStripe(supabase, event.account, event.data.object as Stripe.Charge);
         break;
       }
 

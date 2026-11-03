@@ -57,6 +57,30 @@ export default function CobroTarjeta({
     setError(json?.error || "No se pudo conectar con Stripe. Intenta de nuevo en un momento.");
   }
 
+  // Importar ventas de Stripe al historial (Estadísticas) — 3 nov 2026.
+  const [importando, setImportando] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  async function importarHistorial() {
+    setImportando(true);
+    setImportMsg(null);
+    const res = await fetch("/api/stripe-connect/importar-historial", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entityId }),
+    });
+    const json = await res.json().catch(() => null);
+    setImportando(false);
+    if (res.ok && json?.ok) {
+      setImportMsg(
+        `Listo: ${json.creadas} ventas importadas${json.yaExistian ? `, ${json.yaExistian} ya estaban` : ""}${
+          json.limitado ? ". Había más: vuelve a tocar el botón para seguir." : "."
+        }`
+      );
+    } else {
+      setImportMsg(json?.error || "No se pudo importar. Intenta de nuevo.");
+    }
+  }
+
   const estado: "sin_conectar" | "pendiente" | "activo" = chargesEnabled ? "activo" : cuentaId ? "pendiente" : "sin_conectar";
 
   return (
@@ -85,6 +109,21 @@ export default function CobroTarjeta({
         )}
       </div>
       {error && <p className="mt-2 text-xs text-red">{textoConLinks(error)}</p>}
+      {estado === "activo" && (
+        <div className="mt-2">
+          <p className="text-[11px] text-muted">
+            Las ventas nuevas que cobres en tu Stripe (aunque no hagas factura aquí) entran solas a tus Estadísticas.
+          </p>
+          <button
+            onClick={importarHistorial}
+            disabled={importando}
+            className="mt-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium"
+          >
+            {importando ? "Importando..." : "Importar ventas de los últimos 12 meses"}
+          </button>
+          {importMsg && <p className="mt-1.5 text-xs text-muted">{importMsg}</p>}
+        </div>
+      )}
       {/* Tip de más formas de pago (4 sept 2026, pedido de Joel: "que el
           cliente tenga más opciones para pagar" — su esposa preguntó por
           Klarna específicamente). No requiere ningún cambio en el checkout

@@ -40,6 +40,7 @@ const FUENTE_LABEL: Record<string, string> = {
   api: "Integración (Zapier / API)",
   importacion: "Importado (CSV / otro sistema)",
   tecnico: "Creado por un técnico",
+  stripe: "Stripe (cobro directo)",
 };
 
 const dias = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
