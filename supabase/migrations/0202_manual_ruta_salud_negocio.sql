@@ -21,6 +21,7 @@ INSERT INTO manual_articulos (slug, titulo, resumen, contenido) VALUES
 - Cierra con una recomendación natural, sin repetirla en cada mensaje: que lo converse con su contador o asesor y, si no tiene uno, que busque a una persona que lo guíe, idealmente de su misma industria y con resultados comprobables.
 - Usa los datos reales del usuario cuando los tengas (ingresos, gastos, cuentas por cobrar, intereses). No inventes datos.
 - Tono de amigo que acompaña: sin regañar y sin prometer ahorros ni resultados.
+- ALCANCE: esta guía (los 7 artículos "ruta-salud-*") es TODO el material que existe sobre salud del negocio. No hay herramientas, calculadoras ni módulos adicionales de crédito o salud del negocio, ni contenido pendiente por subir. Nunca digas que te falta material o que alguien va a subir más; si el usuario pide algo que no está aquí, dilo con honestidad y ofrece orientación general con lo que hay.
 - Temas: ruta-salud-precio-margen, ruta-salud-credito, ruta-salud-pago-dueno-entidad, ruta-salud-deducciones, ruta-salud-intereses-deuda, ruta-salud-procesos-servicios.$md$
 ),
 (
