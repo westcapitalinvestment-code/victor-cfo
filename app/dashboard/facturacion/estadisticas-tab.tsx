@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
 
-// Pantalla "Estadísticas" (icono propio en el nav de negocio; 3 nov 2026, pedido de
-// Joel, a raíz del video de los 6 sistemas de un negocio): números del
-// negocio estilo dashboard CFO, para ver cómo van las ventas y los clientes.
+// Pantalla "Estadísticas" (icono propio en el nav de negocio; 3 nov 2026,
+// pedido de Joel). Rediseño "tentador": resumen con tendencia, avisos de
+// VICTOR (reglas sobre los números del usuario, sin costo de IA), gráficas
+// (barra de dependencia, anillo de retención, embudo, canales) y una hoja que
+// sube desde abajo con la lista completa de quiénes son.
 // REGLA DE JOEL: nada se escribe a mano. Todo sale de lo que ya existe:
-// clientes, cotizaciones, facturas, seguimientos y los gastos categorizados
-// como "Publicidad y mercadeo". Es orientación con los datos reales del
-// usuario, no una meta ni una promesa de resultados.
+// clientes, cotizaciones, facturas (incluidas las importadas de Stripe y
+// Shopify), seguimientos y gasto en "Publicidad y mercadeo". Son referencias
+// del propio negocio, no metas ni promesas de resultados.
 
 type Cli = { id: string; name: string; fuente: string | null; created_at: string };
 type Fac = {
@@ -29,14 +31,13 @@ type Fac = {
 type Nota = { monto: number; fecha: string; client_id: string | null; numero: string | null };
 type Cot = { estado: string; total: number; fecha_emision: string; client_id: string | null };
 type Seg = { estado: string; fecha_proximo: string; client_id: string | null };
-// Fila de la lista de detalle que se abre al tocar una tarjeta.
 type Fila = { nombre: string; extra?: string; href?: string };
 type Detalle = { titulo: string; nota?: string; filas: Fila[] };
 
 const PERIODOS = [
-  { value: 30, label: "Últimos 30 días" },
-  { value: 90, label: "Últimos 90 días" },
-  { value: 365, label: "Últimos 12 meses" },
+  { value: 30, label: "30 días" },
+  { value: 90, label: "90 días" },
+  { value: 365, label: "12 meses" },
 ] as const;
 
 const FUENTE_LABEL: Record<string, string> = {
@@ -47,8 +48,31 @@ const FUENTE_LABEL: Record<string, string> = {
   stripe: "Stripe (cobro directo)",
 };
 
+const COLORES = ["#534AB7", "#7F77DD", "#1D9E75", "#AFA9EC", "#5DCAA5"];
+const TEAL = "#1D9E75";
+const VIOLETA = "#534AB7";
+
 const dias = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
-const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : "—");
+const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
+const fFecha = (f: string) => f.slice(5, 7) + "/" + f.slice(8, 10) + "/" + f.slice(0, 4);
+
+// Número que "sube" hasta su valor al cargar (se ve vivo, no cuesta nada).
+function useContar(objetivo: number, ms = 900) {
+  const [v, setV] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const ini = performance.now();
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - ini) / ms);
+      const e = 1 - Math.pow(1 - p, 3);
+      setV(objetivo * e);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [objetivo, ms]);
+  return v;
+}
 
 export default function EstadisticasTab({ entidadId }: { entidadId: string | null }) {
   const supabase = createClient();
@@ -61,28 +85,25 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
   const [gastoMercadeo, setGastoMercadeo] = useState(0);
   const [notas, setNotas] = useState<Nota[]>([]);
   const [detalle, setDetalle] = useState<Detalle | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [subida, setSubida] = useState(false);
 
   useEffect(() => {
     let activo = true;
     (async () => {
       setCargando(true);
-      const desde = dias(periodo * 2); // el período actual + el anterior, para comparar
+      const desde = dias(periodo * 2); // período actual + anterior, para comparar
       const filtrar = (q: any) => (entidadId ? q.eq("entity_id", entidadId) : q);
       const [c, f, q, s, t, n] = await Promise.all([
         filtrar(supabase.from("clients").select("id, name, fuente, created_at")),
-        filtrar(supabase
+        filtrar(
+          supabase
             .from("invoices")
-            .select("id, client_id, total, estado, fecha_emision, fecha_pago, origen, es_recurrente, frecuencia_recurrente, factura_padre_id")),
+            .select("id, client_id, total, estado, fecha_emision, fecha_pago, origen, es_recurrente, frecuencia_recurrente, factura_padre_id")
+        ),
         filtrar(supabase.from("cotizaciones").select("estado, total, fecha_emision, client_id").gte("fecha_emision", desde)),
         filtrar(supabase.from("seguimientos_clientes").select("estado, fecha_proximo, client_id")),
         filtrar(
-          supabase
-            .from("transactions")
-            .select("amount")
-            .eq("category", "Publicidad y mercadeo")
-            .eq("tipo_flujo", "gasto")
-            .gte("fecha", dias(periodo))
+          supabase.from("transactions").select("amount").eq("category", "Publicidad y mercadeo").eq("tipo_flujo", "gasto").gte("fecha", dias(periodo))
         ),
         filtrar(supabase.from("notas_credito").select("monto, fecha, client_id, numero").gte("fecha", dias(periodo))),
       ]);
@@ -106,12 +127,23 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
     const fechaCobro = (x: Fac) => x.fecha_pago ?? x.fecha_emision;
     const pagadas = facturas.filter((x) => x.estado === "pagada");
     const pagadasPer = pagadas.filter((x) => fechaCobro(x) >= ini);
+    const pagadasPrev = pagadas.filter((x) => fechaCobro(x) >= iniPrev && fechaCobro(x) < ini);
+    const cobrado = pagadasPer.reduce((a, x) => a + Number(x.total || 0), 0);
+    const cobradoPrev = pagadasPrev.reduce((a, x) => a + Number(x.total || 0), 0);
+
+    // Serie para la línea de tendencia: 12 tramos iguales del período.
+    const N = 12;
+    const serie = Array.from({ length: N }, () => 0);
+    const t0 = new Date(ini + "T00:00:00Z").getTime();
+    const tramo = (periodo * 86400000) / N;
+    pagadasPer.forEach((x) => {
+      const i = Math.min(N - 1, Math.max(0, Math.floor((new Date(fechaCobro(x) + "T00:00:00Z").getTime() - t0) / tramo)));
+      serie[i] += Number(x.total || 0);
+    });
 
     const nuevos = clientes.filter((x) => x.created_at.slice(0, 10) >= ini);
     const nuevosPrev = clientes.filter((x) => x.created_at.slice(0, 10) >= iniPrev && x.created_at.slice(0, 10) < ini);
 
-    // Origen de cada cliente nuevo: el canal de su primera factura con origen
-    // (Shopify/Zapier), o si no, cómo entró al sistema (importado, técnico…).
     const primeraConOrigen = new Map<string, string>();
     [...facturas]
       .filter((x) => x.client_id && x.origen)
@@ -119,309 +151,534 @@ export default function EstadisticasTab({ entidadId }: { entidadId: string | nul
       .forEach((x) => {
         if (!primeraConOrigen.has(x.client_id as string)) primeraConOrigen.set(x.client_id as string, x.origen as string);
       });
+    const canalDeCliente = (x: Cli) =>
+      primeraConOrigen.get(x.id) ?? (x.fuente ? FUENTE_LABEL[x.fuente] ?? x.fuente : "Manual / sin identificar");
     const porFuente = new Map<string, number>();
-    nuevos.forEach((x) => {
-      const k = primeraConOrigen.get(x.id) ?? (x.fuente ? FUENTE_LABEL[x.fuente] ?? x.fuente : "Manual / sin identificar");
-      porFuente.set(k, (porFuente.get(k) ?? 0) + 1);
-    });
+    nuevos.forEach((x) => porFuente.set(canalDeCliente(x), (porFuente.get(canalDeCliente(x)) ?? 0) + 1));
 
-    // Ventas por canal (cobrado en el período).
+    const canalVenta = (x: Fac) => x.origen ?? (x.factura_padre_id ? "Recurrente (automática)" : "Factura directa");
     const ventasCanal = new Map<string, { n: number; monto: number }>();
     pagadasPer.forEach((x) => {
-      const k = x.origen ?? (x.factura_padre_id ? "Recurrente (automática)" : "Factura directa");
+      const k = canalVenta(x);
       const v = ventasCanal.get(k) ?? { n: 0, monto: 0 };
       ventasCanal.set(k, { n: v.n + 1, monto: v.monto + Number(x.total || 0) });
     });
 
-    // Ingreso recurrente: plantillas activas (es_recurrente) llevadas a mes.
     const factorMes = (f: string | null) => (f === "semanal" ? 52 / 12 : f === "quincenal" ? 2 : 1);
     const plantillas = facturas.filter((x) => x.es_recurrente && x.estado !== "borrador");
     const mrr = plantillas.reduce((a, x) => a + Number(x.total || 0) * factorMes(x.frecuencia_recurrente), 0);
     const padresConHijas = new Set(facturas.filter((x) => x.factura_padre_id).map((x) => x.factura_padre_id as string));
-    const detenidas = facturas.filter((x) => !x.es_recurrente && padresConHijas.has(x.id)).length;
+    const detenidasFacs = facturas.filter((x) => !x.es_recurrente && padresConHijas.has(x.id));
 
-    // Reembolsos / notas de crédito del período.
     const reembolsado = notas.reduce((a, x) => a + Number(x.monto || 0), 0);
 
     const cots = cotizaciones.filter((x) => x.fecha_emision >= ini);
     const ganadas = cots.filter((x) => x.estado === "aprobada" || x.estado === "convertida");
     const perdidas = cots.filter((x) => x.estado === "rechazada");
     const abiertas = cots.filter((x) => x.estado === "enviada");
+    const abiertasViejas = abiertas.filter((x) => x.fecha_emision <= dias(7));
 
-    const cobrado = pagadasPer.reduce((a, x) => a + Number(x.total || 0), 0);
-
-    // Retención: de los clientes que han pagado alguna vez, cuántos han vuelto a pagar.
     const pagosPorCliente = new Map<string, Fac[]>();
     pagadas.forEach((x) => {
       if (!x.client_id) return;
       pagosPorCliente.set(x.client_id, [...(pagosPorCliente.get(x.client_id) ?? []), x]);
     });
     const conPago = pagosPorCliente.size;
-    const repiten = [...pagosPorCliente.values()].filter((l) => l.length >= 2).length;
+    const ultimoPago = (l: Fac[]) => l.reduce((mx, x) => (fechaCobro(x) > mx ? fechaCobro(x) : mx), "");
     const limiteDormido = dias(180);
-    const dormidos = [...pagosPorCliente.values()].filter(
-      (l) => l.reduce((mx, x) => (fechaCobro(x) > mx ? fechaCobro(x) : mx), "") < limiteDormido
-    ).length;
+    const repiten = [...pagosPorCliente.entries()].filter(([, l]) => l.length >= 2);
+    const dormidos = [...pagosPorCliente.entries()].filter(([, l]) => ultimoPago(l) < limiteDormido);
 
-    // Concentración: cuánto del cobrado del período depende de pocos clientes.
     const cobradoPorCliente = new Map<string, number>();
     pagadasPer.forEach((x) => {
       if (!x.client_id) return;
       cobradoPorCliente.set(x.client_id, (cobradoPorCliente.get(x.client_id) ?? 0) + Number(x.total || 0));
     });
     const top = [...cobradoPorCliente.entries()].sort((a, b) => b[1] - a[1]);
+    const top3Monto = top.slice(0, 3).reduce((a, x) => a + x[1], 0);
+
+    const hoy = dias(0);
+    const segVenc = seguimientos.filter((x) => x.estado === "pendiente" && x.fecha_proximo < hoy);
+
     const nombre = (id: string | null) => (id ? clientes.find((x) => x.id === id)?.name ?? "Cliente" : "Sin cliente");
     const hrefCli = (id: string | null) => (id ? `/dashboard/clientes/${id}/editar` : undefined);
     const fila = (id: string | null, extra?: string): Fila => ({ nombre: nombre(id), extra, href: hrefCli(id) });
     const fm = (n: number) => formatMoney(n);
-    const fFecha = (f: string) => f.slice(5, 7) + "/" + f.slice(8, 10) + "/" + f.slice(0, 4);
+    const parte = (v: number) => `${fm(v)} · ${cobrado > 0 ? Math.round((v / cobrado) * 100) : 0}%`;
 
-    const hoy = dias(0);
-    const segVenc = seguimientos.filter((x) => x.estado === "pendiente" && x.fecha_proximo < hoy);
-    const segVencidos = segVenc.length;
-
-    // Listas de detalle (se abren al tocar cada tarjeta).
-    const ultimoPago = (l: Fac[]) => l.reduce((mx, x) => (fechaCobro(x) > mx ? fechaCobro(x) : mx), "");
     const listas = {
-      nuevos: nuevos.map((x) =>
-        fila(x.id, primeraConOrigen.get(x.id) ?? (x.fuente ? FUENTE_LABEL[x.fuente] ?? x.fuente : "Manual / sin identificar"))
-      ),
-      top: top.slice(0, 10).map(([id, v], i) => fila(id, `${fm(v)} · ${cobrado > 0 ? Math.round((v / cobrado) * 100) : 0}%`)),
-      top3: top.slice(0, 3).map(([id, v]) => fila(id, `${fm(v)} · ${cobrado > 0 ? Math.round((v / cobrado) * 100) : 0}%`)),
-      top1: top.slice(0, 1).map(([id, v]) => fila(id, `${fm(v)} · ${cobrado > 0 ? Math.round((v / cobrado) * 100) : 0}%`)),
-      repiten: [...pagosPorCliente.entries()].filter(([, l]) => l.length >= 2).map(([id, l]) => fila(id, `${l.length} pagos`)),
-      dormidos: [...pagosPorCliente.entries()]
-        .filter(([, l]) => ultimoPago(l) < limiteDormido)
-        .map(([id, l]) => fila(id, `último pago ${fFecha(ultimoPago(l))}`)),
+      nuevos: nuevos.map((x) => fila(x.id, canalDeCliente(x))),
+      top: top.slice(0, 15).map(([id, v]) => fila(id, parte(v))),
+      top3: top.slice(0, 3).map(([id, v]) => fila(id, parte(v))),
+      repiten: repiten.map(([id, l]) => fila(id, `${l.length} pagos`)),
+      dormidos: dormidos.map(([id, l]) => fila(id, `último pago ${fFecha(ultimoPago(l))}`)),
       segVencidos: segVenc.map((x) => fila(x.client_id, `le tocaba ${fFecha(x.fecha_proximo)}`)),
       abiertas: abiertas.map((x) => fila(x.client_id, `${fm(Number(x.total || 0))} · ${fFecha(x.fecha_emision)}`)),
       cierre: [...ganadas, ...perdidas].map((x) =>
         fila(x.client_id, `${x.estado === "rechazada" ? "rechazada" : "aprobada"} · ${fm(Number(x.total || 0))}`)
       ),
       recurrentes: plantillas.map((x) => fila(x.client_id, `${fm(Number(x.total || 0))} / ${x.frecuencia_recurrente ?? "mensual"}`)),
-      detenidas: facturas.filter((x) => !x.es_recurrente && padresConHijas.has(x.id)).map((x) => fila(x.client_id)),
+      detenidas: detenidasFacs.map((x) => fila(x.client_id)),
       reembolsos: notas.map((x) => fila(x.client_id, `${fm(Number(x.monto || 0))} · ${x.numero ?? ""}`)),
-      porCanalClientes: (canal: string) =>
-        nuevos
-          .filter((x) => (primeraConOrigen.get(x.id) ?? (x.fuente ? FUENTE_LABEL[x.fuente] ?? x.fuente : "Manual / sin identificar")) === canal)
-          .map((x) => fila(x.id)),
+      porCanalClientes: (canal: string) => nuevos.filter((x) => canalDeCliente(x) === canal).map((x) => fila(x.id)),
       porCanalVentas: (canal: string) =>
-        pagadasPer
-          .filter((x) => (x.origen ?? (x.factura_padre_id ? "Recurrente (automática)" : "Factura directa")) === canal)
-          .map((x) => fila(x.client_id, `${fm(Number(x.total || 0))} · ${fFecha(fechaCobro(x))}`)),
+        pagadasPer.filter((x) => canalVenta(x) === canal).map((x) => fila(x.client_id, `${fm(Number(x.total || 0))} · ${fFecha(fechaCobro(x))}`)),
     };
 
+    // Segmentos de la barra de dependencia: los 4 mayores.
+    const seg = top.slice(0, 4).map(([id, v], i) => ({ id, nombre: nombre(id), v, color: COLORES[i] }));
+
     return {
+      cobrado,
+      cobradoPrev,
+      serie,
+      nPagadas: pagadasPer.length,
+      ticket: pagadasPer.length ? cobrado / pagadasPer.length : 0,
       nuevos: nuevos.length,
       nuevosPrev: nuevosPrev.length,
       porFuente: [...porFuente.entries()].sort((a, b) => b[1] - a[1]),
       ventasCanal: [...ventasCanal.entries()].sort((a, b) => b[1].monto - a[1].monto),
       mrr,
       nRecurrentes: plantillas.length,
-      detenidas,
+      nDetenidas: detenidasFacs.length,
       reembolsado,
       nNotas: notas.length,
       cots: cots.length,
       ganadas: ganadas.length,
       perdidas: perdidas.length,
       abiertas: abiertas.length,
-      montoGanado: ganadas.reduce((a, x) => a + Number(x.total || 0), 0),
-      cobrado,
-      nPagadas: pagadasPer.length,
-      ticket: pagadasPer.length ? cobrado / pagadasPer.length : 0,
+      abiertasViejas: abiertasViejas.length,
       conPago,
-      repiten,
-      dormidos,
-      segVencidos,
+      nRepiten: repiten.length,
+      nDormidos: dormidos.length,
+      nSegVenc: segVenc.length,
       costoPorNuevo: nuevos.length > 0 && gastoMercadeo > 0 ? gastoMercadeo / nuevos.length : null,
-      top1: top[0] ? { nombre: nombre(top[0][0]), share: cobrado > 0 ? top[0][1] / cobrado : 0 } : null,
-      top3Share: cobrado > 0 ? top.slice(0, 3).reduce((a, x) => a + x[1], 0) / cobrado : 0,
+      top3Share: cobrado > 0 ? top3Monto / cobrado : 0,
+      top1Share: top[0] && cobrado > 0 ? top[0][1] / cobrado : 0,
+      seg,
       listas,
     };
   }, [clientes, facturas, cotizaciones, seguimientos, gastoMercadeo, notas, periodo]);
 
   function abrir(d: Detalle) {
+    if (!d.filas.length) return;
     setDetalle(d);
-    setTimeout(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    setSubida(false);
+    setTimeout(() => setSubida(true), 20);
   }
+  function cerrar() {
+    setSubida(false);
+    setTimeout(() => setDetalle(null), 220);
+  }
+
+  const cobradoAnim = useContar(m.cobrado);
+  const nuevosAnim = useContar(m.nuevos, 700);
 
   if (cargando) return <p className="text-sm text-muted">Calculando estadísticas…</p>;
 
-  const dif = m.nuevos - m.nuevosPrev;
-  // Tarjeta tocable: abre la lista de quiénes son (clientes, cotizaciones…).
-  const Kpi = ({ titulo, valor, nota, filas }: { titulo: string; valor: string; nota?: string; filas?: Fila[] }) => {
-    const tocable = !!filas && filas.length > 0;
-    return (
-      <div
-        className="vc-card"
-        onClick={tocable ? () => abrir({ titulo, nota, filas: filas as Fila[] }) : undefined}
-        style={tocable ? { cursor: "pointer" } : undefined}
-      >
-        <p className="text-xs text-muted">{titulo}</p>
-        <p className="mt-1 text-xl font-semibold">{valor}</p>
-        {nota && <p className="mt-1 text-xs text-muted">{nota}</p>}
-        {tocable && <p className="mt-1 text-[11px] text-teal">Toca para ver quiénes →</p>}
-      </div>
-    );
+  const delta = m.cobradoPrev > 0 ? Math.round(((m.cobrado - m.cobradoPrev) / m.cobradoPrev) * 100) : null;
+
+  // Avisos de VICTOR: reglas simples sobre los números del propio usuario.
+  const avisos: { icono: string; texto: string; color: "warn" | "info" | "ok"; detalle: Detalle }[] = [];
+  if (m.top3Share >= 0.5 && m.cobrado > 0)
+    avisos.push({
+      icono: "ti-alert-triangle",
+      texto: `3 clientes aportan ${Math.round(m.top3Share * 100)}% de lo cobrado`,
+      color: "warn",
+      detalle: { titulo: `Tus 3 mejores clientes · ${Math.round(m.top3Share * 100)}%`, filas: m.listas.top3 },
+    });
+  else if (m.top1Share >= 0.35)
+    avisos.push({
+      icono: "ti-alert-triangle",
+      texto: `Un solo cliente aporta ${Math.round(m.top1Share * 100)}% de lo cobrado`,
+      color: "warn",
+      detalle: { titulo: "Cliente que más aporta", filas: m.listas.top.slice(0, 1) },
+    });
+  if (m.nSegVenc > 0)
+    avisos.push({
+      icono: "ti-bell-ringing",
+      texto: `${m.nSegVenc} seguimiento${m.nSegVenc > 1 ? "s" : ""} vencido${m.nSegVenc > 1 ? "s" : ""}: ya les tocaba volver`,
+      color: "warn",
+      detalle: { titulo: "Seguimientos vencidos", filas: m.listas.segVencidos },
+    });
+  if (m.abiertasViejas > 0)
+    avisos.push({
+      icono: "ti-file-description",
+      texto: `${m.abiertasViejas} cotización${m.abiertasViejas > 1 ? "es" : ""} sin respuesta hace más de 7 días`,
+      color: "info",
+      detalle: { titulo: "Cotizaciones sin respuesta", filas: m.listas.abiertas },
+    });
+  if (m.nDormidos > 0)
+    avisos.push({
+      icono: "ti-moon",
+      texto: `${m.nDormidos} cliente${m.nDormidos > 1 ? "s" : ""} llevan más de 6 meses sin volver`,
+      color: "info",
+      detalle: { titulo: "Clientes dormidos", nota: "Pagaron antes, pero llevan más de 6 meses sin volver.", filas: m.listas.dormidos },
+    });
+  if (m.nDetenidas > 0)
+    avisos.push({
+      icono: "ti-repeat-off",
+      texto: `${m.nDetenidas} cobro${m.nDetenidas > 1 ? "s" : ""} recurrente${m.nDetenidas > 1 ? "s" : ""} detenido${m.nDetenidas > 1 ? "s" : ""}`,
+      color: "info",
+      detalle: { titulo: "Recurrentes detenidos", filas: m.listas.detenidas },
+    });
+  if (avisos.length === 0)
+    avisos.push({
+      icono: "ti-circle-check",
+      texto: "Sin alertas por ahora. Tus números se ven tranquilos.",
+      color: "ok",
+      detalle: { titulo: "", filas: [] },
+    });
+
+  const colorAviso = (c: "warn" | "info" | "ok") =>
+    c === "warn"
+      ? { bg: "rgba(239,159,39,.14)", fg: "#854F0B", bd: "rgba(239,159,39,.35)" }
+      : c === "ok"
+      ? { bg: "rgba(29,158,117,.12)", fg: "#0F6E56", bd: "rgba(29,158,117,.3)" }
+      : { bg: "rgba(83,74,183,.10)", fg: "#534AB7", bd: "rgba(83,74,183,.28)" };
+
+  // Línea de tendencia.
+  const W = 300;
+  const H = 64;
+  const maxS = Math.max(1, ...m.serie);
+  const pts = m.serie.map((v, i) => [(i / (m.serie.length - 1)) * W, H - 6 - (v / maxS) * (H - 14)] as const);
+  const linea = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
+  const area = `${linea} L${W} ${H} L0 ${H} Z`;
+
+  const card: React.CSSProperties = {
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
   };
+  const tocable: React.CSSProperties = { cursor: "pointer" };
+  const etiqueta: React.CSSProperties = { fontSize: 11, color: "var(--muted)", margin: 0 };
+
+  const anillo = pct(m.nRepiten, m.conPago);
+  const circ = 2 * Math.PI * 30;
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-xs text-muted">Calculado solo con lo que ya está en tu cuenta. Nada que escribir a mano.</p>
-        <select className="vc-input" style={{ width: "auto" }} value={periodo} onChange={(e) => setPeriodo(Number(e.target.value))}>
-          {PERIODOS.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
-            </option>
-          ))}
-        </select>
+      <style>{`
+        @keyframes vc-st-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .vc-st > * { animation: vc-st-in .45s ease both; }
+        .vc-st > *:nth-child(2) { animation-delay: .06s; } .vc-st > *:nth-child(3) { animation-delay: .12s; }
+        .vc-st > *:nth-child(4) { animation-delay: .18s; } .vc-st > *:nth-child(5) { animation-delay: .24s; }
+        .vc-st > *:nth-child(6) { animation-delay: .3s; } .vc-st > *:nth-child(7) { animation-delay: .36s; }
+        .vc-st-tap:active { transform: scale(.985); }
+        @keyframes vc-st-draw { from { stroke-dashoffset: 700; } to { stroke-dashoffset: 0; } }
+      `}</style>
+
+      {/* Selector de período */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 99, padding: 4 }}>
+        {PERIODOS.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => setPeriodo(p.value)}
+            style={{
+              flex: 1,
+              padding: "7px 0",
+              borderRadius: 99,
+              fontSize: 12,
+              fontWeight: 500,
+              border: "none",
+              background: periodo === p.value ? TEAL : "transparent",
+              color: periodo === p.value ? "#fff" : "var(--muted)",
+            }}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
 
-      <div ref={panelRef}>
-        {detalle && (
-          <div className="vc-card mb-4" style={{ borderColor: "#1D9E75" }}>
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold">{detalle.titulo}</p>
-                {detalle.nota && <p className="text-xs text-muted">{detalle.nota}</p>}
+      <div className="vc-st">
+        {/* Resumen */}
+        <div style={{ ...card, background: "linear-gradient(135deg, rgba(29,158,117,.18), rgba(83,74,183,.16))", borderColor: "rgba(29,158,117,.35)", padding: 18 }}>
+          <p style={etiqueta}>Cobrado · {PERIODOS.find((p) => p.value === periodo)?.label}</p>
+          <p style={{ fontSize: 34, fontWeight: 600, margin: "2px 0 6px", letterSpacing: "-0.5px" }}>{formatMoney(cobradoAnim)}</p>
+          {delta !== null && (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 500,
+                padding: "3px 9px",
+                borderRadius: 99,
+                background: delta >= 0 ? "rgba(29,158,117,.18)" : "rgba(226,75,74,.16)",
+                color: delta >= 0 ? "#0F6E56" : "#A32D2D",
+              }}
+            >
+              {delta >= 0 ? "▲" : "▼"} {Math.abs(delta)}% vs. el período anterior
+            </span>
+          )}
+          <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ marginTop: 10, display: "block" }} role="img" aria-label="Cobrado por tramo del período">
+            <defs>
+              <linearGradient id="vc-st-g" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={TEAL} stopOpacity="0.35" />
+                <stop offset="100%" stopColor={TEAL} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={area} fill="url(#vc-st-g)" />
+            <path d={linea} fill="none" stroke={TEAL} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="700" style={{ animation: "vc-st-draw 1.2s ease-out both" }} />
+            {pts.length > 0 && <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="3.5" fill={TEAL} />}
+          </svg>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            {[
+              { t: "Facturas", v: String(m.nPagadas), f: m.listas.top, d: "Cobrado por cliente" },
+              { t: "Ticket promedio", v: m.nPagadas ? formatMoney(m.ticket) : "—", f: [] as Fila[], d: "" },
+              { t: "Clientes nuevos", v: String(Math.round(nuevosAnim)), f: m.listas.nuevos, d: "Clientes nuevos" },
+            ].map((k) => (
+              <div
+                key={k.t}
+                className="vc-st-tap"
+                onClick={k.f.length ? () => abrir({ titulo: k.d, filas: k.f }) : undefined}
+                style={{ flex: 1, background: "rgba(255,255,255,.35)", borderRadius: 14, padding: "8px 10px", cursor: k.f.length ? "pointer" : "default" }}
+              >
+                <p style={etiqueta}>{k.t}</p>
+                <p style={{ margin: 0, fontWeight: 600, fontSize: 15 }}>{k.v}</p>
               </div>
-              <button onClick={() => setDetalle(null)} className="text-xs text-muted">
-                Cerrar ✕
+            ))}
+          </div>
+        </div>
+
+        {/* Avisos de VICTOR */}
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ ...etiqueta, margin: "0 0 6px 4px", display: "flex", alignItems: "center", gap: 6 }}>
+            <i className="ti ti-sparkles" style={{ fontSize: 14, color: VIOLETA }} /> VICTOR nota esto
+          </p>
+          {avisos.map((a, i) => {
+            const c = colorAviso(a.color);
+            return (
+              <div
+                key={i}
+                className="vc-st-tap"
+                onClick={() => abrir(a.detalle)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "11px 12px",
+                  borderRadius: 14,
+                  background: c.bg,
+                  border: `1px solid ${c.bd}`,
+                  color: c.fg,
+                  fontSize: 13,
+                  marginBottom: 6,
+                  cursor: a.detalle.filas.length ? "pointer" : "default",
+                }}
+              >
+                <i className={`ti ${a.icono}`} style={{ fontSize: 18 }} />
+                <span style={{ flex: 1 }}>{a.texto}</span>
+                {a.detalle.filas.length > 0 && <i className="ti ti-chevron-right" style={{ fontSize: 16 }} />}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Dependencia */}
+        {m.cobrado > 0 && m.seg.length > 0 && (
+          <div className="vc-st-tap" style={{ ...card, ...tocable }} onClick={() => abrir({ titulo: "Quién aporta más", nota: "Porcentaje de lo cobrado en el período.", filas: m.listas.top })}>
+            <p style={etiqueta}>Dependencia de clientes</p>
+            <div style={{ display: "flex", height: 16, borderRadius: 8, overflow: "hidden", margin: "10px 0", background: "var(--border)" }}>
+              {m.seg.map((s) => (
+                <div key={s.id} style={{ width: `${(s.v / m.cobrado) * 100}%`, background: s.color }} />
+              ))}
+              <div style={{ flex: 1 }} />
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px" }}>
+              {m.seg.map((s) => (
+                <span key={s.id} style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 99, background: s.color, flexShrink: 0 }} />
+                  {s.nombre.length > 24 ? s.nombre.slice(0, 23) + "…" : s.nombre} <b style={{ fontWeight: 600 }}>{Math.round((s.v / m.cobrado) * 100)}%</b>
+                </span>
+              ))}
+            </div>
+            <p style={{ ...etiqueta, marginTop: 8, color: "#0F6E56" }}>Toca para ver la lista completa →</p>
+          </div>
+        )}
+
+        {/* Retención + Embudo */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div className="vc-st-tap" style={{ ...card, marginBottom: 0, ...tocable }} onClick={() => abrir({ titulo: "Clientes que repiten", filas: m.listas.repiten })}>
+            <p style={etiqueta}>Clientes que repiten</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+              <svg viewBox="0 0 80 80" width="68" height="68">
+                <circle cx="40" cy="40" r="30" fill="none" stroke="var(--border)" strokeWidth="9" />
+                <circle
+                  cx="40"
+                  cy="40"
+                  r="30"
+                  fill="none"
+                  stroke={TEAL}
+                  strokeWidth="9"
+                  strokeLinecap="round"
+                  strokeDasharray={`${(anillo / 100) * circ} ${circ}`}
+                  transform="rotate(-90 40 40)"
+                  style={{ transition: "stroke-dasharray 1s ease" }}
+                />
+                <text x="40" y="45" textAnchor="middle" fontSize="16" fontWeight="600" fill="currentColor">
+                  {anillo}%
+                </text>
+              </svg>
+              <p style={{ ...etiqueta, flex: 1 }}>
+                {m.nRepiten} de {m.conPago} han pagado más de una vez
+              </p>
+            </div>
+          </div>
+
+          {m.cots > 0 ? (
+            <div className="vc-st-tap" style={{ ...card, marginBottom: 0, ...tocable }} onClick={() => abrir({ titulo: "Cotizaciones del período", filas: m.listas.cierre.length ? m.listas.cierre : m.listas.abiertas })}>
+              <p style={etiqueta}>Embudo de cotizaciones</p>
+              <div style={{ marginTop: 8, fontSize: 11, fontWeight: 500 }}>
+                <div style={{ background: "#CECBF6", color: "#3C3489", borderRadius: 8, padding: "4px 8px", marginBottom: 4 }}>Enviadas {m.cots}</div>
+                <div style={{ background: "#AFA9EC", color: "#26215C", borderRadius: 8, padding: "4px 8px", marginBottom: 4, width: `${Math.max(30, pct(m.ganadas + m.perdidas, m.cots))}%` }}>
+                  Respondidas {m.ganadas + m.perdidas}
+                </div>
+                <div style={{ background: TEAL, color: "#fff", borderRadius: 8, padding: "4px 8px", width: `${Math.max(25, pct(m.ganadas, m.cots))}%` }}>Aprobadas {m.ganadas}</div>
+              </div>
+              <p style={{ ...etiqueta, marginTop: 6 }}>Cierre: {pct(m.ganadas, m.cots)}%</p>
+            </div>
+          ) : (
+            <div className="vc-st-tap" style={{ ...card, marginBottom: 0, ...tocable }} onClick={() => abrir({ titulo: "Cobros recurrentes", filas: m.listas.recurrentes })}>
+              <p style={etiqueta}>Ingreso mensual recurrente</p>
+              <p style={{ fontSize: 22, fontWeight: 600, margin: "8px 0 2px" }}>{formatMoney(m.mrr)}</p>
+              <p style={etiqueta}>{m.nRecurrentes} cobros activos</p>
+            </div>
+          )}
+        </div>
+
+        {/* Clientes nuevos y canales */}
+        <div style={card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <p style={etiqueta}>Por dónde entraron los clientes nuevos</p>
+              <p style={{ margin: "2px 0 0", fontWeight: 600, fontSize: 18 }}>
+                {m.nuevos} nuevos{" "}
+                <span style={{ fontSize: 11, fontWeight: 500, color: "var(--muted)" }}>
+                  ({m.nuevos - m.nuevosPrev >= 0 ? "+" : ""}
+                  {m.nuevos - m.nuevosPrev} vs. antes)
+                </span>
+              </p>
+            </div>
+            {m.costoPorNuevo !== null && (
+              <div style={{ textAlign: "right" }}>
+                <p style={etiqueta}>Costo por cliente nuevo</p>
+                <p style={{ margin: 0, fontWeight: 600 }}>{formatMoney(m.costoPorNuevo)}</p>
+              </div>
+            )}
+          </div>
+          {m.porFuente.length === 0 ? (
+            <p style={{ ...etiqueta, marginTop: 8 }}>Sin clientes nuevos en este período.</p>
+          ) : (
+            m.porFuente.map(([k, n]) => (
+              <div key={k} className="vc-st-tap" style={{ ...tocable, marginTop: 10 }} onClick={() => abrir({ titulo: `Clientes nuevos: ${k}`, filas: m.listas.porCanalClientes(k) })}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
+                  <span>{k}</span>
+                  <b style={{ fontWeight: 600 }}>{n}</b>
+                </div>
+                <div style={{ height: 7, borderRadius: 4, background: "var(--border)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${(n / m.nuevos) * 100}%`, background: `linear-gradient(90deg, ${VIOLETA}, ${TEAL})`, borderRadius: 4 }} />
+                </div>
+              </div>
+            ))
+          )}
+          <p style={{ ...etiqueta, marginTop: 10 }}>
+            El canal sale solo de Stripe, tu tienda Shopify o el campo "origen" de tu Zap. Lo creado a mano aparece como "Manual / sin identificar".
+          </p>
+        </div>
+
+        {m.ventasCanal.length > 0 && (
+          <div style={card}>
+            <p style={etiqueta}>Cobrado por canal</p>
+            {m.ventasCanal.map(([k, v]) => (
+              <div key={k} className="vc-st-tap" style={{ ...tocable, marginTop: 10 }} onClick={() => abrir({ titulo: `Cobrado: ${k}`, filas: m.listas.porCanalVentas(k) })}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
+                  <span>
+                    {k} <span style={{ color: "var(--muted)" }}>({v.n})</span>
+                  </span>
+                  <b style={{ fontWeight: 600 }}>{formatMoney(v.monto)}</b>
+                </div>
+                <div style={{ height: 7, borderRadius: 4, background: "var(--border)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${m.cobrado > 0 ? (v.monto / m.cobrado) * 100 : 0}%`, background: `linear-gradient(90deg, ${TEAL}, ${VIOLETA})`, borderRadius: 4 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Más indicadores */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          {[
+            m.nRecurrentes > 0 || m.nDetenidas > 0
+              ? { t: "Ingreso recurrente", v: formatMoney(m.mrr), n: `${m.nRecurrentes} activos · ${m.nDetenidas} detenidos`, f: m.listas.recurrentes }
+              : null,
+            m.nNotas > 0 ? { t: "Reembolsos y créditos", v: formatMoney(m.reembolsado), n: `${pct(m.reembolsado, m.cobrado)}% de lo cobrado`, f: m.listas.reembolsos } : null,
+            { t: "Clientes dormidos", v: String(m.nDormidos), n: "Más de 6 meses sin volver", f: m.listas.dormidos },
+            { t: "Seguimientos vencidos", v: String(m.nSegVenc), n: "Ya les tocaba volver", f: m.listas.segVencidos },
+          ]
+            .filter(Boolean)
+            .map((k: any) => (
+              <div key={k.t} className="vc-st-tap" style={{ ...card, marginBottom: 0, ...(k.f.length ? tocable : {}) }} onClick={k.f.length ? () => abrir({ titulo: k.t, filas: k.f }) : undefined}>
+                <p style={etiqueta}>{k.t}</p>
+                <p style={{ fontSize: 22, fontWeight: 600, margin: "4px 0 2px" }}>{k.v}</p>
+                <p style={etiqueta}>{k.n}</p>
+              </div>
+            ))}
+        </div>
+
+        <p style={{ ...etiqueta, textAlign: "center", marginTop: 8 }}>
+          Son referencias de tu propio negocio, no metas. Coméntalo con tu contador o con alguien de tu industria con resultados.
+        </p>
+      </div>
+
+      {/* Hoja de detalle: sube desde abajo con la lista completa */}
+      {detalle && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 120 }}>
+          <div onClick={cerrar} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.45)", opacity: subida ? 1 : 0, transition: "opacity .22s" }} />
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              maxHeight: "82vh",
+              overflowY: "auto",
+              background: "var(--card)",
+              borderRadius: "22px 22px 0 0",
+              padding: "10px 18px 28px",
+              transform: subida ? "translateY(0)" : "translateY(100%)",
+              transition: "transform .24s ease-out",
+              maxWidth: 640,
+              margin: "0 auto",
+            }}
+          >
+            <div style={{ width: 40, height: 4, borderRadius: 4, background: "var(--border)", margin: "0 auto 12px" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+              <div>
+                <p style={{ margin: 0, fontWeight: 600, fontSize: 16 }}>{detalle.titulo}</p>
+                {detalle.nota && <p style={{ ...etiqueta, marginTop: 2 }}>{detalle.nota}</p>}
+              </div>
+              <button onClick={cerrar} aria-label="Cerrar" style={{ border: "none", background: "none", fontSize: 20, color: "var(--muted)" }}>
+                <i className="ti ti-x" />
               </button>
             </div>
-            <div className="mt-2">
+            <div style={{ marginTop: 8 }}>
               {detalle.filas.map((f, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 py-1.5 text-sm" style={{ borderTop: i ? "1px solid var(--border)" : undefined }}>
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "11px 0", borderTop: "1px solid var(--border)", fontSize: 14 }}>
                   {f.href ? (
-                    <Link href={f.href} className="text-teal underline">
+                    <Link href={f.href} style={{ color: TEAL, textDecoration: "underline" }}>
                       {f.nombre}
                     </Link>
                   ) : (
                     <span>{f.nombre}</span>
                   )}
-                  {f.extra && <span className="text-xs text-muted text-right">{f.extra}</span>}
+                  {f.extra && <span style={{ fontSize: 12, color: "var(--muted)", textAlign: "right" }}>{f.extra}</span>}
                 </div>
               ))}
             </div>
           </div>
-        )}
-      </div>
-
-      <h3 className="mb-2 text-sm font-semibold">Clientes nuevos</h3>
-      <div className="mb-4 grid grid-cols-2 gap-3">
-        <Kpi
-          titulo="Clientes nuevos"
-          valor={String(m.nuevos)}
-          nota={m.nuevosPrev || m.nuevos ? `${dif >= 0 ? "+" : ""}${dif} vs. el período anterior (${m.nuevosPrev})` : undefined}
-          filas={m.listas.nuevos}
-        />
-        <Kpi
-          titulo="Costo por cliente nuevo"
-          valor={m.costoPorNuevo !== null ? formatMoney(m.costoPorNuevo) : "—"}
-          nota={
-            m.costoPorNuevo !== null
-              ? `Gasto en "Publicidad y mercadeo": ${formatMoney(gastoMercadeo)}`
-              : 'Aparece cuando hay gastos categorizados como "Publicidad y mercadeo" y clientes nuevos.'
-          }
-        />
-      </div>
-      <div className="vc-card mb-5">
-        <p className="mb-2 text-xs text-muted">Por dónde entraron los clientes nuevos</p>
-        {m.porFuente.length === 0 ? (
-          <p className="text-sm">Sin clientes nuevos en este período.</p>
-        ) : (
-          m.porFuente.map(([k, n]) => (
-            <div
-              key={k}
-              className="flex justify-between py-1 text-sm"
-              style={{ cursor: "pointer" }}
-              onClick={() => abrir({ titulo: `Clientes nuevos: ${k}`, filas: m.listas.porCanalClientes(k) })}
-            >
-              <span>{k}</span>
-              <span className="font-medium">{n}</span>
-            </div>
-          ))
-        )}
-        <p className="mt-2 text-xs text-muted">
-          El canal se toma solo de tu tienda Shopify (red social, buscador, directo) o de lo que envíe tu Zap con el campo "origen". Los
-          clientes creados a mano aparecen como "Manual / sin identificar".
-        </p>
-      </div>
-
-      <h3 className="mb-2 text-sm font-semibold">Ventas</h3>
-      <div className="mb-3 grid grid-cols-2 gap-3">
-        <Kpi titulo="Cobrado" valor={formatMoney(m.cobrado)} nota={`${m.nPagadas} facturas pagadas`} filas={m.listas.top} />
-        <Kpi titulo="Ticket promedio" valor={m.nPagadas ? formatMoney(m.ticket) : "—"} />
-        {m.cots > 0 && (
-          <>
-            <Kpi titulo="Cotizaciones enviadas" valor={String(m.cots)} nota={`${m.abiertas} sin respuesta (toca para ver las abiertas)`} filas={m.listas.abiertas} />
-            <Kpi
-              titulo="Tasa de cierre"
-              valor={pct(m.ganadas, m.cots)}
-              nota={`${m.ganadas} aprobadas · ${m.perdidas} rechazadas · ${formatMoney(m.montoGanado)} aprobado`}
-              filas={m.listas.cierre}
-            />
-          </>
-        )}
-      </div>
-      {m.ventasCanal.length > 0 && (
-        <div className="vc-card mb-5">
-          <p className="mb-2 text-xs text-muted">Cobrado por canal</p>
-          {m.ventasCanal.map(([k, v]) => (
-            <div
-              key={k}
-              className="flex justify-between py-1 text-sm"
-              style={{ cursor: "pointer" }}
-              onClick={() => abrir({ titulo: `Cobrado: ${k}`, filas: m.listas.porCanalVentas(k) })}
-            >
-              <span>
-                {k} <span className="text-xs text-muted">({v.n})</span>
-              </span>
-              <span className="font-medium">{formatMoney(v.monto)}</span>
-            </div>
-          ))}
         </div>
       )}
-      {m.nNotas > 0 && (
-        <div className="mb-5 grid grid-cols-2 gap-3">
-          <Kpi
-            titulo="Reembolsos y créditos"
-            valor={formatMoney(m.reembolsado)}
-            nota={`${m.nNotas} en el período · ${pct(m.reembolsado, m.cobrado)} de lo cobrado`}
-            filas={m.listas.reembolsos}
-          />
-        </div>
-      )}
-
-      <h3 className="mb-2 text-sm font-semibold">Retención</h3>
-      <div className="mb-5 grid grid-cols-2 gap-3">
-        <Kpi titulo="Clientes que repiten" valor={pct(m.repiten, m.conPago)} nota={`${m.repiten} de ${m.conPago} clientes que han pagado`} filas={m.listas.repiten} />
-        <Kpi titulo="Clientes dormidos" valor={String(m.dormidos)} nota="Pagaron antes, pero llevan más de 6 meses sin volver." filas={m.listas.dormidos} />
-        {(m.nRecurrentes > 0 || m.detenidas > 0) && (
-          <>
-            <Kpi titulo="Ingreso mensual recurrente" valor={formatMoney(m.mrr)} nota={`${m.nRecurrentes} cobros recurrentes activos`} filas={m.listas.recurrentes} />
-            <Kpi titulo="Recurrentes detenidos" valor={String(m.detenidas)} nota="Cobros recurrentes que ya se apagaron (cancelaciones)." filas={m.listas.detenidas} />
-          </>
-        )}
-        <Kpi titulo="Seguimientos vencidos" valor={String(m.segVencidos)} nota="Clientes a quienes ya les tocaba volver y no se les ha contactado." filas={m.listas.segVencidos} />
-      </div>
-
-      <h3 className="mb-2 text-sm font-semibold">Dependencia de clientes</h3>
-      <div className="grid grid-cols-2 gap-3">
-        <Kpi
-          titulo="Cliente que más aporta"
-          valor={m.top1 ? `${Math.round(m.top1.share * 100)}%` : "—"}
-          nota={m.top1 ? m.top1.nombre : "Sin cobros en el período."}
-          filas={m.listas.top1}
-        />
-        <Kpi titulo="Tus 3 mejores clientes" valor={m.cobrado > 0 ? `${Math.round(m.top3Share * 100)}%` : "—"} nota="Del total cobrado en el período." filas={m.listas.top3} />
-      </div>
-
-      <p className="mt-4 text-xs text-muted">
-        Son referencias de tu propio negocio, no metas. Cada negocio es distinto: coméntalo con tu contador o con alguien de tu industria con
-        resultados.
-      </p>
     </div>
   );
 }
