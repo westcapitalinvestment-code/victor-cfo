@@ -7,7 +7,6 @@ import { createClient } from "@/lib/supabase/client";
 import { formatMoney, formatFecha } from "@/lib/format";
 import { fechaHoyPR } from "@/lib/hora-pr";
 import ConfirmarPagoModal, { type LineaConfirmacion } from "../confirmar-pago-modal";
-import EstadisticasTab from "./estadisticas-tab";
 
 type Cliente = {
   id: string;
@@ -163,9 +162,6 @@ const TABS = [
   // cada X meses") y factura-detalle.tsx (crearSeguimientosSiAplica).
   { id: "seguimientos", label: "Seguimientos", icon: "ti-bell-ringing" },
   { id: "reportes", label: "Reportes", icon: "ti-chart-bar" },
-  // Estadísticas (3 nov 2026, pedido de Joel): números de ventas/clientes
-  // calculados solo con datos existentes, ver estadisticas-tab.tsx.
-  { id: "estadisticas", label: "Estadísticas", icon: "ti-chart-line" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -385,7 +381,6 @@ export default function FacturacionPortal({
           addonTecnicosActivo={addonTecnicosActivo}
         />
       )}
-      {!modoAdmin && tab === "estadisticas" && <EstadisticasTab entidadId={entidadId} />}
       {!modoAdmin && tab === "reportes" && (
         <ReportesTab
           facturas={facturas}
