@@ -116,9 +116,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const txt = (s: string, x: number, yy: number, o: { f?: typeof font; size?: number; color?: ReturnType<typeof rgb> } = {}) =>
-    page.drawText(s, { x, y: yy, size: o.size ?? 10, font: o.f ?? font, color: o.color ?? negro });
-  const der = (s: string, xd: number, yy: number, o: { f?: typeof font; size?: number; color?: ReturnType<typeof rgb> } = {}) => {
+  // Las fuentes estándar de pdf-lib solo codifican WinAnsi: cualquier otro carácter
+  // (p. ej. un nombre de categoría con símbolos raros) tumbaría todo el PDF con un 500.
+  const seguro = (t: string) => t.replace(/[^\x20-\x7E\u00A0-\u00FF\u2013\u2014\u2018-\u201E\u2022\u2026]/g, "?");
+  const txt = (s0: string, x: number, yy: number, o: { f?: typeof font; size?: number; color?: ReturnType<typeof rgb> } = {}) =>
+    page.drawText(seguro(s0), { x, y: yy, size: o.size ?? 10, font: o.f ?? font, color: o.color ?? negro });
+  const der = (s0: string, xd: number, yy: number, o: { f?: typeof font; size?: number; color?: ReturnType<typeof rgb> } = {}) => {
+    const s = seguro(s0);
     const f = o.f ?? font; const size = o.size ?? 10;
     page.drawText(s, { x: xd - f.widthOfTextAtSize(s, size), y: yy, size, font: f, color: o.color ?? negro });
   };
@@ -153,7 +157,7 @@ export async function GET(req: NextRequest) {
   fila("Total gastos", er.totalGastos, { negrita: true, color: rojo });
 
   seccion("Ganancia neta");
-  fila("Ganancia neta del año (ingresos − gastos)", er.utilidadNeta, { negrita: true, color: er.utilidadNeta >= 0 ? tealOscuro : rojo });
+  fila("Ganancia neta del año (ingresos menos gastos)", er.utilidadNeta, { negrita: true, color: er.utilidadNeta >= 0 ? tealOscuro : rojo });
 
   seccion("Self-employment (Seguro Social y Medicare)");
   if (!tieneParams) {
