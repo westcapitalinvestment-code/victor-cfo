@@ -2,6 +2,7 @@
 
 import Formularios480Dueno from "./formularios-480-dueno";
 import Separador480 from "./separador-480";
+import PortalContratistaPanel from "./portal-contratista-panel";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -2138,6 +2139,9 @@ function ContratistasTab({
           <p className="text-[11px] text-muted">
             {casilla480_6SP({ retention_type: retentionType, is_corporation: isCorporation }).label}
           </p>
+
+          {/* Portal en línea del contratista (migración 0207, 4 nov 2026). */}
+          {relevoVendor && <PortalContratistaPanel vendorId={relevoVendor.id} onAplicado={() => { router.refresh(); }} />}
 
           {/* Relevo de Retención (migración 0116, 30 sept 2026) — solo
               aplica a un contratista ya guardado, y solo tiene sentido si
