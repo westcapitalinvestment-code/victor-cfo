@@ -8,6 +8,7 @@ import GastosPendientesCard from "./gastos-pendientes-card";
 import ResumenCard from "./resumen-card";
 import ResumenReglasCard from "./resumen-reglas-card";
 import AvisosOficialesCard from "../avisos-oficiales-card";
+import FamiliaPlanillaCard from "./familia-planilla-card";
 import AlertasPatronCard, { type AlertaRegla } from "./alertas-patron-card";
 import ImpuestosEstimadosCard from "./impuestos-estimados-card";
 import Regla503020Card from "./regla-503020-card";
@@ -829,6 +830,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // tarjeta no se muestra) si la migración todavía no corrió o algo falla.
   const estimadoImpuestos = await obtenerEstimadoImpuestos(supabase, user.id, null, hoyStrPR);
 
+  // Recordatorio para familias con hijos (4 nov 2026): solo si lo dijo en el
+  // onboarding y no marcó residencia en EE.UU. en Impuestos estimados.
+  const [{ data: perfilHijos }, { data: ajusteImp }] = await Promise.all([
+    supabase.from("user_profiles").select("tiene_hijos, hijos_detalle").eq("id", user.id).maybeSingle(),
+    supabase.from("tax_estimate_settings").select("residencia").eq("owner_id", user.id).is("entity_id", null).maybeSingle(),
+  ]);
+  const mostrarFamilia =
+    (perfilHijos as { tiene_hijos?: boolean | null } | null)?.tiene_hijos === true &&
+    (ajusteImp as { residencia?: string } | null)?.residencia !== "us";
+  const detalleHijos = ((perfilHijos as { hijos_detalle?: string | null } | null)?.hijos_detalle ?? null) || null;
+
   // Recordatorio de estimada (9 oct 2026, pedido de Joel: "que prenda una
   // alerta... antes del 15 que recuerde que se debe pagar"): aparece en
   // Alertas inteligentes desde 21 días antes de cada fecha de estimada y
@@ -855,6 +867,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <p className="text-xl font-medium">{saludoPorHora(hoy)}, {firstName} 👋</p>
         <p className="mt-0.5 text-xs capitalize text-muted">{fechaLbl} · Personal</p>
       </div>
+
+      {mostrarFamilia && <FamiliaPlanillaCard mes={Number(hoyStrPR.slice(5, 7))} detalle={detalleHijos} />}
 
       {/* Avisos oficiales automáticos (30 oct 2026): resumen filtrado de lo que
           publican DTRH, Hacienda, Colegio de CPA e IRS, solo lo que aplica a
