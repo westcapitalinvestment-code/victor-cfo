@@ -468,6 +468,9 @@ export default async function CpaPersonalPage({
               <a href={`/api/reportes/estado-resultados/pdf?ownerId=${ownerId}&anio=${anio}`} className="text-sm font-medium hover:text-teal">
                 ↓ PDF
               </a>
+              <a href={`/api/reportes/ganancia-neta-se?ownerId=${ownerId}&anio=${anio}`} target="_blank" className="text-sm font-medium hover:text-teal" title="Ganancia neta y self-employment (1040-SS / Anejo SE)">
+                ↓ Self-employment
+              </a>
             </div>
           </div>
 

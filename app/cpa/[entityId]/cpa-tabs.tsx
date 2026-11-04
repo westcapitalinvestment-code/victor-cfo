@@ -505,6 +505,14 @@ export default function CpaTabs({
                 >
                   <i className="ti ti-file-type-xls" /> Excel
                 </a>
+                <a
+                  href={`/api/reportes/ganancia-neta-se?entityId=${entityId}&anio=${anioResultados}`}
+                  target="_blank"
+                  className="flex items-center gap-1 text-muted hover:text-teal"
+                  title="Ganancia neta y self-employment (1040-SS / Anejo SE)"
+                >
+                  <i className="ti ti-report-money" /> Self-employment
+                </a>
               </div>
             </div>
             <div className="mb-3 flex flex-wrap gap-4">

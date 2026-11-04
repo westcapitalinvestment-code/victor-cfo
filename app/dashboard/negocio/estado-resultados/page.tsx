@@ -179,6 +179,9 @@ export default async function EstadoResultadosPage({
           <a href={`/api/reportes/estado-resultados/pdf?${qsExport}`} className="text-xs font-medium hover:text-teal">
             ↓ PDF
           </a>
+          <a href={`/api/reportes/ganancia-neta-se?${qsExport}`} target="_blank" className="text-xs font-medium hover:text-teal" title="Ganancia neta y self-employment (1040-SS / Anejo SE) para tu contable">
+            ↓ Self-employment
+          </a>
         </div>
       </div>
 
