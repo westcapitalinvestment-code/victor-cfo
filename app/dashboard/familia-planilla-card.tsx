@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 // Recordatorio para usuarios con hijos (4 nov 2026, pedido de Joel: "que si la
@@ -9,6 +12,26 @@ import Link from "next/link";
 export default function FamiliaPlanillaCard({ mes, detalle }: { mes: number; detalle: string | null }) {
   // mes: 1-12 (hora de PR)
   const temporada = mes >= 1 && mes <= 6 ? "planilla" : mes >= 11 ? "cierre" : "general";
+  // "Visto" se guarda en este dispositivo por temporada y año: al marcarlo se
+  // oculta, y vuelve a aparecer solo cuando cambia la temporada.
+  const clave = `familia-planilla-visto-${new Date().getFullYear()}-${temporada}`;
+  const [oculto, setOculto] = useState(true); // true hasta leer el estado: evita parpadeo
+  useEffect(() => {
+    try {
+      setOculto(localStorage.getItem(clave) === "1");
+    } catch {
+      setOculto(false);
+    }
+  }, [clave]);
+  if (oculto) return null;
+  const marcarVisto = () => {
+    try {
+      localStorage.setItem(clave, "1");
+    } catch {
+      /* sin storage: solo se oculta ahora */
+    }
+    setOculto(true);
+  };
   const titulo =
     temporada === "planilla"
       ? "Es temporada de planillas — y tienes hijos"
@@ -26,7 +49,10 @@ export default function FamiliaPlanillaCard({ mes, detalle }: { mes: number; det
     <div className="vc-card mb-3 !p-0">
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <span aria-hidden style={{ fontSize: 14 }}>👨‍👩‍👧</span>
-        <p className="text-xs font-medium uppercase tracking-wide text-muted">{titulo}</p>
+        <p className="flex-1 text-xs font-medium uppercase tracking-wide text-muted">{titulo}</p>
+        <button type="button" onClick={marcarVisto} className="text-[11px] font-medium text-teal" aria-label="Marcar como visto y ocultar">
+          ✓ Visto
+        </button>
       </div>
       <div className="p-4">
         <p className="text-xs text-text">{cuerpo}</p>

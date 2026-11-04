@@ -188,6 +188,24 @@ export async function POST(req: NextRequest) {
     .eq("id", user.id)
     .maybeSingle();
 
+  // 2c. Avisos oficiales que el usuario ve en Inicio (últimos 30 días, máx. 3).
+  // Si la tabla no existe o falla, VICTOR simplemente no los conoce.
+  let avisosRecientes: { titulo: string; resumen: string; fuente: string; fechaLimite: string | null; url: string }[] = [];
+  try {
+    const { data: av } = await supabase
+      .from("avisos_oficiales")
+      .select("titulo, resumen, fuente_nombre, fecha_limite, url, temas")
+      .gte("creado_at", new Date(Date.now() - 30 * 86400000).toISOString())
+      .order("creado_at", { ascending: false })
+      .limit(6);
+    avisosRecientes = ((av ?? []) as { titulo: string; resumen: string; fuente_nombre: string; fecha_limite: string | null; url: string; temas: string[] }[])
+      .filter((a) => !(a.temas.length === 1 && a.temas[0] === "profesion"))
+      .slice(0, 3)
+      .map((a) => ({ titulo: a.titulo, resumen: a.resumen, fuente: a.fuente_nombre, fechaLimite: a.fecha_limite, url: a.url }));
+  } catch {
+    /* sin avisos */
+  }
+
   // 3. Conversación activa — la retomamos si viene un id válido; si no,
   // retomamos la más reciente del usuario (así la conversación sigue igual
   // si entra desde otro dispositivo/navegador, donde el conversationId
@@ -610,6 +628,7 @@ export async function POST(req: NextRequest) {
         balance: Number(c.current_balance || 0),
       })),
     },
+    avisosRecientes,
     onboardingProfile: onboardingProfile
       ? {
           perfilCompleto: onboardingProfile.perfil_completo,

@@ -41,6 +41,9 @@ const TABS_NEGOCIO_INICIO = [
 // misma idea, /dashboard/tecnico sigue existiendo pero ya no se enlaza).
 const TABS_NEGOCIO = [
   { href: "/dashboard/facturacion", label: "Facturas", icon: "ti-file-invoice" },
+  // Reportes (4 nov 2026): Estado de Resultados / Self-employment. Antes esa
+  // página no tenía ícono propio y el nav no marcaba dónde estabas.
+  { href: "/dashboard/negocio/estado-resultados", label: "Reportes", icon: "ti-report-money" },
   { href: "/dashboard/pagos", label: "Pagos", icon: "ti-cash" },
   // Nómina (19 oct 2026, pedido de Joel): addon aparte al lado de Pagos.
   { href: "/dashboard/nomina", label: "Nómina", icon: "ti-receipt-2" },
@@ -67,7 +70,7 @@ const TAB_TRADING = { href: "/dashboard/trading", label: "Trading", icon: "ti-ch
 
 function NavLink({ tab, active }: { tab: { href: string; label: string; icon: string }; active: boolean }) {
   return (
-    <Link href={tab.href} className="vc-nb">
+    <Link href={tab.href} className={`vc-nb ${active ? "vc-nb-on" : ""}`} aria-current={active ? "page" : undefined}>
       <i className={`ti ${tab.icon} ${active ? "on" : ""}`} />
       <span className={`vc-nl ${active ? "on" : ""}`}>{tab.label}</span>
     </Link>

@@ -47,6 +47,9 @@ export function buildUserContextBlock(params: {
     tieneHijos: boolean | null;
     hijosDetalle: string | null;
   } | null;
+  // Avisos oficiales que el usuario ve en Inicio (banner automático) — para
+  // que VICTOR sepa de qué le hablan si pregunta por ellos.
+  avisosRecientes?: { titulo: string; resumen: string; fuente: string; fechaLimite: string | null; url: string }[];
   entidadesNegocio?: {
     name: string;
     entityType: string | null;
@@ -93,6 +96,7 @@ export function buildUserContextBlock(params: {
     liveGoals,
     finanzas,
     onboardingProfile,
+    avisosRecientes,
     entidadesNegocio,
     resumenFinanciero,
   } = params;
@@ -333,6 +337,18 @@ export function buildUserContextBlock(params: {
       "(no un ciclo rotativo de 365 días desde hoy). Aclara esto si el usuario pregunta 'cómo voy",
       "a terminar el año', y adviértele si el año apenas empezó (pocos días transcurridos = número",
       "más volátil, un solo gasto o ingreso grande puede distorsionar mucho el ritmo diario todavía)."
+    );
+  }
+
+  if (avisosRecientes && avisosRecientes.length > 0) {
+    lines.push(
+      "",
+      "Avisos oficiales recientes que el usuario ve en su pantalla de Inicio (banner automático; VICTOR CFO NO los redacta, son resúmenes de fuentes oficiales):",
+      ...avisosRecientes.map(
+        (a) => `- ${a.titulo} (${a.fuente}${a.fechaLimite ? `, fecha límite ${a.fechaLimite}` : ""}): ${a.resumen} Fuente: ${a.url}`
+      ),
+      "Si te pregunta por uno, explícalo en simple, aclara que es un resumen automático y que lo confirme en la fuente y con su contable. Si te pregunta qué es la tarjeta de hijos/planilla en Inicio: es un recordatorio general para usuarios con hijos registrados; no confirma elegibilidad ni montos.",
+      "No se los menciones por tu cuenta salvo que sea relevante a lo que habla."
     );
   }
 
