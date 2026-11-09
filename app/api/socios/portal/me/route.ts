@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarSesionSocio, COOKIE_SESION_SOCIO } from "@/lib/socio-session";
+import { fechaHoyPR } from "@/lib/hora-pr";
+import { proximaFechaPago } from "@/lib/dias-laborables";
 import {
   planGeneraRegalia,
   regaliaMensualCentavos,
@@ -204,7 +206,14 @@ export async function GET(req: NextRequest) {
     totalRetenidoPendienteCentavos,
     totalRetenidoAnioCentavos,
     anioRetencion: anioActual,
-    proximaFechaPago: (socio as { proxima_fecha_pago?: string | null }).proxima_fecha_pago ?? null,
+    // Fecha del próximo pago (9 nov 2026): la que fijó el founder a mano si
+    // todavía no ha pasado; si no, la próxima quincena automática (15 o
+    // último día del mes, movida al próximo día laborable).
+    proximaFechaPago: (() => {
+      const hoyPR = fechaHoyPR();
+      const manual = (socio as { proxima_fecha_pago?: string | null }).proxima_fecha_pago ?? null;
+      return manual && manual >= hoyPR ? manual : proximaFechaPago(hoyPR);
+    })(),
     clientes: filas,
   });
 }

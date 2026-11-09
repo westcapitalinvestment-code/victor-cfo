@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { EmbudoSocio } from "@/lib/embudo-socios";
+import { fechaHoyPR } from "@/lib/hora-pr";
+import { proximaFechaPago } from "@/lib/dias-laborables";
 
 // Panel de "Programa de Socios" del Dashboard de Operaciones (migración
 // 0070/0071, 5 sept 2026) — mismo patrón que usuarios-panel.tsx: recibe los
@@ -33,15 +35,31 @@ function FechaPagoSocio({ socioId, inicial }: { socioId: string; inicial: string
     });
     setEstado(res.ok ? "ok" : "error");
   }
+  // Automática (9 nov 2026): si no hay fecha manual vigente, el vendedor ve
+  // la próxima quincena (15 o fin de mes, movida al próximo día laborable).
+  const hoy = fechaHoyPR();
+  const automatica = proximaFechaPago(hoy);
+  const manualVigente = !!fecha && fecha >= hoy;
   return (
-    <div className="mt-1.5 flex items-center gap-2 text-[11px]">
+    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
       <span className="text-muted">Próximo pago al vendedor:</span>
+      {!manualVigente && (
+        <span className="text-teal">
+          {automatica} <span className="text-muted">(automática)</span>
+        </span>
+      )}
       <input
         type="date"
-        value={fecha}
+        value={manualVigente ? fecha : ""}
+        title="Solo si necesitas cambiar la fecha de este pago"
         onChange={(e) => guardar(e.target.value)}
         className="rounded-lg border border-border px-1.5 py-0.5 text-[11px]"
       />
+      {manualVigente && (
+        <button type="button" className="text-muted underline" onClick={() => guardar("")}>
+          usar automática
+        </button>
+      )}
       {estado === "guardando" && <span className="text-muted">guardando…</span>}
       {estado === "ok" && <span className="text-teal">guardado ✓</span>}
       {estado === "error" && <span className="text-red">no se pudo guardar</span>}

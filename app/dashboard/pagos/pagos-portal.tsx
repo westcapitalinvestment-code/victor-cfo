@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney, formatFecha } from "@/lib/format";
 import { fechaHoyPR } from "@/lib/hora-pr";
+import { proximaFechaPago } from "@/lib/dias-laborables";
 import ConfirmarPagoModal, { type LineaConfirmacion } from "../confirmar-pago-modal";
 // Calculadora de deducción en riesgo (3 oct 2026, pedido de Joel: quería la
 // misma calculadora de la landing disponible DENTRO de la cuenta demo, en
@@ -166,10 +167,6 @@ const aISO = (d: Date) => d.toISOString().slice(0, 10);
 function sumarDias(iso: string, n: number): string {
   return aISO(new Date(aUTC(iso).getTime() + n * MS_DIA));
 }
-function ultimoDiaMes(iso: string): string {
-  const d = aUTC(iso);
-  return aISO(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)));
-}
 function fmtCorrida(iso: string): string {
   const d = aUTC(iso);
   return `${DIAS_SEM[d.getUTCDay()]} ${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}`;
@@ -181,10 +178,11 @@ function corridaDesde(desde: string, frec: FrecCorrida, ancla: string): string {
     const diff = Math.round((aUTC(desde).getTime() - aUTC(ancla).getTime()) / MS_DIA);
     return sumarDias(ancla, Math.ceil(diff / p) * p);
   }
-  const fin = ultimoDiaMes(desde);
-  if (frec === "mensual") return fin;
-  const quince = `${desde.slice(0, 7)}-15`;
-  return desde <= quince ? quince : fin;
+  // Quincenal (15 y fin de mes) y mensual (fin de mes): si la fecha cae en
+  // fin de semana o feriado bancario, se corre al próximo día laborable
+  // (9 nov 2026 — misma regla del Kit y el Contrato de vendedores; ver
+  // lib/dias-laborables.ts).
+  return proximaFechaPago(desde, frec);
 }
 function moverCorrida(actual: string, dir: 1 | -1, frec: FrecCorrida, ancla: string): string {
   if (dir > 0) return corridaDesde(sumarDias(actual, 1), frec, ancla);
