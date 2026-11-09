@@ -12,6 +12,10 @@ import {
   priceIdAddonEntidadAdicional,
   todosLosPriceIdsDePlanes,
   planDesdePriceId,
+  priceIdPara,
+  PLAN_RANK,
+  type PlanId,
+  type Ciclo,
 } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { limiteMensualIaCentavos } from "@/lib/limites-ia";
@@ -623,6 +627,12 @@ export async function POST(req: NextRequest) {
             .update({ treinta_estado: "perdida" })
             .eq("referred_id", userId)
             .eq("treinta_estado", "pendiente");
+          // Igual con el 30% pendiente de un upgrade (migración 0208).
+          await supabase
+            .from("socios_vendedor_upgrades")
+            .update({ treinta_estado: "perdida" })
+            .eq("referred_id", userId)
+            .eq("treinta_estado", "pendiente");
         }
 
         // Correo de "win-back" al cancelar (27 sept 2026, pedido de Joel:
@@ -1023,7 +1033,19 @@ async function procesarComisionSocio(
   // tipos (vendedor, influencer, otro) ganan igual: 70% al primer pago real
   // + 30% al 3er pago. Solo 'cpa' sigue sin comisión (ver bloque de abajo).
   if (socio.tipo !== "cpa") {
+    // Upgrade de plan (9 nov 2026, migración 0208): el cobro prorrateado de
+    // una subida de plan llega como billing_reason='subscription_update'. Se
+    // procesa aparte (comisión por la diferencia) y NO cuenta como "pago
+    // real" para liberar el 30% — tampoco los cobros de add-ons, que llegan
+    // con ese mismo billing_reason.
+    if (invoice.billing_reason === "subscription_update") {
+      await procesarUpgradeVendedor(admin, socio, referido, invoice);
+      return;
+    }
     await procesarComisionVendedor(admin, socio, referido, invoice);
+    if (invoice.billing_reason === "subscription_cycle") {
+      await avanzarUpgradesVendedor(admin, socio, referido.id);
+    }
     return;
   }
 
@@ -1084,6 +1106,7 @@ async function procesarComisionVendedor(
     // arriba: se lee el item que corresponde al PLAN en sí.
     let intervalo: "month" | "year" | null = null;
     let montoBase: number | null = null;
+    let planStripe: PlanId | null = null;
     try {
       const sub = await getStripe().subscriptions.retrieve(referido.stripe_subscription_id);
       const priceIdsDePlanes = new Set(todosLosPriceIdsDePlanes());
@@ -1102,6 +1125,7 @@ async function procesarComisionVendedor(
         }
       }
       intervalo = (itemPlan?.price.recurring?.interval as "month" | "year" | undefined) ?? null;
+      planStripe = itemPlan ? planDesdePriceId(itemPlan.price.id)?.plan ?? null : null;
     } catch (err) {
       console.error("No se pudo leer la suscripción del referido para la comisión de vendedor:", err);
     }
@@ -1122,6 +1146,7 @@ async function procesarComisionVendedor(
         pagos_reales_contados: 1,
         treinta_estado: "liberada",
         treinta_liberada_at: new Date().toISOString(),
+        plan_comisionado: planStripe ?? referido.plan,
       });
       if (errorFila) {
         // UNIQUE en referred_id — si Stripe reintentó el mismo evento y
@@ -1167,6 +1192,7 @@ async function procesarComisionVendedor(
       setenta_centavos: setentaCentavos,
       treinta_centavos: treintaCentavos,
       pagos_reales_contados: 1,
+      plan_comisionado: planStripe ?? referido.plan,
     });
     if (errorFila) {
       console.error("No se pudo registrar el cliente de vendedor (70/30):", errorFila);
@@ -1234,5 +1260,175 @@ async function procesarComisionVendedor(
     console.error("No se pudo registrar el 30% del vendedor:", errorComisionTreinta);
   } else {
     await registrarRetencionVendedor(admin, socio, filaComisionTreinta?.id ?? null, estadoCliente.treinta_centavos);
+  }
+}
+
+// --- Upgrades de plan (9 nov 2026, migración 0208, decisión de Joel) -------
+// Si un cliente del vendedor sube de plan (Core→Pro, Core→Business,
+// Pro→Business), el vendedor cobra la DIFERENCIA entre la comisión del plan
+// nuevo y la del plan que ya se le comisionó — al cliente también se le
+// cobra la diferencia prorrateada. Solo el plan, sin add-ons.
+//   - Mensual: 70% con este cobro + 30% al 3er pago contando desde el upgrade.
+//   - Anual: 20% de la diferencia de una vez (misma regla que el anual normal).
+
+// Comisión que corresponde a un plan por sí solo (sin add-ons).
+function comisionDePlanCentavos(plan: PlanId, ciclo: Ciclo, precioUnitarioCentavos: number): number {
+  if (ciclo === "anual") return Math.round(precioUnitarioCentavos * PORCENTAJE_ANUAL_VENDEDOR);
+  if (plan === "core") return COMISION_VENDEDOR_CORE_CENTAVOS;
+  return precioUnitarioCentavos;
+}
+
+const META_PAGOS_PARA_LIBERAR_TREINTA_UPGRADE = 3;
+
+async function procesarUpgradeVendedor(
+  admin: ReturnType<typeof createAdminClient>,
+  socio: { id: string; relevo_r2_key?: string | null; relevo_pct?: number | null; relevo_fecha_expiracion?: string | null },
+  referido: { id: string; plan: string | null; stripe_subscription_id: string | null },
+  invoice: Stripe.Invoice
+) {
+  const { data: estadoCliente } = await admin
+    .from("socios_vendedor_clientes")
+    .select("id, plan_comisionado")
+    .eq("referred_id", referido.id)
+    .maybeSingle();
+
+  // Todavía no tenía primer pago real: este cobro es el primero, se comisiona
+  // completo con el plan nuevo (flujo normal).
+  if (!estadoCliente) {
+    await procesarComisionVendedor(admin, socio, referido, invoice);
+    return;
+  }
+  if (!referido.stripe_subscription_id) return;
+
+  const stripe = getStripe();
+  let nuevo: { plan: PlanId; ciclo: Ciclo } | null = null;
+  let precioNuevo: number | null = null;
+  try {
+    const sub = await stripe.subscriptions.retrieve(referido.stripe_subscription_id);
+    const ids = new Set(todosLosPriceIdsDePlanes());
+    const itemPlan = sub.items.data.find((it) => ids.has(it.price.id));
+    if (itemPlan) {
+      nuevo = planDesdePriceId(itemPlan.price.id);
+      precioNuevo = itemPlan.price.unit_amount ?? null;
+    }
+  } catch (err) {
+    console.error("No se pudo leer la suscripción para el upgrade del vendedor:", err);
+    return;
+  }
+  if (!nuevo || precioNuevo == null) return;
+
+  const anterior = (esPlanValido(estadoCliente.plan_comisionado) ? estadoCliente.plan_comisionado : null) as PlanId | null;
+  // Cobro de add-ons, o un cambio que no es subida sobre lo ya comisionado.
+  if (!anterior || PLAN_RANK[nuevo.plan] <= PLAN_RANK[anterior]) return;
+
+  let precioAnterior: number | null = null;
+  const priceIdAnterior = priceIdPara(anterior, nuevo.ciclo);
+  if (priceIdAnterior) {
+    try {
+      precioAnterior = (await stripe.prices.retrieve(priceIdAnterior)).unit_amount ?? null;
+    } catch (err) {
+      console.error("No se pudo leer el precio del plan anterior para el upgrade:", err);
+    }
+  }
+  if (precioAnterior == null) return;
+
+  const diferencia =
+    comisionDePlanCentavos(nuevo.plan, nuevo.ciclo, precioNuevo) - comisionDePlanCentavos(anterior, nuevo.ciclo, precioAnterior);
+  if (diferencia <= 0) {
+    await admin.from("socios_vendedor_clientes").update({ plan_comisionado: nuevo.plan }).eq("id", estadoCliente.id);
+    return;
+  }
+
+  const esAnual = nuevo.ciclo === "anual";
+  const setenta = esAnual ? diferencia : Math.round(diferencia * PORCENTAJE_SETENTA_VENDEDOR);
+  const treinta = diferencia - setenta;
+
+  // UNIQUE (referred_id, a_plan): si Stripe reintenta el evento, no se paga dos veces.
+  const { error: errorUpgrade } = await admin.from("socios_vendedor_upgrades").insert({
+    socio_id: socio.id,
+    referred_id: referido.id,
+    de_plan: anterior,
+    a_plan: nuevo.plan,
+    ciclo: nuevo.ciclo,
+    diferencia_centavos: diferencia,
+    setenta_centavos: setenta,
+    treinta_centavos: treinta,
+    pagos_desde_upgrade: 1,
+    treinta_estado: treinta > 0 ? "pendiente" : "liberada",
+    treinta_liberada_at: treinta > 0 ? null : new Date().toISOString(),
+  });
+  if (errorUpgrade) {
+    console.error("No se pudo registrar el upgrade del vendedor:", errorUpgrade);
+    return;
+  }
+
+  await admin.from("socios_vendedor_clientes").update({ plan_comisionado: nuevo.plan }).eq("id", estadoCliente.id);
+
+  const { data: fila, error: errorComision } = await admin
+    .from("socios_comisiones")
+    .insert({
+      socio_id: socio.id,
+      referred_id: referido.id,
+      plan: nuevo.plan,
+      comision_centavos: setenta,
+      tipo_comision: esAnual ? "upgrade_unica" : "upgrade_setenta",
+      // Una por plan destino — no choca con el UNIQUE (referred_id, tipo_comision, ciclo_numero).
+      ciclo_numero: PLAN_RANK[nuevo.plan],
+    })
+    .select("id")
+    .single();
+  if (errorComision) {
+    console.error("No se pudo registrar la comisión del upgrade:", errorComision);
+  } else {
+    await registrarRetencionVendedor(admin, socio, fila?.id ?? null, setenta);
+  }
+}
+
+// En cada renovación real, avanza los upgrades con el 30% pendiente y lo
+// libera cuando el cliente llega a su 3er pago desde el upgrade.
+async function avanzarUpgradesVendedor(
+  admin: ReturnType<typeof createAdminClient>,
+  socio: { id: string; relevo_r2_key?: string | null; relevo_pct?: number | null; relevo_fecha_expiracion?: string | null },
+  referidoId: string
+) {
+  const { data: pendientes } = await admin
+    .from("socios_vendedor_upgrades")
+    .select("id, a_plan, treinta_centavos, pagos_desde_upgrade")
+    .eq("referred_id", referidoId)
+    .eq("treinta_estado", "pendiente");
+
+  for (const u of pendientes ?? []) {
+    const pagos = Number(u.pagos_desde_upgrade ?? 1) + 1;
+    if (pagos < META_PAGOS_PARA_LIBERAR_TREINTA_UPGRADE) {
+      await admin.from("socios_vendedor_upgrades").update({ pagos_desde_upgrade: pagos }).eq("id", u.id);
+      continue;
+    }
+
+    const { data: liberado } = await admin
+      .from("socios_vendedor_upgrades")
+      .update({ pagos_desde_upgrade: pagos, treinta_estado: "liberada", treinta_liberada_at: new Date().toISOString() })
+      .eq("id", u.id)
+      .eq("treinta_estado", "pendiente") // anti doble liberación si Stripe reintenta
+      .select("id");
+    if (!liberado || liberado.length === 0) continue;
+
+    const monto = Number(u.treinta_centavos);
+    const { data: fila, error } = await admin
+      .from("socios_comisiones")
+      .insert({
+        socio_id: socio.id,
+        referred_id: referidoId,
+        plan: u.a_plan,
+        comision_centavos: monto,
+        tipo_comision: "upgrade_treinta",
+        ciclo_numero: PLAN_RANK[u.a_plan as PlanId] ?? 0,
+      })
+      .select("id")
+      .single();
+    if (error) {
+      console.error("No se pudo registrar el 30% del upgrade:", error);
+    } else {
+      await registrarRetencionVendedor(admin, socio, fila?.id ?? null, monto);
+    }
   }
 }

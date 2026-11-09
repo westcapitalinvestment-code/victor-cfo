@@ -49,6 +49,10 @@
       "schedule": "20 14 * * *"
     },
     {
+      "path": "/api/cron/regalia-vendedores",
+      "schedule": "40 19 * * *"
+    },
+    {
       "path": "/api/cron/recargos-mora",
       "schedule": "0 15 * * *"
     },

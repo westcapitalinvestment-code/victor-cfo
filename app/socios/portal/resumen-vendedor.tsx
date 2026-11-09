@@ -18,7 +18,21 @@ type Datos = {
   totalRetenidoAnioCentavos?: number;
   anioRetencion?: number;
   proximaFechaPago?: string | null;
+  regalia?: Regalia;
   clientes: unknown[];
+};
+// Regalía mensual (migración 0208, 9 nov 2026) — ver lib/regalia-vendedor.ts.
+type Regalia = {
+  proGenerando: number;
+  businessGenerando: number;
+  proEnCamino: number;
+  businessEnCamino: number;
+  porProCentavos: number;
+  porBusinessCentavos: number;
+  mensualCentavos: number;
+  proximoInicio: string | null;
+  esteMesCentavos: number;
+  acumuladaCentavos: number;
 };
 type Bonos = {
   trimestreActual: string;
@@ -110,6 +124,8 @@ export default function ResumenVendedor({ datos }: { datos: Datos }) {
             />
           </div>
 
+          {datos.regalia && <TarjetaRegalia r={datos.regalia} />}
+
           <div className="vc-card mt-2 flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-muted">Total proyectado</p>
@@ -147,10 +163,47 @@ export default function ResumenVendedor({ datos }: { datos: Datos }) {
             <p className="mb-1 font-medium text-foreground">Cómo se calcula lo tuyo</p>
             <p>• Cliente mensual: 70% con su primer pago y el 30% restante cuando llega a su 3er pago.</p>
             <p>• Cliente anual: 20% del año, una sola vez, con su primer pago.</p>
+            <p>• Si tu cliente sube de plan: cobras la diferencia de comisión (70% con el cambio y 30% cuando llega a su 3er pago desde el cambio; anual, 20% de la diferencia de una vez).</p>
+            <p>• Regalía: desde el mes 7 de cada cliente Pro o Business activo, cobras cada mes el 4% de su plan ($2 Pro, $4 Business), pague mensual o anual.</p>
             <p>• Oficina de contables que activaste: $20 una vez cuando su primer cliente ya pagó, y $10 una vez por cada cliente que traiga. Se paga cada 3 meses.</p>
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function TarjetaRegalia({ r }: { r: Regalia }) {
+  const enCamino = r.proEnCamino + r.businessEnCamino;
+  return (
+    <div className="vc-card mt-2 text-xs leading-snug">
+      <div className="mb-1 flex items-baseline justify-between">
+        <p className="font-medium">Regalía mensual</p>
+        <p className="text-lg font-semibold text-teal">{fmt(r.mensualCentavos)}<span className="text-xs font-normal text-muted">/mes</span></p>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted">Pro activos</span>
+        <span>{r.proGenerando} × {fmt(r.porProCentavos)} = {fmt(r.proGenerando * r.porProCentavos)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted">Business activos</span>
+        <span>{r.businessGenerando} × {fmt(r.porBusinessCentavos)} = {fmt(r.businessGenerando * r.porBusinessCentavos)}</span>
+      </div>
+      <div className="mt-1 flex justify-between border-t border-border pt-1">
+        <span className="text-muted">Generada este mes</span>
+        <span>{fmt(r.esteMesCentavos)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted">Acumulada</span>
+        <span>{fmt(r.acumuladaCentavos)}</span>
+      </div>
+      {enCamino > 0 && (
+        <p className="mt-1.5 text-muted">
+          En camino: {r.proEnCamino} Pro y {r.businessEnCamino} Business empiezan a generar regalía al llegar a su mes 7
+          {r.proximoInicio ? ` (el próximo, ${fechaLarga(r.proximoInicio)})` : ""}.
+        </p>
+      )}
+      <p className="mt-1.5 text-muted">4% del plan de cada cliente Pro o Business activo desde su mes 7. Se suma a tu pago de la quincena.</p>
     </div>
   );
 }

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarSesionSocio, COOKIE_SESION_SOCIO } from "@/lib/socio-session";
+import {
+  planGeneraRegalia,
+  regaliaMensualCentavos,
+  yaGeneraRegalia,
+  inicioRegalia,
+  periodoRegaliaPR,
+} from "@/lib/regalia-vendedor";
 
 // Datos del portal del vendedor — SOLO su propia info: sus clientes
 // referidos, el estado de cada uno, cuánto ya cobró y cuánto tiene
@@ -19,7 +26,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Portal no disponible." }, { status: 403 });
   }
 
-  const [{ data: clientes }, { data: estadosVendedor }, { data: comisiones }, { data: retenciones }] = await Promise.all([
+  const [{ data: clientes }, { data: estadosVendedor }, { data: comisiones }, { data: retenciones }, { data: upgradesPendientes }] = await Promise.all([
     admin
       .from("users")
       .select("id, full_name, email, plan, plan_status, created_at")
@@ -34,13 +41,21 @@ export async function GET(req: NextRequest) {
       // "unica" = modelo nuevo de pago único (migración 0135, 2 oct 2026);
       // "setenta"/"treinta" = modelo viejo 70/30 (0107), sigue vivo solo
       // para clientes que ya estaban a mitad de camino antes del cambio.
-      .select("id, referred_id, tipo_comision, comision_centavos, estado, created_at")
+      .select("id, referred_id, tipo_comision, comision_centavos, estado, created_at, ciclo_numero")
       .eq("socio_id", socioId)
-      .in("tipo_comision", ["setenta", "treinta", "unica"]),
+      // Desde el 9 nov 2026 (migración 0208) también: comisión por upgrade
+      // de plan y regalía mensual.
+      .in("tipo_comision", ["setenta", "treinta", "unica", "upgrade_setenta", "upgrade_treinta", "upgrade_unica", "regalia"]),
     // Retención Sección 1062.03 (migración 0138, 3 oct 2026) — una fila por
     // cada comisión de arriba, para mostrarle al vendedor cuánto le
     // retuvimos y cuánto es lo neto real que va a recibir.
     admin.from("socios_vendedor_retenciones").select("comision_id, retention_centavos").eq("socio_id", socioId),
+    // 30% de upgrades de plan que todavía espera el 3er pago (migración 0208).
+    admin
+      .from("socios_vendedor_upgrades")
+      .select("referred_id, treinta_centavos")
+      .eq("socio_id", socioId)
+      .eq("treinta_estado", "pendiente"),
   ]);
 
   const estadoPorCliente = new Map((estadosVendedor ?? []).map((e) => [e.referred_id, e]));
@@ -135,8 +150,51 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  // 30% de upgrades en espera — se suma al "30% en espera" del resumen.
+  for (const u of upgradesPendientes ?? []) totalTreintaEsperaCentavos += Number(u.treinta_centavos);
+
+  // Regalía mensual (migración 0208): clientes Pro/Business activos del
+  // vendedor. "Generando" = ya en su mes 7+; "en camino" = todavía no.
+  const hoy = new Date();
+  const periodoActual = periodoRegaliaPR(hoy);
+  const regalia = {
+    proGenerando: 0,
+    businessGenerando: 0,
+    proEnCamino: 0,
+    businessEnCamino: 0,
+    porProCentavos: regaliaMensualCentavos("pro"),
+    porBusinessCentavos: regaliaMensualCentavos("proplus"),
+    mensualCentavos: 0,
+    proximoInicio: null as string | null,
+    esteMesCentavos: 0,
+    acumuladaCentavos: 0,
+  };
+  for (const cliente of clientes ?? []) {
+    if (cliente.plan_status !== "active" || !planGeneraRegalia(cliente.plan as string)) continue;
+    const primerPago = estadoPorCliente.get(cliente.id)?.primer_pago_at as string | undefined;
+    if (!primerPago) continue;
+    const esPro = cliente.plan === "pro";
+    if (yaGeneraRegalia(primerPago, hoy)) {
+      if (esPro) regalia.proGenerando += 1;
+      else regalia.businessGenerando += 1;
+    } else {
+      if (esPro) regalia.proEnCamino += 1;
+      else regalia.businessEnCamino += 1;
+      const inicio = inicioRegalia(primerPago).toISOString();
+      if (!regalia.proximoInicio || inicio < regalia.proximoInicio) regalia.proximoInicio = inicio;
+    }
+  }
+  regalia.mensualCentavos =
+    regalia.proGenerando * regalia.porProCentavos + regalia.businessGenerando * regalia.porBusinessCentavos;
+  for (const c of comisiones ?? []) {
+    if (c.tipo_comision !== "regalia" || c.estado === "reversada") continue;
+    regalia.acumuladaCentavos += Number(c.comision_centavos);
+    if (Number(c.ciclo_numero) === periodoActual) regalia.esteMesCentavos += Number(c.comision_centavos);
+  }
+
   return NextResponse.json({
     ok: true,
+    regalia,
     socio: { nombre: socio.nombre, codigo: (socio as { codigo?: string | null }).codigo ?? null },
     totalCobradoCentavos,
     totalPendienteCentavos,
