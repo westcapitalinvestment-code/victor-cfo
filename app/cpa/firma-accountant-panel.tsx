@@ -22,6 +22,10 @@ export default function FirmaAccountantPanel() {
 
   const [registroComerciante, setRegistroComerciante] = useState("");
   const [licenciaCpa, setLicenciaCpa] = useState("");
+  // Tipo de firma (migración 0209): define si recibe acceso de contable
+  // a las entidades de sus clientes al aceptar ('contable') o no ('facturacion').
+  const [tipo, setTipo] = useState<"" | "contable" | "facturacion">("");
+  const [tipoGuardado, setTipoGuardado] = useState<"contable" | "facturacion" | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [errorActivar, setErrorActivar] = useState<string | null>(null);
 
@@ -111,6 +115,7 @@ export default function FirmaAccountantPanel() {
       .then((d) => {
         setEsFirma(!!d.esFirmaAccountant);
         setSeatsActivos(d.seatsActivos ?? 0);
+        setTipoGuardado(d.tipo ?? null);
         if (d.esFirmaAccountant) cargarClientes();
       })
       .catch(() => {})
@@ -126,7 +131,7 @@ export default function FirmaAccountantPanel() {
     const res = await fetch("/api/firma/activar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ registroComerciante, licenciaCpa }),
+      body: JSON.stringify({ registroComerciante, licenciaCpa, tipo }),
     });
     const json = await res.json().catch(() => null);
     setGuardando(false);
@@ -136,6 +141,16 @@ export default function FirmaAccountantPanel() {
       return;
     }
     setEsFirma(true);
+    if (tipo) setTipoGuardado(tipo);
+  }
+
+  async function guardarTipo(nuevo: "contable" | "facturacion") {
+    const res = await fetch("/api/firma/activar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ soloTipo: true, tipo: nuevo }),
+    });
+    if (res.ok) setTipoGuardado(nuevo);
   }
 
   async function invitar(e: React.FormEvent) {
@@ -196,6 +211,15 @@ export default function FirmaAccountantPanel() {
           </p>
           {errorActivar && <p className="mb-2 text-sm text-red">{errorActivar}</p>}
           <form onSubmit={activar} className="flex flex-col gap-2">
+            <select className="vc-input" value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} required>
+              <option value="">Tipo de firma…</option>
+              <option value="contable">Contabilidad (CPA, contable, bookkeeping)</option>
+              <option value="facturacion">Facturación (ej. facturación médica)</option>
+            </select>
+            <p className="text-xs leading-snug text-muted">
+              Contabilidad: al aceptar tu invitación, tendrás acceso de contable a los negocios del cliente (facturas, pagos, nómina, reportes y documentos); lo personal no.
+              Facturación: solo cubres el plan, sin acceso a su información. El cliente siempre puede cambiarlo.
+            </p>
             <input
               className="vc-input"
               placeholder="Registro de Comerciante"
@@ -216,6 +240,23 @@ export default function FirmaAccountantPanel() {
         </>
       ) : (
         <>
+          {!tipoGuardado && (
+            <div className="mb-3 rounded-lg border border-amb/40 bg-amb/5 px-3 py-2 text-xs leading-snug">
+              <p className="mb-1.5 font-medium">¿Tu firma es de contabilidad o de facturación?</p>
+              <p className="mb-2 text-muted">
+                Contabilidad: tendrás acceso de contable a los negocios de los clientes que acepten tu invitación (facturas, pagos, nómina,
+                reportes y documentos). Facturación: solo cubres el plan.
+              </p>
+              <div className="flex gap-2">
+                <button type="button" className="vc-btn-primary px-3 py-1 text-xs" onClick={() => guardarTipo("contable")}>
+                  Contabilidad
+                </button>
+                <button type="button" className="rounded-lg border border-border px-3 py-1 text-xs" onClick={() => guardarTipo("facturacion")}>
+                  Facturación
+                </button>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-sm font-medium">VICTOR Accountant</p>

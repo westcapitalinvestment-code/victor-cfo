@@ -26,6 +26,23 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const registroComerciante: string | undefined = body?.registroComerciante?.trim();
   const licenciaCpa: string | null = body?.licenciaCpa?.trim() || null;
+  // Tipo de firma (migración 0209, 9 nov 2026): 'contable' recibe acceso de
+  // contable a las entidades del cliente al aceptar; 'facturacion' no.
+  const tipo: string | undefined = body?.tipo;
+  const tipoValido = tipo === "contable" || tipo === "facturacion";
+
+  // Firma ya registrada que solo escoge (o cambia) su tipo.
+  if (body?.soloTipo) {
+    if (!tipoValido) return NextResponse.json({ error: "Escoge el tipo de firma." }, { status: 400 });
+    if (await esCuentaDemo(supabase, user.id)) return NextResponse.json({ ok: true, demo: true });
+    const { error: errTipo } = await supabase.from("users").update({ firma_tipo: tipo }).eq("id", user.id);
+    if (errTipo) return NextResponse.json({ error: errTipo.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (!tipoValido) {
+    return NextResponse.json({ error: "Escoge si tu firma es de contabilidad o de facturación." }, { status: 400 });
+  }
 
   if (!registroComerciante) {
     return NextResponse.json({ error: "El Registro de Comerciante es obligatorio." }, { status: 400 });
@@ -39,6 +56,7 @@ export async function POST(req: NextRequest) {
       es_firma_accountant: true,
       firma_registro_comerciante: registroComerciante,
       firma_licencia_cpa: licenciaCpa,
+      firma_tipo: tipo,
     })
     .eq("id", user.id);
 
@@ -63,7 +81,7 @@ export async function GET() {
 
   const { data: perfil } = await supabase
     .from("users")
-    .select("es_firma_accountant, firma_registro_comerciante, firma_licencia_cpa, firma_seats_activos")
+    .select("es_firma_accountant, firma_registro_comerciante, firma_licencia_cpa, firma_seats_activos, firma_tipo")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -72,5 +90,6 @@ export async function GET() {
     registroComerciante: perfil?.firma_registro_comerciante ?? null,
     licenciaCpa: perfil?.firma_licencia_cpa ?? null,
     seatsActivos: perfil?.firma_seats_activos ?? 0,
+    tipo: perfil?.firma_tipo ?? null,
   });
 }

@@ -20,6 +20,7 @@ export default function AceptarInvitacionFirmaPage() {
   const [errorInvite, setErrorInvite] = useState<string | null>(null);
   const [invite, setInvite] = useState<{
     firmaName: string | null;
+    firmaTipo?: "contable" | "facturacion" | null;
     nombreNegocio: string | null;
     email: string;
     status: string;
@@ -230,6 +231,18 @@ export default function AceptarInvitacionFirmaPage() {
               {invite.firmaName || "Tu contador"} cubre tu plan Business{invite.nombreNegocio ? ` de ${invite.nombreNegocio}` : ""} —
               vas a usar tu cuenta completa todos los días, sin tener que pagar nada.
             </p>
+            {invite.firmaTipo === "contable" ? (
+              <p className="mt-2 rounded-lg border border-border px-2.5 py-2 text-xs leading-snug text-muted">
+                Al aceptar, {invite.firmaName || "tu contador"} tendrá acceso de contable a tus negocios: libros, facturas, pagos, nómina,
+                reportes y documentos. Tus finanzas personales no se comparten. Puedes limitar o quitar este acceso cuando quieras en
+                Configuración → Invita a tu contable.
+              </p>
+            ) : (
+              <p className="mt-2 rounded-lg border border-border px-2.5 py-2 text-xs leading-snug text-muted">
+                {invite.firmaName || "Tu firma"} solo cubre tu plan: no tiene acceso a tu información financiera. Si algún día quieres
+                compartirla, lo decides tú desde Configuración → Invita a tu contable.
+              </p>
+            )}
           </div>
 
           <div className="flex gap-1 rounded-lg border border-border p-1">

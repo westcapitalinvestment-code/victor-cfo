@@ -68,6 +68,45 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: updateUserError.message }, { status: 500 });
   }
 
+  // Firma CONTABLE (migración 0209, 9 nov 2026): el mismo acceso de contable
+  // (role='cpa': facturas, pagos, nómina, reportes y documentos) en
+  // todas las entidades del cliente (entity_id NULL = todas, incluidas las
+  // futuras). Lo personal queda apagado (share_personal=false por defecto).
+  // Es la misma fila que crea "Invita a tu contable", así que el cliente la
+  // ve en "Quién tiene acceso hoy" y la puede limitar o quitar. Una firma de
+  // FACTURACIÓN (o sin tipo) no recibe ningún acceso.
+  const { data: firma } = await admin
+    .from("users")
+    .select("email, firma_tipo")
+    .eq("id", invitacion.firma_id)
+    .maybeSingle();
+  if (firma?.firma_tipo === "contable" && firma.email) {
+    const { data: existente } = await admin
+      .from("account_members")
+      .select("id, active")
+      .eq("owner_id", user.id)
+      .eq("role", "cpa")
+      .is("entity_id", null)
+      .ilike("member_email", firma.email)
+      .maybeSingle();
+    const ahora = new Date().toISOString();
+    const { error: accesoError } = existente
+      ? existente.active
+        ? { error: null }
+        : await admin.from("account_members").update({ active: true, accepted_at: ahora }).eq("id", existente.id)
+      : await admin.from("account_members").insert({
+          owner_id: user.id,
+          entity_id: null,
+          member_email: firma.email,
+          role: "cpa",
+          active: true,
+          accepted_at: ahora,
+        });
+    if (accesoError) {
+      return NextResponse.json({ error: accesoError.message }, { status: 500 });
+    }
+  }
+
   const { error: updateInviteError } = await admin
     .from("firma_invitaciones")
     .update({ status: "accepted", accepted_at: new Date().toISOString() })
@@ -101,10 +140,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Invitación no encontrada o inválida." }, { status: 404 });
   }
 
-  const { data: firma } = await admin.from("users").select("full_name").eq("id", invitacion.firma_id).maybeSingle();
+  const { data: firma } = await admin.from("users").select("full_name, firma_tipo").eq("id", invitacion.firma_id).maybeSingle();
 
   return NextResponse.json({
     firmaName: firma?.full_name ?? null,
+    firmaTipo: firma?.firma_tipo ?? null,
     nombreNegocio: invitacion.nombre_negocio,
     email: invitacion.email,
     status: invitacion.status,
