@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { EmbudoSocio } from "@/lib/embudo-socios";
 import { fechaHoyPR } from "@/lib/hora-pr";
 import { proximaFechaPago } from "@/lib/dias-laborables";
+import PagosQuincena from "./pagos-quincena";
 
 // Panel de "Programa de Socios" del Dashboard de Operaciones (migración
 // 0070/0071, 5 sept 2026) — mismo patrón que usuarios-panel.tsx: recibe los
@@ -367,6 +368,11 @@ export default function SociosPanel({
               </div>
             </div>
           )}
+
+          {/* Pagos de la quincena por Mercury (10 nov 2026) */}
+          <PagosQuincena
+            onPagadas={(ids) => setComisiones((prev) => prev.map((c) => (ids.includes(c.id) ? { ...c, estado: "pagada" } : c)))}
+          />
 
           {/* Socios activos — código + link de pago, comisiones pendientes/pagadas y alerta de 1062.03 */}
           <div>
