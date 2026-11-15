@@ -30,7 +30,8 @@ export type PerfilIncentivos = {
   industria: string | null;
   fechaInicio: string | null; // yyyy-mm-dd
   clientesFueraPR: boolean | null;
-  tieneVentas: boolean; // alguna venta/ingreso registrado alguna vez
+  tieneVentas: boolean; // ya tuvo ventas (lo que dijo el dueño, o inferido del banco)
+  ventasSegunDueno: boolean; // true si tieneVentas viene de la respuesta del dueño
   ventas12m: number; // ingresos de los últimos 12 meses
   ganancia12m: number; // ingresos - gastos de los últimos 12 meses
   empleados: number; // empleados activos en Nómina
@@ -73,7 +74,7 @@ export type Incentivo = {
   orden: number;
 };
 
-export type DatoFaltante = "industria" | "fecha_inicio" | "clientes_fuera_pr" | "edad";
+export type DatoFaltante = "industria" | "fecha_inicio" | "clientes_fuera_pr" | "edad" | "ya_tuvo_ventas";
 export type Condicion = { estado: "si" | "no" | "falta"; texto: string; falta?: DatoFaltante };
 export type Evaluacion = {
   incentivo: Incentivo;
@@ -127,8 +128,18 @@ function evaluarRegla(r: Regla, p: PerfilIncentivos): Condicion {
       if (!p.fechaInicio) return { estado: "falta", texto, falta: "fecha_inicio" };
       return { estado: p.fechaInicio >= r.v ? "si" : "no", texto };
     }
-    case "sin_ventas":
-      return { estado: p.tieneVentas ? "no" : "si", texto: p.tieneVentas ? "Todavía sin ventas (ya hay ventas registradas)" : "Todavía sin ventas" };
+    case "sin_ventas": {
+      // Lo contesta el dueño: el banco no distingue ventas de dinero que él
+      // mismo metió (ver NO_ES_VENTA y la migración 0211).
+      if (!p.ventasSegunDueno) {
+        return {
+          estado: "falta",
+          texto: p.tieneVentas ? "Todavía sin ventas (tus cuentas muestran depósitos: confirma si fueron ventas)" : "Todavía sin ventas",
+          falta: "ya_tuvo_ventas",
+        };
+      }
+      return { estado: p.tieneVentas ? "no" : "si", texto: p.tieneVentas ? "Todavía sin ventas (ya tuviste tu primera venta)" : "Todavía sin ventas" };
+    }
     case "residente_pr":
       return { estado: p.residentePR ? "si" : "no", texto: "Residente de Puerto Rico" };
     case "clientes_fuera_pr": {
@@ -175,4 +186,8 @@ export const PREGUNTA_DATO: Record<DatoFaltante, string> = {
   fecha_inicio: "¿Cuándo comenzó a operar?",
   clientes_fuera_pr: "¿Tiene clientes fuera de Puerto Rico?",
   edad: "¿Qué edad tiene el dueño?",
+  ya_tuvo_ventas: "¿Ya tuvo su primera venta a un cliente?",
 };
+
+// Depósitos que NO son ventas aunque entren al banco del negocio.
+export const NO_ES_VENTA = /(CASHBACK|CASH BACK|INTEREST|INTERES|ACCTVERIFY|VERIFY|VERIFICA|REFUND|REEMBOLSO|REVERSAL|REVERSO|DEVOLUCION)/i;

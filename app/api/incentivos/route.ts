@@ -55,6 +55,12 @@ export async function PATCH(req: NextRequest) {
     }
     cambios.clientes_fuera_pr = body.clientes_fuera_pr;
   }
+  if (body.ya_tuvo_ventas !== undefined) {
+    if (body.ya_tuvo_ventas !== null && typeof body.ya_tuvo_ventas !== "boolean") {
+      return NextResponse.json({ error: "Dato inválido." }, { status: 400 });
+    }
+    cambios.ya_tuvo_ventas = body.ya_tuvo_ventas;
+  }
   if (Object.keys(cambios).length) {
     const { error } = await supabase.from("business_entities").update(cambios).eq("id", entity).eq("owner_id", user.id);
     if (error) return NextResponse.json({ error: "No se pudo guardar." }, { status: 500 });

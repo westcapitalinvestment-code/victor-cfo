@@ -28,6 +28,7 @@ export default function IncentivosCard({ entityId }: { entityId: string }) {
   const [fechaInicio, setFechaInicio] = useState("");
   const [fuera, setFuera] = useState<"" | "si" | "no">("");
   const [edad, setEdad] = useState("");
+  const [ventas, setVentas] = useState<"" | "si" | "no">("");
 
   function aplicar(r: ResultadoIncentivos) {
     setDatos(r);
@@ -35,6 +36,7 @@ export default function IncentivosCard({ entityId }: { entityId: string }) {
     setFechaInicio(r.perfil.fechaInicio ?? "");
     setFuera(r.perfil.clientesFueraPR === null ? "" : r.perfil.clientesFueraPR ? "si" : "no");
     setEdad(r.perfil.edadDueno === null ? "" : String(r.perfil.edadDueno));
+    setVentas(r.perfil.ventasSegunDueno ? (r.perfil.tieneVentas ? "si" : "no") : "");
   }
 
   useEffect(() => {
@@ -50,7 +52,8 @@ export default function IncentivosCard({ entityId }: { entityId: string }) {
   const cumple = visibles.filter((e) => e.estado === "cumple");
   // Si no se sabe a qué se dedica el negocio, no se listan uno por uno los
   // decretos de cada industria: primero se piden los datos.
-  const sinPerfil = !datos.perfil.industria || !datos.perfil.fechaInicio || datos.perfil.clientesFueraPR === null;
+  const sinPerfil =
+    !datos.perfil.industria || !datos.perfil.fechaInicio || datos.perfil.clientesFueraPR === null || !datos.perfil.ventasSegunDueno;
   const faltaDato = sinPerfil ? [] : visibles.filter((e) => e.estado === "falta_dato");
   const urgentes = cumple.filter((e) => e.incentivo.urgente);
   const mostrarFormulario = sinPerfil || editando;
@@ -65,6 +68,7 @@ export default function IncentivosCard({ entityId }: { entityId: string }) {
         industria: industria || null,
         fecha_inicio: fechaInicio || null,
         clientes_fuera_pr: fuera === "" ? null : fuera === "si",
+        ya_tuvo_ventas: ventas === "" ? null : ventas === "si",
         ...(edad ? { edad: Number(edad) } : {}),
       }),
     });
@@ -155,7 +159,7 @@ export default function IncentivosCard({ entityId }: { entityId: string }) {
           <span className="block text-[11px] font-medium uppercase tracking-wide text-muted">Incentivos que podrías aprovechar</span>
           <span className="text-sm text-text">
             {sinPerfil
-              ? "Contesta 3 preguntas y VICTOR te dice qué decretos y ayudas del DDEC podrías aprovechar"
+              ? "Contesta 4 preguntas y VICTOR te dice qué decretos y ayudas del DDEC podrías aprovechar"
               : cumple.length > 0
                 ? `${cumple.length} incentivo${cumple.length === 1 ? "" : "s"} para ${datos.entidad.nombre}`
                 : "Por ahora no vemos incentivos para este negocio"}
@@ -190,6 +194,15 @@ export default function IncentivosCard({ entityId }: { entityId: string }) {
                   <option value="">Escoge…</option>
                   <option value="si">Sí</option>
                   <option value="no">No, solo en Puerto Rico</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-muted">
+                {PREGUNTA_DATO.ya_tuvo_ventas}{" "}
+                <span className="text-[10px]">(no cuenta el dinero que pusiste tú, préstamos, cashback ni compras de prueba)</span>
+                <select className="vc-input" value={ventas} onChange={(e) => setVentas(e.target.value as "" | "si" | "no")}>
+                  <option value="">Escoge…</option>
+                  <option value="no">Todavía no</option>
+                  <option value="si">Sí, ya vendí</option>
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-xs text-muted">

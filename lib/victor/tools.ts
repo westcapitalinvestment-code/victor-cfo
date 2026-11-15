@@ -1308,7 +1308,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
     name: "guardar_datos_incentivos",
     description:
       "Guarda los datos que hacen falta para evaluar incentivos de un negocio: a qué se dedica (industria), cuándo comenzó a operar y si tiene " +
-      "clientes fuera de Puerto Rico; y la edad del dueño. Úsala solo con lo que el usuario te dijo explícitamente, y después vuelve a llamar " +
+      "clientes fuera de Puerto Rico, si ya tuvo su primera venta; y la edad del dueño. Úsala solo con lo que el usuario te dijo explícitamente, y después vuelve a llamar " +
       "evaluar_incentivos.",
     input_schema: {
       type: "object",
@@ -1321,6 +1321,10 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
         },
         fecha_inicio: { type: "string", description: "Fecha en que el negocio comenzó a operar, YYYY-MM-DD (si solo dice el año o el mes, usa el día 01)." },
         clientes_fuera_pr: { type: "boolean", description: "true si le vende o presta servicios a clientes fuera de Puerto Rico." },
+        ya_tuvo_ventas: {
+          type: "boolean",
+          description: "true si el negocio ya tuvo su primera venta a un cliente. No cuentan el dinero que puso el dueño, préstamos, cashback ni compras de prueba.",
+        },
         edad: { type: "number", description: "Edad del dueño, en años." },
       },
       required: [],
@@ -5371,6 +5375,7 @@ export async function executeVictorTool(
         if (typeof input.industria === "string" && INDUSTRIAS.some((i) => i.id === input.industria)) cambiosInc.industria = input.industria;
         if (typeof input.fecha_inicio === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.fecha_inicio)) cambiosInc.fecha_inicio_operaciones = input.fecha_inicio;
         if (typeof input.clientes_fuera_pr === "boolean") cambiosInc.clientes_fuera_pr = input.clientes_fuera_pr;
+        if (typeof input.ya_tuvo_ventas === "boolean") cambiosInc.ya_tuvo_ventas = input.ya_tuvo_ventas;
         if (Object.keys(cambiosInc).length) {
           const { error } = await supabase.from("business_entities").update(cambiosInc).eq("id", entidadesInc[0].id).eq("owner_id", ownerId);
           if (error) return { ok: false, message: `No se pudieron guardar los datos: ${error.message}` };
@@ -5394,7 +5399,8 @@ export async function executeVictorTool(
           `Datos usados: industria ${nombreIndustria(pf.industria) ?? "SIN DATO"} · inicio ${pf.fechaInicio ?? "SIN DATO"} · clientes fuera de PR ` +
           `${pf.clientesFueraPR === null ? "SIN DATO" : pf.clientesFueraPR ? "sí" : "no"} · ventas 12 meses $${Math.round(pf.ventas12m).toLocaleString("en-US")} · ` +
           `ganancia 12 meses $${Math.round(pf.ganancia12m).toLocaleString("en-US")} · empleados ${pf.empleados} · edad dueño ${pf.edadDueno ?? "SIN DATO"} · ` +
-          `ya tiene ventas: ${pf.tieneVentas ? "sí" : "no"}${pf.tieneDecreto ? " · YA TIENE DECRETO" : ""}`;
+          `ya tuvo ventas: ${pf.ventasSegunDueno ? (pf.tieneVentas ? "sí" : "no") : "SIN DATO (pregúntale; no cuenta dinero del dueño, préstamos, cashback ni compras de prueba)"}` +
+          `${pf.tieneDecreto ? " · YA TIENE DECRETO" : ""}`;
         const visiblesInc = r.evaluaciones.filter((e) => !r.descartados.includes(e.incentivo.id));
         const linea = (e: (typeof visiblesInc)[number]) =>
           `- ${e.incentivo.nombre}: ${e.incentivo.beneficios}` +

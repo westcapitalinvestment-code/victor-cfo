@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fechaHoyPR } from "@/lib/hora-pr";
-import { evaluarIncentivos, type Evaluacion, type Incentivo, type PerfilIncentivos } from "@/lib/incentivos";
+import { evaluarIncentivos, NO_ES_VENTA, type Evaluacion, type Incentivo, type PerfilIncentivos } from "@/lib/incentivos";
 
 // Lado servidor de los incentivos (15 nov 2026): arma el perfil del negocio
 // con datos reales de VICTOR (entidad, transacciones de 12 meses, Nómina,
@@ -22,7 +22,7 @@ export async function evaluarIncentivosEntidad(
   try {
     const { data: ent, error: eEnt } = await supabase
       .from("business_entities")
-      .select("id, name, industria, fecha_inicio_operaciones, clientes_fuera_pr, tax_regime")
+      .select("id, name, industria, fecha_inicio_operaciones, clientes_fuera_pr, ya_tuvo_ventas, tax_regime")
       .eq("id", entityId)
       .eq("owner_id", ownerId)
       .maybeSingle();
@@ -38,7 +38,7 @@ export async function evaluarIncentivosEntidad(
       supabase.from("user_profiles").select("edad").eq("id", ownerId).maybeSingle(),
       supabase.from("tax_estimate_settings").select("residencia").eq("owner_id", ownerId).is("entity_id", null).maybeSingle(),
       supabase.from("payroll_employees").select("id", { count: "exact", head: true }).eq("entity_id", entityId).eq("activo", true),
-      supabase.from("transactions").select("id").eq("entity_id", entityId).eq("tipo_flujo", "ingreso").eq("es_duplicada", false).limit(1),
+      supabase.from("transactions").select("description_raw").eq("entity_id", entityId).eq("tipo_flujo", "ingreso").eq("es_duplicada", false).limit(500),
       supabase.from("incentivos_descartados").select("incentivo_id").eq("entity_id", entityId),
     ]);
     if (!catalogo) return null;
@@ -49,7 +49,7 @@ export async function evaluarIncentivosEntidad(
     for (let i = 0; i < 30; i++) {
       const { data, error } = await supabase
         .from("transactions")
-        .select("amount, tipo_flujo")
+        .select("amount, tipo_flujo, description_raw")
         .eq("entity_id", entityId)
         .eq("es_duplicada", false)
         .gte("fecha", desde)
@@ -58,20 +58,25 @@ export async function evaluarIncentivosEntidad(
         .order("fecha")
         .range(i * 1000, i * 1000 + 999);
       if (error || !data) break;
-      for (const t of data as { amount: number | string; tipo_flujo: string }[]) {
+      for (const t of data as { amount: number | string; tipo_flujo: string; description_raw: string | null }[]) {
         const v = Math.abs(Number(t.amount) || 0);
-        if (t.tipo_flujo === "ingreso") ventas += v;
+        if (t.tipo_flujo === "ingreso") {
+          if (!NO_ES_VENTA.test(t.description_raw ?? "")) ventas += v;
+        }
         else gastos += v;
       }
       if (data.length < 1000) break;
     }
 
     const regimen = String(ent.tax_regime ?? "ordinaria");
+    const respuesta = (ent.ya_tuvo_ventas as boolean | null) ?? null;
+    const inferido = (unaVenta ?? []).some((t) => !NO_ES_VENTA.test((t.description_raw as string | null) ?? ""));
     const perfil: PerfilIncentivos = {
       industria: (ent.industria as string | null) ?? null,
       fechaInicio: (ent.fecha_inicio_operaciones as string | null) ?? null,
       clientesFueraPR: (ent.clientes_fuera_pr as boolean | null) ?? null,
-      tieneVentas: (unaVenta ?? []).length > 0,
+      tieneVentas: respuesta ?? inferido,
+      ventasSegunDueno: respuesta !== null,
       ventas12m: Math.round(ventas * 100) / 100,
       ganancia12m: Math.round((ventas - gastos) * 100) / 100,
       empleados: empleados ?? 0,
