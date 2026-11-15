@@ -9,6 +9,7 @@ import { PLAN_LABEL } from "@/lib/plan-label";
 import Colapsable from "./colapsable";
 import EmailCanceladoBoton from "./email-cancelado-boton";
 import UsuariosPanel from "./usuarios-panel";
+import IncentivosAdmin from "./incentivos-admin";
 
 // Dashboard de Operaciones — vivía en /dashboard/admin, pero esa ruta la
 // necesitaba el módulo real de Admin/Secretaria (2 sept 2026, pedido de
@@ -458,6 +459,9 @@ export default async function CfoPage() {
 
       <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
         {/* Gasto de IA por plan */}
+        <Colapsable titulo="Catálogo de incentivos de PR (Ley 60 / DDEC)">
+          <IncentivosAdmin />
+        </Colapsable>
         <Colapsable titulo="Gasto de IA por plan">
           <div className="flex flex-col gap-1">
             {Array.from(costoIaPorPlanCentavos.entries())

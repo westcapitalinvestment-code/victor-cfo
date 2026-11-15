@@ -8,6 +8,7 @@ import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-ac
 import GastosPendientesCard from "../gastos-pendientes-card";
 import ResumenCard from "../resumen-card";
 import AvisosOficialesCard from "../../avisos-oficiales-card";
+import IncentivosCard from "./incentivos-card";
 
 // Fix (30 sept 2026): new Date().toISOString() es UTC — en PR, después de
 // las 8pm esto ya da la fecha de mañana. fechaHoyPR() (ya importado arriba)
@@ -462,6 +463,9 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
         </p>
         <span style={{ color: "#B45309" }}>→</span>
       </Link>
+
+      {/* Incentivos de PR (Ley 60 / DDEC) que este negocio podría aprovechar (15 nov 2026). */}
+      <IncentivosCard entityId={entidadId} />
 
       <GastosPendientesCard
         pendientesIniciales={pendientesNegocioConSugerencia}

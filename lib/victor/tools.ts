@@ -10,6 +10,8 @@ import { claveCicloUso, progresoCicloUso } from "@/lib/ciclo-uso";
 import { limiteMensualIaCentavos, centavosAMicrotokens } from "@/lib/limites-ia";
 import { esFounder } from "@/lib/founder";
 import { obtenerEstimadoImpuestos } from "@/lib/impuestos-estimados-server";
+import { evaluarIncentivosEntidad } from "@/lib/incentivos-server";
+import { INDUSTRIAS, PREGUNTA_DATO, nombreIndustria } from "@/lib/incentivos";
 import { nominaIncluidaEnPlan } from "@/lib/stripe";
 import { cargarParametros, cargarConfigEntidad } from "@/lib/nomina-server";
 import { calcularEmpleado, PERIODOS_POR_ANIO, type EmpleadoNomina, type Frecuencia } from "@/lib/nomina";
@@ -1278,6 +1280,50 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
         },
       },
       required: ["tema"],
+    },
+  },
+  {
+    name: "evaluar_incentivos",
+    description:
+      "Evalúa qué decretos de la Ley 60-2019 (PYME Nueva, Manufactura/software, Exportación de servicios, Turismo, Agroindustria, Joven " +
+      "Empresario) y programas del DDEC (PYME Innovadora hasta $200K, Capital Semilla, Maquinaria y Equipo, Mercadeo, Juvempleo) y créditos " +
+      "PODRÍA aprovechar un negocio del usuario, con sus datos reales (industria, fecha de inicio, ventas y ganancia de 12 meses, empleados en " +
+      "Nómina, edad, si tiene clientes fuera de PR). Úsala cuando pregunte por incentivos, decretos, Ley 60, ayudas o subsidios del DDEC, cómo " +
+      "pagar menos contribución legalmente, o cuando hable de abrir o expandir un negocio. El cálculo lo hace el backend: NUNCA inventes un " +
+      "requisito, un % ni un monto que no venga en el resultado. Di siempre 'podrías cualificar', nunca 'cualificas': quien decide es el DDEC, y " +
+      "recomienda verificarlo con su CPA o abogado (puede invitar a su contable a VICTOR). Si el resultado dice que faltan datos, pregúntaselos " +
+      "con naturalidad y guárdalos con guardar_datos_incentivos.",
+    input_schema: {
+      type: "object",
+      properties: {
+        entidad_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la entidad de negocio. Si se omite y hay varias, se evalúan todas.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "guardar_datos_incentivos",
+    description:
+      "Guarda los datos que hacen falta para evaluar incentivos de un negocio: a qué se dedica (industria), cuándo comenzó a operar y si tiene " +
+      "clientes fuera de Puerto Rico; y la edad del dueño. Úsala solo con lo que el usuario te dijo explícitamente, y después vuelve a llamar " +
+      "evaluar_incentivos.",
+    input_schema: {
+      type: "object",
+      properties: {
+        entidad_nombre: { type: "string", description: "Nombre (o parte) de la entidad. Obligatorio si tiene más de una." },
+        industria: {
+          type: "string",
+          enum: ["software", "manufactura", "turismo", "agricultura", "agroindustria", "creativas", "energia", "servicios_profesionales", "salud", "comercio", "restaurante", "construccion", "transporte", "otro"],
+          description: "software = software, apps o plataformas digitales (SaaS); creativas = cine, música, diseño; energia = energía verde/ambiental.",
+        },
+        fecha_inicio: { type: "string", description: "Fecha en que el negocio comenzó a operar, YYYY-MM-DD (si solo dice el año o el mes, usa el día 01)." },
+        clientes_fuera_pr: { type: "boolean", description: "true si le vende o presta servicios a clientes fuera de Puerto Rico." },
+        edad: { type: "number", description: "Edad del dueño, en años." },
+      },
+      required: [],
     },
   },
   {
@@ -5298,6 +5344,84 @@ export async function executeVictorTool(
         message: articulos
           .map((a) => `### ${a.titulo}\n${a.contenido}`)
           .join("\n\n---\n\n"),
+      };
+    }
+
+    case "evaluar_incentivos":
+    case "guardar_datos_incentivos": {
+      // Incentivos de PR (15 nov 2026, migración 0210). El backend evalúa
+      // (lib/incentivos.ts); VICTOR solo comunica el resultado.
+      const pistaInc = typeof input.entidad_nombre === "string" ? input.entidad_nombre.trim() : "";
+      let entidadesInc = (
+        (await supabase.from("business_entities").select("id, name").eq("owner_id", ownerId).eq("active", true).order("name", { ascending: true })).data ?? []
+      ) as { id: string; name: string }[];
+      if (pistaInc) {
+        const p = pistaInc.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        const f = entidadesInc.filter((e) => e.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(p));
+        if (f.length === 0) return { ok: false, message: `No encontré una entidad que se parezca a "${pistaInc}".` };
+        entidadesInc = f;
+      }
+      if (entidadesInc.length === 0) {
+        return { ok: true, message: "El usuario no tiene entidades de negocio en VICTOR. Los incentivos se evalúan por negocio: sugiérele crear su entidad primero." };
+      }
+
+      if (toolName === "guardar_datos_incentivos") {
+        if (entidadesInc.length > 1) return { ok: false, message: "Tiene varias entidades: pregúntale a cuál negocio se refiere y pasa entidad_nombre." };
+        const cambiosInc: Record<string, unknown> = {};
+        if (typeof input.industria === "string" && INDUSTRIAS.some((i) => i.id === input.industria)) cambiosInc.industria = input.industria;
+        if (typeof input.fecha_inicio === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.fecha_inicio)) cambiosInc.fecha_inicio_operaciones = input.fecha_inicio;
+        if (typeof input.clientes_fuera_pr === "boolean") cambiosInc.clientes_fuera_pr = input.clientes_fuera_pr;
+        if (Object.keys(cambiosInc).length) {
+          const { error } = await supabase.from("business_entities").update(cambiosInc).eq("id", entidadesInc[0].id).eq("owner_id", ownerId);
+          if (error) return { ok: false, message: `No se pudieron guardar los datos: ${error.message}` };
+        }
+        const edadInc = Number(input.edad);
+        if (Number.isInteger(edadInc) && edadInc >= 14 && edadInc <= 110) {
+          await supabase.from("user_profiles").update({ edad: edadInc }).eq("id", ownerId);
+        }
+        return { ok: true, message: `Datos guardados para ${entidadesInc[0].name}. Ahora llama evaluar_incentivos para ver el resultado.` };
+      }
+
+      const bloques: string[] = [];
+      for (const ent of entidadesInc.slice(0, 5)) {
+        const r = await evaluarIncentivosEntidad(supabase, ownerId, ent.id);
+        if (!r) {
+          bloques.push(`### ${ent.name}\nNo se pudo evaluar (puede faltar la migración de incentivos).`);
+          continue;
+        }
+        const pf = r.perfil;
+        const datosTxt =
+          `Datos usados: industria ${nombreIndustria(pf.industria) ?? "SIN DATO"} · inicio ${pf.fechaInicio ?? "SIN DATO"} · clientes fuera de PR ` +
+          `${pf.clientesFueraPR === null ? "SIN DATO" : pf.clientesFueraPR ? "sí" : "no"} · ventas 12 meses $${Math.round(pf.ventas12m).toLocaleString("en-US")} · ` +
+          `ganancia 12 meses $${Math.round(pf.ganancia12m).toLocaleString("en-US")} · empleados ${pf.empleados} · edad dueño ${pf.edadDueno ?? "SIN DATO"} · ` +
+          `ya tiene ventas: ${pf.tieneVentas ? "sí" : "no"}${pf.tieneDecreto ? " · YA TIENE DECRETO" : ""}`;
+        const visiblesInc = r.evaluaciones.filter((e) => !r.descartados.includes(e.incentivo.id));
+        const linea = (e: (typeof visiblesInc)[number]) =>
+          `- ${e.incentivo.nombre}: ${e.incentivo.beneficios}` +
+          (e.estimado ? ` Estimado: ${e.estimado}` : "") +
+          (e.incentivo.urgente ? ` ⚠️ ${e.incentivo.urgente}` : "") +
+          (e.incentivo.excluye ? ` Ojo: ${e.incentivo.excluye}` : "") +
+          (e.incentivo.como_solicitar ? ` Cómo: ${e.incentivo.como_solicitar}` : "");
+        const cumpleInc = visiblesInc.filter((e) => e.estado === "cumple");
+        const faltaInc = visiblesInc.filter((e) => e.estado === "falta_dato");
+        const faltanDatos = Array.from(new Set(faltaInc.flatMap((e) => e.faltan))).map((f) => PREGUNTA_DATO[f]);
+        bloques.push(
+          [
+            `### ${ent.name}`,
+            datosTxt,
+            cumpleInc.length ? `PODRÍA CUALIFICAR:\n${cumpleInc.map(linea).join("\n")}` : "Con los datos actuales no vemos incentivos que cumplan todos los requisitos.",
+            faltaInc.length ? `FALTAN DATOS para evaluar: ${faltaInc.map((e) => e.incentivo.nombre).join(", ")}. Pregunta: ${faltanDatos.join(" · ")}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n")
+        );
+      }
+      return {
+        ok: true,
+        message:
+          bloques.join("\n\n") +
+          "\n\nRecuerda: di 'podrías cualificar' (decide el DDEC), recomienda confirmarlo con su CPA o abogado, y no inventes requisitos ni montos fuera de esta lista. " +
+          "Si hay un aviso ⚠️ de fecha (ej. PYME Nueva antes de la primera venta), menciónalo primero.",
       };
     }
 
