@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const apertura = fecha(x?.open_time);
     const lado = x?.side === "sell" ? "sell" : x?.side === "buy" ? "buy" : null;
     const ticket = typeof x?.ticket === "string" || typeof x?.ticket === "number" ? String(x.ticket).slice(0, 40) : "";
-    const simbolo = typeof x?.symbol === "string" ? x.symbol.replace(/[^A-Za-z0-9._]/g, "").slice(0, 20) : "";
+    const simbolo = typeof x?.symbol === "string" ? x.symbol.replace(/[^A-Za-z0-9._#-]/g, "").slice(0, 20) : "";
     if (!apertura || !lado || !ticket || !simbolo) continue;
     const sl = num(x.sl);
     const tp = num(x.tp);
@@ -53,6 +53,8 @@ export async function POST(req: NextRequest) {
       comision: num(x.commission),
       swap: num(x.swap),
       ganancia: num(x.profit),
+      // riesgo en dinero al abrir, calculado por el guardián con los datos del broker (cualquier activo)
+      riesgo_usd: num(x.risk, -1) > 0 ? num(x.risk) : null,
     });
   }
   if (filas.length) {

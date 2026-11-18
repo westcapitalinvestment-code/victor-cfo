@@ -42,6 +42,7 @@ type Cuenta = {
 };
 type FilaTrade = {
   id: string;
+  riesgo_usd?: number | null;
   ticket: string;
   simbolo: string;
   lado: "buy" | "sell";
@@ -223,6 +224,7 @@ export default function TradingPage() {
         comision: Number(t.comision),
         swap: Number(t.swap),
         ganancia: Number(t.ganancia),
+        riesgo_usd: t.riesgo_usd == null ? null : Number(t.riesgo_usd),
       }))
     );
     const { data: tk } = await supabase.from("trading_sync_tokens").select("token").eq("account_id", id).maybeSingle();
@@ -260,6 +262,7 @@ export default function TradingPage() {
             comision: Number(t.comision),
             swap: Number(t.swap),
             ganancia: Number(t.ganancia),
+        riesgo_usd: t.riesgo_usd == null ? null : Number(t.riesgo_usd),
           }))
         );
       }
@@ -268,18 +271,22 @@ export default function TradingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncToken, cuentaId]);
 
-  async function activarSync() {
-    if (!cuenta) return;
+  async function activarSync(silencioso = false): Promise<string | null> {
+    if (!cuenta) return null;
     setError(null);
     const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
+    if (!u.user) return null;
     const bytes = new Uint8Array(24);
     crypto.getRandomValues(bytes);
     const token = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
     const { error: e } = await supabase.from("trading_sync_tokens").upsert({ account_id: cuenta.id, owner_id: u.user.id, token, created_at: new Date().toISOString(), last_sync_at: null });
-    if (e) return setError(`No se pudo activar la sincronización: ${e.message}`);
+    if (e) {
+      setError(`No se pudo activar la sincronización: ${e.message}`);
+      return null;
+    }
     setSyncToken(token);
-    setMsg("Sincronización activada. Descarga el guardián otra vez para que lleve tu token.");
+    if (!silencioso) setMsg("Sincronización activada. Descarga el guardián otra vez para que lleve tu token.");
+    return token;
   }
 
   async function desactivarSync() {
@@ -456,7 +463,9 @@ export default function TradingPage() {
 
   const todosActivos = guardian.guard_symbol.trim() === "" || guardian.guard_symbol.includes("*");
 
-  function descargarGuardian() {
+  async function descargarGuardian() {
+    // El guardián siempre sale con la sincronización lista: si no hay token, se crea uno.
+    const token = syncToken ?? (await activarSync(true));
     const codigo = generarGuardianMQ5({
       simbolos: guardian.guard_symbol,
       modoStop: guardian.guard_sl_mode,
@@ -475,8 +484,8 @@ export default function TradingPage() {
       maxAbiertos: guardian.guard_max_open,
       maxTradesDia: reglas.max_trades_dia,
       esperaTrasPerdidaMin: reglas.espera_tras_perdida_min,
-      syncUrl: syncToken ? `${window.location.origin}/api/trading/sync` : "",
-      syncToken: syncToken ?? "",
+      syncUrl: token ? `${window.location.origin}/api/trading/sync` : "",
+      syncToken: token ?? "",
       modoBloqueo: guardian.guard_lock_mode,
       bloquearCierreManual: guardian.guard_block_manual_close,
     });
@@ -996,14 +1005,14 @@ export default function TradingPage() {
                         Activa para <b>{cuenta?.nombre}</b>. El guardián envía tus trades cerrados y tu balance cada 30 segundos, y este panel se actualiza solo. Si cambiaste algo, <b>descarga el guardián otra vez</b> y reemplázalo en MT5 (lleva tu token adentro).
                       </p>
                       <div className="mt-2 flex gap-3">
-                        <button className="text-teal" onClick={activarSync}>Generar token nuevo</button>
+                        <button className="text-teal" onClick={() => activarSync()}>Generar token nuevo</button>
                         <button className="text-red" onClick={desactivarSync}>Desactivar</button>
                       </div>
                     </>
                   ) : (
                     <>
                       <p className="text-muted">Sin subir reportes: el guardián manda tus trades y tu balance a este panel mientras MT5 esté abierto.</p>
-                      <button className="mt-2 rounded-lg border border-[#1B3A5C] px-3 py-1.5 font-medium text-[#1B3A5C]" onClick={activarSync}>Activar sincronización</button>
+                      <button className="mt-2 rounded-lg border border-[#1B3A5C] px-3 py-1.5 font-medium text-[#1B3A5C]" onClick={() => activarSync()}>Activar sincronización</button>
                     </>
                   )}
                   {syncToken && (
@@ -1012,15 +1021,24 @@ export default function TradingPage() {
                     </p>
                   )}
                 </div>
-                <details className="text-[14px] text-muted">
-                  <summary className="cursor-pointer text-sm font-medium text-teal">Cómo instalarlo en MT5</summary>
-                  <ol className="mt-2 list-decimal pl-4">
-                    <li>En MT5 abre <b>Archivo → Abrir carpeta de datos</b> y entra a <b>MQL5 → Experts</b>.</li>
-                    <li>Copia ahí el archivo <b>VictorGuard.mq5</b> descargado.</li>
-                    <li>Abre MetaEditor (F4), abre el archivo y pulsa <b>Compilar (F7)</b>. Debe decir 0 errores.</li>
-                    <li>En MT5, arrastra <b>VictorGuard</b> desde el Navegador a un gráfico del símbolo permitido y activa <b>Algo Trading</b> (botón verde).</li>
-                    <li>Los valores se pueden ajustar en la pestaña <b>Entradas</b> sin volver a la app. Pruébalo primero en cuenta demo.</li>
+                <details className="text-[14px] text-muted" open={!cuenta?.last_sync_at}>
+                  <summary className="cursor-pointer text-sm font-medium text-teal">Cómo instalarlo en MT5 (5 minutos, una sola vez)</summary>
+                  <ol className="mt-2 flex list-decimal flex-col gap-1 pl-4">
+                    <li>Arriba, pulsa <b>Descargar para MT5</b>. El archivo <b>VictorGuard.mq5</b> ya lleva tus reglas y tu conexión con VICTOR.</li>
+                    <li>En MT5 abre <b>Archivo → Abrir carpeta de datos</b>, entra a <b>MQL5 → Experts</b> y copia ahí el archivo (si ya tenías uno, reemplázalo).</li>
+                    <li>Pulsa <b>F4</b> para abrir MetaEditor, abre <b>VictorGuard.mq5</b> y pulsa <b>Compilar (F7)</b>. Abajo debe decir <b>0 errors</b>.</li>
+                    <li>
+                      En MT5: <b>Herramientas → Opciones → Asesores Expertos</b>, marca <b>Permitir WebRequest para las URL listadas</b> y agrega{" "}
+                      <b>{typeof window !== "undefined" ? window.location.origin : "https://www.victorcfo.com"}</b>. Así tus trades llegan solos a la bitácora.
+                    </li>
+                    <li>Activa el botón <b>Algo Trading</b> de la barra de MT5 (debe quedar verde).</li>
+                    <li>
+                      En el <b>Navegador</b> (Ctrl+N) busca <b>Asesores Expertos → VictorGuard</b> y arrástralo a <b>un solo gráfico</b>, de cualquier activo. En la ventana que abre, pestaña
+                      <b> Común</b>, marca <b>Permitir Algo Trading</b> y pulsa Aceptar.
+                    </li>
+                    <li>Listo: arriba a la izquierda del gráfico verás VENDER / COMPRAR y tu estado. Vigila todas tus posiciones de la cuenta. Pruébalo primero en demo.</li>
                   </ol>
+                  <p className="mt-2">Si cambias tus reglas aquí, descárgalo otra vez y repite los pasos 2 y 3. También puedes ajustar valores en MT5, en la pestaña <b>Entradas</b> del guardián.</p>
                 </details>
                 <p className="text-[13px] text-muted">Para MT4 el programa es distinto y todavía no está disponible. Es una herramienta de control propio, no una señal ni una garantía de resultados.</p>
               </div>

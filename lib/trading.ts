@@ -17,6 +17,7 @@ export type Trade = {
   comision: number;
   swap: number;
   ganancia: number;
+  riesgo_usd?: number | null; // riesgo al abrir según el guardián (si se sincronizó desde MT5)
 };
 
 export type ReglasRiesgo = {
@@ -271,10 +272,14 @@ export function evaluarCumplimiento(trades: Trade[], reglas: ReglasRiesgo, balan
     if (reglas.sl_obligatorio && !t.sl) v.push("sin_sl");
 
     const info = infoSimbolo(t.simbolo);
-    // Con el lote mínimo (0.01) no se puede arriesgar menos: no se marca.
-    if (t.sl && t.precio_apertura && info && t.volumen > 0.01 + 1e-9) {
+    const permitido = (balance * reglas.riesgo_por_trade_pct) / 100;
+    if (t.riesgo_usd != null && t.riesgo_usd > 0) {
+      // Dato exacto del broker (vale para acciones, cripto, futuros...). Mismo margen de 10% que el guardián.
+      if (t.riesgo_usd > permitido * 1.1 + 0.005) v.push("riesgo_alto");
+    } else if (t.sl && t.precio_apertura && info && t.volumen > 0.01 + 1e-9) {
+      // Con el lote mínimo (0.01) no se puede arriesgar menos: no se marca.
       const riesgo = Math.abs(t.precio_apertura - t.sl) * info.contrato * t.volumen * (USD_POR_MONEDA[info.quote] ?? 1);
-      if (riesgo > (balance * reglas.riesgo_por_trade_pct) / 100 + 0.005) v.push("riesgo_alto");
+      if (riesgo > permitido + 0.005) v.push("riesgo_alto");
     }
     const dur = Math.max(0, Math.round((cierra - abre) / 1000));
     if (t.hora_cierre && dur < reglas.duracion_min_seg) v.push("muy_corto");

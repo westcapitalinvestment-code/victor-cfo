@@ -397,6 +397,7 @@ void Guard()
             continue;
          }
          GlobalVariableSet(kok, 1);
+         GlobalVariableSet(P + "RK_" + (string)tk, vol * LossPerLot(sym, lossDist));   // riesgo al abrir, para la bitacora
       }
       kept++;
       if(dist <= 0) continue;
@@ -739,13 +740,22 @@ void SyncTick()
       }
       if(tOpen == 0 || tClose == 0 || sym == "") continue;
       if(sl == 0 && GlobalVariableCheck(P + "SL_" + (string)pids[j])) sl = GlobalVariableGet(P + "SL_" + (string)pids[j]);
+      // riesgo en dinero al abrir (sirve para cualquier activo: acciones, cripto, futuros...)
+      double rk = -1;
+      if(GlobalVariableCheck(P + "RK_" + (string)pids[j])) rk = GlobalVariableGet(P + "RK_" + (string)pids[j]);
+      else if(sl > 0)
+      {
+         double dd = (side == "buy") ? pOpen - sl : sl - pOpen;
+         if(dd > 0) rk = LossPerLot(sym, dd) * vol;
+      }
       string it = "{\"ticket\":" + JStr((string)pids[j]) + ",\"symbol\":" + JStr(sym) + ",\"side\":" + JStr(side)
          + ",\"volume\":" + DoubleToString(vol, 2)
          + ",\"open_time\":" + JTime(tOpen) + ",\"open_price\":" + DoubleToString(pOpen, 8)
          + ",\"sl\":" + DoubleToString(sl, 8) + ",\"tp\":" + DoubleToString(tp, 8)
          + ",\"close_time\":" + JTime(tClose) + ",\"close_price\":" + DoubleToString(pClose, 8)
          + ",\"commission\":" + DoubleToString(com, 2) + ",\"swap\":" + DoubleToString(swp, 2)
-         + ",\"profit\":" + DoubleToString(prof, 2) + "}";
+         + ",\"profit\":" + DoubleToString(prof, 2)
+         + (rk >= 0 ? ",\"risk\":" + DoubleToString(rk, 2) : "") + "}";
       items += (items == "" ? "" : ",") + it;
       ArrayResize(sentIds, ns + 1);
       sentIds[ns] = pids[j];
