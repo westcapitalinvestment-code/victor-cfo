@@ -23,7 +23,7 @@ import {
   type Trade,
   type TradeEvaluado,
 } from "@/lib/trading";
-import { generarGuardianMQ5 } from "@/lib/trading-guard";
+import { generarGuardianMQ5, type ModoStop, type TemporalidadATR } from "@/lib/trading-guard";
 import { Anillo, BarrasMensuales, Calendario, CurvaCapital, nombreMes, type MesPct } from "./graficos";
 
 // Módulo Trading (oct 2026) — organizador, NO da señales ni consejos.
@@ -68,7 +68,12 @@ type Guardian = {
   guard_min_equity_usd: number | null;
   guard_lock_mode: "total" | "flexible" | "ninguno";
   guard_block_manual_close: boolean;
+  guard_sl_mode: ModoStop;
+  guard_sl_pct: number;
+  guard_atr_mult: number;
+  guard_atr_tf: TemporalidadATR;
 };
+const TFS_ATR: TemporalidadATR[] = ["M5", "M15", "M30", "H1", "H4", "D1"];
 const GUARDIAN_POR_DEFECTO: Guardian = {
   guard_symbol: "XAUUSD",
   guard_sl_pips: 60,
@@ -79,6 +84,10 @@ const GUARDIAN_POR_DEFECTO: Guardian = {
   guard_min_equity_usd: null,
   guard_lock_mode: "flexible",
   guard_block_manual_close: true,
+  guard_sl_mode: "pips",
+  guard_sl_pct: 0.5,
+  guard_atr_mult: 1.5,
+  guard_atr_tf: "H1",
 };
 
 // Se muestra en hora de Puerto Rico (los datos guardados siguen en hora del broker).
@@ -186,6 +195,10 @@ export default function TradingPage() {
         guard_min_equity_usd: r.guard_min_equity_usd == null ? null : Number(r.guard_min_equity_usd),
         guard_lock_mode: r.guard_lock_mode === "total" || r.guard_lock_mode === "ninguno" ? r.guard_lock_mode : "flexible",
         guard_block_manual_close: r.guard_block_manual_close !== false,
+        guard_sl_mode: r.guard_sl_mode === "porcentaje" || r.guard_sl_mode === "atr" ? r.guard_sl_mode : "pips",
+        guard_sl_pct: Number(r.guard_sl_pct ?? 0.5),
+        guard_atr_mult: Number(r.guard_atr_mult ?? 1.5),
+        guard_atr_tf: TFS_ATR.includes(r.guard_atr_tf as TemporalidadATR) ? (r.guard_atr_tf as TemporalidadATR) : "H1",
       });
     }
     const id = preferida ?? cuentaId ?? lista[0]?.id ?? null;
@@ -441,9 +454,15 @@ export default function TradingPage() {
     ? calcularLote({ balance: balanceCalc, riesgoPct: reglas.riesgo_por_trade_pct, distanciaSL: distPrecio, contrato, usdPorQuote })
     : null;
 
+  const todosActivos = guardian.guard_symbol.trim() === "" || guardian.guard_symbol.includes("*");
+
   function descargarGuardian() {
     const codigo = generarGuardianMQ5({
-      simbolo: guardian.guard_symbol,
+      simbolos: guardian.guard_symbol,
+      modoStop: guardian.guard_sl_mode,
+      stopPct: guardian.guard_sl_pct,
+      atrMult: guardian.guard_atr_mult,
+      atrTF: guardian.guard_atr_tf,
       riesgoPct: reglas.riesgo_por_trade_pct,
       distanciaPips: guardian.guard_sl_pips,
       tamanoPip: guardian.guard_pip_size,
@@ -868,29 +887,72 @@ export default function TradingPage() {
               <div className="vc-card mb-4 flex flex-col gap-3">
                 <p className="text-sm uppercase tracking-wide text-muted">Guardián para MT5</p>
                 <p className="text-[14px] text-muted">
-                  Un programa (EA) que pones en tu gráfico de MT5. No decide cuándo entrar: tú entras con sus botones COMPRAR / VENDER y él calcula el lote, pone stop y take profit, y te bloquea al llegar a tus límites.
+                  Un programa (EA) que pones en UN solo gráfico de MT5 y vigila toda tu cuenta: forex, oro, índices, acciones, futuros o cripto. No decide cuándo entrar: tú entras (con sus botones o como siempre en MT5) y él calcula el lote de cada activo, pone stop y take profit, y te bloquea al llegar a tus límites. Cambia el símbolo del gráfico y los botones lo siguen.
                 </p>
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <label className="flex flex-col gap-1"><span className="text-muted">Símbolo permitido</span>
-                    <input
+                  <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Qué puedo operar</span>
+                    <select
                       className="vc-input"
-                      list="vt-simbolos"
-                      value={guardian.guard_symbol}
-                      onChange={(e) => {
-                        const v = e.target.value.toUpperCase();
-                        const inf = infoSimbolo(v);
-                        setGuardian({ ...guardian, guard_symbol: v, ...(inf ? { guard_pip_size: inf.pip } : {}) });
-                      }}
-                    />
-                    <span className="text-[13px] text-muted">Como aparece en tu broker (ej. EURUSD, NAS100.fs, US30). Sirve para cualquier símbolo.</span>
+                      value={todosActivos ? "todos" : "lista"}
+                      onChange={(e) => setGuardian({ ...guardian, guard_symbol: e.target.value === "todos" ? "*" : "XAUUSD" })}
+                    >
+                      <option value="todos">Todos los activos (forex, oro, índices, acciones, futuros, cripto)</option>
+                      <option value="lista">Solo los símbolos que escoja</option>
+                    </select>
                   </label>
-                  <label className="flex flex-col gap-1"><span className="text-muted">Distancia del stop (pips)</span>
-                    <NumInput value={guardian.guard_sl_pips} onChange={(n) => setGuardian({ ...guardian, guard_sl_pips: n ?? 0 })} />
-                    <span className="text-[13px] text-muted">Oro: 60 pips = $6 de precio</span>
+                  {!todosActivos && (
+                    <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Símbolos permitidos</span>
+                      <input
+                        className="vc-input"
+                        list="vt-simbolos"
+                        value={guardian.guard_symbol}
+                        onChange={(e) => {
+                          const v = e.target.value.toUpperCase();
+                          const inf = infoSimbolo(v.split(",")[0].trim());
+                          setGuardian({ ...guardian, guard_symbol: v, ...(inf ? { guard_pip_size: inf.pip } : {}) });
+                        }}
+                      />
+                      <span className="text-[13px] text-muted">Como aparecen en tu broker, separados por coma (ej. XAUUSD, EURUSD, NAS100, BTCUSD, #AAPL). Acepta sufijos como .r o m.</span>
+                    </label>
+                  )}
+                  <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Cómo se calcula el stop</span>
+                    <select className="vc-input" value={guardian.guard_sl_mode} onChange={(e) => setGuardian({ ...guardian, guard_sl_mode: e.target.value as ModoStop })}>
+                      <option value="atr">Por volatilidad (ATR): se ajusta solo a cada activo</option>
+                      <option value="porcentaje">% del precio: igual para todos los activos</option>
+                      <option value="pips">Pips fijos: para un solo símbolo</option>
+                    </select>
+                    {guardian.guard_sl_mode === "pips" && (todosActivos || guardian.guard_symbol.includes(",")) && (
+                      <span className="text-[13px] text-red">Con varios activos usa ATR o %: los pips solo aplican a {todosActivos ? "el símbolo del gráfico" : "el primero de la lista"} y al forex; el resto usa el %.</span>
+                    )}
                   </label>
-                  <label className="flex flex-col gap-1"><span className="text-muted">Tamaño de 1 pip (precio)</span>
-                    <NumInput value={guardian.guard_pip_size} onChange={(n) => setGuardian({ ...guardian, guard_pip_size: n ?? 0 })} />
-                    <span className="text-[13px] text-muted">Se llena solo para símbolos conocidos</span>
+                  {guardian.guard_sl_mode === "pips" && (
+                    <>
+                      <label className="flex flex-col gap-1"><span className="text-muted">Distancia del stop (pips)</span>
+                        <NumInput value={guardian.guard_sl_pips} onChange={(n) => setGuardian({ ...guardian, guard_sl_pips: n ?? 0 })} />
+                        <span className="text-[13px] text-muted">Oro: 60 pips = $6 de precio</span>
+                      </label>
+                      <label className="flex flex-col gap-1"><span className="text-muted">Tamaño de 1 pip (precio)</span>
+                        <NumInput value={guardian.guard_pip_size} onChange={(n) => setGuardian({ ...guardian, guard_pip_size: n ?? 0 })} />
+                        <span className="text-[13px] text-muted">Se llena solo para símbolos conocidos</span>
+                      </label>
+                    </>
+                  )}
+                  {guardian.guard_sl_mode === "atr" && (
+                    <>
+                      <label className="flex flex-col gap-1"><span className="text-muted">Stop = ATR ×</span>
+                        <NumInput value={guardian.guard_atr_mult} onChange={(n) => setGuardian({ ...guardian, guard_atr_mult: n ?? 0 })} />
+                        <span className="text-[13px] text-muted">1.5 = una vez y media el movimiento promedio de una vela</span>
+                      </label>
+                      <label className="flex flex-col gap-1"><span className="text-muted">Temporalidad del ATR</span>
+                        <select className="vc-input" value={guardian.guard_atr_tf} onChange={(e) => setGuardian({ ...guardian, guard_atr_tf: e.target.value as TemporalidadATR })}>
+                          {TFS_ATR.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </label>
+                    </>
+                  )}
+                  <label className="flex flex-col gap-1"><span className="text-muted">{guardian.guard_sl_mode === "porcentaje" ? "Stop a este % del precio" : "Stop de respaldo (% del precio)"}</span>
+                    <NumInput value={guardian.guard_sl_pct} onChange={(n) => setGuardian({ ...guardian, guard_sl_pct: n ?? 0 })} />
+                    <span className="text-[13px] text-muted">{guardian.guard_sl_mode === "porcentaje" ? "Ej. 0.5% en oro a $4,000 = $20 de stop" : "Se usa si el ATR o los pips no aplican a un activo"}</span>
                   </label>
                   <label className="flex flex-col gap-1"><span className="text-muted">Take profit = stop ×</span>
                     <NumInput value={guardian.guard_reward_ratio} onChange={(n) => setGuardian({ ...guardian, guard_reward_ratio: n ?? 0 })} />

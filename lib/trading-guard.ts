@@ -4,8 +4,15 @@
 // compila en MetaEditor (F7). Probar siempre primero en demo.
 // Texto del archivo en ASCII (sin acentos) para que MetaEditor no lo corrompa.
 
+export type ModoStop = "pips" | "porcentaje" | "atr";
+export type TemporalidadATR = "M5" | "M15" | "M30" | "H1" | "H4" | "D1";
+
 export type ParametrosGuardian = {
-  simbolo: string;
+  simbolos: string; // "*" = todos los activos; o lista separada por comas (EURUSD, NAS100, BTCUSD, #AAPL)
+  modoStop: ModoStop; // pips (un simbolo), % del precio, o ATR (sirve para cualquier activo)
+  stopPct: number; // % del precio (modo porcentaje; tambien respaldo)
+  atrMult: number; // stop = ATR x este numero (modo atr)
+  atrTF: TemporalidadATR;
   riesgoPct: number;
   distanciaPips: number; // distancia del stop en pips
   tamanoPip: number; // tamano de 1 pip en precio (ej. 0.1 oro, 0.0001 EURUSD, 1 NAS100)
@@ -30,13 +37,23 @@ const n = (v: number, d = 2) => {
 };
 const b = (v: boolean) => (v ? "true" : "false");
 const q = (s: string) => s.replace(/[^A-Za-z0-9:/._-]/g, "");
-const sym = (s: string) => s.replace(/[^A-Za-z0-9._]/g, "").slice(0, 20) || "XAUUSD";
+// Lista de simbolos: "*" (o vacio) = todos. Solo caracteres validos en nombres de MT5.
+const syms = (s: string) => {
+  const t = s.toUpperCase().replace(/[^A-Z0-9._,#*-]/g, "").slice(0, 300);
+  return !t || t.includes("*") ? "*" : t.split(",").filter(Boolean).join(",");
+};
+const MODO_MQ5: Record<ModoStop, string> = { pips: "SL_PIPS", porcentaje: "SL_PERCENT", atr: "SL_ATR" };
+const TF_MQ5: Record<TemporalidadATR, string> = { M5: "PERIOD_M5", M15: "PERIOD_M15", M30: "PERIOD_M30", H1: "PERIOD_H1", H4: "PERIOD_H4", D1: "PERIOD_D1" };
 
 export function generarGuardianMQ5(p: ParametrosGuardian): string {
   const fecha = new Date().toISOString().slice(0, 10);
   return String.raw`//+------------------------------------------------------------------+
 //|  VictorGuard.mq5 - Guardian de riesgo (generado por VICTOR CFO)   |
 //|  Generado: ${fecha}                                               |
+//|  Sirve para cualquier activo de tu broker: forex, oro, indices,   |
+//|  acciones, futuros y cripto (lista o * = todos).                  |
+//|  Ponlo en UN SOLO grafico: vigila todas las posiciones de la      |
+//|  cuenta. Cambia el simbolo del grafico y los botones lo siguen.   |
 //|  Tu decides las entradas (o activas AutoEntry: retroceso a la     |
 //|  media en tendencia). El guardian impone TUS reglas:              |
 //|   - calcula el lote segun tu riesgo                               |
@@ -48,15 +65,22 @@ export function generarGuardianMQ5(p: ParametrosGuardian): string {
 //|  Probar SIEMPRE en demo primero. No es asesoria financiera.       |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "2.00"
+#property version   "3.00"
 #include <Trade\Trade.mqh>
 
 CTrade trade;
 
-input string AllowedSymbol      = "${sym(p.simbolo)}"; // unico simbolo permitido
+enum ENUM_SL_MODE { SL_PIPS = 0, SL_PERCENT = 1, SL_ATR = 2 };
+
+input string AllowedSymbols     = "${syms(p.simbolos)}"; // simbolos permitidos separados por coma, o * = todos (forex, indices, acciones, futuros, cripto)
 input double RiskPercent        = ${n(p.riesgoPct)};      // % del balance a arriesgar por trade
-input double SLPips             = ${n(p.distanciaPips, 2)};      // distancia del SL en pips
-input double PipSize            = ${n(p.tamanoPip, 5)};      // tamano de 1 pip en precio (oro 0.1, EURUSD 0.0001, USDJPY 0.01, NAS100/US30 1)
+input ENUM_SL_MODE SLMode       = ${MODO_MQ5[p.modoStop] ?? "SL_ATR"}; // como se calcula el stop: pips, % del precio o ATR
+input double SLPips             = ${n(p.distanciaPips, 2)};      // modo pips: distancia del SL en pips
+input double PipSize            = ${n(p.tamanoPip, 5)};      // modo pips: tamano de 1 pip del simbolo principal (oro 0.1, EURUSD 0.0001, NAS100 1)
+input double SLPercent          = ${n(p.stopPct, 3)};      // modo %: stop a este % del precio (tambien es el respaldo si falta el ATR)
+input double ATRMult            = ${n(p.atrMult, 2)};      // modo ATR: stop = ATR x este numero
+input ENUM_TIMEFRAMES ATRTF     = ${TF_MQ5[p.atrTF] ?? "PERIOD_H1"}; // modo ATR: temporalidad del ATR
+input int    ATRPeriod          = 14;       // modo ATR: periodo del ATR
 input double RewardRatio        = ${n(p.relacionTP)};      // TP inicial = SL x este numero (0 = sin TP al abrir, lo pones tu)
 input int    MaxLosersPerDay    = ${Math.max(1, Math.round(p.maxPerdedoresDia))};        // perdedores maximos por dia
 input double MaxDailyLossPct    = ${n(p.perdidaMaxDiaPct)};      // perdida diaria maxima en % del balance con que empezo el dia
@@ -85,38 +109,119 @@ input int    SlopeBars          = 10;       // velas para medir la pendiente de 
 input double MinSlopeUSD        = 1.0;      // pendiente minima (en precio) en esas velas: filtra rangos
 
 string P = "VG_";
-double SLDistance = 0;   // = SLPips x PipSize (se calcula al iniciar)
 int      hMA = INVALID_HANDLE;
 datetime lastAutoBar = 0;
 
 //------------------------------------------------------------------
-double LossPerLot(double dist)
+// Simbolos permitidos
+bool   g_all = true;
+string g_syms[];
+
+string Up(string s) { string u = s; StringTrimLeft(u); StringTrimRight(u); StringToUpper(u); return u; }
+
+void ParseSymbols()
 {
-   double ts = SymbolInfoDouble(AllowedSymbol, SYMBOL_TRADE_TICK_SIZE);
-   double tv = SymbolInfoDouble(AllowedSymbol, SYMBOL_TRADE_TICK_VALUE);
+   ArrayResize(g_syms, 0);
+   string s = Up(AllowedSymbols);
+   g_all = (s == "" || StringFind(s, "*") >= 0);
+   if(g_all) return;
+   string parts[];
+   int k = StringSplit(s, ',', parts);
+   for(int i = 0; i < k; i++)
+   {
+      string x = Up(parts[i]);
+      if(x == "") continue;
+      int n = ArraySize(g_syms);
+      ArrayResize(g_syms, n + 1);
+      g_syms[n] = x;
+   }
+   if(ArraySize(g_syms) == 0) g_all = true;
+}
+
+// acepta sufijos del broker: "XAUUSD" permite "XAUUSD.r" o "XAUUSDm"
+bool SymbolAllowed(string s)
+{
+   if(g_all) return true;
+   string u = Up(s);
+   for(int i = 0; i < ArraySize(g_syms); i++)
+      if(u == g_syms[i] || StringFind(u, g_syms[i]) == 0) return true;
+   return false;
+}
+
+// simbolo principal: el primero de la lista, o el del grafico si son todos
+bool IsMain(string s)
+{
+   string u = Up(s);
+   string m = g_all ? Up(_Symbol) : g_syms[0];
+   return (u == m || StringFind(u, m) == 0);
+}
+
+//------------------------------------------------------------------
+// Distancia del stop (en precio) para cada simbolo
+string g_atrSym[];
+int    g_atrH[];
+
+int AtrHandle(string s)
+{
+   for(int i = 0; i < ArraySize(g_atrSym); i++) if(g_atrSym[i] == s) return g_atrH[i];
+   SymbolSelect(s, true);
+   int h = iATR(s, ATRTF, ATRPeriod);
+   int n = ArraySize(g_atrSym);
+   ArrayResize(g_atrSym, n + 1); ArrayResize(g_atrH, n + 1);
+   g_atrSym[n] = s; g_atrH[n] = h;
+   return h;
+}
+
+double SLDist(string s)
+{
+   if(SLMode == SL_ATR)
+   {
+      int h = AtrHandle(s);
+      double b[];
+      if(h != INVALID_HANDLE && CopyBuffer(h, 0, 1, 1, b) == 1 && b[0] > 0) return b[0] * ATRMult;
+   }
+   if(SLMode == SL_PIPS)
+   {
+      if(IsMain(s)) return SLPips * PipSize;
+      int dg = (int)SymbolInfoInteger(s, SYMBOL_DIGITS);
+      if(dg == 3 || dg == 5) return SLPips * SymbolInfoDouble(s, SYMBOL_POINT) * 10;   // forex
+   }
+   // % del precio (y respaldo de los otros modos)
+   double price = SymbolInfoDouble(s, SYMBOL_BID);
+   return price * SLPercent / 100.0;
+}
+
+//------------------------------------------------------------------
+double LossPerLot(string s, double dist)
+{
+   double ts = SymbolInfoDouble(s, SYMBOL_TRADE_TICK_SIZE);
+   double tv = SymbolInfoDouble(s, SYMBOL_TRADE_TICK_VALUE_LOSS);
+   if(tv <= 0) tv = SymbolInfoDouble(s, SYMBOL_TRADE_TICK_VALUE);
    if(ts <= 0) return 0;
    return dist / ts * tv;
 }
 
-double CalcLot(double dist)
+double CalcLot(string s, double dist)
 {
-   double lpl = LossPerLot(dist);
+   double lpl = LossPerLot(s, dist);
    if(lpl <= 0) return 0;
    double risk = AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
-   double step = SymbolInfoDouble(AllowedSymbol, SYMBOL_VOLUME_STEP);
-   double minL = SymbolInfoDouble(AllowedSymbol, SYMBOL_VOLUME_MIN);
-   double maxL = SymbolInfoDouble(AllowedSymbol, SYMBOL_VOLUME_MAX);
+   double step = SymbolInfoDouble(s, SYMBOL_VOLUME_STEP);
+   double minL = SymbolInfoDouble(s, SYMBOL_VOLUME_MIN);
+   double maxL = SymbolInfoDouble(s, SYMBOL_VOLUME_MAX);
+   if(step <= 0) step = minL > 0 ? minL : 0.01;
    double lot  = MathFloor(risk / lpl / step) * step;
    if(lot < minL) lot = minL;
    if(lot > maxL) lot = maxL;
-   return NormalizeDouble(lot, 2);
+   int vd = (int)MathMax(0, MathCeil(-MathLog10(step) - 1e-9));   // decimales del lote (acciones = 0, forex = 2)
+   return NormalizeDouble(lot, vd);
 }
 
 // true si hasta el lote minimo excede el riesgo permitido (cuenta muy chica)
-bool RiskTooHigh(double lot, double dist)
+bool RiskTooHigh(string s, double lot, double dist)
 {
    double risk = AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
-   return (lot * LossPerLot(dist) > risk * 1.5);
+   return (lot * LossPerLot(s, dist) > risk * 1.5);
 }
 
 //------------------------------------------------------------------
@@ -182,7 +287,7 @@ bool IsBlocked(string &why)
 }
 
 // bloqueo suave: no cierra nada, solo impide ABRIR otro trade ahora
-bool CanOpenNew(string &why)
+bool CanOpenNew(string s, string &why)
 {
    if(IsBlocked(why)) return false;
    int losers, manual, closed; double pl; datetime lastLoss;
@@ -192,21 +297,21 @@ bool CanOpenNew(string &why)
    // + el nuevo trade no puede pasar la perdida diaria maxima (con varios trades abiertos).
    double startBal = AccountInfoDouble(ACCOUNT_BALANCE) - pl;
    double maxLoss  = (MaxDailyLossUSD > 0) ? MaxDailyLossUSD : startBal * MaxDailyLossPct / 100.0;
-   double ts = SymbolInfoDouble(AllowedSymbol, SYMBOL_TRADE_TICK_SIZE);
-   double tv = SymbolInfoDouble(AllowedSymbol, SYMBOL_TRADE_TICK_VALUE);
    double openRisk = 0;
    for(int i = 0; i < PositionsTotal(); i++)
    {
       ulong ptk = PositionGetTicket(i);
-      if(ptk == 0 || ts <= 0) continue;
+      if(ptk == 0) continue;
+      string psym  = PositionGetString(POSITION_SYMBOL);
       double popen = PositionGetDouble(POSITION_PRICE_OPEN);
       double psl   = PositionGetDouble(POSITION_SL);
       double pvol  = PositionGetDouble(POSITION_VOLUME);
       bool pbuy    = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY);
-      double d = (psl == 0) ? SLDistance : (pbuy ? popen - psl : psl - popen);
-      if(d > 0) openRisk += d / ts * tv * pvol;
+      double d = (psl == 0) ? SLDist(psym) : (pbuy ? popen - psl : psl - popen);
+      if(d > 0) openRisk += LossPerLot(psym, d) * pvol;
    }
-   double newRisk = CalcLot(SLDistance) * LossPerLot(SLDistance);
+   double nd = SLDist(s);
+   double newRisk = CalcLot(s, nd) * LossPerLot(s, nd);
    if(maxLoss > 0 && openRisk + newRisk > maxLoss + pl + 0.01)
    { why = "Riesgo del dia completo (abiertos $" + DoubleToString(openRisk, 2) + " + nuevo $" + DoubleToString(newRisk, 2) + ")"; return false; }
 
@@ -249,8 +354,6 @@ void Guard()
    string why;
    bool blocked = IsBlocked(why);
    int kept = 0;
-   double maxLot = CalcLot(SLDistance);
-   int digits = (int)SymbolInfoInteger(AllowedSymbol, SYMBOL_DIGITS);
 
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
@@ -264,20 +367,45 @@ void Guard()
       double tp  = PositionGetDouble(POSITION_TP);
 
       // reglas que cierran el trade
-      if(blocked || sym != AllowedSymbol || kept >= MaxOpenPositions || vol > maxLot + 0.0000001)
+      if(blocked || !SymbolAllowed(sym) || kept >= MaxOpenPositions)
       {
          SafeClose(tk);
          continue;
       }
+      bool isBuy = (typ == POSITION_TYPE_BUY);
+      double dist = SLDist(sym);
+      int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      double pt = SymbolInfoDouble(sym, SYMBOL_POINT);
+
+      // lote: se revisa una vez por trade, contra el riesgo real a su stop
+      string kok = P + "OK_" + (string)tk;
+      if(!GlobalVariableCheck(kok) && dist > 0)
+      {
+         double lossDist = dist;
+         if(sl != 0)
+         {
+            double d = isBuy ? op - sl : sl - op;
+            if(d > 0 && d <= dist * 1.5) lossDist = d;
+         }
+         // margen de 10% por deslizamiento y redondeo; el lote minimo siempre se permite
+         double allowed = AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
+         double minL = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
+         if(vol > minL + 0.0000001 && vol * LossPerLot(sym, lossDist) > allowed * 1.10)
+         {
+            Print("VictorGuard: #", tk, " ", sym, " lote ", vol, " pasa tu riesgo. Cerrado.");
+            SafeClose(tk);
+            continue;
+         }
+         GlobalVariableSet(kok, 1);
+      }
       kept++;
+      if(dist <= 0) continue;
 
       // SL/TP vigilados: si ya los fijamos antes, se aplica el modo de bloqueo
-      bool isBuy = (typ == POSITION_TYPE_BUY);
       string ksl = P + "SL_" + (string)tk, ktp = P + "TP_" + (string)tk;
       if(LockSLTP && GlobalVariableCheck(ksl) && GlobalVariableCheck(ktp))
       {
          double lsl = GlobalVariableGet(ksl), ltp = GlobalVariableGet(ktp);
-         double pt = SymbolInfoDouble(AllowedSymbol, SYMBOL_POINT);
          if(FlexibleLock)
          {
             // SL: solo puede acercarse a tu favor (protegerte / perseguir el precio). Nunca alejarse ni quitarse.
@@ -295,10 +423,10 @@ void Guard()
       // SL/TP obligatorios y SL no mas lejos de 1.5x lo permitido
       bool buy = isBuy;
       double newSL = sl, newTP = tp;
-      if(sl == 0 || MathAbs(op - sl) > SLDistance * 1.5)
-         newSL = buy ? op - SLDistance : op + SLDistance;
+      if(sl == 0 || MathAbs(op - sl) > dist * 1.5)
+         newSL = buy ? op - dist : op + dist;
       if(tp == 0 && RewardRatio > 0)
-         newTP = buy ? op + SLDistance * RewardRatio : op - SLDistance * RewardRatio;
+         newTP = buy ? op + dist * RewardRatio : op - dist * RewardRatio;
       newSL = NormalizeDouble(newSL, digits);
       newTP = NormalizeDouble(newTP, digits);
       if(newSL != sl || newTP != tp)
@@ -315,18 +443,20 @@ void Guard()
 void OpenTrade(bool buy)
 {
    string why;
-   if(_Symbol != AllowedSymbol) { Alert("VictorGuard: solo se opera ", AllowedSymbol); return; }
-   if(!CanOpenNew(why))         { Alert("VictorGuard: ", why); return; }
+   if(!SymbolAllowed(_Symbol)) { Alert("VictorGuard: ", _Symbol, " no esta en tus simbolos permitidos (", AllowedSymbols, ")"); return; }
+   if(!CanOpenNew(_Symbol, why)) { Alert("VictorGuard: ", why); return; }
    if(PositionsTotal() >= MaxOpenPositions) { Alert("VictorGuard: ya tienes el maximo de trades abiertos"); return; }
 
-   double lot = CalcLot(SLDistance);
-   if(lot <= 0 || RiskTooHigh(lot, SLDistance))
-   { Alert("VictorGuard: el lote minimo arriesga demasiado para esta cuenta. Baja SLDistance o sube el capital."); return; }
+   double dist = SLDist(_Symbol);
+   if(dist <= 0) { Alert("VictorGuard: no pude calcular el stop de ", _Symbol); return; }
+   double lot = CalcLot(_Symbol, dist);
+   if(lot <= 0 || RiskTooHigh(_Symbol, lot, dist))
+   { Alert("VictorGuard: el lote minimo arriesga demasiado para esta cuenta en ", _Symbol, ". Baja el stop o sube el capital."); return; }
 
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
    double price = buy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   double sl = buy ? price - SLDistance : price + SLDistance;
-   double tp = (RewardRatio > 0) ? (buy ? price + SLDistance * RewardRatio : price - SLDistance * RewardRatio) : 0;
+   double sl = buy ? price - dist : price + dist;
+   double tp = (RewardRatio > 0) ? (buy ? price + dist * RewardRatio : price - dist * RewardRatio) : 0;
    sl = NormalizeDouble(sl, digits);
    tp = NormalizeDouble(tp, digits);
 
@@ -343,17 +473,20 @@ void GuardOrders()
 {
    string why;
    bool blocked = IsBlocked(why);
-   int digits = (int)SymbolInfoInteger(AllowedSymbol, SYMBOL_DIGITS);
 
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       ulong tk = OrderGetTicket(i);
       if(tk == 0) continue;
-      if(blocked || OrderGetString(ORDER_SYMBOL) != AllowedSymbol)
+      string osym = OrderGetString(ORDER_SYMBOL);
+      if(blocked || !SymbolAllowed(osym))
       {
          trade.OrderDelete(tk);
          continue;
       }
+      double dist = SLDist(osym);
+      if(dist <= 0) continue;
+      int digits = (int)SymbolInfoInteger(osym, SYMBOL_DIGITS);
 
       ENUM_ORDER_TYPE t = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
       bool buy  = (t == ORDER_TYPE_BUY_LIMIT  || t == ORDER_TYPE_BUY_STOP  || t == ORDER_TYPE_BUY_STOP_LIMIT);
@@ -364,10 +497,10 @@ void GuardOrders()
       double sl = OrderGetDouble(ORDER_SL);
       double tp = OrderGetDouble(ORDER_TP);
       double nsl = sl, ntp = tp;
-      if(sl == 0 || MathAbs(price - sl) > SLDistance * 1.5)
-         nsl = buy ? price - SLDistance : price + SLDistance;
+      if(sl == 0 || MathAbs(price - sl) > dist * 1.5)
+         nsl = buy ? price - dist : price + dist;
       if(tp == 0 && RewardRatio > 0)
-         ntp = buy ? price + SLDistance * RewardRatio : price - SLDistance * RewardRatio;
+         ntp = buy ? price + dist * RewardRatio : price - dist * RewardRatio;
       nsl = NormalizeDouble(nsl, digits);
       ntp = NormalizeDouble(ntp, digits);
 
@@ -387,12 +520,14 @@ void GuardOrders()
 // bajo la media; el precio retrocede hacia arriba y la TOCA -> VENDE (espejo: compra).
 void AutoEntryCheck()
 {
-   if(!AutoEntry || _Symbol != AllowedSymbol || hMA == INVALID_HANDLE) return;
+   if(!AutoEntry || !SymbolAllowed(_Symbol) || hMA == INVALID_HANDLE) return;
    datetime bar = iTime(_Symbol, MaTF, 0);
    if(bar == lastAutoBar) return;
    if(PositionsTotal() >= MaxOpenPositions) return;
    string why;
-   if(!CanOpenNew(why)) return;
+   if(!CanOpenNew(_Symbol, why)) return;
+   double dist = SLDist(_Symbol);
+   if(dist <= 0) return;
 
    double ma[];
    ArraySetAsSeries(ma, true);
@@ -403,13 +538,13 @@ void AutoEntryCheck()
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
 
-   bool sell = (slope <= -MinSlopeUSD && c1 < ma[1] && bid >= ma0 && bid <= ma0 + SLDistance);
-   bool buy  = (slope >=  MinSlopeUSD && c1 > ma[1] && ask <= ma0 && ask >= ma0 - SLDistance);
+   bool sell = (slope <= -MinSlopeUSD && c1 < ma[1] && bid >= ma0 && bid <= ma0 + dist);
+   bool buy  = (slope >=  MinSlopeUSD && c1 > ma[1] && ask <= ma0 && ask >= ma0 - dist);
    if(!sell && !buy) return;
 
    lastAutoBar = bar;   // una sola entrada por vela
-   double lot = CalcLot(SLDistance);
-   if(lot <= 0 || RiskTooHigh(lot, SLDistance))
+   double lot = CalcLot(_Symbol, dist);
+   if(lot <= 0 || RiskTooHigh(_Symbol, lot, dist))
    { Print("VictorGuard AutoEntry: el lote minimo arriesga demasiado para esta cuenta."); return; }
    OpenTrade(buy);
 }
@@ -500,11 +635,14 @@ void UpdatePanel()
    if(!IsBlocked(why))
    {
       string w2;
-      if(!CanOpenNew(w2)) why = w2;
+      if(!SymbolAllowed(_Symbol)) why = _Symbol + " no esta permitido";
+      else if(!CanOpenNew(_Symbol, w2)) why = w2;
    }
-   double lot = CalcLot(SLDistance);
-   string txt = why + " | lote: " + DoubleToString(lot, 2)
-              + " | riesgo $" + DoubleToString(lot * LossPerLot(SLDistance), 2);
+   double dist = SLDist(_Symbol);
+   double lot = CalcLot(_Symbol, dist);
+   string txt = why + " | " + _Symbol + " lote: " + DoubleToString(lot, 2)
+              + " | stop " + DoubleToString(dist, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS))
+              + " | riesgo $" + DoubleToString(lot * LossPerLot(_Symbol, dist), 2);
    ObjectSetString(0, P + "ST", OBJPROP_TEXT, txt);
 
    // Cuenta regresiva para el cierre de la vela actual
@@ -638,9 +776,17 @@ void SyncTick()
 int OnInit()
 {
    trade.SetDeviationInPoints(DeviationPts);
-   SLDistance = SLPips * PipSize;
-   if(SLDistance <= 0) { Alert("VictorGuard: SLPips y PipSize deben ser mayores que 0"); return INIT_PARAMETERS_INCORRECT; }
-   hMA = iMA(AllowedSymbol, MaTF, MaPeriod, 0, MaMethod, PRICE_CLOSE);
+   ParseSymbols();
+   if(SLMode == SL_PIPS && SLPips * PipSize <= 0) { Alert("VictorGuard: SLPips y PipSize deben ser mayores que 0"); return INIT_PARAMETERS_INCORRECT; }
+   if(SLMode == SL_ATR && ATRMult <= 0)           { Alert("VictorGuard: ATRMult debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }
+   if(SLPercent <= 0)                              { Alert("VictorGuard: SLPercent debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }
+   if(SLMode == SL_ATR)
+   {
+      AtrHandle(_Symbol);
+      for(int a = 0; a < ArraySize(g_syms); a++) AtrHandle(g_syms[a]);
+      for(int c = 0; c < PositionsTotal(); c++) if(PositionGetTicket(c) > 0) AtrHandle(PositionGetString(POSITION_SYMBOL));
+   }
+   hMA = iMA(_Symbol, MaTF, MaPeriod, 0, MaMethod, PRICE_CLOSE);
    MakeButton(P + "BUY",  "COMPRAR", 10, 30, clrSeaGreen);
    MakeButton(P + "SELL", "VENDER",  130, 30, clrFireBrick);
    ObjectCreate(0, P + "ST", OBJ_LABEL, 0, 0, 0);
@@ -672,6 +818,8 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    if(hMA != INVALID_HANDLE) IndicatorRelease(hMA);
+   for(int i = 0; i < ArraySize(g_atrH); i++) if(g_atrH[i] != INVALID_HANDLE) IndicatorRelease(g_atrH[i]);
+   ArrayResize(g_atrSym, 0); ArrayResize(g_atrH, 0);
    ObjectsDeleteAll(0, P);
 }
 
