@@ -379,6 +379,35 @@ export default function TradingPage() {
   }, [mesesDisp, evaluadosAll, capitalInicio]);
   const netoTotal = balanceInicial - capitalInicio;
   const pctTotal = capitalInicio > 0 ? (netoTotal / capitalInicio) * 100 : null;
+  // Rendimiento contra el balance con que empezó el día, el mes y el año (fecha de cierre del broker).
+  const rendimientos = useMemo(() => {
+    const d = new Date();
+    const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const desde = (inicioStr: string) => {
+      let antes = 0, neto = 0;
+      for (const t of evaluadosAll) {
+        if (fechaCierre(t) < inicioStr) antes += t.neto;
+        else neto += t.neto;
+      }
+      const inicio = capitalInicio + antes;
+      return { inicio, neto, pct: inicio > 0 ? (neto / inicio) * 100 : null };
+    };
+    return [
+      { k: "Hoy", ...desde(hoy) },
+      { k: "Este mes", ...desde(`${hoy.slice(0, 7)}-01`) },
+      { k: "Este año", ...desde(`${hoy.slice(0, 4)}-01-01`) },
+      { k: "Total", ...desde("0000-00-00") },
+    ];
+  }, [evaluadosAll, capitalInicio]);
+  const pctDia = useMemo(() => {
+    const out: Record<string, number> = {};
+    let saldo = capitalInicio;
+    for (const f of Object.keys(diasAll).sort()) {
+      if (saldo > 0) out[f] = (diasAll[f].neto / saldo) * 100;
+      saldo += diasAll[f].neto;
+    }
+    return out;
+  }, [diasAll, capitalInicio]);
   const basePeriodo = mes === "todo" ? capitalInicio : pctMeses.find((m) => m.ym === mes)?.inicio ?? 0;
   const pctPeriodo = basePeriodo > 0 ? (metricas.neto / basePeriodo) * 100 : null;
   const impacto = useMemo(() => impactoReglas(evaluados), [evaluados]);
@@ -627,6 +656,21 @@ export default function TradingPage() {
                 <div className="vc-card text-center text-sm text-muted">Sube el reporte Excel de MT5 para ver tu panel.</div>
               ) : (
                 <>
+                  <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {rendimientos.map((r) => (
+                      <div key={r.k} className="vc-card !p-3">
+                        <p className="text-[13px] uppercase tracking-wide text-muted">{r.k}</p>
+                        <p className={`text-xl font-medium ${r.neto > 0 ? "text-teal" : r.neto < 0 ? "text-red" : ""}`}>
+                          {r.pct === null ? "—" : `${r.pct >= 0 ? "+" : ""}${r.pct.toFixed(2)}%`}
+                        </p>
+                        <p className="text-[13px] text-muted">
+                          {formatMoney(r.neto)} sobre {formatMoney(r.inicio, 0)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mb-4 text-[12px] text-muted">% contra el balance con que empezaste el día, el mes, el año y la cuenta.</p>
+
                   <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {kpis.map(([k, v, anillo]) => (
                       <div key={k} className="vc-card flex items-center justify-between !p-3">
@@ -641,7 +685,7 @@ export default function TradingPage() {
 
                   <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
                     <div className="lg:col-span-2">
-                      {calMes && <Calendario ym={calMes} onCambiarMes={cambiarMesCal} dias={diasAll} diaSel={diaSel} onDia={setDiaSel} />}
+                      {calMes && <Calendario ym={calMes} onCambiarMes={cambiarMesCal} dias={diasAll} diaSel={diaSel} onDia={setDiaSel} pctDia={pctDia} />}
                     </div>
                     <div className="vc-card !p-3">
                       <p className="mb-2 text-sm uppercase tracking-wide text-muted">Cumplimiento de tus reglas</p>

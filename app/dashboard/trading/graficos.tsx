@@ -24,12 +24,14 @@ export function Calendario({
   dias,
   diaSel,
   onDia,
+  pctDia,
 }: {
   ym: string; // "YYYY-MM"
   onCambiarMes: (delta: number) => void;
   dias: Record<string, DiaResumen>;
   diaSel: string | null;
   onDia: (fecha: string | null) => void;
+  pctDia?: Record<string, number>;
 }) {
   const [a, m] = ym.split("-").map(Number);
   const primero = new Date(Date.UTC(a, m - 1, 1));
@@ -85,7 +87,11 @@ export function Calendario({
                   >
                     <span className="text-muted">{Number(f.slice(8))}</span>
                     {d && <span className="font-medium">{corto(d.neto)}</span>}
-                    {d && <span className="text-[12px] text-muted">{d.trades}t</span>}
+                    {d && pctDia?.[f] !== undefined ? (
+                      <span className="text-[11px] text-muted" title={`${d.trades} trades`}>{pctDia[f] >= 0 ? "+" : ""}{pctDia[f].toFixed(2)}%</span>
+                    ) : (
+                      d && <span className="text-[12px] text-muted">{d.trades}t</span>
+                    )}
                   </button>
                 );
               })}
