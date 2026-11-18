@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enviarBienvenidaInicial } from "@/lib/bienvenida-inicial";
+import { guardarOrigenRegistro } from "@/lib/origen-registro";
 
 // Ruta PÚBLICA a propósito (21 sept 2026) — se llama desde
 // app/registro/page.tsx justo después de supabase.auth.signUp(), momento en
@@ -16,6 +17,11 @@ export async function POST(req: NextRequest) {
   if (!userId || typeof userId !== "string") {
     return NextResponse.json({ error: "Falta userId." }, { status: 400 });
   }
+
+  // De dónde vino (anuncio / cooperativa) — 18 nov 2026. La cookie vc_origen
+  // viaja sola en este fetch (mismo dominio). Misma protección que la
+  // bienvenida: solo cuentas nuevas y sin origen guardado.
+  await guardarOrigenRegistro(userId, req.cookies.get("vc_origen")?.value);
 
   try {
     await enviarBienvenidaInicial(userId);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { enviarBienvenidaInicial } from "@/lib/bienvenida-inicial";
 import { enviarEventoCAPI } from "@/lib/meta-capi";
+import { guardarOrigenRegistro } from "@/lib/origen-registro";
 
 // Callback de OAuth (Google/Apple) — Supabase redirige aquí con ?code=...
 // después de que el usuario autoriza en el proveedor (10 sept 2026, pedido
@@ -44,6 +45,10 @@ export async function GET(req: NextRequest) {
   // usuario que ya la recibió, esto no hace nada. Fire-and-forget.
   if (sesionData.user?.id) {
     enviarBienvenidaInicial(sesionData.user.id).catch(() => {});
+
+    // De dónde vino (anuncio / cooperativa) — 18 nov 2026. Solo escribe si la
+    // cuenta es nueva y no tiene origen todavía (ver lib/origen-registro.ts).
+    await guardarOrigenRegistro(sesionData.user.id, req.cookies.get("vc_origen")?.value);
 
     // Meta CAPI: evento Lead para registros nuevos por Google (26 sept 2026,
     // hallazgo de Joel al revisar por qué la campaña no se movía) —
