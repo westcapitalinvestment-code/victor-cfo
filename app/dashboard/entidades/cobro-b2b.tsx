@@ -90,15 +90,15 @@ export default function CobroB2B({
         <div className="mt-3 space-y-2">
           <label className="block text-xs">
             API Login ID
-            <input className={input} value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="off" />
+            <input className={input} name="authnet-login-id" value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="off" data-1p-ignore data-lpignore="true" />
           </label>
           <label className="block text-xs">
             Transaction Key{conectado && " (déjala vacía para no cambiarla)"}
-            <input className={input} type="password" value={transactionKey} onChange={(e) => setTransactionKey(e.target.value)} autoComplete="off" />
+            <input className={input} type="password" name="authnet-transaction-key" value={transactionKey} onChange={(e) => setTransactionKey(e.target.value)} autoComplete="new-password" data-1p-ignore data-lpignore="true" />
           </label>
           <label className="block text-xs">
             Signature Key{conectado && " (déjala vacía para no cambiarla)"}
-            <input className={input} type="password" value={signatureKey} onChange={(e) => setSignatureKey(e.target.value)} autoComplete="off" />
+            <input className={input} type="password" name="authnet-signature-key" value={signatureKey} onChange={(e) => setSignatureKey(e.target.value)} autoComplete="new-password" data-1p-ignore data-lpignore="true" />
           </label>
           <label className="block text-xs">
             Ambiente

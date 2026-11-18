@@ -64,3 +64,13 @@ export async function POST(req: NextRequest, { params }: { params: { entityId: s
 
   return NextResponse.json({ ok: true });
 }
+
+// Authorize.Net puede comprobar que la URL responde antes de crear el
+// webhook — un GET/HEAD aquí debe devolver 200 (sin hacer nada).
+export async function GET() {
+  return NextResponse.json({ ok: true });
+}
+
+export async function HEAD() {
+  return new NextResponse(null, { status: 200 });
+}

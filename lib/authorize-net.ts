@@ -78,22 +78,33 @@ export async function registrarWebhook(c: CredencialesAuthnet, entityId: string)
       const ya = Array.isArray(existentes) ? existentes.find((w) => w.url === url) : undefined;
       if (ya) return { ok: true, webhookId: ya.webhookId };
     }
-    const res = await fetch(`${base}/webhooks`, {
-      method: "POST",
-      headers: { Authorization: auth, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "VICTOR CFO - pagos de facturas",
-        url,
-        eventTypes: ["net.authorize.payment.authcapture.created"],
-        status: "active",
-      }),
-      cache: "no-store",
-    });
-    const json = await res.json().catch(() => null);
-    if (!res.ok || !json?.webhookId) {
-      return { ok: false, error: json?.message || json?.reason || `Authorize.Net respondió ${res.status} al crear el webhook.` };
+    // Se intenta primero con nombre y, si Authorize.Net rechaza los campos
+    // ("Field validation errors"), otra vez sin nombre — el nombre es
+    // opcional y es la causa más común de ese rechazo (18 nov 2026).
+    const intentos = [
+      { name: "VICTOR CFO pagos", url, eventTypes: ["net.authorize.payment.authcapture.created"], status: "active" },
+      { url, eventTypes: ["net.authorize.payment.authcapture.created"], status: "active" },
+    ];
+    let ultimoError = "";
+    for (const cuerpo of intentos) {
+      const res = await fetch(`${base}/webhooks`, {
+        method: "POST",
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify(cuerpo),
+        cache: "no-store",
+      });
+      const texto = await res.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(texto);
+      } catch {
+        // respuesta no JSON
+      }
+      if (res.ok && json?.webhookId) return { ok: true, webhookId: json.webhookId };
+      // Detalle completo para poder diagnosticar (no trae secretos).
+      ultimoError = `${res.status} ${json?.reason || ""} ${json?.message || ""} ${texto.slice(0, 300)}`.trim();
     }
-    return { ok: true, webhookId: json.webhookId };
+    return { ok: false, error: ultimoError || "Authorize.Net no aceptó el webhook." };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "No se pudo crear el webhook." };
   }
