@@ -787,8 +787,8 @@ int OnInit()
       for(int c = 0; c < PositionsTotal(); c++) if(PositionGetTicket(c) > 0) AtrHandle(PositionGetString(POSITION_SYMBOL));
    }
    hMA = iMA(_Symbol, MaTF, MaPeriod, 0, MaMethod, PRICE_CLOSE);
-   MakeButton(P + "BUY",  "COMPRAR", 10, 30, clrSeaGreen);
-   MakeButton(P + "SELL", "VENDER",  130, 30, clrFireBrick);
+   MakeButton(P + "SELL", "VENDER",  10, 30, clrFireBrick);   // mismo orden que MT5: vender a la izquierda
+   MakeButton(P + "BUY",  "COMPRAR", 130, 30, clrSeaGreen);
    ObjectCreate(0, P + "ST", OBJ_LABEL, 0, 0, 0);
    ObjectSetInteger(0, P + "ST", OBJPROP_XDISTANCE, 10);
    ObjectSetInteger(0, P + "ST", OBJPROP_YDISTANCE, 70);
