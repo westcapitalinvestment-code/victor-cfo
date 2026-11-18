@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolverLinkCobro } from "@/lib/stripe-connect-checkout";
+import { paginaPagoAuthnet } from "@/lib/authorize-net";
 
 // Link ESTABLE de cobro con tarjeta (3 sept 2026, pedido de Joel: que el
 // email y el PDF de la factura "jalen" el link de Stripe Connect) — PÚBLICA
@@ -29,6 +30,17 @@ function paginaMensaje(titulo: string, mensaje: string): NextResponse {
 }
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  // B2B Merchant (Authorize.Net) primero: si el negocio lo conectó, es el
+  // procesador que escogió para cobrar con tarjeta (18 nov 2026).
+  const b2b = await paginaPagoAuthnet(params.id);
+  if (b2b.ok === true) {
+    return new NextResponse(b2b.html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+  }
+  if (b2b.ok === false) {
+    const titulo = b2b.error === "Esta factura ya está pagada." ? "Ya está pagada ✓" : "No se pudo generar el cobro";
+    return paginaMensaje(titulo, b2b.error);
+  }
+
   const resultado = await resolverLinkCobro(params.id);
 
   if (!resultado.ok) {

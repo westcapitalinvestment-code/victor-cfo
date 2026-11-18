@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 
 // Página pública de cobro (28 sept 2026, pedido de Joel: "un POS... que si
 // alguien quiere pagar por tarjeta salga un QR... y el cliente escoja como
@@ -50,6 +50,10 @@ export default function CobroPage() {
   const [error, setError] = useState<string | null>(null);
   const [athEstado, setAthEstado] = useState<"idle" | "confirmando" | "pagado" | "error">("idle");
   const [athError, setAthError] = useState<string | null>(null);
+  // Vuelve de la página de pago de B2B Merchant (Authorize.Net) con ?b2b=1 —
+  // el aviso de pago puede tardar unos segundos en marcar la factura pagada.
+  const searchParams = useSearchParams();
+  const volvioDeB2B = searchParams?.get("b2b") === "1";
 
   useEffect(() => {
     if (!id) return;
@@ -155,6 +159,20 @@ export default function CobroPage() {
           <div style={{ fontSize: 40, marginBottom: 8 }}>✓</div>
           <h1 style={{ fontSize: "1.2rem", marginBottom: 4 }}>Ya está pagada</h1>
           <p style={{ color: "#666", fontSize: "0.9rem" }}>Gracias — este pago ya quedó registrado.</p>
+        </div>
+      </Envoltorio>
+    );
+  }
+
+  if (volvioDeB2B) {
+    return (
+      <Envoltorio negocioNombre={info.negocioNombre}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>✓</div>
+          <h1 style={{ fontSize: "1.2rem", marginBottom: 4 }}>Recibimos tu pago</h1>
+          <p style={{ color: "#666", fontSize: "0.9rem" }}>
+            Puede tardar unos segundos en aparecer como pagada. Gracias.
+          </p>
         </div>
       </Envoltorio>
     );

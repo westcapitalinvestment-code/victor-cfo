@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import CobroTarjeta from "./cobro-tarjeta";
 import ConectarShopify from "./conectar-shopify";
+import CobroB2B from "./cobro-b2b";
 
 // Formulario completo de entidad de negocio — calcado campo por campo de
 // "VICTOR — Dashboard Pro.html" (sección Configuración: Perfil/Fiscal/
@@ -56,6 +57,9 @@ export type EntidadCompleta = {
   recordatorios_cobro_activos?: boolean | null;
   stripe_connect_account_id?: string | null;
   stripe_connect_charges_enabled?: boolean | null;
+  authnet_activo?: boolean | null;
+  authnet_api_login_id?: string | null;
+  authnet_ambiente?: string | null;
   shopify_shop_domain?: string | null;
   shopify_conectado?: boolean | null;
   ach_bank_name?: string | null;
@@ -856,6 +860,12 @@ export default function EntidadForm({
                 entityId={entidad.id}
                 conectado={entidad.shopify_conectado}
                 shopDomainActual={entidad.shopify_shop_domain}
+              />
+              <CobroB2B
+                entityId={entidad.id}
+                activo={entidad.authnet_activo}
+                apiLoginId={entidad.authnet_api_login_id}
+                ambiente={entidad.authnet_ambiente}
               />
             </div>
           )}

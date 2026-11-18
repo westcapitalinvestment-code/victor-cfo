@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const { data: factura, error } = await supabase
     .from("invoices")
     .select(
-      "id, numero, total, estado, business_entities(name, stripe_connect_account_id, stripe_connect_charges_enabled, ath_movil_public_token)"
+      "id, numero, total, estado, business_entities(name, stripe_connect_account_id, stripe_connect_charges_enabled, ath_movil_public_token, authnet_activo)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -29,6 +29,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     stripe_connect_account_id: string | null;
     stripe_connect_charges_enabled: boolean | null;
     ath_movil_public_token: string | null;
+    authnet_activo: boolean | null;
   } | null;
 
   const total = Number((factura as any).total ?? 0);
@@ -42,7 +43,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     total,
     pagada: factura.estado === "pagada",
     negocioNombre: entidad?.name ?? "",
-    tarjetaDisponible: !!(entidad?.stripe_connect_account_id && entidad?.stripe_connect_charges_enabled),
+    // Tarjeta por Stripe Connect o por B2B Merchant (Authorize.Net, 18 nov 2026).
+    tarjetaDisponible:
+      !!(entidad?.stripe_connect_account_id && entidad?.stripe_connect_charges_enabled) || !!entidad?.authnet_activo,
     athDisponible,
     athPublicToken: athDisponible ? entidad!.ath_movil_public_token : null,
   });
