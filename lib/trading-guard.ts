@@ -13,6 +13,7 @@ export type ParametrosGuardian = {
   stopPct: number; // % del precio (modo porcentaje; tambien respaldo)
   atrMult: number; // stop = ATR x este numero (modo atr)
   atrTF: TemporalidadATR;
+  bloqueados?: string; // simbolos prohibidos separados por coma (se cierran al abrir)
   riesgoPct: number;
   distanciaPips: number; // distancia del stop en pips
   tamanoPip: number; // tamano de 1 pip en precio (ej. 0.1 oro, 0.0001 EURUSD, 1 NAS100)
@@ -73,6 +74,7 @@ CTrade trade;
 enum ENUM_SL_MODE { SL_PIPS = 0, SL_PERCENT = 1, SL_ATR = 2 };
 
 input string AllowedSymbols     = "${syms(p.simbolos)}"; // simbolos permitidos separados por coma, o * = todos (forex, indices, acciones, futuros, cripto)
+input string BlockedSymbols     = "${syms(p.bloqueados ?? "").replace("*", "")}"; // simbolos PROHIBIDOS separados por coma: si los abres, se cierran
 input double RiskPercent        = ${n(p.riesgoPct)};      // % del balance a arriesgar por trade
 input ENUM_SL_MODE SLMode       = ${MODO_MQ5[p.modoStop] ?? "SL_ATR"}; // como se calcula el stop: pips, % del precio o ATR
 input double SLPips             = ${n(p.distanciaPips, 2)};      // modo pips: distancia del SL en pips
@@ -116,6 +118,7 @@ datetime lastAutoBar = 0;
 // Simbolos permitidos
 bool   g_all = true;
 string g_syms[];
+string g_block[];
 
 string Up(string s) { string u = s; StringTrimLeft(u); StringTrimRight(u); StringToUpper(u); return u; }
 
@@ -138,11 +141,28 @@ void ParseSymbols()
    if(ArraySize(g_syms) == 0) g_all = true;
 }
 
+void ParseBlocked()
+{
+   ArrayResize(g_block, 0);
+   string parts[];
+   int k = StringSplit(Up(BlockedSymbols), ',', parts);
+   for(int i = 0; i < k; i++)
+   {
+      string x = Up(parts[i]);
+      if(x == "") continue;
+      int n = ArraySize(g_block);
+      ArrayResize(g_block, n + 1);
+      g_block[n] = x;
+   }
+}
+
 // acepta sufijos del broker: "XAUUSD" permite "XAUUSD.r" o "XAUUSDm"
 bool SymbolAllowed(string s)
 {
-   if(g_all) return true;
    string u = Up(s);
+   for(int b = 0; b < ArraySize(g_block); b++)
+      if(u == g_block[b] || StringFind(u, g_block[b]) == 0) return false;   // prohibido
+   if(g_all) return true;
    for(int i = 0; i < ArraySize(g_syms); i++)
       if(u == g_syms[i] || StringFind(u, g_syms[i]) == 0) return true;
    return false;
@@ -444,7 +464,7 @@ void Guard()
 void OpenTrade(bool buy)
 {
    string why;
-   if(!SymbolAllowed(_Symbol)) { Alert("VictorGuard: ", _Symbol, " no esta en tus simbolos permitidos (", AllowedSymbols, ")"); return; }
+   if(!SymbolAllowed(_Symbol)) { Alert("VictorGuard: ", _Symbol, " esta prohibido o no esta en tus simbolos permitidos"); return; }
    if(!CanOpenNew(_Symbol, why)) { Alert("VictorGuard: ", why); return; }
    if(PositionsTotal() >= MaxOpenPositions) { Alert("VictorGuard: ya tienes el maximo de trades abiertos"); return; }
 
@@ -787,6 +807,7 @@ int OnInit()
 {
    trade.SetDeviationInPoints(DeviationPts);
    ParseSymbols();
+   ParseBlocked();
    if(SLMode == SL_PIPS && SLPips * PipSize <= 0) { Alert("VictorGuard: SLPips y PipSize deben ser mayores que 0"); return INIT_PARAMETERS_INCORRECT; }
    if(SLMode == SL_ATR && ATRMult <= 0)           { Alert("VictorGuard: ATRMult debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }
    if(SLPercent <= 0)                              { Alert("VictorGuard: SLPercent debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }

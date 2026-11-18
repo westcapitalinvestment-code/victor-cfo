@@ -73,6 +73,7 @@ type Guardian = {
   guard_sl_pct: number;
   guard_atr_mult: number;
   guard_atr_tf: TemporalidadATR;
+  guard_blocked_symbols: string;
 };
 const TFS_ATR: TemporalidadATR[] = ["M5", "M15", "M30", "H1", "H4", "D1"];
 const GUARDIAN_POR_DEFECTO: Guardian = {
@@ -89,6 +90,7 @@ const GUARDIAN_POR_DEFECTO: Guardian = {
   guard_sl_pct: 0.5,
   guard_atr_mult: 1.5,
   guard_atr_tf: "H1",
+  guard_blocked_symbols: "",
 };
 
 // Se muestra en hora de Puerto Rico (los datos guardados siguen en hora del broker).
@@ -200,6 +202,7 @@ export default function TradingPage() {
         guard_sl_pct: Number(r.guard_sl_pct ?? 0.5),
         guard_atr_mult: Number(r.guard_atr_mult ?? 1.5),
         guard_atr_tf: TFS_ATR.includes(r.guard_atr_tf as TemporalidadATR) ? (r.guard_atr_tf as TemporalidadATR) : "H1",
+        guard_blocked_symbols: String(r.guard_blocked_symbols ?? ""),
       });
     }
     const id = preferida ?? cuentaId ?? lista[0]?.id ?? null;
@@ -472,6 +475,7 @@ export default function TradingPage() {
       stopPct: guardian.guard_sl_pct,
       atrMult: guardian.guard_atr_mult,
       atrTF: guardian.guard_atr_tf,
+      bloqueados: guardian.guard_blocked_symbols,
       riesgoPct: reglas.riesgo_por_trade_pct,
       distanciaPips: guardian.guard_sl_pips,
       tamanoPip: guardian.guard_pip_size,
@@ -879,7 +883,7 @@ export default function TradingPage() {
               <div className="vc-card mb-4 flex flex-col gap-3">
                 <p className="text-sm uppercase tracking-wide text-muted">Mis reglas de riesgo</p>
                 <div className="grid grid-cols-2 gap-3">
-                  {campoRegla("riesgo_por_trade_pct", "Riesgo por trade (% del balance)")}
+                  {campoRegla("riesgo_por_trade_pct", "Cuánto arriesgo por trade (% de mi cuenta)")}
                   {campoRegla("perdida_max_dia_pct", "Pérdida máxima del día (%)")}
                   {campoRegla("max_perdedores_dia", "Máx. trades perdedores al día")}
                   {campoRegla("max_trades_dia", "Máx. trades al día")}
@@ -898,6 +902,18 @@ export default function TradingPage() {
                 <p className="text-[14px] text-muted">
                   Un programa (EA) que pones en UN solo gráfico de MT5 y vigila toda tu cuenta: forex, oro, índices, acciones, futuros o cripto. No decide cuándo entrar: tú entras (con sus botones o como siempre en MT5) y él calcula el lote de cada activo, pone stop y take profit, y te bloquea al llegar a tus límites. Cambia el símbolo del gráfico y los botones lo siguen.
                 </p>
+                <div className="rounded-lg border border-[#1B3A5C]/30 bg-[#1B3A5C]/5 p-3">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">Cuánto arriesgo en cada trade (% de mi cuenta)</span>
+                    <NumInput value={reglas.riesgo_por_trade_pct} onChange={(n) => setReglas({ ...reglas, riesgo_por_trade_pct: n ?? 0 })} />
+                  </label>
+                  <p className="mt-2 text-[14px]">
+                    En cada trade arriesgas <b>{reglas.riesgo_por_trade_pct}%</b> de tu cuenta
+                    {balanceActual > 0 && <> (≈ <b>{formatMoney((balanceActual * reglas.riesgo_por_trade_pct) / 100)}</b> con {formatMoney(balanceActual, 0)})</>}. Si el precio toca tu stop, eso es lo que pierdes:
+                    el guardián calcula el lote solo para que así sea, en cualquier activo.
+                  </p>
+                  <p className="mt-1 text-[13px] text-muted">La regla más usada es 1%. Con 1% necesitas perder muchos trades seguidos para hacerle daño serio a la cuenta.</p>
+                </div>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Qué puedo operar</span>
                     <select
@@ -924,11 +940,20 @@ export default function TradingPage() {
                       <span className="text-[13px] text-muted">Como aparecen en tu broker, separados por coma (ej. XAUUSD, EURUSD, NAS100, BTCUSD, #AAPL). Acepta sufijos como .r o m.</span>
                     </label>
                   )}
-                  <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Cómo se calcula el stop</span>
+                  <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Activos prohibidos (opcional)</span>
+                    <input
+                      className="vc-input"
+                      placeholder="Ej. BTCUSD, ETHUSD, GBPJPY"
+                      value={guardian.guard_blocked_symbols}
+                      onChange={(e) => setGuardian({ ...guardian, guard_blocked_symbols: e.target.value.toUpperCase() })}
+                    />
+                    <span className="text-[13px] text-muted">Los que te queman la cuenta. Si abres uno, el guardián lo cierra al instante y borra sus órdenes pendientes.</span>
+                  </label>
+                  <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Dónde va el stop</span>
                     <select className="vc-input" value={guardian.guard_sl_mode} onChange={(e) => setGuardian({ ...guardian, guard_sl_mode: e.target.value as ModoStop })}>
-                      <option value="atr">Por volatilidad (ATR): se ajusta solo a cada activo</option>
-                      <option value="porcentaje">% del precio: igual para todos los activos</option>
-                      <option value="pips">Pips fijos: para un solo símbolo</option>
+                      <option value="atr">Según la volatilidad (ATR): se ajusta solo a cada activo</option>
+                      <option value="porcentaje">A una distancia fija en % del precio</option>
+                      <option value="pips">A una distancia fija en pips (un solo símbolo)</option>
                     </select>
                     {guardian.guard_sl_mode === "pips" && (todosActivos || guardian.guard_symbol.includes(",")) && (
                       <span className="text-[13px] text-red">Con varios activos usa ATR o %: los pips solo aplican a {todosActivos ? "el símbolo del gráfico" : "el primero de la lista"} y al forex; el resto usa el %.</span>
@@ -936,7 +961,7 @@ export default function TradingPage() {
                   </label>
                   {guardian.guard_sl_mode === "pips" && (
                     <>
-                      <label className="flex flex-col gap-1"><span className="text-muted">Distancia del stop (pips)</span>
+                      <label className="flex flex-col gap-1"><span className="text-muted">Distancia del stop en pips</span>
                         <NumInput value={guardian.guard_sl_pips} onChange={(n) => setGuardian({ ...guardian, guard_sl_pips: n ?? 0 })} />
                         <span className="text-[13px] text-muted">Oro: 60 pips = $6 de precio</span>
                       </label>
@@ -950,7 +975,7 @@ export default function TradingPage() {
                     <>
                       <label className="flex flex-col gap-1"><span className="text-muted">Stop = ATR ×</span>
                         <NumInput value={guardian.guard_atr_mult} onChange={(n) => setGuardian({ ...guardian, guard_atr_mult: n ?? 0 })} />
-                        <span className="text-[13px] text-muted">1.5 = una vez y media el movimiento promedio de una vela</span>
+                        <span className="text-[13px] text-muted">Distancia del stop. 1.5 = una vez y media el movimiento promedio de una vela</span>
                       </label>
                       <label className="flex flex-col gap-1"><span className="text-muted">Temporalidad del ATR</span>
                         <select className="vc-input" value={guardian.guard_atr_tf} onChange={(e) => setGuardian({ ...guardian, guard_atr_tf: e.target.value as TemporalidadATR })}>
@@ -959,9 +984,11 @@ export default function TradingPage() {
                       </label>
                     </>
                   )}
-                  <label className="flex flex-col gap-1"><span className="text-muted">{guardian.guard_sl_mode === "porcentaje" ? "Stop a este % del precio" : "Stop de respaldo (% del precio)"}</span>
+                  <label className="flex flex-col gap-1"><span className="text-muted">{guardian.guard_sl_mode === "porcentaje" ? "Distancia del stop (% del precio del activo)" : "Distancia de respaldo (% del precio)"}</span>
                     <NumInput value={guardian.guard_sl_pct} onChange={(n) => setGuardian({ ...guardian, guard_sl_pct: n ?? 0 })} />
-                    <span className="text-[13px] text-muted">{guardian.guard_sl_mode === "porcentaje" ? "Ej. 0.5% en oro a $4,000 = $20 de stop" : "Se usa si el ATR o los pips no aplican a un activo"}</span>
+                    <span className="text-[13px] text-muted">{guardian.guard_sl_mode === "porcentaje"
+                        ? `No es lo que arriesgas: es qué tan lejos queda el stop. Ej. ${guardian.guard_sl_pct || 0.5}% en oro a $4,000 = stop a ${formatMoney((4000 * (guardian.guard_sl_pct || 0.5)) / 100, 0)} de la entrada. Lo que pierdes sigue siendo tu ${reglas.riesgo_por_trade_pct}%.`
+                        : "Se usa si el ATR o los pips no aplican a un activo"}</span>
                   </label>
                   <label className="flex flex-col gap-1"><span className="text-muted">Take profit = stop ×</span>
                     <NumInput value={guardian.guard_reward_ratio} onChange={(n) => setGuardian({ ...guardian, guard_reward_ratio: n ?? 0 })} />
