@@ -31,13 +31,20 @@ export async function POST(req: NextRequest) {
 
   const { data: factura, error: errorFactura } = await supabase
     .from("invoices")
-    .select("id")
+    .select("id, business_entities(authnet_activo)")
     .eq("id", invoiceId)
     .eq("owner_id", user.id)
     .maybeSingle();
 
   if (errorFactura || !factura) {
     return NextResponse.json({ error: "Factura no encontrada." }, { status: 404 });
+  }
+
+  // Si el negocio conectó B2B Merchant (Authorize.Net), ese es su procesador
+  // de tarjeta: el botón lleva al link estable, que abre la página de pago
+  // de Authorize.Net (18 nov 2026 — antes este botón siempre iba a Stripe).
+  if ((factura as any).business_entities?.authnet_activo) {
+    return NextResponse.json({ url: `https://www.victorcfo.com/api/facturas/${invoiceId}/pagar` });
   }
 
   const resultado = await resolverLinkCobro(invoiceId);
