@@ -472,7 +472,14 @@ void OpenTrade(bool buy)
    if(dist <= 0) { Alert("VictorGuard: no pude calcular el stop de ", _Symbol); return; }
    double lot = CalcLot(_Symbol, dist);
    if(lot <= 0 || RiskTooHigh(_Symbol, lot, dist))
-   { Alert("VictorGuard: el lote minimo arriesga demasiado para esta cuenta en ", _Symbol, ". Baja el stop o sube el capital."); return; }
+   {
+      int dg = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+      double lim = AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
+      Alert("VictorGuard: en ", _Symbol, " el lote minimo (", DoubleToString(lot, 2), ") con stop a ", DoubleToString(dist, dg),
+            " arriesga $", DoubleToString(lot * LossPerLot(_Symbol, dist), 2), " y tu limite es $", DoubleToString(lim, 2),
+            " (", DoubleToString(RiskPercent, 1), "% de la cuenta). Acerca el stop o sube el % de riesgo.");
+      return;
+   }
 
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
    double price = buy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
@@ -661,10 +668,14 @@ void UpdatePanel()
    }
    double dist = SLDist(_Symbol);
    double lot = CalcLot(_Symbol, dist);
-   string txt = why + " | " + _Symbol + " lote: " + DoubleToString(lot, 2)
-              + " | stop " + DoubleToString(dist, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS))
-              + " | riesgo $" + DoubleToString(lot * LossPerLot(_Symbol, dist), 2);
-   ObjectSetString(0, P + "ST", OBJPROP_TEXT, txt);
+   double rk  = lot * LossPerLot(_Symbol, dist);
+   double lim = AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
+   // MT5 corta las etiquetas a 63 letras: estado y riesgo van en lineas separadas
+   ObjectSetString(0, P + "ST", OBJPROP_TEXT, StringSubstr(why, 0, 63));
+   string lt = _Symbol + " lote " + DoubleToString(lot, 2) + " | stop " + DoubleToString(dist, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS))
+             + " | riesgo $" + DoubleToString(rk, 2) + " / $" + DoubleToString(lim, 2);
+   ObjectSetString(0, P + "LT", OBJPROP_TEXT, StringSubstr(lt, 0, 63));
+   ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, rk > lim * 1.5 ? clrRed : clrSilver);
 
    // Cuenta regresiva para el cierre de la vela actual
    long left = (long)PeriodSeconds() - (long)(TimeCurrent() - iTime(_Symbol, _Period, 0));
@@ -825,19 +836,24 @@ int OnInit()
    ObjectSetInteger(0, P + "ST", OBJPROP_YDISTANCE, 70);
    ObjectSetInteger(0, P + "ST", OBJPROP_COLOR, clrOrange);
    ObjectSetInteger(0, P + "ST", OBJPROP_FONTSIZE, 10);
+   ObjectCreate(0, P + "LT", OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, P + "LT", OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, P + "LT", OBJPROP_YDISTANCE, 88);
+   ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, clrSilver);
+   ObjectSetInteger(0, P + "LT", OBJPROP_FONTSIZE, 10);
    ObjectCreate(0, P + "TM", OBJ_LABEL, 0, 0, 0);
    ObjectSetInteger(0, P + "TM", OBJPROP_XDISTANCE, 10);
-   ObjectSetInteger(0, P + "TM", OBJPROP_YDISTANCE, 95);
+   ObjectSetInteger(0, P + "TM", OBJPROP_YDISTANCE, 108);
    ObjectSetInteger(0, P + "TM", OBJPROP_COLOR, clrDeepSkyBlue);
    ObjectSetInteger(0, P + "TM", OBJPROP_FONTSIZE, 12);
    ObjectCreate(0, P + "SY", OBJ_LABEL, 0, 0, 0);
    ObjectSetInteger(0, P + "SY", OBJPROP_XDISTANCE, 10);
-   ObjectSetInteger(0, P + "SY", OBJPROP_YDISTANCE, 125);
+   ObjectSetInteger(0, P + "SY", OBJPROP_YDISTANCE, 135);
    ObjectSetInteger(0, P + "SY", OBJPROP_COLOR, clrSilver);
    ObjectSetInteger(0, P + "SY", OBJPROP_FONTSIZE, 9);
    ObjectCreate(0, P + "PL", OBJ_LABEL, 0, 0, 0);
    ObjectSetInteger(0, P + "PL", OBJPROP_XDISTANCE, 10);
-   ObjectSetInteger(0, P + "PL", OBJPROP_YDISTANCE, 150);
+   ObjectSetInteger(0, P + "PL", OBJPROP_YDISTANCE, 158);
    ObjectSetInteger(0, P + "PL", OBJPROP_COLOR, clrSilver);
    ObjectSetInteger(0, P + "PL", OBJPROP_FONTSIZE, 13);
    EventSetTimer(1);
