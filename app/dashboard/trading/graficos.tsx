@@ -101,8 +101,14 @@ export function Calendario({
 }
 
 // ---------- Curva de capital ----------
-export function CurvaCapital({ serie }: { serie: { fecha: string; saldo: number }[] }) {
+export function CurvaCapital({ serie: serieDolares, base }: { serie: { fecha: string; saldo: number }[]; base?: number }) {
   const [hover, setHover] = useState<number | null>(null);
+  const [modo, setModo] = useState<"$" | "%">("$");
+  // En modo % cada punto es el resultado acumulado sobre el balance con que empezó el período.
+  const puedePct = !!base && base > 0;
+  const enPct = modo === "%" && puedePct;
+  const serie = enPct ? serieDolares.map((s) => ({ fecha: s.fecha, saldo: (s.saldo / base!) * 100 })) : serieDolares;
+  const fmt = (v: number) => (enPct ? `${v >= 0 ? "+" : ""}${v.toFixed(2)}%` : formatMoney(v));
   if (serie.length < 2) return <div className="vc-card text-center text-sm text-muted">Sin datos para la curva.</div>;
   const W = 600, H = 170, PX = 8, PY = 14;
   const min = Math.min(...serie.map((s) => s.saldo));
@@ -118,8 +124,19 @@ export function CurvaCapital({ serie }: { serie: { fecha: string; saldo: number 
   return (
     <div className="vc-card !p-3">
       <div className="mb-1 flex items-center justify-between text-sm">
-        <span className="uppercase tracking-wide text-muted">Resultado acumulado</span>
-        <span className="text-muted">{h ? `${h.fecha} · ${formatMoney(h.saldo)}` : `${formatMoney(serie[serie.length - 1].saldo)} en total`}</span>
+        <span className="flex items-center gap-2">
+          <span className="uppercase tracking-wide text-muted">Resultado acumulado</span>
+          {puedePct && (
+            <span className="inline-flex overflow-hidden rounded-md border border-border text-[12px]">
+              {(["$", "%"] as const).map((m) => (
+                <button key={m} type="button" onClick={() => setModo(m)} className={`px-2 py-0.5 ${modo === m ? "bg-[#1B3A5C] text-white" : "text-muted"}`}>
+                  {m}
+                </button>
+              ))}
+            </span>
+          )}
+        </span>
+        <span className="text-muted">{h ? `${h.fecha} · ${fmt(h.saldo)}` : `${fmt(serie[serie.length - 1].saldo)} en total`}</span>
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
@@ -151,6 +168,61 @@ export function CurvaCapital({ serie }: { serie: { fecha: string; saldo: number 
           </>
         )}
       </svg>
+    </div>
+  );
+}
+
+// ---------- % ganado o perdido por mes ----------
+export type MesPct = { ym: string; neto: number; inicio: number; pct: number | null };
+
+export function BarrasMensuales({ meses, total, mesSel, onMes }: { meses: MesPct[]; total: { neto: number; pct: number | null }; mesSel: string; onMes: (ym: string) => void }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const validos = meses.filter((m) => m.pct !== null);
+  if (!validos.length) {
+    return <div className="vc-card text-center text-sm text-muted">Escribe tu balance en la pestaña Riesgo para ver el % ganado o perdido.</div>;
+  }
+  const W = 600, H = 190, PX = 10, TOP = 22, BOT = 26;
+  const maxAbs = Math.max(0.5, ...validos.map((m) => Math.abs(m.pct!)));
+  const alto = H - TOP - BOT;
+  const y0 = TOP + alto / 2;
+  const esc = alto / 2 / maxAbs;
+  const ancho = (W - PX * 2) / meses.length;
+  const barra = Math.min(56, ancho * 0.6);
+  const pctTxt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(Math.abs(v) < 10 ? 2 : 1)}%`;
+  const h = hover !== null ? meses[hover] : null;
+  return (
+    <div className="vc-card !p-3">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-1 text-sm">
+        <span className="uppercase tracking-wide text-muted">% de la cuenta por mes</span>
+        <span className="text-muted">
+          {h
+            ? `${nombreMes(h.ym)} · ${h.pct === null ? "—" : pctTxt(h.pct)} · ${formatMoney(h.neto)} sobre ${formatMoney(h.inicio, 0)}`
+            : <>Total: <b className={total.neto >= 0 ? "text-teal" : "text-red"}>{total.pct === null ? "—" : pctTxt(total.pct)}</b> ({formatMoney(total.neto)})</>}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" onMouseLeave={() => setHover(null)}>
+        <line x1={PX} x2={W - PX} y1={y0} y2={y0} stroke="currentColor" strokeOpacity="0.25" />
+        {meses.map((m, i) => {
+          const cx = PX + ancho * i + ancho / 2;
+          const v = m.pct ?? 0;
+          const hgt = Math.max(1.5, Math.abs(v) * esc);
+          const yb = v >= 0 ? y0 - hgt : y0;
+          const sel = mesSel === m.ym;
+          return (
+            <g key={m.ym} className="cursor-pointer" onMouseEnter={() => setHover(i)} onClick={() => onMes(sel ? "todo" : m.ym)}>
+              <rect x={cx - ancho / 2} y={TOP - 18} width={ancho} height={H - TOP + 18} fill="transparent" />
+              <rect x={cx - barra / 2} y={yb} width={barra} height={hgt} rx="3" fill={v >= 0 ? VERDE : ROJO} fillOpacity={mesSel === "todo" || sel ? 0.9 : 0.35} />
+              <text x={cx} y={v >= 0 ? yb - 5 : yb + hgt + 13} textAnchor="middle" fontSize="12" fill="currentColor" fontWeight="500">
+                {m.pct === null ? "—" : pctTxt(v)}
+              </text>
+              <text x={cx} y={H - 6} textAnchor="middle" fontSize="12" fill="currentColor" fillOpacity={sel ? 1 : 0.6} fontWeight={sel ? 600 : 400}>
+                {nombreMes(m.ym)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <p className="text-[12px] text-muted">Cada mes se mide contra el balance que tenías al empezar ese mes. Toca un mes para filtrar el panel.</p>
     </div>
   );
 }

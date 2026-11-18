@@ -24,7 +24,7 @@ import {
   type TradeEvaluado,
 } from "@/lib/trading";
 import { generarGuardianMQ5 } from "@/lib/trading-guard";
-import { Anillo, Calendario, CurvaCapital, nombreMes } from "./graficos";
+import { Anillo, BarrasMensuales, Calendario, CurvaCapital, nombreMes, type MesPct } from "./graficos";
 
 // Módulo Trading (oct 2026) — organizador, NO da señales ni consejos.
 // Panel (calendario, curva, perfil), Bitácora por mes y por día, y Riesgo
@@ -365,6 +365,22 @@ export default function TradingPage() {
   );
   const metricas = useMemo(() => calcularMetricas(evaluados, balanceInicioPeriodo), [evaluados, balanceInicioPeriodo]);
   const serie = useMemo(() => curvaCapital(evaluados, 0), [evaluados]);
+  // % ganado/perdido: el balance de hoy menos todo lo ganado da el capital con que empezó la cuenta;
+  // cada mes se mide contra el balance que había al empezar ese mes.
+  const capitalInicio = useMemo(() => balanceInicial - evaluadosAll.reduce((s, t) => s + t.neto, 0), [balanceInicial, evaluadosAll]);
+  const pctMeses = useMemo<MesPct[]>(() => {
+    let acumulado = capitalInicio;
+    return mesesDisp.map((ym) => {
+      const neto = evaluadosAll.filter((t) => fechaCierre(t).startsWith(ym)).reduce((s, t) => s + t.neto, 0);
+      const inicio = acumulado;
+      acumulado += neto;
+      return { ym, neto, inicio, pct: inicio > 0 ? (neto / inicio) * 100 : null };
+    });
+  }, [mesesDisp, evaluadosAll, capitalInicio]);
+  const netoTotal = balanceInicial - capitalInicio;
+  const pctTotal = capitalInicio > 0 ? (netoTotal / capitalInicio) * 100 : null;
+  const basePeriodo = mes === "todo" ? capitalInicio : pctMeses.find((m) => m.ym === mes)?.inicio ?? 0;
+  const pctPeriodo = basePeriodo > 0 ? (metricas.neto / basePeriodo) * 100 : null;
   const impacto = useMemo(() => impactoReglas(evaluados), [evaluados]);
   // El reporte de posiciones no trae depósitos ni retiros, así que no se puede reconstruir el balance real:
   // el "capital" lo escribe el usuario (su balance de hoy) y se usa para calcular % de riesgo y lotes.
@@ -486,7 +502,7 @@ export default function TradingPage() {
   })();
 
   const kpis: [string, string, number | null][] = [
-    ["Resultado", formatMoney(metricas.neto), null],
+    ["Resultado", `${formatMoney(metricas.neto)}${pctPeriodo === null ? "" : ` (${pctPeriodo >= 0 ? "+" : ""}${pctPeriodo.toFixed(2)}%)`}`, null],
     ["Aciertos", `${metricas.winRate.toFixed(0)}%`, metricas.winRate],
     ["Ganado / perdido", `${formatMoney(metricas.promedioGanado, 0)} / ${formatMoney(Math.abs(metricas.promedioPerdido), 0)}`, null],
     ["Factor de beneficio", metricas.profitFactor === null ? "—" : metricas.profitFactor.toFixed(2), null],
@@ -655,8 +671,9 @@ export default function TradingPage() {
                     </div>
                   )}
 
-                  <div className="mb-4">
-                    <CurvaCapital serie={serie} />
+                  <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    <CurvaCapital serie={serie} base={basePeriodo} />
+                    <BarrasMensuales meses={pctMeses} total={{ neto: netoTotal, pct: pctTotal }} mesSel={mes} onMes={elegirMes} />
                   </div>
 
                   <div className="vc-card !p-0">
