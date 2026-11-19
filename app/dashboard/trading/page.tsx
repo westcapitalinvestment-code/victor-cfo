@@ -87,10 +87,10 @@ const GUARDIAN_POR_DEFECTO: Guardian = {
   guard_min_equity_usd: null,
   guard_lock_mode: "flexible",
   guard_block_manual_close: true,
-  guard_sl_mode: "pips",
+  guard_sl_mode: "atr",
   guard_sl_pct: 0.5,
   guard_atr_mult: 1.5,
-  guard_atr_tf: "H1",
+  guard_atr_tf: "M15",
   guard_blocked_symbols: "",
   guard_pip_symbol: "XAUUSD",
 };
@@ -990,7 +990,63 @@ export default function TradingPage() {
                     />
                     <span className="text-[13px] text-muted">Los que te queman la cuenta. Si abres uno, el guardián lo cierra al instante y borra sus órdenes pendientes.</span>
                   </label>
-                  <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Dónde va el stop</span>
+                  <div className="col-span-2 rounded-lg border border-[#1B3A5C]/30 bg-[#1B3A5C]/5 p-3">
+                    <p className="mb-2 font-medium">Stop y take profit (automáticos para cada activo)</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="flex flex-col gap-1"><span className="text-muted">Mi estilo</span>
+                        <select
+                          className="vc-input"
+                          value={guardian.guard_sl_mode === "atr" ? guardian.guard_atr_tf : ""}
+                          onChange={(e) => setGuardian({ ...guardian, guard_sl_mode: "atr", guard_atr_tf: e.target.value as TemporalidadATR })}
+                        >
+                          {guardian.guard_sl_mode !== "atr" && <option value="">Escoge tu estilo…</option>}
+                          <option value="M5">Scalping (operaciones de minutos)</option>
+                          <option value="M15">Intradía (operaciones de horas)</option>
+                          <option value="H1">Intradía largo (varias horas)</option>
+                          <option value="H4">Swing (operaciones de días)</option>
+                          {!["M5", "M15", "H1", "H4"].includes(guardian.guard_atr_tf) && <option value={guardian.guard_atr_tf}>Personalizado ({guardian.guard_atr_tf})</option>}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1"><span className="text-muted">Qué tan amplio el stop</span>
+                        <select
+                          className="vc-input"
+                          value={guardian.guard_sl_mode === "atr" ? String(guardian.guard_atr_mult) : ""}
+                          onChange={(e) => setGuardian({ ...guardian, guard_sl_mode: "atr", guard_atr_mult: Number(e.target.value) })}
+                        >
+                          {guardian.guard_sl_mode !== "atr" && <option value="">Escoge…</option>}
+                          <option value="1">Ajustado (sale rápido si va en contra)</option>
+                          <option value="1.5">Normal (recomendado)</option>
+                          <option value="2.5">Amplio (le da más espacio al precio)</option>
+                          {![1, 1.5, 2.5].includes(guardian.guard_atr_mult) && <option value={String(guardian.guard_atr_mult)}>Personalizado (×{guardian.guard_atr_mult})</option>}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1"><span className="text-muted">Take profit</span>
+                        <select className="vc-input" value={String(guardian.guard_reward_ratio)} onChange={(e) => setGuardian({ ...guardian, guard_reward_ratio: Number(e.target.value) })}>
+                          <option value="0">Sin take profit (lo cierro yo)</option>
+                          <option value="1">1 a 1 (gano lo mismo que arriesgo)</option>
+                          <option value="1.5">1.5 a 1</option>
+                          <option value="2">2 a 1 (recomendado)</option>
+                          <option value="3">3 a 1</option>
+                          <option value="4">4 a 1</option>
+                          {![0, 1, 1.5, 2, 3, 4].includes(guardian.guard_reward_ratio) && <option value={String(guardian.guard_reward_ratio)}>{guardian.guard_reward_ratio} a 1</option>}
+                        </select>
+                      </label>
+                    </div>
+                    {guardian.guard_sl_mode === "atr" ? (
+                      <p className="mt-2 text-[14px]">
+                        El guardián mide cuánto se mueve <b>cada activo</b> en velas de {guardian.guard_atr_tf} y pone el stop a{" "}
+                        {guardian.guard_atr_mult === 1 ? "una" : guardian.guard_atr_mult} vez{guardian.guard_atr_mult === 1 ? "" : "es"} ese movimiento. Así EUR/USD, oro o BTC
+                        tienen cada uno un stop razonable, y el lote se ajusta para que si toca el stop pierdas <b>{riesgoFijoUSD > 0 ? formatMoney(riesgoFijoUSD) : `${reglas.riesgo_por_trade_pct}% de tu cuenta`}</b>
+                        {guardian.guard_reward_ratio > 0 ? <>; si llega al take profit ganas <b>{riesgoFijoUSD > 0 ? formatMoney(riesgoFijoUSD * guardian.guard_reward_ratio) : `${guardian.guard_reward_ratio} veces eso`}</b>.</> : "."}
+                        {" "}Activo más volátil = stop más lejos y lote más pequeño.
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-[14px] text-red">Estás usando un stop fijo ({guardian.guard_sl_mode === "pips" ? "pips" : "% del precio"}). Escoge tu estilo arriba para que se calcule solo en cada activo.</p>
+                    )}
+                    <details className="mt-2 text-[13px]">
+                      <summary className="cursor-pointer text-muted">Avanzado: stop fijo en pips o en % del precio</summary>
+                      <div className="mt-2 grid grid-cols-2 gap-3">
+                  <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Tipo de stop</span>
                     <select className="vc-input" value={guardian.guard_sl_mode} onChange={(e) => setGuardian({ ...guardian, guard_sl_mode: e.target.value as ModoStop })}>
                       <option value="atr">Según la volatilidad (ATR): se ajusta solo a cada activo</option>
                       <option value="porcentaje">A una distancia fija en % del precio</option>
@@ -1043,9 +1099,9 @@ export default function TradingPage() {
                         ? `No es lo que arriesgas: es qué tan lejos queda el stop. Ej. ${guardian.guard_sl_pct || 0.5}% en oro a $4,000 = stop a ${formatMoney((4000 * (guardian.guard_sl_pct || 0.5)) / 100, 0)} de la entrada. Lo que pierdes sigue siendo tu ${reglas.riesgo_por_trade_pct}%.`
                         : "Se usa si el ATR o los pips no aplican a un activo"}</span>
                   </label>
-                  <label className="flex flex-col gap-1"><span className="text-muted">Take profit = stop ×</span>
-                    <NumInput value={guardian.guard_reward_ratio} onChange={(n) => setGuardian({ ...guardian, guard_reward_ratio: n ?? 0 })} />
-                  </label>
+                      </div>
+                    </details>
+                  </div>
                   <label className="flex flex-col gap-1"><span className="text-muted">Trades abiertos a la vez</span>
                     <NumInput value={guardian.guard_max_open} onChange={(n) => setGuardian({ ...guardian, guard_max_open: n ?? 1 })} />
                   </label>
@@ -1069,6 +1125,35 @@ export default function TradingPage() {
                   <input type="checkbox" checked={guardian.guard_block_manual_close} onChange={(e) => setGuardian({ ...guardian, guard_block_manual_close: e.target.checked })} />
                   Si cierro un trade a mano, bloquear el resto del día
                 </label>
+                <div className="rounded-lg border border-teal/40 bg-teal/5 p-3 text-[14px]">
+                  <p className="mb-1 font-medium">Así te va a cuidar el guardián</p>
+                  <ul className="flex list-disc flex-col gap-0.5 pl-5">
+                    <li>
+                      Cada trade arriesga <b>{riesgoFijoUSD > 0 ? formatMoney(riesgoFijoUSD) : `${reglas.riesgo_por_trade_pct}% de tu cuenta`}</b>: el lote se calcula solo en cualquier activo.
+                    </li>
+                    <li>
+                      Stop puesto siempre al abrir{guardian.guard_sl_mode === "atr" ? <>, según cuánto se mueve cada activo (velas de {guardian.guard_atr_tf})</> : null}
+                      {guardian.guard_reward_ratio > 0 ? <>; take profit a {guardian.guard_reward_ratio} veces el stop.</> : "; sin take profit automático."}
+                    </li>
+                    <li>
+                      Te bloquea hasta mañana si pierdes <b>{reglas.max_perdedores_dia}</b> trades
+                      {guardian.guard_daily_loss_usd ? <> o llegas a <b>-{formatMoney(guardian.guard_daily_loss_usd)}</b> en el día</> : <> o pierdes el {reglas.perdida_max_dia_pct}% de la cuenta en el día</>}.
+                    </li>
+                    <li>
+                      Máximo <b>{reglas.max_trades_dia > 0 ? reglas.max_trades_dia : "sin límite de"}</b> trades al día y <b>{guardian.guard_max_open}</b> abiertos a la vez
+                      {reglas.espera_tras_perdida_min > 0 ? <>; espera {reglas.espera_tras_perdida_min} min después de una pérdida</> : null}.
+                    </li>
+                    {guardian.guard_blocked_symbols.trim() && <li>Prohibido operar: {guardian.guard_blocked_symbols}.</li>}
+                    <li>
+                      {guardian.guard_lock_mode === "flexible"
+                        ? "El stop solo lo puedes mover a tu favor; nunca alejarlo ni quitarlo."
+                        : guardian.guard_lock_mode === "total"
+                          ? "No puedes mover el stop ni el take profit."
+                          : "Puedes mover el stop y el take profit libremente."}
+                      {guardian.guard_block_manual_close ? " Si cierras un trade a mano, se bloquea el resto del día." : ""}
+                    </li>
+                  </ul>
+                </div>
                 <div className="flex gap-2">
                   <button className="vc-btn-primary" onClick={guardarReglas}>Guardar reglas</button>
                   <button className="rounded-lg border border-[#1B3A5C] px-4 text-base font-medium text-[#1B3A5C]" onClick={descargarGuardian}>Descargar para MT5</button>
