@@ -74,6 +74,7 @@ type Guardian = {
   guard_atr_mult: number;
   guard_atr_tf: TemporalidadATR;
   guard_blocked_symbols: string;
+  guard_pip_symbol: string;
 };
 const TFS_ATR: TemporalidadATR[] = ["M5", "M15", "M30", "H1", "H4", "D1"];
 const GUARDIAN_POR_DEFECTO: Guardian = {
@@ -91,6 +92,7 @@ const GUARDIAN_POR_DEFECTO: Guardian = {
   guard_atr_mult: 1.5,
   guard_atr_tf: "H1",
   guard_blocked_symbols: "",
+  guard_pip_symbol: "XAUUSD",
 };
 
 // Se muestra en hora de Puerto Rico (los datos guardados siguen en hora del broker).
@@ -203,6 +205,7 @@ export default function TradingPage() {
         guard_atr_mult: Number(r.guard_atr_mult ?? 1.5),
         guard_atr_tf: TFS_ATR.includes(r.guard_atr_tf as TemporalidadATR) ? (r.guard_atr_tf as TemporalidadATR) : "H1",
         guard_blocked_symbols: String(r.guard_blocked_symbols ?? ""),
+        guard_pip_symbol: String(r.guard_pip_symbol ?? "XAUUSD"),
       });
     }
     const id = preferida ?? cuentaId ?? lista[0]?.id ?? null;
@@ -476,6 +479,7 @@ export default function TradingPage() {
       atrMult: guardian.guard_atr_mult,
       atrTF: guardian.guard_atr_tf,
       bloqueados: guardian.guard_blocked_symbols,
+      simboloPips: guardian.guard_pip_symbol,
       riesgoPct: reglas.riesgo_por_trade_pct,
       distanciaPips: guardian.guard_sl_pips,
       tamanoPip: guardian.guard_pip_size,
@@ -934,7 +938,8 @@ export default function TradingPage() {
                         onChange={(e) => {
                           const v = e.target.value.toUpperCase();
                           const inf = infoSimbolo(v.split(",")[0].trim());
-                          setGuardian({ ...guardian, guard_symbol: v, ...(inf ? { guard_pip_size: inf.pip } : {}) });
+                          const primero = v.split(",")[0].trim();
+                          setGuardian({ ...guardian, guard_symbol: v, ...(primero ? { guard_pip_symbol: primero } : {}), ...(inf ? { guard_pip_size: inf.pip } : {}) });
                         }}
                       />
                       <span className="text-[13px] text-muted">Como aparecen en tu broker, separados por coma (ej. XAUUSD, EURUSD, NAS100, BTCUSD, #AAPL). Acepta sufijos como .r o m.</span>
@@ -955,12 +960,24 @@ export default function TradingPage() {
                       <option value="porcentaje">A una distancia fija en % del precio</option>
                       <option value="pips">A una distancia fija en pips (un solo símbolo)</option>
                     </select>
-                    {guardian.guard_sl_mode === "pips" && (todosActivos || guardian.guard_symbol.includes(",")) && (
-                      <span className="text-[13px] text-red">Con varios activos usa ATR o %: los pips solo aplican a {todosActivos ? "el símbolo del gráfico" : "el primero de la lista"} y al forex; el resto usa el %.</span>
+                    {guardian.guard_sl_mode === "pips" && (
+                      <span className="text-[13px] text-muted">Los pips aplican solo a {guardian.guard_pip_symbol || "tu activo"}. El forex usa sus pips de siempre y los demás activos (cripto, índices, acciones) el ATR.</span>
                     )}
                   </label>
                   {guardian.guard_sl_mode === "pips" && (
                     <>
+                      <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Activo de esos pips</span>
+                        <input
+                          className="vc-input"
+                          list="vt-simbolos"
+                          value={guardian.guard_pip_symbol}
+                          onChange={(e) => {
+                            const v = e.target.value.toUpperCase().trim();
+                            const inf = infoSimbolo(v);
+                            setGuardian({ ...guardian, guard_pip_symbol: v, ...(inf ? { guard_pip_size: inf.pip } : {}) });
+                          }}
+                        />
+                      </label>
                       <label className="flex flex-col gap-1"><span className="text-muted">Distancia del stop en pips</span>
                         <NumInput value={guardian.guard_sl_pips} onChange={(n) => setGuardian({ ...guardian, guard_sl_pips: n ?? 0 })} />
                         <span className="text-[13px] text-muted">Oro: 60 pips = $6 de precio</span>
@@ -971,9 +988,9 @@ export default function TradingPage() {
                       </label>
                     </>
                   )}
-                  {guardian.guard_sl_mode === "atr" && (
+                  {guardian.guard_sl_mode !== "porcentaje" && (
                     <>
-                      <label className="flex flex-col gap-1"><span className="text-muted">Stop = ATR ×</span>
+                      <label className="flex flex-col gap-1"><span className="text-muted">{guardian.guard_sl_mode === "pips" ? "Demás activos: stop = ATR ×" : "Stop = ATR ×"}</span>
                         <NumInput value={guardian.guard_atr_mult} onChange={(n) => setGuardian({ ...guardian, guard_atr_mult: n ?? 0 })} />
                         <span className="text-[13px] text-muted">Distancia del stop. 1.5 = una vez y media el movimiento promedio de una vela</span>
                       </label>

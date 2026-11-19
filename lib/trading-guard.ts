@@ -17,6 +17,7 @@ export type ParametrosGuardian = {
   riesgoPct: number;
   distanciaPips: number; // distancia del stop en pips
   tamanoPip: number; // tamano de 1 pip en precio (ej. 0.1 oro, 0.0001 EURUSD, 1 NAS100)
+  simboloPips?: string; // activo al que aplican SLPips/PipSize (los demas: forex con sus pips; el resto ATR)
   relacionTP: number;
   maxPerdedoresDia: number;
   perdidaMaxDiaPct: number; // % del balance con que empezo el dia
@@ -78,7 +79,8 @@ input string BlockedSymbols     = "${syms(p.bloqueados ?? "").replace("*", "")}"
 input double RiskPercent        = ${n(p.riesgoPct)};      // % del balance a arriesgar por trade
 input ENUM_SL_MODE SLMode       = ${MODO_MQ5[p.modoStop] ?? "SL_ATR"}; // como se calcula el stop: pips, % del precio o ATR
 input double SLPips             = ${n(p.distanciaPips, 2)};      // modo pips: distancia del SL en pips
-input double PipSize            = ${n(p.tamanoPip, 5)};      // modo pips: tamano de 1 pip del simbolo principal (oro 0.1, EURUSD 0.0001, NAS100 1)
+input double PipSize            = ${n(p.tamanoPip, 5)};      // modo pips: tamano de 1 pip de PipSymbol (oro 0.1, EURUSD 0.0001, NAS100 1)
+input string PipSymbol          = "${(syms(p.simboloPips ?? "") === "*" ? "XAUUSD" : syms(p.simboloPips ?? "").split(",")[0])}"; // modo pips: activo al que aplican esos pips. Forex usa sus pips; los demas, el ATR
 input double SLPercent          = ${n(p.stopPct, 3)};      // modo %: stop a este % del precio (tambien es el respaldo si falta el ATR)
 input double ATRMult            = ${n(p.atrMult, 2)};      // modo ATR: stop = ATR x este numero
 input ENUM_TIMEFRAMES ATRTF     = ${TF_MQ5[p.atrTF] ?? "PERIOD_H1"}; // modo ATR: temporalidad del ATR
@@ -168,11 +170,12 @@ bool SymbolAllowed(string s)
    return false;
 }
 
-// simbolo principal: el primero de la lista, o el del grafico si son todos
+// activo al que aplican los pips configurados (nunca el simbolo del grafico por accidente)
 bool IsMain(string s)
 {
    string u = Up(s);
-   string m = g_all ? Up(_Symbol) : g_syms[0];
+   string m = Up(PipSymbol);
+   if(m == "") return false;
    return (u == m || StringFind(u, m) == 0);
 }
 
@@ -192,23 +195,42 @@ int AtrHandle(string s)
    return h;
 }
 
-double SLDist(string s)
+double AtrDist(string s)
 {
-   if(SLMode == SL_ATR)
-   {
-      int h = AtrHandle(s);
-      double b[];
-      if(h != INVALID_HANDLE && CopyBuffer(h, 0, 1, 1, b) == 1 && b[0] > 0) return b[0] * ATRMult;
-   }
+   int h = AtrHandle(s);
+   double b[];
+   if(h != INVALID_HANDLE && CopyBuffer(h, 0, 1, 1, b) == 1 && b[0] > 0) return b[0] * ATRMult;
+   return 0;
+}
+
+double RawSLDist(string s)
+{
+   double price = SymbolInfoDouble(s, SYMBOL_BID);
+   if(SLMode == SL_PERCENT) return price * SLPercent / 100.0;
    if(SLMode == SL_PIPS)
    {
       if(IsMain(s)) return SLPips * PipSize;
       int dg = (int)SymbolInfoInteger(s, SYMBOL_DIGITS);
-      if(dg == 3 || dg == 5) return SLPips * SymbolInfoDouble(s, SYMBOL_POINT) * 10;   // forex
+      string base = SymbolInfoString(s, SYMBOL_CURRENCY_BASE), prof = SymbolInfoString(s, SYMBOL_CURRENCY_PROFIT);
+      bool fx = (dg == 3 || dg == 5) && StringLen(base) == 3 && StringLen(prof) == 3 && base != prof && base != "XAU" && base != "XAG";
+      if(fx) return SLPips * SymbolInfoDouble(s, SYMBOL_POINT) * 10;   // forex: sus pips de siempre
    }
-   // % del precio (y respaldo de los otros modos)
-   double price = SymbolInfoDouble(s, SYMBOL_BID);
+   // ATR (modo ATR, o los demas activos en modo pips); si aun no hay datos, % del precio
+   double a = AtrDist(s);
+   if(a > 0) return a;
    return price * SLPercent / 100.0;
+}
+
+// Distancia del stop, nunca mas cerca que 3 spreads ni que el minimo del broker
+double SLDist(string s)
+{
+   double d = RawSLDist(s);
+   double pt = SymbolInfoDouble(s, SYMBOL_POINT);
+   double spread = SymbolInfoDouble(s, SYMBOL_ASK) - SymbolInfoDouble(s, SYMBOL_BID);
+   double lvl = (double)SymbolInfoInteger(s, SYMBOL_TRADE_STOPS_LEVEL) * pt * 1.1;
+   double minD = MathMax(spread * 3, lvl);
+   if(d < minD) d = minD;
+   return d;
 }
 
 //------------------------------------------------------------------
@@ -822,7 +844,7 @@ int OnInit()
    if(SLMode == SL_PIPS && SLPips * PipSize <= 0) { Alert("VictorGuard: SLPips y PipSize deben ser mayores que 0"); return INIT_PARAMETERS_INCORRECT; }
    if(SLMode == SL_ATR && ATRMult <= 0)           { Alert("VictorGuard: ATRMult debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }
    if(SLPercent <= 0)                              { Alert("VictorGuard: SLPercent debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }
-   if(SLMode == SL_ATR)
+   if(SLMode != SL_PERCENT)
    {
       AtrHandle(_Symbol);
       for(int a = 0; a < ArraySize(g_syms); a++) AtrHandle(g_syms[a]);
