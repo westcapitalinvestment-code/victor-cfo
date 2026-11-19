@@ -792,7 +792,10 @@ void UpdatePanel()
    string lt = _Symbol + " lote " + DoubleToString(lot, 2) + " | stop " + DoubleToString(dist, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS))
              + " | riesgo $" + DoubleToString(rk, 2) + " / $" + DoubleToString(lim, 2);
    ObjectSetString(0, P + "LT", OBJPROP_TEXT, StringSubstr(lt, 0, 63));
-   ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, rk > lim * 1.5 ? clrRed : clrSilver);
+   // verde = luz verde para entrar; rojo = el lote minimo no cabe; gris = cabe, pero hoy estas bloqueado o en espera
+   bool puede = (StringFind(why, "OK") == 0);
+   color c = (rk > lim * 1.5) ? clrRed : (puede ? clrForestGreen : clrSilver);
+   ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, c);
 
    // Cuenta regresiva para el cierre de la vela actual
    long left = (long)PeriodSeconds() - (long)(TimeCurrent() - iTime(_Symbol, _Period, 0));
@@ -959,11 +962,11 @@ int OnInit()
    ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, clrSilver);
    ObjectSetInteger(0, P + "LT", OBJPROP_FONTSIZE, 10);
    ObjectCreate(0, P + "TM", OBJ_LABEL, 0, 0, 0);
-   // cierre de la vela arriba a la derecha (debajo del nombre del guardian)
-   ObjectSetInteger(0, P + "TM", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-   ObjectSetInteger(0, P + "TM", OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+   // cierre de la vela abajo a la derecha
+   ObjectSetInteger(0, P + "TM", OBJPROP_CORNER, CORNER_RIGHT_LOWER);
+   ObjectSetInteger(0, P + "TM", OBJPROP_ANCHOR, ANCHOR_RIGHT_LOWER);
    ObjectSetInteger(0, P + "TM", OBJPROP_XDISTANCE, 15);
-   ObjectSetInteger(0, P + "TM", OBJPROP_YDISTANCE, 30);
+   ObjectSetInteger(0, P + "TM", OBJPROP_YDISTANCE, 15);
    ObjectSetInteger(0, P + "TM", OBJPROP_COLOR, clrDeepSkyBlue);
    ObjectSetInteger(0, P + "TM", OBJPROP_FONTSIZE, 12);
    ObjectCreate(0, P + "SY", OBJ_LABEL, 0, 0, 0);
