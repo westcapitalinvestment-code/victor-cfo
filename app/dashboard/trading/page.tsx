@@ -375,7 +375,15 @@ export default function TradingPage() {
   const balanceInicial = cuenta?.balance_actual ?? cuenta?.balance_inicial ?? 0;
 
   // Todo se evalúa con el historial completo (la revancha o el límite diario dependen de trades anteriores).
-  const evaluadosAll = useMemo(() => evaluarCumplimiento(trades as unknown as Trade[], reglas, balanceInicial), [trades, reglas, balanceInicial]);
+  // Modo simple: lo que puedo perder al día / trades del día = $ fijos por trade, en cualquier activo.
+  const riesgoFijoUSD =
+    guardian.guard_daily_loss_usd && guardian.guard_daily_loss_usd > 0 && reglas.max_trades_dia > 0
+      ? Math.floor((guardian.guard_daily_loss_usd / reglas.max_trades_dia) * 100) / 100
+      : 0;
+  const evaluadosAll = useMemo(
+    () => evaluarCumplimiento(trades as unknown as Trade[], reglas, balanceInicial, riesgoFijoUSD),
+    [trades, reglas, balanceInicial, riesgoFijoUSD]
+  );
   const filaPorTicket = useMemo(() => new Map(trades.map((t) => [t.ticket, t])), [trades]);
   const diasAll = useMemo(() => resultadosPorDia(evaluadosAll), [evaluadosAll]);
   const mesesDisp = useMemo(() => Array.from(new Set(evaluadosAll.map((t) => fechaCierre(t).slice(0, 7)))).sort(), [evaluadosAll]);
@@ -481,6 +489,7 @@ export default function TradingPage() {
       bloqueados: guardian.guard_blocked_symbols,
       simboloPips: guardian.guard_pip_symbol,
       riesgoPct: reglas.riesgo_por_trade_pct,
+      riesgoUSD: riesgoFijoUSD,
       distanciaPips: guardian.guard_sl_pips,
       tamanoPip: guardian.guard_pip_size,
       relacionTP: guardian.guard_reward_ratio,
@@ -907,16 +916,36 @@ export default function TradingPage() {
                   Un programa (EA) que pones en UN solo gráfico de MT5 y vigila toda tu cuenta: forex, oro, índices, acciones, futuros o cripto. No decide cuándo entrar: tú entras (con sus botones o como siempre en MT5) y él calcula el lote de cada activo, pone stop y take profit, y te bloquea al llegar a tus límites. Cambia el símbolo del gráfico y los botones lo siguen.
                 </p>
                 <div className="rounded-lg border border-[#1B3A5C]/30 bg-[#1B3A5C]/5 p-3">
-                  <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium">Cuánto arriesgo en cada trade (% de mi cuenta)</span>
-                    <NumInput value={reglas.riesgo_por_trade_pct} onChange={(n) => setReglas({ ...reglas, riesgo_por_trade_pct: n ?? 0 })} />
-                  </label>
-                  <p className="mt-2 text-[14px]">
-                    En cada trade arriesgas <b>{reglas.riesgo_por_trade_pct}%</b> de tu cuenta
-                    {balanceActual > 0 && <> (≈ <b>{formatMoney((balanceActual * reglas.riesgo_por_trade_pct) / 100)}</b> con {formatMoney(balanceActual, 0)})</>}. Si el precio toca tu stop, eso es lo que pierdes:
-                    el guardián calcula el lote solo para que así sea, en cualquier activo.
-                  </p>
-                  <p className="mt-1 text-[13px] text-muted">La regla más usada es 1%. Con 1% necesitas perder muchos trades seguidos para hacerle daño serio a la cuenta.</p>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <label className="flex flex-col gap-1">
+                      <span className="font-medium">Cuánto puedo perder al día ($)</span>
+                      <NumInput value={guardian.guard_daily_loss_usd} onChange={(n) => setGuardian({ ...guardian, guard_daily_loss_usd: n })} placeholder="Ej. 21" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-medium">Cuántos trades al día</span>
+                      <NumInput value={reglas.max_trades_dia} onChange={(n) => setReglas({ ...reglas, max_trades_dia: Math.max(0, Math.round(n ?? 0)) })} placeholder="Ej. 3" />
+                    </label>
+                  </div>
+                  {riesgoFijoUSD > 0 ? (
+                    <p className="mt-2 text-[14px]">
+                      Cada trade arriesga <b>{formatMoney(riesgoFijoUSD)}</b>, en cualquier activo. Si pierdes los {reglas.max_trades_dia}, pierdes{" "}
+                      <b>{formatMoney(guardian.guard_daily_loss_usd ?? 0)}</b> y el guardián te bloquea hasta mañana. El lote se calcula solo para que, si toca el stop, pierdas eso.
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-[14px] text-muted">Pon las dos cantidades y el guardián divide: ej. $21 en 3 trades = $7 por trade.</p>
+                  )}
+                  <details className="mt-2 text-[13px]" open={riesgoFijoUSD === 0}>
+                    <summary className="cursor-pointer text-muted">{riesgoFijoUSD > 0 ? "Prefiero un % de mi cuenta" : "O arriesgar un % de mi cuenta por trade"}</summary>
+                    <label className="mt-2 flex flex-col gap-1">
+                      <span className="text-muted">% de mi cuenta por trade (se usa si dejas vacío lo de arriba)</span>
+                      <NumInput value={reglas.riesgo_por_trade_pct} onChange={(n) => setReglas({ ...reglas, riesgo_por_trade_pct: n ?? 0 })} />
+                    </label>
+                    {balanceActual > 0 && (
+                      <p className="mt-1 text-muted">
+                        {reglas.riesgo_por_trade_pct}% de {formatMoney(balanceActual, 0)} ≈ {formatMoney((balanceActual * reglas.riesgo_por_trade_pct) / 100)} por trade.
+                      </p>
+                    )}
+                  </details>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Qué puedo operar</span>
@@ -1012,10 +1041,6 @@ export default function TradingPage() {
                   </label>
                   <label className="flex flex-col gap-1"><span className="text-muted">Trades abiertos a la vez</span>
                     <NumInput value={guardian.guard_max_open} onChange={(n) => setGuardian({ ...guardian, guard_max_open: n ?? 1 })} />
-                  </label>
-                  <label className="flex flex-col gap-1"><span className="text-muted">Pérdida máxima del día en $ (opcional)</span>
-                    <NumInput value={guardian.guard_daily_loss_usd} onChange={(n) => setGuardian({ ...guardian, guard_daily_loss_usd: n })} placeholder="Automática" />
-                    <span className="text-[13px] text-muted">Vacío = {reglas.perdida_max_dia_pct}% del balance que tenga MT5 al empezar el día</span>
                   </label>
                   <label className="flex flex-col gap-1"><span className="text-muted">Equity mínimo en $ (opcional)</span>
                     <NumInput value={guardian.guard_min_equity_usd} onChange={(n) => setGuardian({ ...guardian, guard_min_equity_usd: n })} placeholder="Automático" />

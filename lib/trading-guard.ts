@@ -15,6 +15,7 @@ export type ParametrosGuardian = {
   atrTF: TemporalidadATR;
   bloqueados?: string; // simbolos prohibidos separados por coma (se cierran al abrir)
   riesgoPct: number;
+  riesgoUSD?: number; // $ fijos por trade (perdida maxima del dia / trades del dia). 0 = usar riesgoPct
   distanciaPips: number; // distancia del stop en pips
   tamanoPip: number; // tamano de 1 pip en precio (ej. 0.1 oro, 0.0001 EURUSD, 1 NAS100)
   simboloPips?: string; // activo al que aplican SLPips/PipSize (los demas: forex con sus pips; el resto ATR)
@@ -76,7 +77,8 @@ enum ENUM_SL_MODE { SL_PIPS = 0, SL_PERCENT = 1, SL_ATR = 2 };
 
 input string AllowedSymbols     = "${syms(p.simbolos)}"; // simbolos permitidos separados por coma, o * = todos (forex, indices, acciones, futuros, cripto)
 input string BlockedSymbols     = "${syms(p.bloqueados ?? "").replace("*", "")}"; // simbolos PROHIBIDOS separados por coma: si los abres, se cierran
-input double RiskPercent        = ${n(p.riesgoPct)};      // % del balance a arriesgar por trade
+input double RiskMoney          = ${n(p.riesgoUSD ?? 0)};      // $ fijos a arriesgar por trade, en cualquier activo (0 = usar RiskPercent)
+input double RiskPercent        = ${n(p.riesgoPct)};      // % del balance a arriesgar por trade (si RiskMoney = 0)
 input ENUM_SL_MODE SLMode       = ${MODO_MQ5[p.modoStop] ?? "SL_ATR"}; // como se calcula el stop: pips, % del precio o ATR
 input double SLPips             = ${n(p.distanciaPips, 2)};      // modo pips: distancia del SL en pips
 input double PipSize            = ${n(p.tamanoPip, 5)};      // modo pips: tamano de 1 pip de PipSymbol (oro 0.1, EURUSD 0.0001, NAS100 1)
@@ -234,6 +236,13 @@ double SLDist(string s)
 }
 
 //------------------------------------------------------------------
+// Lo que se puede perder en un trade si toca el stop
+double RiskAllowed()
+{
+   if(RiskMoney > 0) return RiskMoney;
+   return AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
+}
+
 double LossPerLot(string s, double dist)
 {
    double ts = SymbolInfoDouble(s, SYMBOL_TRADE_TICK_SIZE);
@@ -247,7 +256,7 @@ double CalcLot(string s, double dist)
 {
    double lpl = LossPerLot(s, dist);
    if(lpl <= 0) return 0;
-   double risk = AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
+   double risk = RiskAllowed();
    double step = SymbolInfoDouble(s, SYMBOL_VOLUME_STEP);
    double minL = SymbolInfoDouble(s, SYMBOL_VOLUME_MIN);
    double maxL = SymbolInfoDouble(s, SYMBOL_VOLUME_MAX);
@@ -262,7 +271,7 @@ double CalcLot(string s, double dist)
 // true si hasta el lote minimo excede el riesgo permitido (cuenta muy chica)
 bool RiskTooHigh(string s, double lot, double dist)
 {
-   double risk = AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
+   double risk = RiskAllowed();
    return (lot * LossPerLot(s, dist) > risk * 1.5);
 }
 
@@ -354,7 +363,8 @@ bool CanOpenNew(string s, string &why)
    }
    double nd = SLDist(s);
    double newRisk = CalcLot(s, nd) * LossPerLot(s, nd);
-   if(maxLoss > 0 && openRisk + newRisk > maxLoss + pl + 0.01)
+   // margen de 10% de un trade para deslizamiento (ej. 3 trades de $7 con perdidas de $7.05)
+   if(maxLoss > 0 && openRisk + newRisk > maxLoss + pl + RiskAllowed() * 0.10 + 0.01)
    { why = "Riesgo del dia completo (abiertos $" + DoubleToString(openRisk, 2) + " + nuevo $" + DoubleToString(newRisk, 2) + ")"; return false; }
 
    if(MaxTradesPerDay > 0 && closed + PositionsTotal() >= MaxTradesPerDay)
@@ -430,7 +440,7 @@ void Guard()
             if(d > 0 && d <= dist * 1.5) lossDist = d;
          }
          // margen de 10% por deslizamiento y redondeo; el lote minimo siempre se permite
-         double allowed = AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
+         double allowed = RiskAllowed();
          double minL = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
          if(vol > minL + 0.0000001 && vol * LossPerLot(sym, lossDist) > allowed * 1.10)
          {
@@ -496,10 +506,10 @@ void OpenTrade(bool buy)
    if(lot <= 0 || RiskTooHigh(_Symbol, lot, dist))
    {
       int dg = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-      double lim = AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
+      double lim = RiskAllowed();
       Alert("VictorGuard: en ", _Symbol, " el lote minimo (", DoubleToString(lot, 2), ") con stop a ", DoubleToString(dist, dg),
             " arriesga $", DoubleToString(lot * LossPerLot(_Symbol, dist), 2), " y tu limite es $", DoubleToString(lim, 2),
-            " (", DoubleToString(RiskPercent, 1), "% de la cuenta). Acerca el stop o sube el % de riesgo.");
+            ". Acerca el stop o sube tu riesgo por trade.");
       return;
    }
 
@@ -691,7 +701,7 @@ void UpdatePanel()
    double dist = SLDist(_Symbol);
    double lot = CalcLot(_Symbol, dist);
    double rk  = lot * LossPerLot(_Symbol, dist);
-   double lim = AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
+   double lim = RiskAllowed();
    // MT5 corta las etiquetas a 63 letras: estado y riesgo van en lineas separadas
    ObjectSetString(0, P + "ST", OBJPROP_TEXT, StringSubstr(why, 0, 63));
    string lt = _Symbol + " lote " + DoubleToString(lot, 2) + " | stop " + DoubleToString(dist, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS))

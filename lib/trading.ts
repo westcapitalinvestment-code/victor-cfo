@@ -241,7 +241,7 @@ export function aHoraPR(s: string): string {
 
 const neto = (t: Trade) => t.ganancia + t.comision + t.swap;
 
-export function evaluarCumplimiento(trades: Trade[], reglas: ReglasRiesgo, balanceInicial: number): TradeEvaluado[] {
+export function evaluarCumplimiento(trades: Trade[], reglas: ReglasRiesgo, balanceInicial: number, riesgoFijoUSD = 0): TradeEvaluado[] {
   const orden = [...trades].sort((a, b) => ms(a.hora_apertura) - ms(b.hora_apertura));
   const lista: TradeEvaluado[] = [];
   let balance = balanceInicial;
@@ -272,7 +272,7 @@ export function evaluarCumplimiento(trades: Trade[], reglas: ReglasRiesgo, balan
     if (reglas.sl_obligatorio && !t.sl) v.push("sin_sl");
 
     const info = infoSimbolo(t.simbolo);
-    const permitido = (balance * reglas.riesgo_por_trade_pct) / 100;
+    const permitido = riesgoFijoUSD > 0 ? riesgoFijoUSD : (balance * reglas.riesgo_por_trade_pct) / 100;
     if (t.riesgo_usd != null && t.riesgo_usd > 0) {
       // Dato exacto del broker (vale para acciones, cripto, futuros...). Mismo margen de 10% que el guardián.
       if (t.riesgo_usd > permitido * 1.1 + 0.005) v.push("riesgo_alto");
