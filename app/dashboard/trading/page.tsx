@@ -1003,7 +1003,7 @@ export default function TradingPage() {
                   </label>
                 </div>
                 <details className="rounded-lg border border-border p-3 text-sm">
-                  <summary className="cursor-pointer font-medium text-muted">Más opciones (opcional)</summary>
+                  <summary className="cursor-pointer font-medium text-muted">Más reglas (opcional)</summary>
                   <div className="mt-3 flex flex-col gap-3">
                     <div className="grid grid-cols-2 gap-3">
                   <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Qué puedo operar</span>
@@ -1034,27 +1034,17 @@ export default function TradingPage() {
                   )}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                    <label className="flex flex-col gap-1">
-                      <span className="text-muted">% de mi cuenta por trade (se usa si dejas vacío lo de arriba)</span>
-                      <NumInput value={reglas.riesgo_por_trade_pct} onChange={(n) => setReglas({ ...reglas, riesgo_por_trade_pct: n ?? 0 })} />
-                    </label>
-                    {balanceActual > 0 && (
-                      <p className="mt-1 text-muted">
-                        {reglas.riesgo_por_trade_pct}% de {formatMoney(balanceActual, 0)} ≈ {formatMoney((balanceActual * reglas.riesgo_por_trade_pct) / 100)} por trade.
-                      </p>
-                    )}
-                      {campoRegla("perdida_max_dia_pct", "Pérdida máxima del día (%) si no pones $")}
-                      {campoRegla("espera_tras_perdida_min", "Espera tras una pérdida (min)", "0 = sin espera")}
-                      {campoRegla("duracion_min_seg", "Duración mínima del trade (seg)", "Solo para medir; el guardián no la fuerza")}
-                  <label className="flex flex-col gap-1"><span className="text-muted">Equity mínimo en $ (opcional)</span>
-                    <NumInput value={guardian.guard_min_equity_usd} onChange={(n) => setGuardian({ ...guardian, guard_min_equity_usd: n })} placeholder="Automático" />
-                    <span className="text-[13px] text-muted">Vacío = 80% del balance de MT5 al empezar el día. Si baja de ahí, se bloquea todo</span>
-                  </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-muted">Espera después de una pérdida (min)</span>
+                        <NumInput value={reglas.espera_tras_perdida_min} onChange={(n) => setReglas({ ...reglas, espera_tras_perdida_min: Math.max(0, Math.round(n ?? 0)) })} />
+                        <span className="text-[13px] text-muted">Para no entrar con revancha. 0 = sin espera.</span>
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-muted">Piso de la cuenta ($)</span>
+                        <NumInput value={guardian.guard_min_equity_usd} onChange={(n) => setGuardian({ ...guardian, guard_min_equity_usd: n })} placeholder="Automático" />
+                        <span className="text-[13px] text-muted">Si la cuenta baja de aquí, se bloquea todo (como el drawdown máximo de una cuenta de fondeo).</span>
+                      </label>
                     </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={reglas.sl_obligatorio} onChange={(e) => setReglas({ ...reglas, sl_obligatorio: e.target.checked })} />
-                  Stop loss obligatorio
-                </label>
                 <label className="flex flex-col gap-1 text-sm">
                   <span className="text-muted">Qué puedo hacer con el stop y el take profit</span>
                   <select className="vc-input" value={guardian.guard_lock_mode} onChange={(e) => setGuardian({ ...guardian, guard_lock_mode: e.target.value as Guardian["guard_lock_mode"] })}>

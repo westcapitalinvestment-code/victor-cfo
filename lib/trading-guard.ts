@@ -320,6 +320,9 @@ double FloatingPL()
 }
 
 // bloqueo duro: cierra todo y no deja operar
+// Explicacion larga del ultimo bloqueo (para las alertas): por que te protegio y que hacer
+string g_detalle = "";
+
 bool IsBlocked(string &why)
 {
    int losers, manual, closed; double pl; datetime lastLoss;
@@ -328,10 +331,30 @@ bool IsBlocked(string &why)
    double startBal = AccountInfoDouble(ACCOUNT_BALANCE) - pl;   // balance con que empezo el dia
    double maxLoss  = (MaxDailyLossUSD > 0) ? MaxDailyLossUSD : startBal * MaxDailyLossPct / 100.0;
    double minEq    = (MinEquityUSD > 0) ? MinEquityUSD : startBal * MinEquityPct / 100.0;
-   if(BlockOnManualClose && manual > 0)        { why = "BLOQUEADO: cerraste un trade a mano hoy"; return true; }
-   if(losers >= MaxLosersPerDay)               { why = "BLOQUEADO: " + IntegerToString(losers) + " perdedores hoy"; return true; }
-   if(total <= -maxLoss)                       { why = "BLOQUEADO: perdida diaria maxima (" + DoubleToString(maxLoss, 2) + ")"; return true; }
-   if(AccountInfoDouble(ACCOUNT_EQUITY) <= minEq) { why = "BLOQUEADO: equity minimo. Revisa tu plan."; return true; }
+   if(BlockOnManualClose && manual > 0)
+   {
+      why = "BLOQUEADO: cerraste un trade a mano hoy";
+      g_detalle = "hoy cerraste un trade a mano y tu regla es no hacerlo. Quedas bloqueado hasta manana para no operar con emocion.";
+      return true;
+   }
+   if(losers >= MaxLosersPerDay)
+   {
+      why = "BLOQUEADO: " + IntegerToString(losers) + " perdedores hoy (tu limite)";
+      g_detalle = "hoy ya perdiste " + IntegerToString(losers) + " trades, que es tu limite. Despues de varias perdidas seguidas es cuando mas se quema una cuenta. Manana se reinicia.";
+      return true;
+   }
+   if(total <= -maxLoss)
+   {
+      why = "BLOQUEADO: llegaste a tu perdida del dia ($" + DoubleToString(maxLoss, 2) + ")";
+      g_detalle = "llegaste a tu perdida maxima del dia ($" + DoubleToString(maxLoss, 2) + "). Te bloqueo hasta manana para que un mal dia no se convierta en una cuenta quemada.";
+      return true;
+   }
+   if(AccountInfoDouble(ACCOUNT_EQUITY) <= minEq)
+   {
+      why = "BLOQUEADO: la cuenta llego a tu piso ($" + DoubleToString(minEq, 2) + ")";
+      g_detalle = "tu cuenta bajo de tu piso de $" + DoubleToString(minEq, 2) + ". Todo queda bloqueado para que no la pierdas completa. Revisa tu plan antes de seguir.";
+      return true;
+   }
    why = "OK | perdedores hoy: " + IntegerToString(losers) + "/" + IntegerToString(MaxLosersPerDay)
        + " | P/L hoy: " + DoubleToString(total, 2);
    return false;
@@ -365,15 +388,30 @@ bool CanOpenNew(string s, string &why)
    double newRisk = CalcLot(s, nd) * LossPerLot(s, nd);
    // margen de 10% de un trade para deslizamiento (ej. 3 trades de $7 con perdidas de $7.05)
    if(maxLoss > 0 && openRisk + newRisk > maxLoss + pl + RiskAllowed() * 0.10 + 0.01)
-   { why = "Riesgo del dia completo (abiertos $" + DoubleToString(openRisk, 2) + " + nuevo $" + DoubleToString(newRisk, 2) + ")"; return false; }
+   {
+      double queda = MathMax(0, maxLoss + pl - openRisk);
+      why = "No cabe hoy: te quedan $" + DoubleToString(queda, 2) + ", este arriesga $" + DoubleToString(newRisk, 2);
+      g_detalle = "te quedan $" + DoubleToString(queda, 2) + " para perder hoy" + (openRisk > 0 ? " (contando lo que arriesgan tus trades abiertos)" : "")
+                + " y este trade en " + s + " arriesgaria $" + DoubleToString(newRisk, 2) + ". Si sale mal pasarias tu limite de $" + DoubleToString(maxLoss, 2)
+                + ". Espera a que cierre un trade abierto o vuelve manana.";
+      return false;
+   }
 
    if(MaxTradesPerDay > 0 && closed + PositionsTotal() >= MaxTradesPerDay)
-   { why = "Limite de trades del dia (" + IntegerToString(MaxTradesPerDay) + ")"; return false; }
+   {
+      why = "Ya hiciste tus " + IntegerToString(MaxTradesPerDay) + " trades de hoy";
+      g_detalle = "ya hiciste tus " + IntegerToString(MaxTradesPerDay) + " trades de hoy. Operar de mas es la forma mas comun de devolver lo ganado. Manana se reinicia.";
+      return false;
+   }
    if(CooldownMin > 0 && lastLoss > 0)
    {
       long left = (long)CooldownMin * 60 - (long)(TimeCurrent() - lastLoss);
       if(left > 0)
-      { why = "ESPERA " + IntegerToString((int)(left / 60)) + " min tras la perdida"; return false; }
+      {
+         why = "ESPERA " + IntegerToString((int)(left / 60) + 1) + " min tras la perdida";
+         g_detalle = "tu regla es esperar " + IntegerToString(CooldownMin) + " min despues de una perdida para no entrar con revancha. Faltan " + IntegerToString((int)(left / 60) + 1) + " min.";
+         return false;
+      }
    }
    return true;
 }
@@ -418,9 +456,17 @@ void Guard()
       double sl  = PositionGetDouble(POSITION_SL);
       double tp  = PositionGetDouble(POSITION_TP);
 
-      // reglas que cierran el trade
+      // reglas que cierran el trade (se explica una sola vez por trade)
       if(blocked || !SymbolAllowed(sym) || kept >= MaxOpenPositions)
       {
+         string kav = P + "AV_" + (string)tk;
+         if(!GlobalVariableCheck(kav))
+         {
+            GlobalVariableSet(kav, 1);
+            if(blocked) Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: ", g_detalle);
+            else if(!SymbolAllowed(sym)) Alert("VictorGuard cerro tu trade de ", sym, ": esta en tus activos prohibidos o fuera de tu lista.");
+            else Alert("VictorGuard cerro tu trade de ", sym, ": ya tenias ", IntegerToString(MaxOpenPositions), " trades abiertos, tu maximo.");
+         }
          SafeClose(tk);
          continue;
       }
@@ -444,7 +490,8 @@ void Guard()
          double minL = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
          if(vol > minL + 0.0000001 && vol * LossPerLot(sym, lossDist) > allowed * 1.10)
          {
-            Print("VictorGuard: #", tk, " ", sym, " lote ", vol, " pasa tu riesgo. Cerrado.");
+            Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: con ", DoubleToString(vol, 2), " lotes arriesgabas $",
+                  DoubleToString(vol * LossPerLot(sym, lossDist), 2), " y tu limite por trade es $", DoubleToString(allowed, 2), ". Abre con el boton del guardian y te calcula el lote correcto.");
             SafeClose(tk);
             continue;
          }
@@ -496,9 +543,9 @@ void Guard()
 void OpenTrade(bool buy)
 {
    string why;
-   if(!SymbolAllowed(_Symbol)) { Alert("VictorGuard: ", _Symbol, " esta prohibido o no esta en tus simbolos permitidos"); return; }
-   if(!CanOpenNew(_Symbol, why)) { Alert("VictorGuard: ", why); return; }
-   if(PositionsTotal() >= MaxOpenPositions) { Alert("VictorGuard: ya tienes el maximo de trades abiertos"); return; }
+   if(!SymbolAllowed(_Symbol)) { Alert("VictorGuard te protegio: ", _Symbol, " esta en tus activos prohibidos o fuera de tu lista. Lo pusiste ahi para cuidarte."); return; }
+   if(!CanOpenNew(_Symbol, why)) { Alert("VictorGuard te protegio: ", g_detalle); return; }
+   if(PositionsTotal() >= MaxOpenPositions) { Alert("VictorGuard te protegio: ya tienes ", IntegerToString(MaxOpenPositions), " trades abiertos, tu maximo. Cierra o espera uno antes de abrir otro."); return; }
 
    double dist = SLDist(_Symbol);
    if(dist <= 0) { Alert("VictorGuard: no pude calcular el stop de ", _Symbol); return; }
@@ -507,9 +554,9 @@ void OpenTrade(bool buy)
    {
       int dg = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
       double lim = RiskAllowed();
-      Alert("VictorGuard: en ", _Symbol, " el lote minimo (", DoubleToString(lot, 2), ") con stop a ", DoubleToString(dist, dg),
-            " arriesga $", DoubleToString(lot * LossPerLot(_Symbol, dist), 2), " y tu limite es $", DoubleToString(lim, 2),
-            ". Acerca el stop o sube tu riesgo por trade.");
+      Alert("VictorGuard te protegio: en ", _Symbol, " el lote mas pequeno (", DoubleToString(lot, 2), ") con el stop a ", DoubleToString(dist, dg),
+            " arriesgaria $", DoubleToString(lot * LossPerLot(_Symbol, dist), 2), " y tu limite por trade es $", DoubleToString(lim, 2),
+            ". Ahora mismo este activo se mueve demasiado para tu cuenta. Prueba stop Ajustado, otro activo, o sube tu riesgo por trade.");
       return;
    }
 
