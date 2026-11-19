@@ -375,10 +375,11 @@ export default function TradingPage() {
   const balanceInicial = cuenta?.balance_actual ?? cuenta?.balance_inicial ?? 0;
 
   // Todo se evalúa con el historial completo (la revancha o el límite diario dependen de trades anteriores).
-  // Modo simple: lo que puedo perder al día / trades del día = $ fijos por trade, en cualquier activo.
+  // Modo simple: lo que puedo perder al día / pérdidas que aguanto al día = $ fijos por trade, en cualquier activo.
+  // El total de trades del día es aparte: si vas ganando, sigues con el mismo riesgo hasta ese máximo.
   const riesgoFijoUSD =
-    guardian.guard_daily_loss_usd && guardian.guard_daily_loss_usd > 0 && reglas.max_trades_dia > 0
-      ? Math.floor((guardian.guard_daily_loss_usd / reglas.max_trades_dia) * 100) / 100
+    guardian.guard_daily_loss_usd && guardian.guard_daily_loss_usd > 0 && reglas.max_perdedores_dia > 0
+      ? Math.floor((guardian.guard_daily_loss_usd / reglas.max_perdedores_dia) * 100) / 100
       : 0;
   const evaluadosAll = useMemo(
     () => evaluarCumplimiento(trades as unknown as Trade[], reglas, balanceInicial, riesgoFijoUSD),
@@ -922,17 +923,23 @@ export default function TradingPage() {
                       <NumInput value={guardian.guard_daily_loss_usd} onChange={(n) => setGuardian({ ...guardian, guard_daily_loss_usd: n })} placeholder="Ej. 21" />
                     </label>
                     <label className="flex flex-col gap-1">
-                      <span className="font-medium">Cuántos trades al día</span>
-                      <NumInput value={reglas.max_trades_dia} onChange={(n) => setReglas({ ...reglas, max_trades_dia: Math.max(0, Math.round(n ?? 0)) })} placeholder="Ej. 3" />
+                      <span className="font-medium">Cuántas pérdidas aguanto al día</span>
+                      <NumInput value={reglas.max_perdedores_dia} onChange={(n) => setReglas({ ...reglas, max_perdedores_dia: Math.max(0, Math.round(n ?? 0)) })} placeholder="Ej. 3" />
+                    </label>
+                    <label className="col-span-2 flex flex-col gap-1">
+                      <span className="font-medium">Máximo de trades al día (ganando o perdiendo)</span>
+                      <NumInput value={reglas.max_trades_dia} onChange={(n) => setReglas({ ...reglas, max_trades_dia: Math.max(0, Math.round(n ?? 0)) })} placeholder="Ej. 6 (0 = sin límite)" />
                     </label>
                   </div>
                   {riesgoFijoUSD > 0 ? (
                     <p className="mt-2 text-[14px]">
-                      Cada trade arriesga <b>{formatMoney(riesgoFijoUSD)}</b>, en cualquier activo. Si pierdes los {reglas.max_trades_dia}, pierdes{" "}
-                      <b>{formatMoney(guardian.guard_daily_loss_usd ?? 0)}</b> y el guardián te bloquea hasta mañana. El lote se calcula solo para que, si toca el stop, pierdas eso.
+                      Cada trade arriesga <b>{formatMoney(riesgoFijoUSD)}</b>, en cualquier activo. Si pierdes {reglas.max_perdedores_dia} veces, llegas a{" "}
+                      <b>{formatMoney(guardian.guard_daily_loss_usd ?? 0)}</b> y el guardián te bloquea hasta mañana.
+                      {reglas.max_trades_dia > 0 ? <> Si vas ganando, sigues con el mismo riesgo hasta <b>{reglas.max_trades_dia} trades</b>.</> : <> Si vas ganando, sigues sin límite de trades.</>}{" "}
+                      El lote se calcula solo para que, si toca el stop, pierdas eso.
                     </p>
                   ) : (
-                    <p className="mt-2 text-[14px] text-muted">Pon las dos cantidades y el guardián divide: ej. $21 en 3 trades = $7 por trade.</p>
+                    <p className="mt-2 text-[14px] text-muted">Pon cuánto puedes perder y cuántas pérdidas aguantas: ej. $21 entre 3 pérdidas = $7 por trade.</p>
                   )}
                   <details className="mt-2 text-[13px]" open={riesgoFijoUSD === 0}>
                     <summary className="cursor-pointer text-muted">{riesgoFijoUSD > 0 ? "Prefiero un % de mi cuenta" : "O arriesgar un % de mi cuenta por trade"}</summary>
