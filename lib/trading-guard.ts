@@ -361,7 +361,8 @@ bool IsBlocked(string &why)
 }
 
 // bloqueo suave: no cierra nada, solo impide ABRIR otro trade ahora
-bool CanOpenNew(string s, string &why)
+// skipTk/riskOverride: para revisar un trade que YA se abrio (ej. desde el Trading Panel de MT5)
+bool CanOpenNew(string s, string &why, ulong skipTk = 0, double riskOverride = -1)
 {
    if(IsBlocked(why)) return false;
    int losers, manual, closed; double pl; datetime lastLoss;
@@ -375,7 +376,7 @@ bool CanOpenNew(string s, string &why)
    for(int i = 0; i < PositionsTotal(); i++)
    {
       ulong ptk = PositionGetTicket(i);
-      if(ptk == 0) continue;
+      if(ptk == 0 || ptk == skipTk) continue;
       string psym  = PositionGetString(POSITION_SYMBOL);
       double popen = PositionGetDouble(POSITION_PRICE_OPEN);
       double psl   = PositionGetDouble(POSITION_SL);
@@ -385,7 +386,7 @@ bool CanOpenNew(string s, string &why)
       if(d > 0) openRisk += LossPerLot(psym, d) * pvol;
    }
    double nd = SLDist(s);
-   double newRisk = CalcLot(s, nd) * LossPerLot(s, nd);
+   double newRisk = (riskOverride >= 0) ? riskOverride : CalcLot(s, nd) * LossPerLot(s, nd);
    // margen de 10% de un trade para deslizamiento (ej. 3 trades de $7 con perdidas de $7.05)
    if(maxLoss > 0 && openRisk + newRisk > maxLoss + pl + RiskAllowed() * 0.10 + 0.01)
    {
@@ -397,7 +398,7 @@ bool CanOpenNew(string s, string &why)
       return false;
    }
 
-   if(MaxTradesPerDay > 0 && closed + PositionsTotal() >= MaxTradesPerDay)
+   if(MaxTradesPerDay > 0 && closed + PositionsTotal() - (skipTk > 0 ? 1 : 0) >= MaxTradesPerDay)
    {
       why = "Ya hiciste tus " + IntegerToString(MaxTradesPerDay) + " trades de hoy";
       g_detalle = "ya hiciste tus " + IntegerToString(MaxTradesPerDay) + " trades de hoy. Operar de mas es la forma mas comun de devolver lo ganado. Manana se reinicia.";
@@ -492,6 +493,23 @@ void Guard()
          {
             Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: con ", DoubleToString(vol, 2), " lotes arriesgabas $",
                   DoubleToString(vol * LossPerLot(sym, lossDist), 2), " y tu limite por trade es $", DoubleToString(allowed, 2), ". Abre con el boton del guardian y te calcula el lote correcto.");
+            SafeClose(tk);
+            continue;
+         }
+         // el lote minimo solo se permite si no pasa 1.5 veces tu riesgo (igual que los botones)
+         if(vol <= minL + 0.0000001 && RiskTooHigh(sym, vol, lossDist))
+         {
+            Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: hasta el lote mas pequeno (", DoubleToString(vol, 2), ") arriesgaba $",
+                  DoubleToString(vol * LossPerLot(sym, lossDist), 2), " y tu limite por trade es $", DoubleToString(allowed, 2),
+                  ". Ahora mismo este activo se mueve demasiado para tu cuenta.");
+            SafeClose(tk);
+            continue;
+         }
+         // mismas reglas que los botones: presupuesto del dia, trades del dia y espera tras perdida
+         string wn;
+         if(!CanOpenNew(sym, wn, tk, vol * LossPerLot(sym, lossDist)))
+         {
+            Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: ", g_detalle);
             SafeClose(tk);
             continue;
          }
