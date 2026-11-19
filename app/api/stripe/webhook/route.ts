@@ -13,6 +13,7 @@ import {
   todosLosPriceIdsDePlanes,
   planDesdePriceId,
   priceIdPara,
+  esPriceCoreTrading,
   PLAN_RANK,
   type PlanId,
   type Ciclo,
@@ -325,6 +326,11 @@ export async function POST(req: NextRequest) {
           plan_status: "active",
         };
         if (esPlanValido(plan)) datosActualizar.plan = plan;
+        // Core + Trading (19 nov 2026): queda incluido y activado desde el inicio.
+        if (session.metadata?.trading === "1") {
+          datosActualizar.trading_incluido = true;
+          datosActualizar.trading_activo = true;
+        }
         // Cliente liberado por su firma que contrata su propio plan (6 oct
         // 2026): termina la gracia — el cron firma-gracia ya no lo baja.
         datosActualizar.firma_gracia_hasta = null;
@@ -457,6 +463,13 @@ export async function POST(req: NextRequest) {
           plan_status,
         };
         if (esPlanValido(plan)) datosActualizar.plan = plan;
+        // Trading incluido = el precio que Stripe cobra es Core + Trading. En
+        // Pro/Business el acceso viene del plan, así que esto solo importa en Core.
+        if (precioPlanActual) {
+          const conTrading = subscription.items.data.some((it) => esPriceCoreTrading(it.price.id));
+          datosActualizar.trading_incluido = conTrading;
+          if (conTrading) datosActualizar.trading_activo = true;
+        }
 
         const eraActivo = perfilPrevio?.plan_status === "active";
         const yaAvisado = !!perfilPrevio?.payment_failed_notified_at;

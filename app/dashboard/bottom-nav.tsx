@@ -64,8 +64,8 @@ const TAB_CFO = { href: "/dashboard/cfo", label: "CFO", icon: "ti-crown" };
 // Ventas (13 oct 2026, pedido de Joel): vendedores, socios y contables. Solo
 // founder, penúltimo tab (justo antes de CFO).
 const TAB_VENTAS = { href: "/dashboard/ventas", label: "Ventas", icon: "ti-briefcase" };
-// Trading (oct 2026): módulo en prueba, solo founder hasta validarlo con
-// traders reales. Va antes de Ventas.
+// Trading: en Core + Trading, Pro y Business, visible si el usuario lo activó
+// en Configuración (19 nov 2026). El founder siempre lo ve.
 const TAB_TRADING = { href: "/dashboard/trading", label: "Trading", icon: "ti-chart-candle" };
 
 function NavLink({ tab, active }: { tab: { href: string; label: string; icon: string }; active: boolean }) {
@@ -77,7 +77,7 @@ function NavLink({ tab, active }: { tab: { href: string; label: string; icon: st
   );
 }
 
-export default function BottomNav({ esFounder = false }: { esFounder?: boolean }) {
+export default function BottomNav({ esFounder = false, mostrarTrading = false }: { esFounder?: boolean; mostrarTrading?: boolean }) {
   const pathname = usePathname();
   // "/dashboard" y "/dashboard/negocio" son los dos "Inicio" (Personal y de
   // negocio) — necesitan comparación exacta, si no "/dashboard/negocio"
@@ -117,7 +117,7 @@ export default function BottomNav({ esFounder = false }: { esFounder?: boolean }
         {TABS_NEGOCIO.map((tab) => (
           <NavLink key={tab.href} tab={tab} active={isActive(tab.href)} />
         ))}
-        {esFounder && <NavLink tab={TAB_TRADING} active={isActive(TAB_TRADING.href)} />}
+        {(esFounder || mostrarTrading) && <NavLink tab={TAB_TRADING} active={isActive(TAB_TRADING.href)} />}
         <NavLink tab={TAB_CONFIG} active={isActive(TAB_CONFIG.href)} />
         {esFounder && <NavLink tab={TAB_VENTAS}active={isActive(TAB_VENTAS.href)} />}
         {esFounder && <NavLink tab={TAB_CFO} active={isActive(TAB_CFO.href)} />}

@@ -1,11 +1,12 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { esCicloValido, type Ciclo } from "@/lib/stripe";
 import { fbqTrack } from "@/lib/fbpixel";
+import { leerCookieTradingCliente, marcarCookieTradingCliente, PRECIO_CORE_TRADING } from "@/lib/trading-plan";
 
 // Registro real — esto es lo que faltaba para que el landing page
 // (victorcfo.com) pueda mandar gente nueva a crear cuenta de verdad.
@@ -153,8 +154,22 @@ function RegistroForm() {
   // 2026, pedido de Joel tras comparar con Luna Money).
   const [ciclo, setCiclo] = useState<Ciclo>(cicloInicial);
 
+  // Core + Trading (19 nov 2026): llega desde /trading (cookie) o con ?trading=1.
+  // La tarjeta de Core pasa a mostrar Core + Trading; el checkout lee la misma cookie.
+  const [esTrading, setEsTrading] = useState(false);
+  useEffect(() => {
+    if (searchParams.get("trading") === "1") marcarCookieTradingCliente();
+    setEsTrading(leerCookieTradingCliente());
+  }, [searchParams]);
+
   function datosPrecio(planId: PlanPago) {
-    const precios = PRECIOS_REGISTRO[planId];
+    const precios =
+      planId === "core" && esTrading
+        ? {
+            mensual: { normal: PRECIO_CORE_TRADING.mensual, sufijo: "/mes" },
+            anual: { normal: PRECIO_CORE_TRADING.anual, sufijo: "/año" },
+          }
+        : PRECIOS_REGISTRO[planId];
     const precioMostrar = precios[ciclo].normal;
     const sufijo = precios[ciclo].sufijo;
     // .replace(/,/g, "") — el anual de Business se guarda como "1,099" (con
@@ -169,7 +184,7 @@ function RegistroForm() {
 
   function finePrint(planId: PlanPago) {
     const { precioMostrar, sufijo } = datosPrecio(planId);
-    const nombre = planId === "pro" ? "Pro" : planId === "proplus" ? "Business" : "Core";
+    const nombre = planId === "pro" ? "Pro" : planId === "proplus" ? "Business" : esTrading ? "Core + Trading" : "Core";
     return esReferido
       ? `Tu primer mes de ${nombre} es gratis, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
       : `Gratis por 7 días, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`;
@@ -527,8 +542,8 @@ function RegistroForm() {
                     planDestacado === "core" ? "border-2 border-teal" : ""
                   }`}
                 >
-                  <p className="text-lg font-semibold text-text">Core</p>
-                  <p className="text-sm text-muted">Personal</p>
+                  <p className="text-lg font-semibold text-text">{esTrading ? "Core + Trading" : "Core"}</p>
+                  <p className="text-sm text-muted">{esTrading ? "Personal + guardián de trading" : "Personal"}</p>
                   <p className="text-3xl font-bold text-teal">
                     ${precioCore}
                     <span className="text-sm font-normal">{sufijoCore}</span>

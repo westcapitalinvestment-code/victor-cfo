@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getStripe, priceIdPara, esPlanValido, esCicloValido } from "@/lib/stripe";
+import { getStripe, priceIdPara, priceIdCoreTrading, esPlanValido, esCicloValido } from "@/lib/stripe";
+import { COOKIE_TRADING } from "@/lib/trading-plan";
 
 // Crea una Stripe Checkout Session y devuelve la URL a la que hay que
 // mandar al usuario. Se usa en dos momentos distintos: (1) justo después
@@ -26,6 +27,9 @@ export async function POST(req: NextRequest) {
   if (!esPlanValido(plan) || !esCicloValido(ciclo)) {
     return NextResponse.json({ error: "Plan o ciclo inválido." }, { status: 400 });
   }
+  // Core + Trading (19 nov 2026): lo pide el body o la cookie que pone la
+  // página /trading. Solo aplica a Core (Pro y Business ya incluyen Trading).
+  const conTrading = plan === "core" && (body?.trading === true || req.cookies.get(COOKIE_TRADING)?.value === "1");
 
   // Red de seguridad de la atribución por prospecto (13 oct 2026, migración
   // 0150): el cruce principal ocurre al registrarse, pero si por cualquier
@@ -93,10 +97,10 @@ export async function POST(req: NextRequest) {
     // 1 nov 2026: todos los vendedores (vendedor/influencer/otro) pagan como
     // cualquier cliente nuevo, con 7 días de prueba; solo 'cpa' conserva los 30.
     !!perfil?.referred_by || (!!perfil?.referido_por_socio_id && socioTipo === "cpa");
-  const priceId = priceIdPara(plan, ciclo);
+  const priceId = conTrading ? priceIdCoreTrading(ciclo) : priceIdPara(plan, ciclo);
   if (!priceId) {
     return NextResponse.json(
-      { error: `Falta configurar el Price ID de Stripe para ${plan}/${ciclo} en las variables de entorno.` },
+      { error: `Falta configurar el Price ID de Stripe para ${conTrading ? "core+trading" : plan}/${ciclo} en las variables de entorno.` },
       { status: 500 }
     );
   }
@@ -152,7 +156,7 @@ export async function POST(req: NextRequest) {
       // El precio mensual real del plan elegido, sin importar si el usuario
       // escogió ciclo anual — un crédito de "un mes" siempre vale un mes,
       // nunca 1/12 de año, para que sea fácil de explicar en el correo.
-      const precioMensualId = priceIdPara(plan, "mensual");
+      const precioMensualId = conTrading ? priceIdCoreTrading("mensual") : priceIdPara(plan, "mensual");
       if (precioMensualId) {
         const precioMensual = await getStripe().prices.retrieve(precioMensualId);
         const montoMensual = precioMensual.unit_amount ?? 0;
@@ -198,9 +202,9 @@ export async function POST(req: NextRequest) {
       client_reference_id: user.id,
       customer: perfil?.stripe_customer_id || undefined,
       customer_email: perfil?.stripe_customer_id ? undefined : user.email,
-      metadata: { supabase_user_id: user.id, plan, ciclo, ...metaMetadata },
+      metadata: { supabase_user_id: user.id, plan, ciclo, ...(conTrading ? { trading: "1" } : {}), ...metaMetadata },
       subscription_data: {
-        metadata: { supabase_user_id: user.id, plan, ciclo },
+        metadata: { supabase_user_id: user.id, plan, ciclo, ...(conTrading ? { trading: "1" } : {}) },
         ...(trialDias > 0 ? { trial_period_days: trialDias } : {}),
       },
       success_url: `${origin}${returnTo}${separadorReturn}pago=exitoso`,

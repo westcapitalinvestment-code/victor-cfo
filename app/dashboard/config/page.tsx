@@ -14,6 +14,7 @@ import EliminarCuenta from "../eliminar-cuenta";
 import EditarCuenta from "../editar-cuenta";
 import ReiniciarDemo from "../reiniciar-demo";
 import ApiKeysConfig from "../api-keys-config";
+import TradingToggle from "../trading-toggle";
 
 export default async function ConfigPage() {
   const supabase = createClient();
@@ -200,6 +201,8 @@ export default async function ConfigPage() {
           esGratis={profile?.plan === "gratis"}
         />
       </div>
+
+      <TradingToggle />
 
       <CreditosIA />
 

@@ -9,6 +9,8 @@ import {
   esCicloValido,
   planDesdePriceId,
   todosLosPriceIdsDePlanes,
+  priceIdCoreTrading,
+  esPriceCoreTrading,
   priceIdAddonTecnicos,
   priceIdAddonPagos,
   priceIdAddonNomina,
@@ -109,6 +111,7 @@ export async function GET() {
       puedeCambiar: perfil.plan_status === "active" && !!actual,
       plan: actual?.plan ?? perfil.plan,
       ciclo: actual?.ciclo ?? null,
+      trading: esPriceCoreTrading(itemPlan?.price.id),
       pendiente,
       // Qué planes tienen Price configurado para el ciclo actual — si falta
       // alguno (ej. Business todavía sin crear en Stripe), la UI no lo ofrece.
@@ -116,6 +119,7 @@ export async function GET() {
         core: !!priceIdPara("core", actual?.ciclo ?? "mensual"),
         pro: !!priceIdPara("pro", actual?.ciclo ?? "mensual"),
         proplus: !!priceIdPara("proplus", actual?.ciclo ?? "mensual"),
+        coreTrading: !!priceIdCoreTrading(actual?.ciclo ?? "mensual"),
       },
     });
   } catch (err) {
@@ -157,6 +161,32 @@ export async function POST(req: NextRequest) {
     const actual = itemPlan ? planDesdePriceId(itemPlan.price.id) : null;
     if (!itemPlan || !actual) {
       return NextResponse.json({ error: "No se pudo identificar tu plan actual en Stripe." }, { status: 500 });
+    }
+    // Core <-> Core + Trading (19 nov 2026): mismo plan, otro precio. Agregar
+    // Trading cobra al momento la diferencia prorrateada; quitarlo deja el
+    // crédito prorrateado para la próxima factura.
+    if (actual.plan === "core" && planNuevo === "core" && typeof body?.trading === "boolean") {
+      const tieneTrading = esPriceCoreTrading(itemPlan.price.id);
+      if (tieneTrading === body.trading) {
+        return NextResponse.json({ error: body.trading ? "Ya tienes Trading incluido." : "Tu plan no tiene Trading." }, { status: 400 });
+      }
+      const destino = body.trading ? priceIdCoreTrading(actual.ciclo) : priceIdPara("core", actual.ciclo);
+      if (!destino) {
+        return NextResponse.json({ error: "Falta configurar el precio de Core + Trading en Stripe." }, { status: 500 });
+      }
+      const scheduleTr = typeof sub.schedule === "string" ? sub.schedule : sub.schedule?.id;
+      if (scheduleTr) await stripe.subscriptionSchedules.release(scheduleTr);
+      await stripe.subscriptions.update(sub.id, {
+        items: [{ id: itemPlan.id, price: destino }],
+        metadata: { ...(sub.metadata ?? {}), supabase_user_id: user.id, plan: "core", ciclo: actual.ciclo, trading: body.trading ? "1" : "0" },
+        proration_behavior: body.trading ? "always_invoice" : "create_prorations",
+        ...(body.trading ? { payment_behavior: "error_if_incomplete" as const } : {}),
+      });
+      await createAdminClient()
+        .from("users")
+        .update(body.trading ? { trading_incluido: true, trading_activo: true } : { trading_incluido: false, trading_activo: false })
+        .eq("id", user.id);
+      return NextResponse.json({ ok: true, tipo: body.trading ? "trading_agregado" : "trading_quitado", plan: "core" });
     }
     if (actual.plan === planNuevo) {
       return NextResponse.json({ error: "Ya tienes ese plan." }, { status: 400 });

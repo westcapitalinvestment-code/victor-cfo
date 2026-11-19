@@ -54,6 +54,25 @@ const PRICE_ENV_VARS: Record<PlanId, Record<Ciclo, string | undefined>> = {
   },
 };
 
+// Core + Trading (19 nov 2026, pedido de Joel): el mismo plan Core (users.plan
+// sigue siendo "core", para no tocar los ~37 lugares que comparan contra ese
+// string) pero con el módulo de Trading incluido — $19.99/mes o $179/año. Se
+// vende por redes, sin vendedor. Se reconoce por el PRECIO que Stripe cobra
+// (users.trading_incluido lo refleja el webhook). Pro y Business incluyen
+// Trading sin cobrar aparte.
+const PRICE_ENV_VARS_CORE_TRADING: Record<Ciclo, string | undefined> = {
+  mensual: process.env.STRIPE_PRICE_CORE_TRADING_MENSUAL,
+  anual: process.env.STRIPE_PRICE_CORE_TRADING_ANUAL,
+};
+
+export function priceIdCoreTrading(ciclo: Ciclo): string | null {
+  return PRICE_ENV_VARS_CORE_TRADING[ciclo] || null;
+}
+
+export function esPriceCoreTrading(priceId: string | null | undefined): boolean {
+  return !!priceId && (priceId === PRICE_ENV_VARS_CORE_TRADING.mensual || priceId === PRICE_ENV_VARS_CORE_TRADING.anual);
+}
+
 // Precio con descuento de referido — DEPRECADO (4 sept 2026, pedido de
 // Joel: "que los 2 sean iguales", Core referido pasa de descuento
 // permanente a primer mes gratis, igual que Pro — ver esReferidoConTrial
@@ -77,6 +96,8 @@ export function todosLosPriceIdsDePlanes(): string[] {
     ...Object.values(PRICE_ENV_VARS).flatMap((c) => [c.mensual, c.anual]),
     PRICE_ENV_VARS_CORE_REFERIDO.mensual,
     PRICE_ENV_VARS_CORE_REFERIDO.anual,
+    PRICE_ENV_VARS_CORE_TRADING.mensual,
+    PRICE_ENV_VARS_CORE_TRADING.anual,
   ].filter((v): v is string => !!v);
 }
 
@@ -107,6 +128,9 @@ export function planDesdePriceId(priceId: string): { plan: PlanId; ciclo: Ciclo 
   // Precio viejo de Core con descuento de referido: sigue siendo Core.
   if (priceId === PRICE_ENV_VARS_CORE_REFERIDO.mensual) return { plan: "core", ciclo: "mensual" };
   if (priceId === PRICE_ENV_VARS_CORE_REFERIDO.anual) return { plan: "core", ciclo: "anual" };
+  // Core + Trading sigue siendo Core (el trading lo marca esPriceCoreTrading).
+  if (priceId === PRICE_ENV_VARS_CORE_TRADING.mensual) return { plan: "core", ciclo: "mensual" };
+  if (priceId === PRICE_ENV_VARS_CORE_TRADING.anual) return { plan: "core", ciclo: "anual" };
   return null;
 }
 

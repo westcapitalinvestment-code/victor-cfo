@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fechaHoyPR } from "@/lib/hora-pr";
 import { leerEntidadActivaCookie, resolverEntidadActiva } from "@/lib/entidad-activa";
 import { esFounder } from "@/lib/founder";
+import { tieneAccesoTrading } from "@/lib/trading-plan";
 import BottomNav from "./bottom-nav";
 import VictorChat from "./victor-chat";
 import Topbar from "./topbar";
@@ -39,6 +40,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let entidadActivaId: string | null = null;
   let vistaGlobalNegocio = false;
   let esFounderUsuario = false;
+  let mostrarTrading = false;
   let firmaNombre: string | null = null;
   let firmaLogoUrl: string | null = null;
   try {
@@ -57,7 +59,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
       const { data: userRow } = await supabase
         .from("users")
-        .select("full_name, plan, referred_by, billed_by_firma_id")
+        .select("full_name, plan, referred_by, billed_by_firma_id, trading_incluido, trading_activo")
         .eq("id", user.id)
         .maybeSingle();
       // Cliente traído por un contador (Firma Accountant): se lee el nombre de
@@ -75,6 +77,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
       plan = userRow?.plan ?? null;
       esReferido = !!userRow?.referred_by;
       esFounderUsuario = esFounder(user.email);
+      // Trading (19 nov 2026): aparece en el menú si el plan lo incluye y el
+      // usuario lo activó (el founder siempre lo ve).
+      mostrarTrading =
+        esFounderUsuario ||
+        (tieneAccesoTrading({ plan, tradingIncluido: userRow?.trading_incluido }) && !!userRow?.trading_activo);
 
       const esPro = plan === "pro" || plan === "proplus";
       if (esPro) {
@@ -118,7 +125,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           plan={plan}
           esReferido={esReferido}
         />
-        <BottomNav esFounder={esFounderUsuario} />
+        <BottomNav esFounder={esFounderUsuario} mostrarTrading={mostrarTrading} />
       </div>
     </PinGate>
   );

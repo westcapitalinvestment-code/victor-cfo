@@ -128,7 +128,41 @@ function NumInput({ value, onChange, placeholder }: { value: number | null; onCh
   );
 }
 
+// Candado (19 nov 2026): Trading viene en Core + Trading, Pro y Business. Si el
+// plan no lo incluye se muestra la oferta en vez del módulo.
 export default function TradingPage() {
+  const [acceso, setAcceso] = useState<boolean | null>(null);
+  useEffect(() => {
+    fetch("/api/config/trading")
+      .then((r) => r.json())
+      .then((r) => setAcceso(!!r?.acceso))
+      .catch(() => setAcceso(false));
+  }, []);
+  if (acceso === null) return <div className="vc-shell text-sm text-muted">Cargando…</div>;
+  if (!acceso) {
+    return (
+      <div className="vc-shell">
+        <div className="vc-card mx-auto max-w-xl text-center">
+          <i className="ti ti-chart-candle text-3xl text-teal" />
+          <h1 className="mt-2 text-xl font-semibold">Trading con reglas que se cumplen solas</h1>
+          <p className="mt-2 text-sm text-muted">
+            Guardián para MT5 que calcula el lote de cada activo, pone tu stop y te bloquea al llegar a tu límite del día. Bitácora automática y % ganado por día, mes
+            y año.
+          </p>
+          <p className="mt-3 text-sm">
+            Viene en <b>Core + Trading</b> ($19.99/mes) y está incluido en <b>Pro</b> y <b>Business</b>.
+          </p>
+          <a href="/dashboard/config#trading" className="vc-btn-primary mt-4 inline-block">
+            Activar Trading
+          </a>
+        </div>
+      </div>
+    );
+  }
+  return <TradingContenido />;
+}
+
+function TradingContenido() {
   const router = useRouter();
   const supabase = createClient();
   const [cargando, setCargando] = useState(true);

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { esPlanValido, esCicloValido, type PlanId, type Ciclo } from "@/lib/stripe";
+import { leerCookieTradingCliente, PRECIO_CORE_TRADING } from "@/lib/trading-plan";
 
 // Página de respaldo del gate de pago. Un usuario cae aquí en 3 casos:
 // (1) el checkout automático de /registro falló (ej. Price ID mal
@@ -46,6 +47,14 @@ function CompletarPagoForm() {
   const [ciclo, setCiclo] = useState<Ciclo>(esCicloValido(cicloQuery) ? cicloQuery : "mensual");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Core + Trading (19 nov 2026): si llegó desde /trading, Core se muestra con Trading.
+  const [esTrading, setEsTrading] = useState(false);
+  useEffect(() => setEsTrading(leerCookieTradingCliente()), []);
+  const planes = PLANES.map((p) =>
+    p.id === "core" && esTrading
+      ? { ...p, nombre: "VICTOR Core + Trading", precioMensual: `$${PRECIO_CORE_TRADING.mensual}/mes`, precioAnual: `$${PRECIO_CORE_TRADING.anual}/año` }
+      : p
+  );
 
   // Si la persona escogió un plan al registrarse con email pero tuvo que
   // confirmar el correo primero, el plan quedó guardado en los metadatos del
@@ -103,7 +112,7 @@ function CompletarPagoForm() {
           </p>
 
           <div className="flex flex-col gap-2">
-            {PLANES.map((p) => (
+            {planes.map((p) => (
               <button
                 key={p.id}
                 type="button"
