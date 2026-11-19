@@ -401,48 +401,85 @@ function RegistroForm() {
           <img src="/victor-avatar.png" alt="VICTOR" className="h-9 w-9 rounded-full object-cover" style={{ background: "#fff" }} />
           <span className="text-lg font-medium">VICTOR</span>
         </div>
+        {esTrading ? (
+          <div className="flex flex-col gap-4 text-sm">
+            <div>
+              <h2 className="mb-2 text-2xl font-semibold text-teal">Tus reglas de trading, cumplidas</h2>
+              <p className="text-muted">
+                No es un bot que promete ganar: es el guardián que te impide perder la cuenta. Tú decides las entradas; él hace la matemática y aplica tus límites.
+              </p>
+            </div>
+            <div>
+              <p className="font-semibold text-text">Qué hace</p>
+              <ul className="mt-1 flex flex-col gap-1 text-muted">
+                <li>✓ Calcula el lote de cada trade para arriesgar lo que tú decidas (ej. $21 al día ÷ 3 pérdidas = $7)</li>
+                <li>✓ Pone el stop según lo que se mueve cada activo y tu take profit</li>
+                <li>✓ Te bloquea al llegar a tu pérdida del día, tus pérdidas o tus trades</li>
+                <li>✓ Cierra lo que abras fuera de tus reglas y te explica por qué</li>
+                <li>✓ Bitácora automática y % ganado por día, mes y año</li>
+              </ul>
+            </div>
+            <div>
+              <p className="font-semibold text-text">Dónde funciona</p>
+              <ul className="mt-1 flex flex-col gap-1 text-muted">
+                <li>✓ MetaTrader 5 con cualquier broker (Axi, IC Markets, Pepperstone…)</li>
+                <li>✓ Forex, oro, índices, acciones, futuros y cripto</li>
+                <li>✓ Cuentas reales, demo y de fondeo en MT5</li>
+                <li>✓ MT5 en Windows o en un VPS (para que corra 24/7)</li>
+              </ul>
+              <p className="mt-1 text-[12px] text-muted">Por ahora no funciona en MT4, cTrader ni TradingView.</p>
+            </div>
+            <div>
+              <p className="font-semibold text-text">Incluye VICTOR Core</p>
+              <p className="text-muted">Banco conectado, presupuesto, deudas y metas, y VICTOR por chat 24/7.</p>
+            </div>
+          </div>
+        ) : (
+          <>
         <div>
-          <h2 className="mb-2 text-2xl font-semibold text-teal">Escoge cómo empezar</h2>
-          <p className="text-sm text-muted">
-            VICTOR se adapta a lo que necesites — desde organizar tus finanzas tú mismo hasta que todo quede
-            automático.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-sm">
-          <div>
-            <p className="font-semibold text-text">Gratis</p>
-            <p className="text-muted">
-              Tú organizas: sube tus estados de cuenta (CSV/Excel) y categoriza tus gastos, guarda documentos en la
-              Documentos, anota tus Citas y pon Metas. Sin conectar banco ni hablar con VICTOR.
+            <h2 className="mb-2 text-2xl font-semibold text-teal">Escoge cómo empezar</h2>
+            <p className="text-sm text-muted">
+              VICTOR se adapta a lo que necesites — desde organizar tus finanzas tú mismo hasta que todo quede
+              automático.
             </p>
           </div>
-          <div>
-            <p className="font-semibold text-text">Core — personal</p>
-            <p className="text-muted">
-              Todo automático: VICTOR conecta tu banco (Plaid) y categoriza cada transacción, contesta lo que sea de
-              tu dinero 24/7, te recuerda tus citas y avisa de documentos antes de que venzan.
-            </p>
+          <div className="flex flex-col gap-4 text-sm">
+            <div>
+              <p className="font-semibold text-text">Gratis</p>
+              <p className="text-muted">
+                Tú organizas: sube tus estados de cuenta (CSV/Excel) y categoriza tus gastos, guarda documentos en la
+                Documentos, anota tus Citas y pon Metas. Sin conectar banco ni hablar con VICTOR.
+              </p>
+            </div>
+            <div>
+              <p className="font-semibold text-text">Core — personal</p>
+              <p className="text-muted">
+                Todo automático: VICTOR conecta tu banco (Plaid) y categoriza cada transacción, contesta lo que sea de
+                tu dinero 24/7, te recuerda tus citas y avisa de documentos antes de que venzan.
+              </p>
+            </div>
+            <div>
+              <p className="font-semibold text-text">Pro — negocio</p>
+              <p className="text-muted">
+                Todo lo de Core, más Facturación, cotizaciones, cobros con tarjeta y reportes listos para Hacienda.
+              </p>
+            </div>
+            {/* Business (3 oct 2026) — "Pagos a contratistas" se movió aquí
+                desde Pro, Joel: "tambien dice Pagos hay q quitarlo pq eso es
+                de Business". Coincide con la copia real de la landing
+                (app/landing-pricing.tsx / lib/victor/landing-system-prompt.ts):
+                retención 480.6SP automática, depósito 480.9A y 1 acceso de
+                secretaria/administrador + hasta 3 técnicos incluidos. */}
+            <div>
+              <p className="font-semibold text-text">Business — todo incluido</p>
+              <p className="text-muted">
+                Todo lo de Pro, más pagos a contratistas con retención 480.6SP automática, 1 acceso de secretaria o
+                administrador y hasta 3 técnicos de campo incluidos.
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="font-semibold text-text">Pro — negocio</p>
-            <p className="text-muted">
-              Todo lo de Core, más Facturación, cotizaciones, cobros con tarjeta y reportes listos para Hacienda.
-            </p>
-          </div>
-          {/* Business (3 oct 2026) — "Pagos a contratistas" se movió aquí
-              desde Pro, Joel: "tambien dice Pagos hay q quitarlo pq eso es
-              de Business". Coincide con la copia real de la landing
-              (app/landing-pricing.tsx / lib/victor/landing-system-prompt.ts):
-              retención 480.6SP automática, depósito 480.9A y 1 acceso de
-              secretaria/administrador + hasta 3 técnicos incluidos. */}
-          <div>
-            <p className="font-semibold text-text">Business — todo incluido</p>
-            <p className="text-muted">
-              Todo lo de Pro, más pagos a contratistas con retención 480.6SP automática, 1 acceso de secretaria o
-              administrador y hasta 3 técnicos de campo incluidos.
-            </p>
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
       {/* Panel de las 3 tarjetas */}
@@ -505,7 +542,9 @@ function RegistroForm() {
                 </button>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className={esTrading ? "mx-auto grid max-w-sm gap-4" : "grid gap-4 md:grid-cols-2 lg:grid-cols-4"}>
+                {!esTrading && (
+                <>
                 {/* Tarjeta Gratis */}
                 <div className="vc-card flex flex-col gap-3 p-6 text-center">
                   <p className="text-lg font-semibold text-text">Gratis</p>
@@ -536,6 +575,8 @@ function RegistroForm() {
                   </button>
                 </div>
 
+                </>
+                )}
                 {/* Tarjeta Core */}
                 <div
                   className={`vc-card flex flex-col gap-3 p-6 text-center ${
@@ -553,13 +594,23 @@ function RegistroForm() {
                       ${anualPorMesCore}/mes · ahorra {ahorroCore}%
                     </p>
                   )}
-                  <ul className="flex flex-1 flex-col gap-1.5 text-left text-sm">
-                    <li className="text-text">✓ Banco conectado (Plaid)</li>
-                    <li className="text-text">✓ VICTOR, tu asesor por chat, 24/7</li>
-                    <li className="text-text">✓ Categorización automática</li>
-                    <li className="text-text">✓ Metas, Documentos y Citas</li>
-                    <li className="text-text">✓ Reportes listos para Hacienda</li>
-                  </ul>
+                  {esTrading ? (
+                    <ul className="flex flex-1 flex-col gap-1.5 text-left text-sm">
+                      <li className="text-text">✓ Guardián para MT5 (lote, stop y bloqueo)</li>
+                      <li className="text-text">✓ Límites del día como cuenta de fondeo</li>
+                      <li className="text-text">✓ Bitácora y % por día, mes y año</li>
+                      <li className="text-text">✓ Forex, oro, índices, acciones y cripto</li>
+                      <li className="text-text">✓ Todo VICTOR Core incluido</li>
+                    </ul>
+                  ) : (
+                    <ul className="flex flex-1 flex-col gap-1.5 text-left text-sm">
+                      <li className="text-text">✓ Banco conectado (Plaid)</li>
+                      <li className="text-text">✓ VICTOR, tu asesor por chat, 24/7</li>
+                      <li className="text-text">✓ Categorización automática</li>
+                      <li className="text-text">✓ Metas, Documentos y Citas</li>
+                      <li className="text-text">✓ Reportes listos para Hacienda</li>
+                    </ul>
+                  )}
                   <p className="text-sm text-muted">{finePrint("core")}</p>
                   <TerminosCheckbox aceptaTerminos={!!terminos.core} setAceptaTerminos={setTerminosDe("core")} />
                   <button
@@ -568,7 +619,7 @@ function RegistroForm() {
                     disabled={loading || !!oauthEnCurso || !terminos.core}
                     onClick={() => continuarConOAuth("google", false, "core")}
                   >
-                    {oauthEnCurso === "google" ? "..." : esReferido ? "Activar Core — primer mes gratis" : "Activar Core"}
+                    {oauthEnCurso === "google" ? "..." : esTrading ? "Empezar 7 días gratis" : esReferido ? "Activar Core — primer mes gratis" : "Activar Core"}
                   </button>
                   <button
                     type="button"
@@ -580,6 +631,8 @@ function RegistroForm() {
                   </button>
                 </div>
 
+                {!esTrading && (
+                <>
                 {/* Tarjeta Pro */}
                 <div
                   className={`vc-card flex flex-col gap-3 p-6 text-center ${
@@ -672,7 +725,25 @@ function RegistroForm() {
                     o con email
                   </button>
                 </div>
+                </>
+                )}
               </div>
+
+              {esTrading && (
+                <p className="mt-4 text-center text-sm text-muted">
+                  ¿Tienes negocio?{" "}
+                  <button
+                    type="button"
+                    className="font-medium text-teal underline"
+                    onClick={() => {
+                      document.cookie = "vc_trading=; Max-Age=0; Path=/";
+                      setEsTrading(false);
+                    }}
+                  >
+                    Ver Pro y Business (incluyen Trading)
+                  </button>
+                </p>
+              )}
 
               <p className="mt-5 text-center text-sm text-muted">
                 ¿Ya tienes cuenta?{" "}
