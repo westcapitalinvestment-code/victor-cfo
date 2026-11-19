@@ -689,8 +689,28 @@ void UpdatePL()
    }
 }
 
+// Algo Trading apagado = el guardian no puede poner stops, cerrar ni bloquear
+bool g_algoAvisado = false;
+bool AlgoOff()
+{
+   return !TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) || !MQLInfoInteger(MQL_TRADE_ALLOWED);
+}
+
 void UpdatePanel()
 {
+   if(AlgoOff())
+   {
+      if(!g_algoAvisado) Alert("VictorGuard: Algo Trading esta APAGADO. No puedo poner stops ni cerrar trades. Activa el boton Algo Trading.");
+      g_algoAvisado = true;
+      ObjectSetString(0, P + "ST", OBJPROP_TEXT, "ALGO TRADING APAGADO: NO te estoy protegiendo");
+      ObjectSetInteger(0, P + "ST", OBJPROP_COLOR, clrRed);
+      ObjectSetString(0, P + "LT", OBJPROP_TEXT, "Activa el boton Algo Trading (verde) en la barra de MT5");
+      ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, clrRed);
+      ChartRedraw();
+      return;
+   }
+   g_algoAvisado = false;
+   ObjectSetInteger(0, P + "ST", OBJPROP_COLOR, clrOrange);
    string why;
    if(!IsBlocked(why))
    {
@@ -874,18 +894,21 @@ int OnInit()
    ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, clrSilver);
    ObjectSetInteger(0, P + "LT", OBJPROP_FONTSIZE, 10);
    ObjectCreate(0, P + "TM", OBJ_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, P + "TM", OBJPROP_XDISTANCE, 10);
-   ObjectSetInteger(0, P + "TM", OBJPROP_YDISTANCE, 108);
+   // cierre de la vela arriba a la derecha (debajo del nombre del guardian)
+   ObjectSetInteger(0, P + "TM", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+   ObjectSetInteger(0, P + "TM", OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+   ObjectSetInteger(0, P + "TM", OBJPROP_XDISTANCE, 15);
+   ObjectSetInteger(0, P + "TM", OBJPROP_YDISTANCE, 30);
    ObjectSetInteger(0, P + "TM", OBJPROP_COLOR, clrDeepSkyBlue);
    ObjectSetInteger(0, P + "TM", OBJPROP_FONTSIZE, 12);
    ObjectCreate(0, P + "SY", OBJ_LABEL, 0, 0, 0);
    ObjectSetInteger(0, P + "SY", OBJPROP_XDISTANCE, 10);
-   ObjectSetInteger(0, P + "SY", OBJPROP_YDISTANCE, 135);
+   ObjectSetInteger(0, P + "SY", OBJPROP_YDISTANCE, 110);
    ObjectSetInteger(0, P + "SY", OBJPROP_COLOR, clrSilver);
    ObjectSetInteger(0, P + "SY", OBJPROP_FONTSIZE, 9);
    ObjectCreate(0, P + "PL", OBJ_LABEL, 0, 0, 0);
    ObjectSetInteger(0, P + "PL", OBJPROP_XDISTANCE, 10);
-   ObjectSetInteger(0, P + "PL", OBJPROP_YDISTANCE, 158);
+   ObjectSetInteger(0, P + "PL", OBJPROP_YDISTANCE, 133);
    ObjectSetInteger(0, P + "PL", OBJPROP_COLOR, clrSilver);
    ObjectSetInteger(0, P + "PL", OBJPROP_FONTSIZE, 13);
    EventSetTimer(1);

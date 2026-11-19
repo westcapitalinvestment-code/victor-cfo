@@ -1218,7 +1218,10 @@ export default function TradingPage() {
                       En MT5: <b>Herramientas → Opciones → Asesores Expertos</b>, marca <b>Permitir WebRequest para las URL listadas</b> y agrega{" "}
                       <b>{typeof window !== "undefined" ? window.location.origin : "https://www.victorcfo.com"}</b>. Así tus trades llegan solos a la bitácora.
                     </li>
-                    <li>Activa el botón <b>Algo Trading</b> de la barra de MT5 (debe quedar verde).</li>
+                    <li>
+                      Activa el botón <b>Algo Trading</b> de la barra de MT5 (debe quedar verde). Para que no se apague solo: en <b>Herramientas → Opciones → Asesores Expertos</b> desmarca
+                      las casillas de <b>“Deshabilitar el trading algorítmico al cambiar de cuenta / de perfil”</b>. Si se apaga, el guardián te avisa en rojo: sin Algo Trading no te puede proteger.
+                    </li>
                     <li>
                       En el <b>Navegador</b> (Ctrl+N) busca <b>Asesores Expertos → VictorGuard</b> y arrástralo a <b>un solo gráfico</b>, de cualquier activo. En la ventana que abre, pestaña
                       <b> Común</b>, marca <b>Permitir Algo Trading</b> y pulsa Aceptar.
