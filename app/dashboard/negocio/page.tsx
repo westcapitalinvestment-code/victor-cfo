@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import DesgloseBalance from "../desglose-balance";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatMoney } from "@/lib/format";
@@ -140,12 +141,12 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
         .order("fecha_vencimiento", { ascending: true }),
       supabase
         .from("plaid_accounts")
-        .select("current_balance, type, subtype")
+        .select("id, name, nickname, mask, available_balance, current_balance, type, subtype")
         .eq("owner_id", user.id)
         .eq("entity_id", entidadId),
       supabase
         .from("manual_accounts")
-        .select("current_balance, type, subtype")
+        .select("id, name, mask, current_balance, type, subtype")
         .eq("owner_id", user.id)
         .eq("entity_id", entidadId),
       // Próxima cita (1 sept 2026, migración 0041) — mismo criterio que
@@ -266,6 +267,20 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
   );
 
   const cuentasDeLaEntidad = [...(cuentasPlaidNegocio ?? []), ...(cuentasManualesNegocio ?? [])];
+  // Desglose por cuenta del Balance de negocio (se abre tocando "Ver por cuenta").
+  const desgloseNegocio = [
+    ...(cuentasPlaidNegocio ?? [])
+      .filter((c) => c.type === "depository")
+      .map((c) => ({
+        id: `p-${c.id}`,
+        nombre: `${c.nickname || c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`,
+        saldo: Number(c.current_balance || 0),
+        disponible: c.available_balance == null ? null : Number(c.available_balance),
+      })),
+    ...(cuentasManualesNegocio ?? [])
+      .filter((c) => c.type === "depository")
+      .map((c) => ({ id: `m-${c.id}`, nombre: `${c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`, saldo: Number(c.current_balance || 0), disponible: null })),
+  ];
   const cuentasLiquidasNegocio = cuentasDeLaEntidad.filter((c) => c.type === "depository");
   const balanceNegocio = cuentasLiquidasNegocio.reduce((sum, c) => sum + Number(c.current_balance || 0), 0);
   // Ahorrado (4 sept 2026, paridad con Personal) — mismo criterio: solo el
@@ -439,6 +454,7 @@ export default async function InicioNegocioPage({ searchParams }: { searchParams
           </div>
           <PrivacyToggle />
         </div>
+        {tieneCuentas && <DesgloseBalance cuentas={desgloseNegocio} />}
         {!tieneCuentas && (
           <Link href="/dashboard/cuentas" className="mt-2 inline-block text-xs font-medium text-white underline">
             Asigna una cuenta a esta entidad →

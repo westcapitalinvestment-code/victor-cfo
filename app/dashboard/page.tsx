@@ -14,6 +14,7 @@ import ImpuestosEstimadosCard from "./impuestos-estimados-card";
 import Regla503020Card from "./regla-503020-card";
 import MetricasGratis from "./metricas-gratis";
 import BotonBalance from "./boton-balance";
+import DesgloseBalance from "./desglose-balance";
 import PrimerPasoGratis from "./primer-paso-gratis";
 import AlertasGratisCard from "./alertas-gratis-card";
 import PlanGratisCard, { type AporteFila } from "./plan-gratis-card";
@@ -170,7 +171,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // seguía sumando en Personal aunque el usuario la hubiera movido.
   let cuentasQuery = supabase
     .from("plaid_accounts")
-    .select("current_balance, es_negocio, type, subtype, entity_id")
+    .select("id, name, nickname, mask, available_balance, current_balance, es_negocio, type, subtype, entity_id")
     .eq("owner_id", user.id)
     .is("entity_id", null);
   if (!esPro) cuentasQuery = cuentasQuery.eq("es_negocio", false);
@@ -187,13 +188,27 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // contaba dos veces — aquí en Personal Y en el Inicio de esa entidad.
   let manualesQuery = supabase
     .from("manual_accounts")
-    .select("current_balance, es_negocio, type, subtype, entity_id")
+    .select("id, name, mask, current_balance, es_negocio, type, subtype, entity_id")
     .eq("owner_id", user.id)
     .is("entity_id", null);
   if (!esPro) manualesQuery = manualesQuery.eq("es_negocio", false);
   const { data: cuentasManuales } = await manualesQuery;
 
   const todasLasCuentas = [...(cuentasPlaid ?? []), ...(cuentasManuales ?? [])];
+  // Desglose por cuenta del Balance personal (se abre tocando "Ver por cuenta").
+  const desgloseLiquidas = [
+    ...(cuentasPlaid ?? [])
+      .filter((c) => c.type === "depository")
+      .map((c) => ({
+        id: `p-${c.id}`,
+        nombre: `${c.nickname || c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`,
+        saldo: Number(c.current_balance || 0),
+        disponible: c.available_balance == null ? null : Number(c.available_balance),
+      })),
+    ...(cuentasManuales ?? [])
+      .filter((c) => c.type === "depository")
+      .map((c) => ({ id: `m-${c.id}`, nombre: `${c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`, saldo: Number(c.current_balance || 0), disponible: null })),
+  ];
   const bancoConectado = todasLasCuentas.length > 0;
 
   // "Balance personal" = solo dinero líquido de verdad (checking + savings,
@@ -886,6 +901,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </div>
           <PrivacyToggle />
         </div>
+        {bancoConectado && (desgloseLiquidas.length > 1 || profile.plan !== "gratis") && <DesgloseBalance cuentas={desgloseLiquidas} />}
         {!bancoConectado && profile.plan === "gratis" && (
           <>
             <p className="mt-2 text-xs text-white/90">Dinos con cuánto dinero empiezas y todo lo que anotes lo suma o lo resta.</p>
