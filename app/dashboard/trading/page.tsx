@@ -1283,6 +1283,21 @@ function TradingContenido() {
                 </div>
                 <details className="text-[14px] text-muted" open={!cuenta?.last_sync_at}>
                   <summary className="cursor-pointer text-sm font-medium text-teal">Cómo instalarlo en MT5 (5 minutos, una sola vez)</summary>
+                  <div className="mt-2 rounded-lg border border-border bg-bg p-2.5">
+                    <p className="font-medium text-[#1B3A5C]">¿Tienes Mac?</p>
+                    <p>
+                      Funciona igual. Baja <b>MT5 para Mac</b> (app de escritorio) desde tu broker o desde metatrader5.com: necesita macOS Catalina o más nuevo, Intel o Apple M1 en adelante.
+                      El MT5 del navegador (web) <b>no sirve</b>: no acepta asesores expertos. Diferencias en los pasos de abajo:
+                    </p>
+                    <ul className="mt-1 list-disc pl-4">
+                      <li>
+                        Paso 2: si “Abrir carpeta de datos” no te deja pegar el archivo, en el <b>Finder</b> pulsa <b>Cmd+Shift+G</b> y pega{" "}
+                        <b className="break-all">~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts</b>, y arrastra ahí el archivo desde Descargas.
+                      </li>
+                      <li>Las teclas F4 y F7 son <b>fn+F4</b> y <b>fn+F7</b> (o usa los botones MetaEditor y Compilar). Dentro de MT5 los atajos van con <b>Control</b>, no con Command: Ctrl+N.</li>
+                      <li>La Mac tiene que estar prendida, sin dormir y con MT5 abierto para que el guardián te proteja. Para 24/7 usa un VPS con Windows.</li>
+                    </ul>
+                  </div>
                   <ol className="mt-2 flex list-decimal flex-col gap-1 pl-4">
                     <li>Arriba, pulsa <b>Descargar para MT5</b>. El archivo <b>VictorGuard.mq5</b> ya lleva tus reglas y tu conexión con VICTOR.</li>
                     <li>En MT5 abre <b>Archivo → Abrir carpeta de datos</b>, entra a <b>MQL5 → Experts</b> y copia ahí el archivo (si ya tenías uno, reemplázalo).</li>
