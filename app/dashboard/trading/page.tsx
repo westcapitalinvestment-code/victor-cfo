@@ -1406,7 +1406,7 @@ function NotaTrade({
             {v ? "Sí" : "No"}
           </button>
         ))}
-        <button type="button" className="ml-auto text-teal disabled:opacity-50" disabled={estado === "guardando"} onClick={guardar}>
+        <button type="button" className="ml-auto rounded-pill bg-[#1d6fe0] px-3 py-0.5 font-medium text-white disabled:opacity-50" disabled={estado === "guardando"} onClick={guardar}>
           {estado === "guardando" ? "Guardando..." : estado === "ok" ? "✓ Guardado" : "Guardar"}
         </button>
       </div>
@@ -1482,7 +1482,7 @@ function AdjuntosTrade({ tradeId }: { tradeId: string }) {
       <div className="flex flex-wrap items-center gap-2">
         <span>Archivos</span>
         <span className="text-[12px]">capturas o PDF · arrastra aquí, o haz clic en este cuadro y pega con Ctrl+V</span>
-        <button type="button" className="ml-auto text-teal disabled:opacity-50" disabled={subiendo} onClick={() => input.current?.click()}>
+        <button type="button" className="ml-auto rounded-pill border border-[#1d6fe0] px-3 py-0.5 font-medium text-[#1d6fe0] disabled:opacity-50" disabled={subiendo} onClick={() => input.current?.click()}>
           {subiendo ? "Subiendo..." : "+ Subir archivo"}
         </button>
         <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" multiple hidden onChange={(e) => subir(Array.from(e.target.files ?? []))} />
@@ -1500,7 +1500,7 @@ function AdjuntosTrade({ tradeId }: { tradeId: string }) {
                     <img src={url} alt={a.nombre ?? "captura"} className="h-20 w-28 rounded border border-border object-cover" />
                   </button>
                 ) : (
-                  <a href={url} target="_blank" rel="noreferrer" className="flex h-20 w-28 items-center justify-center overflow-hidden rounded border border-border p-1 text-center text-[12px] text-teal">
+                  <a href={url} target="_blank" rel="noreferrer" className="flex h-20 w-28 items-center justify-center overflow-hidden rounded border border-border p-1 text-center text-[12px] text-[#1d6fe0]">
                     📄 {a.nombre ?? "PDF"}
                   </a>
                 )}
