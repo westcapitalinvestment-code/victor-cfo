@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/client";
@@ -25,6 +25,7 @@ import {
 } from "@/lib/trading";
 import { generarGuardianMQ5, type ModoStop, type TemporalidadATR } from "@/lib/trading-guard";
 import { Anillo, BarrasMensuales, Calendario, CurvaCapital, nombreMes, type MesPct } from "./graficos";
+import Estadisticas from "./estadisticas";
 
 // Módulo Trading (oct 2026) — organizador, NO da señales ni consejos.
 // Panel (calendario, curva, perfil), Bitácora por mes y por día, y Riesgo
@@ -58,6 +59,8 @@ type FilaTrade = {
   ganancia: number;
   nota: string | null;
   cumpli_plan: boolean | null;
+  timeframe?: string | null;
+  setup?: string | null;
 };
 type Guardian = {
   guard_symbol: string;
@@ -166,7 +169,7 @@ function TradingContenido() {
   const router = useRouter();
   const supabase = createClient();
   const [cargando, setCargando] = useState(true);
-  const [tab, setTab] = useState<"panel" | "bitacora" | "riesgo">("panel");
+  const [tab, setTab] = useState<"panel" | "bitacora" | "estadisticas" | "riesgo">("panel");
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [cuentaId, setCuentaId] = useState<string | null>(null);
   const [trades, setTrades] = useState<FilaTrade[]>([]);
@@ -398,10 +401,11 @@ function TradingContenido() {
   }
 
   // Devuelve un texto de error si falló (null = guardado), para que la tarjeta lo muestre.
-  async function guardarNota(t: FilaTrade, nota: string, cumpli: boolean | null): Promise<string | null> {
-    const { error: e } = await supabase.from("trades").update({ nota: nota.trim() || null, cumpli_plan: cumpli }).eq("id", t.id);
+  async function guardarNota(t: FilaTrade, nota: string, cumpli: boolean | null, tf: string | null, setup: string | null): Promise<string | null> {
+    const cambios = { nota: nota.trim() || null, cumpli_plan: cumpli, timeframe: tf || null, setup: setup?.trim().slice(0, 60) || null };
+    const { error: e } = await supabase.from("trades").update(cambios).eq("id", t.id);
     if (e) return e.message;
-    setTrades((prev) => prev.map((x) => (x.id === t.id ? { ...x, nota: nota.trim() || null, cumpli_plan: cumpli } : x)));
+    setTrades((prev) => prev.map((x) => (x.id === t.id ? { ...x, ...cambios } : x)));
     return null;
   }
 
@@ -420,6 +424,8 @@ function TradingContenido() {
     [trades, reglas, balanceInicial, riesgoFijoUSD]
   );
   const filaPorTicket = useMemo(() => new Map(trades.map((t) => [t.ticket, t])), [trades]);
+  const etiquetas = useMemo(() => new Map(trades.map((t) => [t.ticket, { tf: t.timeframe ?? null, setup: t.setup ?? null }])), [trades]);
+  const setupsUsados = useMemo(() => Array.from(new Set(trades.map((t) => t.setup).filter((x): x is string => !!x))).sort(), [trades]);
   const diasAll = useMemo(() => resultadosPorDia(evaluadosAll), [evaluadosAll]);
   const mesesDisp = useMemo(() => Array.from(new Set(evaluadosAll.map((t) => fechaCierre(t).slice(0, 7)))).sort(), [evaluadosAll]);
 
@@ -598,7 +604,7 @@ function TradingContenido() {
           {t.violaciones.map((v) => (
             <p key={v} className="text-red">• {NOMBRE_REGLA[v]}</p>
           ))}
-          {f && <NotaTrade t={f} onGuardar={guardarNota} />}
+          {f && <NotaTrade t={f} onGuardar={guardarNota} setups={setupsUsados} />}
         </div>
       </details>
     );
@@ -725,7 +731,7 @@ function TradingContenido() {
           )}
 
           <div className="mb-4 flex gap-2">
-            {([["panel", "Panel"], ["bitacora", "Bitácora"], ["riesgo", "Riesgo"]] as const).map(([t, nombre]) => (
+            {([["panel", "Panel"], ["bitacora", "Bitácora"], ["estadisticas", "Estadísticas"], ["riesgo", "Riesgo"]] as const).map(([t, nombre]) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -871,6 +877,9 @@ function TradingContenido() {
               )}
             </>
           )}
+
+          {/* ---------------- ESTADÍSTICAS ---------------- */}
+          {tab === "estadisticas" && <Estadisticas trades={evaluados} etiquetas={etiquetas} />}
 
           {/* ---------------- RIESGO ---------------- */}
           {tab === "riesgo" && (
@@ -1331,13 +1340,26 @@ function TradingContenido() {
   );
 }
 
-function NotaTrade({ t, onGuardar }: { t: FilaTrade; onGuardar: (t: FilaTrade, nota: string, cumpli: boolean | null) => Promise<string | null> }) {
+const TFS = ["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"];
+type Adjunto = { id: string; nombre: string | null; tipo: string | null; bytes: number | null };
+
+function NotaTrade({
+  t,
+  onGuardar,
+  setups,
+}: {
+  t: FilaTrade;
+  onGuardar: (t: FilaTrade, nota: string, cumpli: boolean | null, tf: string | null, setup: string | null) => Promise<string | null>;
+  setups: string[];
+}) {
   const [nota, setNota] = useState(t.nota ?? "");
   const [cumpli, setCumpli] = useState<boolean | null>(t.cumpli_plan);
+  const [tf, setTf] = useState<string>(t.timeframe ?? "");
+  const [setup, setSetup] = useState<string>(t.setup ?? "");
   const [estado, setEstado] = useState<"" | "guardando" | "ok" | string>("");
   async function guardar() {
     setEstado("guardando");
-    const err = await onGuardar(t, nota, cumpli);
+    const err = await onGuardar(t, nota, cumpli, tf || null, setup || null);
     if (err) return setEstado(`No se pudo guardar: ${err}`);
     setEstado("ok");
     setTimeout(() => setEstado((s) => (s === "ok" ? "" : s)), 2500);
@@ -1345,6 +1367,33 @@ function NotaTrade({ t, onGuardar }: { t: FilaTrade; onGuardar: (t: FilaTrade, n
   return (
     <div className="flex flex-col gap-2">
       <textarea className="vc-input" rows={2} placeholder="Nota: ¿por qué entraste?" value={nota} onChange={(e) => { setNota(e.target.value); setEstado(""); }} />
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1">
+          TF
+          <select className="vc-input !w-auto !py-1" value={tf} onChange={(e) => { setTf(e.target.value); setEstado(""); }}>
+            <option value="">—</option>
+            {TFS.map((x) => (
+              <option key={x} value={x}>{x}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex min-w-[180px] flex-1 items-center gap-1">
+          Setup
+          <input
+            className="vc-input !py-1"
+            list={`setups-${t.id}`}
+            maxLength={60}
+            placeholder="ej. ruptura, pullback"
+            value={setup}
+            onChange={(e) => { setSetup(e.target.value); setEstado(""); }}
+          />
+          <datalist id={`setups-${t.id}`}>
+            {setups.map((x) => (
+              <option key={x} value={x} />
+            ))}
+          </datalist>
+        </label>
+      </div>
       <div className="flex items-center gap-2">
         <span>¿Cumplí mi plan?</span>
         {[true, false].map((v) => (
@@ -1362,6 +1411,119 @@ function NotaTrade({ t, onGuardar }: { t: FilaTrade; onGuardar: (t: FilaTrade, n
         </button>
       </div>
       {estado && estado !== "ok" && estado !== "guardando" && <p className="text-red">{estado}</p>}
+      <AdjuntosTrade tradeId={t.id} />
+    </div>
+  );
+}
+
+// Archivos del trade (capturas de la gráfica, PDF). Se cargan al abrir el trade.
+function AdjuntosTrade({ tradeId }: { tradeId: string }) {
+  const [lista, setLista] = useState<Adjunto[] | null>(null);
+  const [subiendo, setSubiendo] = useState(false);
+  const [err, setErr] = useState("");
+  const [grande, setGrande] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    fetch(`/api/trading/adjuntos?tradeId=${tradeId}`)
+      .then((r) => r.json())
+      .then((j) => vivo && setLista(j.adjuntos ?? []))
+      .catch(() => vivo && setLista([]));
+    return () => {
+      vivo = false;
+    };
+  }, [tradeId]);
+
+  async function subir(files: File[]) {
+    if (!files.length) return;
+    setSubiendo(true);
+    setErr("");
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append("file", f, f.name || `captura-${Date.now()}.png`);
+      fd.append("tradeId", tradeId);
+      const r = await fetch("/api/trading/adjuntos", { method: "POST", body: fd });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setErr(j.error ?? "No se pudo subir.");
+        break;
+      }
+      setLista((prev) => [...(prev ?? []), j.adjunto]);
+    }
+    setSubiendo(false);
+    if (input.current) input.current.value = "";
+  }
+
+  async function borrar(a: Adjunto) {
+    if (!confirm(`¿Borrar ${a.nombre ?? "este archivo"}?`)) return;
+    const r = await fetch(`/api/trading/adjuntos/${a.id}`, { method: "DELETE" });
+    if (r.ok) setLista((prev) => (prev ?? []).filter((x) => x.id !== a.id));
+    else setErr("No se pudo borrar.");
+  }
+
+  return (
+    <div
+      className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-2 outline-none focus:border-teal"
+      tabIndex={0}
+      onPaste={(e) => {
+        const files = Array.from(e.clipboardData.files);
+        if (files.length) {
+          e.preventDefault();
+          subir(files);
+        }
+      }}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        subir(Array.from(e.dataTransfer.files));
+      }}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span>Archivos</span>
+        <span className="text-[12px]">capturas o PDF · arrastra aquí, o haz clic en este cuadro y pega con Ctrl+V</span>
+        <button type="button" className="ml-auto text-teal disabled:opacity-50" disabled={subiendo} onClick={() => input.current?.click()}>
+          {subiendo ? "Subiendo..." : "+ Subir archivo"}
+        </button>
+        <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" multiple hidden onChange={(e) => subir(Array.from(e.target.files ?? []))} />
+      </div>
+      {lista && lista.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {lista.map((a) => {
+            const url = `/api/trading/adjuntos/${a.id}/ver`;
+            const img = (a.tipo ?? "").startsWith("image/");
+            return (
+              <div key={a.id} className="relative">
+                {img ? (
+                  <button type="button" onClick={() => setGrande(url)}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt={a.nombre ?? "captura"} className="h-20 w-28 rounded border border-border object-cover" />
+                  </button>
+                ) : (
+                  <a href={url} target="_blank" rel="noreferrer" className="flex h-20 w-28 items-center justify-center overflow-hidden rounded border border-border p-1 text-center text-[12px] text-teal">
+                    📄 {a.nombre ?? "PDF"}
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => borrar(a)}
+                  className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full bg-red text-[12px] leading-5 text-white"
+                  aria-label="Borrar archivo"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {err && <p className="text-red">{err}</p>}
+      {grande && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setGrande(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={grande} alt="captura" className="max-h-full max-w-full rounded" />
+        </div>
+      )}
     </div>
   );
 }
