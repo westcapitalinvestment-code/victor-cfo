@@ -9,7 +9,8 @@ import { aHoraPR, type TradeEvaluado } from "@/lib/trading";
 // evaluados (con el filtro de mes del panel). Horas y días en hora de Puerto
 // Rico. TF y setup los etiqueta el usuario en cada trade de la Bitácora.
 
-type Etiquetas = Map<string, { tf: string | null; setup: string | null }>;
+type Etiquetas = Map<string, { tf: string | null; setup: string | null; checks: Record<string, boolean> }>;
+type ReglaPropia = { id: string; texto: string };
 type Fila = { clave: string; n: number; ganados: number; neto: number; brutoG: number; brutoP: number };
 
 const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -134,7 +135,62 @@ function HorasBarras({ filas }: { filas: Fila[] }) {
   );
 }
 
-export default function Estadisticas({ trades, etiquetas }: { trades: TradeEvaluado[]; etiquetas: Etiquetas }) {
+function resumen(l: TradeEvaluado[]) {
+  if (!l.length) return null;
+  const neto = l.reduce((a, t) => a + t.neto, 0);
+  return { n: l.length, gana: Math.round((l.filter((t) => t.neto > 0).length / l.length) * 100), prom: neto / l.length };
+}
+
+function TablaChecklist({ reglas, trades, etiquetas }: { reglas: ReglaPropia[]; trades: TradeEvaluado[]; etiquetas: Etiquetas }) {
+  const filas = reglas.map((r) => {
+    const marcados = trades.filter((t) => etiquetas.get(t.ticket)?.checks[r.id] !== undefined);
+    return {
+      r,
+      marcados: marcados.length,
+      si: resumen(marcados.filter((t) => etiquetas.get(t.ticket)!.checks[r.id])),
+      no: resumen(marcados.filter((t) => !etiquetas.get(t.ticket)!.checks[r.id])),
+    };
+  });
+  const celda = (x: ReturnType<typeof resumen>) =>
+    x ? (
+      <>
+        <span className={x.prom >= 0 ? "text-teal" : "text-red"}>{formatMoney(x.prom)}</span>
+        <span className="block text-[11px] text-muted">{x.n} trades · {x.gana}% ganados</span>
+      </>
+    ) : (
+      <span className="text-muted">—</span>
+    );
+  return (
+    <div className="vc-card !p-3">
+      <p className="mb-2 text-sm uppercase tracking-wide text-muted">Mi checklist: cuando la cumplo vs cuando no</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="text-left text-muted">
+              <th className="py-1 font-normal">Regla</th>
+              <th className="py-1 text-right font-normal">La cumplí</th>
+              <th className="py-1 text-right font-normal">Promedio ✓</th>
+              <th className="py-1 text-right font-normal">Promedio ✗</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map(({ r, marcados, si, no }) => (
+              <tr key={r.id} className="border-t border-border align-top">
+                <td className="py-1.5 pr-2 font-medium">{r.texto}</td>
+                <td className="py-1.5 text-right">{marcados ? `${Math.round(((si?.n ?? 0) / marcados) * 100)}% (${si?.n ?? 0}/${marcados})` : "—"}</td>
+                <td className="py-1.5 text-right">{celda(si)}</td>
+                <td className="py-1.5 text-right">{celda(no)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-[12px] text-muted">Promedio = lo que ganas o pierdes por trade. Solo cuenta los trades donde marcaste esa regla en la Bitácora.</p>
+    </div>
+  );
+}
+
+export default function Estadisticas({ trades, etiquetas, reglasPropias = [] }: { trades: TradeEvaluado[]; etiquetas: Etiquetas; reglasPropias?: ReglaPropia[] }) {
   const s = useMemo(() => {
     const hora = (t: TradeEvaluado) => Number(aHoraPR(t.hora_apertura).slice(11, 13));
     const diaSem = (t: TradeEvaluado) => new Date(aHoraPR(t.hora_apertura).slice(0, 10) + "T12:00:00Z").getUTCDay();
@@ -187,6 +243,16 @@ export default function Estadisticas({ trades, etiquetas }: { trades: TradeEvalu
   const rompe = reg.find((r) => r.clave.startsWith("Rompiendo"));
   const cumple = reg.find((r) => r.clave.startsWith("Cumpliendo"));
   if (rompe && cumple && rompe.n >= 2) ideas.push(`Cuando cumples tus reglas promedias ${formatMoney(cumple.neto / cumple.n)} por trade; cuando las rompes, ${formatMoney(rompe.neto / rompe.n)}.`);
+  // La regla del checklist que más diferencia hace (mínimo 2 trades de cada lado).
+  let mejorRegla: { texto: string; si: number; no: number } | null = null;
+  for (const r of reglasPropias) {
+    const m = trades.filter((t) => etiquetas.get(t.ticket)?.checks[r.id] !== undefined);
+    const si = resumen(m.filter((t) => etiquetas.get(t.ticket)!.checks[r.id]));
+    const no = resumen(m.filter((t) => !etiquetas.get(t.ticket)!.checks[r.id]));
+    if (si && no && si.n >= 2 && no.n >= 2 && (!mejorRegla || si.prom - no.prom > mejorRegla.si - mejorRegla.no)) mejorRegla = { texto: r.texto, si: si.prom, no: no.prom };
+  }
+  if (mejorRegla && mejorRegla.si > mejorRegla.no)
+    ideas.push(`La regla de tu checklist que más te ayuda es "${mejorRegla.texto}": cumpliéndola promedias ${formatMoney(mejorRegla.si)} por trade; sin cumplirla, ${formatMoney(mejorRegla.no)}.`);
   const ratio = s.promP < 0 ? s.promG / -s.promP : 0;
 
   const tarjetas: [string, string, string?][] = [
@@ -233,6 +299,7 @@ export default function Estadisticas({ trades, etiquetas }: { trades: TradeEvalu
         <Tabla titulo="Por temporalidad (TF)" filas={s.tf} nota="Pon el TF de cada trade en la Bitácora." />
         <Tabla titulo="Por setup / estrategia" filas={s.setup} nota="Ponle nombre a tu setup en cada trade de la Bitácora." />
       </div>
+      {reglasPropias.length > 0 && <TablaChecklist reglas={reglasPropias} trades={trades} etiquetas={etiquetas} />}
       <HorasBarras filas={s.horas} />
       {!s.tf.length && !s.setup.length && (
         <p className="text-center text-[13px] text-muted">

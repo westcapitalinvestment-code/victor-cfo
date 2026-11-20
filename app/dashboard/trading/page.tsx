@@ -26,6 +26,7 @@ import {
 import { generarGuardianMQ5, type ModoStop, type TemporalidadATR } from "@/lib/trading-guard";
 import { Anillo, BarrasMensuales, Calendario, CurvaCapital, nombreMes, type MesPct } from "./graficos";
 import Estadisticas from "./estadisticas";
+import ReglasPropias, { type ReglaPropia } from "./reglas-propias";
 
 // Módulo Trading (oct 2026) — organizador, NO da señales ni consejos.
 // Panel (calendario, curva, perfil), Bitácora por mes y por día, y Riesgo
@@ -209,6 +210,9 @@ function TradingContenido() {
     return () => clearTimeout(t);
   }, [error, msg]);
   const [syncToken, setSyncToken] = useState<string | null>(null);
+  // Mi checklist: reglas propias y sus marcas por trade (trade_id → regla_id → cumplida).
+  const [reglasPropias, setReglasPropias] = useState<ReglaPropia[]>([]);
+  const [checks, setChecks] = useState<Map<string, Record<string, boolean>>>(new Map());
 
   async function cargar(preferida?: string) {
     const { data: u } = await supabase.auth.getUser();
@@ -224,6 +228,17 @@ function TradingContenido() {
       equity_actual: c.equity_actual == null ? null : Number(c.equity_actual),
     }));
     setCuentas(lista);
+    const { data: rp } = await supabase.from("trading_reglas_propias").select("id, texto, orden").order("orden");
+    setReglasPropias((rp ?? []) as ReglaPropia[]);
+    const mapa = new Map<string, Record<string, boolean>>();
+    for (let desde = 0; ; desde += 1000) {
+      const { data: ck } = await supabase.from("trade_checks").select("trade_id, regla_id, cumplida").range(desde, desde + 999);
+      for (const c of (ck ?? []) as { trade_id: string; regla_id: string; cumplida: boolean }[]) {
+        mapa.set(c.trade_id, { ...(mapa.get(c.trade_id) ?? {}), [c.regla_id]: c.cumplida });
+      }
+      if (!ck || ck.length < 1000) break;
+    }
+    setChecks(mapa);
     if (rr) {
       const r = rr as Record<string, unknown>;
       setReglas({ ...REGLAS_POR_DEFECTO, ...(Object.fromEntries(Object.entries(r).filter(([k]) => k in REGLAS_POR_DEFECTO).map(([k, v]) => [k, typeof v === "string" ? Number(v) : v])) as Partial<ReglasRiesgo>) });
@@ -401,11 +416,33 @@ function TradingContenido() {
   }
 
   // Devuelve un texto de error si falló (null = guardado), para que la tarjeta lo muestre.
-  async function guardarNota(t: FilaTrade, nota: string, cumpli: boolean | null, tf: string | null, setup: string | null): Promise<string | null> {
+  async function guardarNota(
+    t: FilaTrade,
+    nota: string,
+    cumpli: boolean | null,
+    tf: string | null,
+    setup: string | null,
+    marcas: Record<string, boolean>
+  ): Promise<string | null> {
     const cambios = { nota: nota.trim() || null, cumpli_plan: cumpli, timeframe: tf || null, setup: setup?.trim().slice(0, 60) || null };
     const { error: e } = await supabase.from("trades").update(cambios).eq("id", t.id);
     if (e) return e.message;
     setTrades((prev) => prev.map((x) => (x.id === t.id ? { ...x, ...cambios } : x)));
+    // Marcas del checklist: se reemplazan todas las de este trade.
+    const { data: u } = await supabase.auth.getUser();
+    const { error: e2 } = await supabase.from("trade_checks").delete().eq("trade_id", t.id);
+    if (e2) return e2.message;
+    const filas = Object.entries(marcas).map(([regla_id, cumplida]) => ({ trade_id: t.id, regla_id, cumplida, owner_id: u.user?.id }));
+    if (filas.length) {
+      const { error: e3 } = await supabase.from("trade_checks").insert(filas);
+      if (e3) return e3.message;
+    }
+    setChecks((prev) => {
+      const m = new Map(prev);
+      if (filas.length) m.set(t.id, { ...marcas });
+      else m.delete(t.id);
+      return m;
+    });
     return null;
   }
 
@@ -424,7 +461,10 @@ function TradingContenido() {
     [trades, reglas, balanceInicial, riesgoFijoUSD]
   );
   const filaPorTicket = useMemo(() => new Map(trades.map((t) => [t.ticket, t])), [trades]);
-  const etiquetas = useMemo(() => new Map(trades.map((t) => [t.ticket, { tf: t.timeframe ?? null, setup: t.setup ?? null }])), [trades]);
+  const etiquetas = useMemo(
+    () => new Map(trades.map((t) => [t.ticket, { tf: t.timeframe ?? null, setup: t.setup ?? null, checks: checks.get(t.id) ?? {} }])),
+    [trades, checks]
+  );
   const setupsUsados = useMemo(() => Array.from(new Set(trades.map((t) => t.setup).filter((x): x is string => !!x))).sort(), [trades]);
   const diasAll = useMemo(() => resultadosPorDia(evaluadosAll), [evaluadosAll]);
   const mesesDisp = useMemo(() => Array.from(new Set(evaluadosAll.map((t) => fechaCierre(t).slice(0, 7)))).sort(), [evaluadosAll]);
@@ -604,7 +644,7 @@ function TradingContenido() {
           {t.violaciones.map((v) => (
             <p key={v} className="text-red">• {NOMBRE_REGLA[v]}</p>
           ))}
-          {f && <NotaTrade t={f} onGuardar={guardarNota} setups={setupsUsados} />}
+          {f && <NotaTrade t={f} onGuardar={guardarNota} setups={setupsUsados} reglasPropias={reglasPropias} marcasIniciales={checks.get(f.id) ?? {}} />}
         </div>
       </details>
     );
@@ -879,7 +919,7 @@ function TradingContenido() {
           )}
 
           {/* ---------------- ESTADÍSTICAS ---------------- */}
-          {tab === "estadisticas" && <Estadisticas trades={evaluados} etiquetas={etiquetas} />}
+          {tab === "estadisticas" && <Estadisticas trades={evaluados} etiquetas={etiquetas} reglasPropias={reglasPropias} />}
 
           {/* ---------------- RIESGO ---------------- */}
           {tab === "riesgo" && (
@@ -1266,6 +1306,8 @@ function TradingContenido() {
                 <p className="text-[13px] text-muted">Para MT4 el programa es distinto y todavía no está disponible. Es una herramienta de control propio, no una señal ni una garantía de resultados.</p>
               </div>
 
+              <ReglasPropias reglas={reglasPropias} onCambio={setReglasPropias} />
+
               <div className="vc-card mb-4 flex flex-col gap-3">
                 <p className="text-sm uppercase tracking-wide text-muted">Calculadora de lote</p>
                 <div className="grid grid-cols-2 gap-3 text-sm">
@@ -1347,11 +1389,16 @@ function NotaTrade({
   t,
   onGuardar,
   setups,
+  reglasPropias,
+  marcasIniciales,
 }: {
   t: FilaTrade;
-  onGuardar: (t: FilaTrade, nota: string, cumpli: boolean | null, tf: string | null, setup: string | null) => Promise<string | null>;
+  onGuardar: (t: FilaTrade, nota: string, cumpli: boolean | null, tf: string | null, setup: string | null, marcas: Record<string, boolean>) => Promise<string | null>;
   setups: string[];
+  reglasPropias: ReglaPropia[];
+  marcasIniciales: Record<string, boolean>;
 }) {
+  const [marcas, setMarcas] = useState<Record<string, boolean>>(marcasIniciales);
   const [nota, setNota] = useState(t.nota ?? "");
   const [cumpli, setCumpli] = useState<boolean | null>(t.cumpli_plan);
   const [tf, setTf] = useState<string>(t.timeframe ?? "");
@@ -1359,7 +1406,8 @@ function NotaTrade({
   const [estado, setEstado] = useState<"" | "guardando" | "ok" | string>("");
   async function guardar() {
     setEstado("guardando");
-    const err = await onGuardar(t, nota, cumpli, tf || null, setup || null);
+    const validas = Object.fromEntries(Object.entries(marcas).filter(([k]) => reglasPropias.some((r) => r.id === k)));
+    const err = await onGuardar(t, nota, cumpli, tf || null, setup || null, validas);
     if (err) return setEstado(`No se pudo guardar: ${err}`);
     setEstado("ok");
     setTimeout(() => setEstado((s) => (s === "ok" ? "" : s)), 2500);
@@ -1394,6 +1442,44 @@ function NotaTrade({
           </datalist>
         </label>
       </div>
+      {reglasPropias.length > 0 && (
+        <div className="flex flex-col gap-1 rounded-lg border border-border p-2">
+          <span className="text-[13px] uppercase tracking-wide">Mi checklist</span>
+          {reglasPropias.map((r) => {
+            const v = marcas[r.id];
+            const marcar = (val: boolean) => {
+              const m = { ...marcas };
+              if (m[r.id] === val) delete m[r.id];
+              else m[r.id] = val;
+              setMarcas(m);
+              setEstado("");
+              // Si marcó todas, "¿Cumplí mi plan?" se pone solo.
+              if (reglasPropias.every((x) => x.id in m)) setCumpli(reglasPropias.every((x) => m[x.id]));
+            };
+            return (
+              <div key={r.id} className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => marcar(true)}
+                  className={`h-7 w-7 rounded-full border text-sm ${v === true ? "border-teal bg-teal text-white" : "border-border"}`}
+                  aria-label="La cumplí"
+                >
+                  ✓
+                </button>
+                <button
+                  type="button"
+                  onClick={() => marcar(false)}
+                  className={`h-7 w-7 rounded-full border text-sm ${v === false ? "border-red bg-red text-white" : "border-border"}`}
+                  aria-label="No la cumplí"
+                >
+                  ✗
+                </button>
+                <span className={v === undefined ? "" : "font-medium"}>{r.texto}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <span>¿Cumplí mi plan?</span>
         {[true, false].map((v) => (
@@ -1423,8 +1509,20 @@ function AdjuntosTrade({ tradeId }: { tradeId: string }) {
   const [err, setErr] = useState("");
   const [grande, setGrande] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const caja = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  // Solo pide la lista cuando el trade se abre (el contenido de un <details> cerrado no se ve).
+  useEffect(() => {
+    const el = caja.current;
+    if (!el || visible) return;
+    const io = new IntersectionObserver((e) => e.some((x) => x.isIntersecting) && setVisible(true));
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visible]);
 
   useEffect(() => {
+    if (!visible) return;
     let vivo = true;
     fetch(`/api/trading/adjuntos?tradeId=${tradeId}`)
       .then((r) => r.json())
@@ -1433,7 +1531,7 @@ function AdjuntosTrade({ tradeId }: { tradeId: string }) {
     return () => {
       vivo = false;
     };
-  }, [tradeId]);
+  }, [tradeId, visible]);
 
   async function subir(files: File[]) {
     if (!files.length) return;
@@ -1464,6 +1562,7 @@ function AdjuntosTrade({ tradeId }: { tradeId: string }) {
 
   return (
     <div
+      ref={caja}
       className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-2 outline-none focus:border-teal"
       tabIndex={0}
       onPaste={(e) => {
