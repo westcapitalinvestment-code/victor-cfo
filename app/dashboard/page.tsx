@@ -196,24 +196,33 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   const todasLasCuentas = [...(cuentasPlaid ?? []), ...(cuentasManuales ?? [])];
   // Desglose por cuenta del Balance personal (se abre tocando "Ver por cuenta").
-  const desgloseLiquidas = [
+  // Cuentas (cheques/ahorros, que suman el balance) y tarjetas de crédito.
+  // Al tocar una, la tarjeta de "sin categorizar" de abajo muestra solo las
+  // de esa cuenta (20 nov 2026, pedido de una clienta: sus tarjetas, entre
+  // ellas la de su hija, salían todas mezcladas).
+  const desgloseTodas = [
     ...(cuentasPlaid ?? [])
-      .filter((c) => c.type === "depository")
+      .filter((c) => c.type === "depository" || c.type === "credit")
       .map((c) => ({
         id: `p-${c.id}`,
+        clave: `plaid:${c.plaid_account_id}`,
+        esTarjeta: c.type === "credit",
         nombre: `${c.nickname || c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`,
         saldo: Number(c.current_balance || 0),
-        disponible: c.available_balance == null ? null : Number(c.available_balance),
+        disponible: c.type === "credit" || c.available_balance == null ? null : Number(c.available_balance),
       })),
     ...(cuentasManuales ?? [])
-      .filter((c) => c.type === "depository")
+      .filter((c) => c.type === "depository" || c.type === "credit")
       .map((c) => ({
         id: `m-${c.id}`,
+        clave: `manual:${c.id}`,
+        esTarjeta: c.type === "credit",
         nombre: `${c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`,
         saldo: Number(c.current_balance || 0),
         disponible: null,
       })),
   ];
+  const desgloseLiquidas = desgloseTodas.filter((c) => !c.esTarjeta);
   const bancoConectado = todasLasCuentas.length > 0;
 
   // "Balance personal" = solo dinero líquido de verdad (checking + savings,
@@ -954,7 +963,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </div>
           <PrivacyToggle />
         </div>
-        {bancoConectado && (desgloseLiquidas.length > 1 || profile.plan !== "gratis") && <DesgloseBalance cuentas={desgloseLiquidas} />}
+        {bancoConectado && (desgloseLiquidas.length > 1 || profile.plan !== "gratis") && (
+          <DesgloseBalance
+            abiertoInicial={!!cuentaActiva}
+            cuentas={desgloseTodas.map((c) => ({
+              ...c,
+              pendientes: conteoPorCuenta.get(c.clave) ?? 0,
+              href: cuentaActiva === c.clave ? hrefCuenta(null) : hrefCuenta(c.clave),
+              activo: cuentaActiva === c.clave,
+            }))}
+          />
+        )}
         {!bancoConectado && profile.plan === "gratis" && (
           <>
             <p className="mt-2 text-xs text-white/90">Dinos con cuánto dinero empiezas y todo lo que anotes lo suma o lo resta.</p>
