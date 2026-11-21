@@ -30,7 +30,7 @@ export default function DesgloseBalance({ cuentas }: { cuentas: CuentaDesglose[]
           {lista.map((c) => (
             <li key={c.id} className="flex items-center justify-between gap-3 py-2 text-sm text-white">
               {c.href ? (
-                <Link href={c.href} className="min-w-0 truncate underline decoration-white/40 underline-offset-2 hover:decoration-white" title="Ver las transacciones de esta cuenta">
+                <Link href={c.href} className="min-w-0 truncate underline decoration-white/40 underline-offset-2 hover:decoration-white" title="Ver los movimientos de esta cuenta">
                   {c.nombre} ›
                 </Link>
               ) : (

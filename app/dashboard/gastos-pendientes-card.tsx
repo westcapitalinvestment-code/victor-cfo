@@ -14,7 +14,7 @@ type Categoria = { id: number; nombre: string };
 // de módulo (no adentro de GastosPendientesCard) por la misma razón: que
 // React no lo desmonte/remonte en cada render del padre y se pierda lo que
 // el usuario ya escribió.
-function CategoriaComboBox({
+export function CategoriaComboBox({
   categorias,
   disabled,
   onSeleccionar,
