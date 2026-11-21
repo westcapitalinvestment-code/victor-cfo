@@ -1,74 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import CategoriaComboBox from "./categoria-combobox";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/format";
 
 type Categoria = { id: number; nombre: string };
 
-// Combobox con búsqueda (24 sept 2026, pedido de Joel: con muchas
-// categorías el <select> nativo obliga a hacer scroll — escribir "vida" y
-// que filtre a "Seguros de vida" es mucho más rápido). Mismo patrón que
-// CategoriaComboBox en app/dashboard/gastos/gastos-list.tsx — vive a nivel
-// de módulo (no adentro de GastosPendientesCard) por la misma razón: que
-// React no lo desmonte/remonte en cada render del padre y se pierda lo que
-// el usuario ya escribió.
-export function CategoriaComboBox({
-  categorias,
-  disabled,
-  onSeleccionar,
-  onCerrar,
-}: {
-  categorias: Categoria[];
-  disabled?: boolean;
-  onSeleccionar: (id: number) => void;
-  onCerrar: () => void;
-}) {
-  const [busqueda, setBusqueda] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function alHacerClicFuera(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        onCerrar();
-      }
-    }
-    document.addEventListener("mousedown", alHacerClicFuera);
-    return () => document.removeEventListener("mousedown", alHacerClicFuera);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const filtradas = busqueda.trim()
-    ? categorias.filter((c) => c.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()))
-    : categorias;
-
-  return (
-    <div className="relative" ref={ref}>
-      <input
-        autoFocus
-        className="vc-input !w-36 !py-1.5 !text-xs"
-        placeholder="Buscar categoría..."
-        disabled={disabled}
-        value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)}
-      />
-      <div className="absolute right-0 z-20 mt-1 max-h-48 w-48 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
-        {filtradas.length === 0 && <p className="p-2 text-xs text-muted">Sin resultados.</p>}
-        {filtradas.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            className="block w-full px-2.5 py-1.5 text-left text-xs hover:bg-bg"
-            onClick={() => onSeleccionar(c.id)}
-          >
-            {c.nombre}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+export { default as CategoriaComboBox } from "./categoria-combobox";
 
 type Pendiente = {
   id: string;
@@ -81,14 +21,6 @@ type Pendiente = {
   cuentaLabel?: string | null;
 };
 
-// Tarjeta de "gastos sin categorizar" en el Inicio — calcada del mockup
-// original (VICTOR — Dashboard Core.html): a medida que entran transacciones
-// nuevas, el motor (trigger_auto_categorize, 0001) ya categoriza solo las
-// que reconoce con alta confianza — lo que queda aquí es justo lo que el
-// motor NO pudo decidir por sí mismo, así que necesita que el usuario
-// confirme. Cada fila trae una categoría SUGERIDA (del mismo match_category
-// que usa el motor, pero sin el filtro de confianza/confirmado) — el
-// usuario solo tiene que aceptarla o cambiarla, no elegir desde cero.
 export default function GastosPendientesCard({
   pendientesIniciales,
   totalPendientes,
@@ -110,6 +42,9 @@ export default function GastosPendientesCard({
 }) {
   const router = useRouter();
   const [pendientes, setPendientes] = useState(pendientesIniciales);
+  // Categorías creadas al vuelo desde el combobox se suman aquí.
+  const [cats, setCats] = useState(categorias);
+  useEffect(() => setCats(categorias), [categorias]);
   const [guardando, setGuardando] = useState<string | null>(null);
   const [abierto, setAbierto] = useState(true);
   // Cuál fila tiene el combobox de categoría abierto (24 sept 2026) —
@@ -130,7 +65,7 @@ export default function GastosPendientesCard({
     setPendientes(pendientesIniciales);
   }, [pendientesIniciales]);
 
-  const nombreCategoria = (id: number | null) => categorias.find((c) => c.id === id)?.nombre ?? null;
+  const nombreCategoria = (id: number | null) => cats.find((c) => c.id === id)?.nombre ?? null;
 
   async function categorizar(transactionId: string, haciendaCategoryId: number) {
     setGuardando(transactionId);
@@ -226,7 +161,8 @@ export default function GastosPendientesCard({
               </div>
               {editando === p.id ? (
                 <CategoriaComboBox
-                  categorias={categorias}
+                  categorias={cats}
+                  onCreada={(c) => setCats((prev) => [...prev, c].sort((a, b) => a.nombre.localeCompare(b.nombre)))}
                   disabled={guardando === p.id}
                   onSeleccionar={(id) => {
                     setEditando(null);

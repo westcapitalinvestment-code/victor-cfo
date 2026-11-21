@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import CategoriaComboBox from "../categoria-combobox";
 import { useRouter } from "next/navigation";
 import { Sensitive } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
@@ -30,62 +31,6 @@ type CambioTransaccion = { descripcionAnterior: string | null; montoAnterior: nu
 // que React no lo desmonte/remonte en cada render del padre — si estuviera
 // anidado, cada vez que cambia "guardando" o "errorPorFila" se perdería el
 // texto que el usuario ya había escrito en la búsqueda.
-function CategoriaComboBox({
-  categorias,
-  disabled,
-  onSeleccionar,
-  onCerrar,
-}: {
-  categorias: Categoria[];
-  disabled?: boolean;
-  onSeleccionar: (id: number) => void;
-  onCerrar: () => void;
-}) {
-  const [busqueda, setBusqueda] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function alHacerClicFuera(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        onCerrar();
-      }
-    }
-    document.addEventListener("mousedown", alHacerClicFuera);
-    return () => document.removeEventListener("mousedown", alHacerClicFuera);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const filtradas = busqueda.trim()
-    ? categorias.filter((c) => c.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()))
-    : categorias;
-
-  return (
-    <div className="relative mt-1" ref={ref}>
-      <input
-        autoFocus
-        className="vc-input !py-1 !text-xs"
-        placeholder="Buscar categoría..."
-        disabled={disabled}
-        value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)}
-      />
-      <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
-        {filtradas.length === 0 && <p className="p-2 text-xs text-muted">Sin resultados.</p>}
-        {filtradas.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            className="block w-full px-2.5 py-1.5 text-left text-xs hover:bg-bg"
-            onClick={() => onSeleccionar(c.id)}
-          >
-            {c.nombre}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function GastosList({
   transaccionesIniciales,
   categorias,
@@ -111,6 +56,9 @@ export default function GastosList({
 }) {
   const router = useRouter();
   const [transacciones, setTransacciones] = useState(transaccionesIniciales);
+  // Categorías creadas al vuelo desde el combobox (20 nov 2026).
+  const [cats, setCats] = useState(categorias);
+  useEffect(() => setCats(categorias), [categorias]);
   const [editando, setEditando] = useState<string | null>(null);
   const [guardando, setGuardando] = useState<string | null>(null);
   // Antes, si /api/transacciones/categorizar fallaba (ej. el guardarraíl de
@@ -136,7 +84,7 @@ export default function GastosList({
   }
 
   const nombreCategoria = (id: number | null) =>
-    categorias.find((c) => c.id === id)?.nombre ?? "Sin categorizar";
+    cats.find((c) => c.id === id)?.nombre ?? "Sin categorizar";
 
   async function guardarCategoria(transactionId: string, haciendaCategoryId: number) {
     setGuardando(transactionId);
@@ -170,7 +118,7 @@ export default function GastosList({
             <TransaccionForm
               hoy={hoy}
               cuentas={[]}
-              categorias={categorias}
+              categorias={cats}
               inicial={{
                 id: t.id,
                 tipo: t.tipo_flujo === "ingreso" ? "ingreso" : "gasto",
@@ -206,7 +154,11 @@ export default function GastosList({
             {editando === t.id ? (
               <>
                 <CategoriaComboBox
-                  categorias={categorias}
+                  categorias={cats}
+                  onCreada={(c) => setCats((prev) => [...prev, c].sort((a, b) => a.nombre.localeCompare(b.nombre)))}
+                  wrapperClassName="relative mt-1"
+                  inputClassName="vc-input !py-1 !text-xs"
+                  menuClassName="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
                   disabled={guardando === t.id}
                   onSeleccionar={(id) => guardarCategoria(t.id, id)}
                   onCerrar={() => setEditando(null)}

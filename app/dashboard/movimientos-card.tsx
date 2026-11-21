@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/format";
 import { Sensitive } from "@/lib/privacy";
-import { CategoriaComboBox } from "./gastos-pendientes-card";
+import CategoriaComboBox from "./categoria-combobox";
 
 // "Últimos movimientos" del Inicio con selector de cuenta (20 nov 2026,
 // pedido de una clienta en una demo: con varias tarjetas, entre ellas la de
@@ -38,12 +38,14 @@ export default function MovimientosCard({
 }) {
   const router = useRouter();
   const [movs, setMovs] = useState(movimientosIniciales);
+  const [cats, setCats] = useState(categorias);
+  useEffect(() => setCats(categorias), [categorias]);
   const [editando, setEditando] = useState<string | null>(null);
   const [guardando, setGuardando] = useState<string | null>(null);
   const [error, setError] = useState("");
   useEffect(() => setMovs(movimientosIniciales), [movimientosIniciales]);
 
-  const nombreCategoria = (id: number | null) => categorias.find((c) => c.id === id)?.nombre ?? null;
+  const nombreCategoria = (id: number | null) => cats.find((c) => c.id === id)?.nombre ?? null;
 
   async function categorizar(id: string, catId: number) {
     setGuardando(id);
@@ -112,7 +114,8 @@ export default function MovimientosCard({
                   </span>
                   {editando === m.id ? (
                     <CategoriaComboBox
-                      categorias={categorias}
+                      categorias={cats}
+                      onCreada={(c) => setCats((prev) => [...prev, c].sort((a, b) => a.nombre.localeCompare(b.nombre)))}
                       disabled={guardando === m.id}
                       onSeleccionar={(id) => categorizar(m.id, id)}
                       onCerrar={() => setEditando(null)}
