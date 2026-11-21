@@ -5,7 +5,6 @@ import { Sensitive, PrivacyToggle } from "@/lib/privacy";
 import { formatMoney } from "@/lib/format";
 import { saludoPorHora, fechaHoyPR, diasHastaPR } from "@/lib/hora-pr";
 import GastosPendientesCard from "./gastos-pendientes-card";
-import MovimientosCard from "./movimientos-card";
 import ResumenCard from "./resumen-card";
 import ResumenReglasCard from "./resumen-reglas-card";
 import AvisosOficialesCard from "../avisos-oficiales-card";
@@ -205,7 +204,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         nombre: `${c.nickname || c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`,
         saldo: Number(c.current_balance || 0),
         disponible: c.available_balance == null ? null : Number(c.available_balance),
-        href: `/dashboard?cuenta=${encodeURIComponent(`plaid:${c.plaid_account_id}`)}#movimientos`,
       })),
     ...(cuentasManuales ?? [])
       .filter((c) => c.type === "depository")
@@ -214,7 +212,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         nombre: `${c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`,
         saldo: Number(c.current_balance || 0),
         disponible: null,
-        href: `/dashboard?cuenta=${encodeURIComponent(`manual:${c.id}`)}#movimientos`,
       })),
   ];
   const bancoConectado = todasLasCuentas.length > 0;
@@ -431,15 +428,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     pendientesQuery = pendientesQuery.eq(columnaCuenta, cuentaFiltro.id);
     totalPendientesQuery = totalPendientesQuery.eq(columnaCuenta, cuentaFiltro.id);
   }
-  // Últimos movimientos (categorizados o no) de la cuenta escogida.
-  let movimientosQuery = supabase
-    .from("transactions")
-    .select("id, description_raw, amount, fecha, tipo_flujo, pending, hacienda_category_id, plaid_account_id, manual_account_id")
-    .eq("owner_id", user.id)
-    .is("entity_id", null)
-    .eq("es_duplicada", false);
-  if (cuentaFiltro) movimientosQuery = movimientosQuery.eq(columnaCuenta, cuentaFiltro.id);
-  const [{ data: pendientesRaw }, { count: totalPendientes }, { data: categorias }, { data: pendientesPorCuentaRaw }, { data: movimientosRaw }] = await Promise.all([
+  const [{ data: pendientesRaw }, { count: totalPendientes }, { data: categorias }, { data: pendientesPorCuentaRaw }] = await Promise.all([
     pendientesQuery
       .is("entity_id", null)
       .is("hacienda_category_id", null)
@@ -468,7 +457,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       .eq("es_duplicada", false)
       .eq("pending", false)
       .limit(5000),
-    movimientosQuery.order("fecha", { ascending: false }).limit(8),
   ]);
 
   // Bug real (23 agosto 2026, reportado por Joel): con dos cuentas
@@ -506,29 +494,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     const q = p.toString();
     return `/dashboard${q ? `?${q}` : ""}#pendientes`;
   };
-  const hrefMovimientos = (clave: string | null) => hrefCuenta(clave).replace("#pendientes", "#movimientos");
-  // Todas las cuentas personales (cheques, ahorros y tarjetas) para escoger.
-  const opcionesMovimientos = [
-    { clave: "todas", nombre: "Todas", href: hrefMovimientos(null), activo: !cuentaActiva },
-    ...[...nombrePorCuenta.entries()]
-      .filter(([clave]) =>
-        clave.startsWith("plaid:")
-          ? (cuentasPlaid ?? []).some((c) => `plaid:${c.plaid_account_id}` === clave)
-          : (cuentasManuales ?? []).some((c) => `manual:${c.id}` === clave)
-      )
-      .map(([clave, nombre]) => ({ clave, nombre, href: hrefMovimientos(clave), activo: cuentaActiva === clave })),
-  ];
-  const movimientos = ((movimientosRaw ?? []) as {
-    id: string;
-    description_raw: string;
-    amount: number;
-    fecha: string;
-    tipo_flujo: string | null;
-    pending: boolean;
-    hacienda_category_id: number | null;
-    plaid_account_id: string | null;
-    manual_account_id: string | null;
-  }[]).map((t) => ({ ...t, amount: Number(t.amount), cuentaLabel: cuentaActiva ? null : etiquetaDeTransaccion(t) }));
   const filtrosPendientes =
     conteoPorCuenta.size > 1 || cuentaActiva
       ? [
@@ -1060,15 +1025,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         hrefBase={cuentaActiva ? `/dashboard/gastos?cuentas=${encodeURIComponent(cuentaActiva)}` : "/dashboard/gastos"}
       />
 
-      {bancoConectado && (
-        <MovimientosCard
-          key={`mov-${cuentaActiva ?? "todas"}`}
-          movimientosIniciales={movimientos}
-          categorias={categorias ?? []}
-          opciones={opcionesMovimientos}
-          hrefVerTodos={cuentaActiva ? `/dashboard/gastos?cuentas=${encodeURIComponent(cuentaActiva)}` : "/dashboard/gastos"}
-        />
-      )}
 
       {/* Selector de mes — solo afecta Ingresos y Gastos, ver comentario
       junto a mesActualStr/mesSeleccionado arriba. */}
