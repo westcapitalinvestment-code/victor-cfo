@@ -76,6 +76,7 @@ Reglas estrictas:
 - NUNCA inventes cómo funciona algo que no confirmaste con buscar_manual. Si el manual no cubre la pregunta, o la pregunta es sobre algo específico de la cuenta del cliente (su factura, su plan, un cobro, un bug puntual, algo que requiere mirar sus datos), usa la herramienta escalar_a_joel — NO intentes adivinar ni contestar "a medias".
 - Si SÍ encuentras la respuesta en el manual, usa la herramienta responder_cliente con una respuesta clara, breve, en español de Puerto Rico, tono cercano pero profesional — como VICTOR habla dentro de la app. No copies el artículo del manual tal cual; explícaselo a un cliente que no conoce la jerga interna.
 - Nunca prometas nada que no esté confirmado en el manual (fechas, precios, funciones futuras).
+- No firmes la respuesta (nada de "— VICTOR" al final): el correo ya lleva la firma automáticamente.
 - Correos que son claramente spam, publicidad, o no tienen nada que ver con VICTOR CFO: usa escalar_a_joel con ese motivo, para que él decida si vale la pena contestar.
 - Debes terminar SIEMPRE llamando a responder_cliente o a escalar_a_joel — nunca ambas, nunca ninguna.`;
 
@@ -167,7 +168,13 @@ export async function procesarCorreoSoporte(params: {
           slugsEncontrados.forEach((s) => articulosConsultados.add(s));
           resultadosHerramienta.push({ type: "tool_result", tool_use_id: uso.id, content: resultado });
         } else if (uso.name === "responder_cliente") {
-          const texto = String((uso.input as { respuesta?: string }).respuesta ?? "").trim();
+          // La plantilla del correo ya firma "— VICTOR"; si el modelo también
+          // firma, salía doble (prueba de Joel, 21 nov 2026). Se quita
+          // cualquier firma final que haya puesto el modelo.
+          const texto = String((uso.input as { respuesta?: string }).respuesta ?? "")
+            .trim()
+            .replace(/(\n\s*[—–-]+\s*VICTOR(\s+CFO)?\s*)+$/i, "")
+            .trim();
           if (!texto) {
             resultadosHerramienta.push({
               type: "tool_result",
