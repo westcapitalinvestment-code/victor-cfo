@@ -15,6 +15,7 @@ import { INDUSTRIAS, PREGUNTA_DATO, nombreIndustria } from "@/lib/incentivos";
 import { nominaIncluidaEnPlan } from "@/lib/stripe";
 import { cargarParametros, cargarConfigEntidad } from "@/lib/nomina-server";
 import { calcularEmpleado, PERIODOS_POR_ANIO, type EmpleadoNomina, type Frecuencia } from "@/lib/nomina";
+import { aHoraPR, evaluarCumplimiento, NOMBRE_REGLA, REGLAS_POR_DEFECTO, type ReglasRiesgo, type Trade, type TradeEvaluado } from "@/lib/trading";
 
 // El texto real del banco (description_raw) casi nunca coincide palabra
 // por palabra con cómo el usuario describe una transacción en el chat —
@@ -1344,6 +1345,32 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
         entidad_nombre: {
           type: "string",
           description: "Nombre (o parte) de la entidad de negocio. Si se omite y hay varias, se consultan todas juntas.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "revisar_mi_trading",
+    description:
+      "Módulo Trading — lee los trades REALES del usuario (sincronizados desde MT5 por VictorGuard o importados) y sus reglas, y devuelve su " +
+      "desempeño del período: resultado neto, % de aciertos, ganancia y pérdida promedio, ratio, expectativa por trade, factor de beneficio, " +
+      "rachas, mejor/peor activo, sesión y día (hora de PR), compras vs ventas, reglas rotas (sin SL, riesgo alto, revancha, exceso de trades, " +
+      "límite diario…) y cómo le va cumpliéndolas vs rompiéndolas, su checklist propio (✓/✗), y el uso de HOY contra sus límites. " +
+      "OBLIGATORIO usarla cuando pregunte cómo le va en el trading, qué está haciendo mal, cuál par o sesión le funciona, si está cumpliendo " +
+      "su plan, o pida una revisión de su semana/mes. Úsala para darle feedback de coach de riesgo y disciplina (ver sección 'VICTOR coach de " +
+      "trading'). NUNCA inventes cifras de trading y NUNCA des señales ni qué comprar/vender.",
+    input_schema: {
+      type: "object",
+      properties: {
+        periodo: {
+          type: "string",
+          enum: ["hoy", "semana", "mes", "anio", "todo"],
+          description: "Período a revisar (hora de PR). semana = últimos 7 días; mes = mes en curso; anio = año en curso. Por defecto: mes.",
+        },
+        cuenta_nombre: {
+          type: "string",
+          description: "Nombre (o parte) de la cuenta de trading si tiene varias. Si se omite, usa todas.",
         },
       },
       required: [],
@@ -5495,6 +5522,160 @@ export async function executeVictorTool(
           })
           .join("\n\n---\n\n"),
       };
+    }
+
+    case "revisar_mi_trading": {
+      // VICTOR coach de trading (21 nov 2026): mismo cálculo que el panel y
+      // la pestaña Estadísticas de /dashboard/trading, para que VICTOR hable
+      // con los números reales del usuario.
+      const { data: cuentasT } = await supabase
+        .from("trading_accounts")
+        .select("id, nombre, tipo, balance_inicial, balance_actual, equity_actual, last_sync_at")
+        .eq("owner_id", ownerId)
+        .order("created_at");
+      let cuentas = (cuentasT ?? []) as {
+        id: string; nombre: string; tipo: string | null; balance_inicial: number | null; balance_actual: number | null; equity_actual: number | null; last_sync_at: string | null;
+      }[];
+      if (cuentas.length === 0) {
+        return { ok: true, message: "El usuario no tiene cuentas de trading en VICTOR todavía (Trading → crear cuenta e instalar el guardián en MT5, o importar el reporte). No hay datos que revisar." };
+      }
+      const pistaCta = typeof input.cuenta_nombre === "string" ? input.cuenta_nombre.trim().toLowerCase() : "";
+      if (pistaCta) {
+        const f = cuentas.filter((c) => (c.nombre ?? "").toLowerCase().includes(pistaCta));
+        if (f.length) cuentas = f;
+      }
+      const { data: rr } = await supabase.from("risk_rules").select("*").eq("owner_id", ownerId).maybeSingle();
+      const reglaRow = (rr ?? {}) as Record<string, unknown>;
+      const reglas: ReglasRiesgo = { ...REGLAS_POR_DEFECTO };
+      for (const k of Object.keys(REGLAS_POR_DEFECTO) as (keyof ReglasRiesgo)[]) {
+        if (reglaRow[k] !== undefined && reglaRow[k] !== null) (reglas as Record<string, unknown>)[k] = reglaRow[k];
+      }
+      const perdidaDiaUSD = Number(reglaRow.guard_daily_loss_usd ?? 0) || 0;
+      const riesgoFijo = perdidaDiaUSD > 0 && reglas.max_perdedores_dia > 0 ? Math.floor((perdidaDiaUSD / reglas.max_perdedores_dia) * 100) / 100 : 0;
+
+      const hoy = fechaHoyPR();
+      const periodo = (["hoy", "semana", "mes", "anio", "todo"] as const).includes(input.periodo as never) ? (input.periodo as string) : "mes";
+      const desde =
+        periodo === "hoy" ? hoy
+        : periodo === "semana" ? new Date(new Date(hoy + "T12:00:00Z").getTime() - 6 * 86400000).toISOString().slice(0, 10)
+        : periodo === "mes" ? hoy.slice(0, 7) + "-01"
+        : periodo === "anio" ? hoy.slice(0, 4) + "-01-01"
+        : "0000-01-01";
+
+      const todos: (TradeEvaluado & { id: string; timeframe?: string | null; setup?: string | null; cuenta: string })[] = [];
+      const lineasCuentas: string[] = [];
+      for (const c of cuentas) {
+        const { data: tr } = await supabase.from("trades").select("*").eq("account_id", c.id).order("hora_apertura", { ascending: false }).limit(3000);
+        const filas = (tr ?? []) as (Trade & { id: string; timeframe?: string | null; setup?: string | null })[];
+        const ev = evaluarCumplimiento(filas, reglas, Number(c.balance_inicial ?? 0), riesgoFijo);
+        const porTicket = new Map(filas.map((f) => [f.ticket, f]));
+        for (const e of ev) {
+          const f = porTicket.get(e.ticket);
+          todos.push({ ...e, id: f?.id ?? "", timeframe: f?.timeframe ?? null, setup: f?.setup ?? null, cuenta: c.nombre });
+        }
+        lineasCuentas.push(
+          `- ${c.nombre}${c.tipo ? ` (${c.tipo})` : ""}: balance ${c.balance_actual != null ? `$${Number(c.balance_actual).toFixed(2)}` : "sin dato"}` +
+            `${c.equity_actual != null ? `, equity $${Number(c.equity_actual).toFixed(2)}` : ""}${c.last_sync_at ? `, última sincronización ${c.last_sync_at.slice(0, 16).replace("T", " ")}` : ", nunca sincronizada"}`
+        );
+      }
+      const diaPR = (t: TradeEvaluado) => aHoraPR(t.hora_apertura).slice(0, 10);
+      const lista = todos.filter((t) => t.hora_cierre && diaPR(t) >= desde && diaPR(t) <= hoy);
+      const usd = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
+
+      // Uso de hoy contra sus límites
+      const deHoy = todos.filter((t) => diaPR(t) === hoy);
+      const netoHoy = deHoy.reduce((a, t) => a + t.neto, 0);
+      const perdHoy = deHoy.filter((t) => t.neto < 0).length;
+      const lineaHoy =
+        `HOY (${hoy}): ${deHoy.length} trades de máx. ${reglas.max_trades_dia}, ${perdHoy} perdedores de máx. ${reglas.max_perdedores_dia}, neto ${usd(netoHoy)}` +
+        (perdidaDiaUSD ? ` (límite de pérdida del día ${usd(perdidaDiaUSD)}, le queda ${usd(Math.max(0, perdidaDiaUSD + Math.min(0, netoHoy)))})` : "") +
+        (riesgoFijo ? `. Riesgo fijo por trade: ${usd(riesgoFijo)}.` : ".");
+
+      const reglasTxt =
+        `Reglas: ${riesgoFijo ? `riesgo fijo ${usd(riesgoFijo)} por trade` : `riesgo ${reglas.riesgo_por_trade_pct}% por trade`}, máx. ${reglas.max_perdedores_dia} perdedores/día, ` +
+        `${perdidaDiaUSD ? `pérdida máx. del día ${usd(perdidaDiaUSD)}` : `pérdida máx. ${reglas.perdida_max_dia_pct}% del día`}, máx. ${reglas.max_trades_dia} trades/día, ` +
+        `espera ${reglas.espera_tras_perdida_min} min tras pérdida, SL ${reglas.sl_obligatorio ? "obligatorio" : "opcional"}.`;
+
+      if (lista.length === 0) {
+        return {
+          ok: true,
+          message: `Cuentas:\n${lineasCuentas.join("\n")}\n${reglasTxt}\n${lineaHoy}\nNo hay trades cerrados en el período "${periodo}" (desde ${desde}).`,
+        };
+      }
+
+      const g = lista.filter((t) => t.neto > 0);
+      const pz = lista.filter((t) => t.neto <= 0);
+      const neto = lista.reduce((a, t) => a + t.neto, 0);
+      const brutoG = g.reduce((a, t) => a + t.neto, 0);
+      const brutoP = -pz.reduce((a, t) => a + t.neto, 0);
+      const promG = g.length ? brutoG / g.length : 0;
+      const promP = pz.length ? -brutoP / pz.length : 0;
+      let rachaG = 0, rachaP = 0, cg = 0, cp = 0;
+      for (const t of [...lista].sort((a, b) => (a.hora_apertura < b.hora_apertura ? -1 : 1))) {
+        if (t.neto > 0) { cg++; cp = 0; } else { cp++; cg = 0; }
+        rachaG = Math.max(rachaG, cg); rachaP = Math.max(rachaP, cp);
+      }
+      const agrupar = (clave: (t: (typeof lista)[number]) => string | null) => {
+        const m = new Map<string, { n: number; g: number; neto: number }>();
+        for (const t of lista) {
+          const k = clave(t);
+          if (!k) continue;
+          const f = m.get(k) ?? { n: 0, g: 0, neto: 0 };
+          f.n++; f.neto += t.neto; if (t.neto > 0) f.g++;
+          m.set(k, f);
+        }
+        return [...m.entries()].sort((a, b) => b[1].neto - a[1].neto)
+          .map(([k, f]) => `${k}: ${f.n} trades, ${Math.round((f.g / f.n) * 100)}% aciertos, neto ${usd(f.neto)}, prom ${usd(f.neto / f.n)}`);
+      };
+      const horaPR = (t: TradeEvaluado) => Number(aHoraPR(t.hora_apertura).slice(11, 13));
+      const sesion = (h: number) => (h >= 19 || h < 3 ? "Asia" : h < 8 ? "Londres" : h < 12 ? "Londres+NY" : h < 16 ? "NY tarde" : "Cierre");
+      const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+      const conteoViol = new Map<string, number>();
+      for (const t of lista) for (const v of t.violaciones) conteoViol.set(NOMBRE_REGLA[v] ?? v, (conteoViol.get(NOMBRE_REGLA[v] ?? v) ?? 0) + 1);
+      const limpios = lista.filter((t) => t.violaciones.length === 0);
+      const rotos = lista.filter((t) => t.violaciones.length > 0);
+      const prom = (l: typeof lista) => (l.length ? l.reduce((a, t) => a + t.neto, 0) / l.length : 0);
+      const sinSL = lista.filter((t) => !t.sl).length;
+      const durMed = [...lista].map((t) => t.duracionSeg).sort((a, b) => a - b)[Math.floor(lista.length / 2)] ?? 0;
+      const mejor = lista.reduce((m, t) => (t.neto > m.neto ? t : m), lista[0]);
+      const peor = lista.reduce((m, t) => (t.neto < m.neto ? t : m), lista[0]);
+
+      // Checklist propio
+      let lineasCheck: string[] = [];
+      const { data: rp } = await supabase.from("trading_reglas_propias").select("id, texto").eq("owner_id", ownerId).order("orden");
+      if (rp && rp.length) {
+        const ids = lista.map((t) => t.id).filter(Boolean);
+        const { data: ck } = ids.length
+          ? await supabase.from("trade_checks").select("trade_id, regla_id, cumplida").in("trade_id", ids.slice(0, 1000))
+          : { data: [] as { trade_id: string; regla_id: string; cumplida: boolean }[] };
+        const netoDe = new Map(lista.map((t) => [t.id, t.neto]));
+        lineasCheck = (rp as { id: string; texto: string }[]).map((r) => {
+          const marcas = ((ck ?? []) as { trade_id: string; regla_id: string; cumplida: boolean }[]).filter((c) => c.regla_id === r.id);
+          const si = marcas.filter((c) => c.cumplida).map((c) => netoDe.get(c.trade_id) ?? 0);
+          const no = marcas.filter((c) => !c.cumplida).map((c) => netoDe.get(c.trade_id) ?? 0);
+          const p = (a: number[]) => (a.length ? usd(a.reduce((x, y) => x + y, 0) / a.length) : "—");
+          return `"${r.texto}": marcada en ${marcas.length} trades; cumplida ${si.length} (prom ${p(si)}), no cumplida ${no.length} (prom ${p(no)})`;
+        });
+      }
+
+      const msg =
+        `Cuentas:\n${lineasCuentas.join("\n")}\n${reglasTxt}\n${lineaHoy}\n\n` +
+        `PERÍODO "${periodo}" (desde ${desde}, hora de PR): ${lista.length} trades cerrados, neto ${usd(neto)}, aciertos ${Math.round((g.length / lista.length) * 100)}%.\n` +
+        `Ganancia promedio ${usd(promG)} · pérdida promedio ${usd(promP)} · ratio ganancia/pérdida ${promP < 0 ? (promG / -promP).toFixed(2) : "—"} · ` +
+        `expectativa por trade ${usd(neto / lista.length)} · factor de beneficio ${brutoP > 0 ? (brutoG / brutoP).toFixed(2) : "∞"}.\n` +
+        `Mejor racha ${rachaG} ganadores · peor racha ${rachaP} perdedores · duración mediana ${Math.round(durMed / 60)} min · trades sin SL: ${sinSL}.\n` +
+        `Mejor trade ${usd(mejor.neto)} (${mejor.simbolo}) · peor trade ${usd(peor.neto)} (${peor.simbolo}).\n\n` +
+        `Por activo:\n${agrupar((t) => t.simbolo).slice(0, 8).join("\n")}\n\n` +
+        `Por sesión (PR):\n${agrupar((t) => sesion(horaPR(t))).join("\n")}\n\n` +
+        `Por día:\n${agrupar((t) => DIAS[new Date(diaPR(t) + "T12:00:00Z").getUTCDay()]).join("\n")}\n\n` +
+        `Compras vs ventas:\n${agrupar((t) => (t.lado === "buy" ? "compras" : "ventas")).join("\n")}\n\n` +
+        (lista.some((t) => t.timeframe) ? `Por TF:\n${agrupar((t) => t.timeframe ?? null).join("\n")}\n\n` : "") +
+        (lista.some((t) => t.setup) ? `Por setup:\n${agrupar((t) => t.setup ?? null).join("\n")}\n\n` : "") +
+        `Disciplina: ${limpios.length} trades cumpliendo todas las reglas (prom ${usd(prom(limpios))}) vs ${rotos.length} rompiendo alguna (prom ${usd(prom(rotos))}).\n` +
+        (conteoViol.size ? `Reglas rotas: ${[...conteoViol.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ×${n}`).join(", ")}.\n` : "Ninguna regla rota en el período.\n") +
+        (lineasCheck.length ? `\nChecklist propio:\n${lineasCheck.join("\n")}\n` : "") +
+        `\nRecuerda: datos del pasado del usuario. Dale feedback de proceso, riesgo y disciplina como coach; nada de señales ni de qué comprar/vender.`;
+      return { ok: true, message: msg };
     }
 
     default:
