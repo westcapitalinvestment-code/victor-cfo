@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { formatMoney } from "@/lib/format";
 import { Sensitive } from "@/lib/privacy";
 
 // Desglose del balance por cuenta (20 nov 2026, pedido de Joel): el total del
 // Inicio suma varias cuentas; al tocarlo se ve cuánto hay en cada una, para
 // no pensar que todo ese dinero está disponible en una sola cuenta.
-export type CuentaDesglose = { id: string; nombre: string; saldo: number; disponible: number | null };
+// href (opcional): al tocar la cuenta se abren sus transacciones (20 nov 2026).
+export type CuentaDesglose = { id: string; nombre: string; saldo: number; disponible: number | null; href?: string };
 
 export default function DesgloseBalance({ cuentas }: { cuentas: CuentaDesglose[] }) {
   const [abierto, setAbierto] = useState(false);
@@ -27,7 +29,13 @@ export default function DesgloseBalance({ cuentas }: { cuentas: CuentaDesglose[]
         <ul className="mt-3 flex flex-col divide-y divide-white/20 rounded-lg bg-white/10 px-3">
           {lista.map((c) => (
             <li key={c.id} className="flex items-center justify-between gap-3 py-2 text-sm text-white">
-              <span className="min-w-0 truncate">{c.nombre}</span>
+              {c.href ? (
+                <Link href={c.href} className="min-w-0 truncate underline decoration-white/40 underline-offset-2 hover:decoration-white" title="Ver las transacciones de esta cuenta">
+                  {c.nombre} ›
+                </Link>
+              ) : (
+                <span className="min-w-0 truncate">{c.nombre}</span>
+              )}
               <span className="shrink-0 text-right">
                 <span className="font-semibold">
                   <Sensitive>{formatMoney(c.saldo)}</Sensitive>

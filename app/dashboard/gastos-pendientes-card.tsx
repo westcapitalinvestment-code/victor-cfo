@@ -99,11 +99,14 @@ export default function GastosPendientesCard({
   // pedido de Joel: esta tarjeta también debía existir en el Inicio de
   // negocio, no solo en Personal).
   hrefBase = "/dashboard/gastos",
+  // Botones para ver solo las pendientes de una cuenta/tarjeta (20 nov 2026).
+  filtros = [],
 }: {
   pendientesIniciales: Pendiente[];
   totalPendientes: number;
   categorias: Categoria[];
   hrefBase?: string;
+  filtros?: { clave: string; nombre: string; n: number; href: string; activo: boolean }[];
 }) {
   const router = useRouter();
   const [pendientes, setPendientes] = useState(pendientesIniciales);
@@ -148,12 +151,12 @@ export default function GastosPendientesCard({
     }
   }
 
-  if (pendientes.length === 0) return null;
+  if (pendientes.length === 0 && !filtros.some((f) => f.activo && f.clave !== "todas")) return null;
 
   const restantes = totalPendientes - pendientesIniciales.length;
 
   return (
-    <div className="vc-card mb-3 !p-0 border-amb">
+    <div id="pendientes" className="vc-card mb-3 !p-0 border-amb">
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
@@ -171,6 +174,25 @@ export default function GastosPendientesCard({
         <span className="text-xs text-muted">{abierto ? "▲" : "▼"}</span>
       </button>
 
+      {abierto && filtros.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto border-t border-border px-4 py-2">
+          {filtros.map((f) => (
+            <Link
+              key={f.clave}
+              href={f.href}
+              scroll={false}
+              className={`flex-shrink-0 rounded-pill border px-2.5 py-1 text-[11px] font-medium ${
+                f.activo ? "border-teal bg-teal text-white" : "border-border text-muted"
+              }`}
+            >
+              {f.nombre} ({f.n})
+            </Link>
+          ))}
+        </div>
+      )}
+      {abierto && pendientes.length === 0 && (
+        <p className="border-t border-border px-4 py-3 text-sm text-muted">Esta cuenta no tiene transacciones por categorizar. ✓</p>
+      )}
       {abierto && (
         <div className="border-t border-border">
           {pendientes.map((p) => (
@@ -232,7 +254,7 @@ export default function GastosPendientesCard({
           filtrada, que además ahora muestra TODO el historial pendiente, no
           solo el mes en curso. */}
           {restantes > 0 && (
-            <Link href={`${hrefBase}?categoria=sin_categorizar`} className="block px-4 py-2.5 text-center text-xs font-medium text-teal hover:opacity-80">
+            <Link href={`${hrefBase}${hrefBase.includes("?") ? "&" : "?"}categoria=sin_categorizar`} className="block px-4 py-2.5 text-center text-xs font-medium text-teal hover:opacity-80">
               Ver los {restantes} restantes en Transacciones →
             </Link>
           )}

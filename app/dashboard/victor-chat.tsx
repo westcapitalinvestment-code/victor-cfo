@@ -12,7 +12,7 @@ import remarkGfm from "remark-gfm";
 // system prompt completo, y ahora también sus "manos" (tool use) —
 // este componente nunca ve esas cosas, solo manda texto y pinta la respuesta.
 
-type ChatMessage = { role: "user" | "assistant"; content: string; imageDataUrl?: string };
+type ChatMessage = { role: "user" | "assistant"; content: string; imageDataUrl?: string; archivoNombre?: string };
 
 // Tipos de imagen que Anthropic acepta para visión — mismo criterio que
 // app/api/victor/route.ts, para no dejar pegar algo que el servidor va a
@@ -88,6 +88,12 @@ const PanelMensajes = memo(function PanelMensajes({
             }`}
             style={m.role === "user" ? { background: "#1D9E75" } : undefined}
           >
+            {m.archivoNombre && (
+              <div className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-black/10 px-2 py-1.5 text-xs">
+                <i className="ti ti-file-type-pdf" style={{ fontSize: 16 }} />
+                <span className="truncate">{m.archivoNombre}</span>
+              </div>
+            )}
             {m.imageDataUrl && (
               <img src={m.imageDataUrl} alt="Imagen enviada" className="mb-1.5 max-h-40 w-full rounded-lg object-cover" />
             )}
@@ -194,7 +200,12 @@ export default function VictorChat({
   // mensaje — se limpia sola después de enviar. dataUrl es para la vista
   // previa y la burbuja del chat; base64/mediaType es lo que de verdad se
   // manda al servidor (misma separación que ya usa subir-csv.tsx para PDFs).
-  const [pendingImage, setPendingImage] = useState<{ dataUrl: string; base64: string; mediaType: string } | null>(null);
+  // También PDFs (20 nov 2026, pedido de una clienta en una demo: arrastrar
+  // un PDF a la conversación). Para un PDF dataUrl queda vacío y se muestra
+  // el nombre del archivo en vez de una miniatura.
+  const [pendingImage, setPendingImage] = useState<{ dataUrl: string; base64: string; mediaType: string; nombre?: string } | null>(null);
+  // Arrastrar y soltar un archivo sobre el panel del chat.
+  const [arrastrando, setArrastrando] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -493,15 +504,29 @@ export default function VictorChat({
     const file = e.target.files?.[0];
     e.target.value = ""; // permite elegir el mismo archivo dos veces seguidas
     if (!file) return;
-    if (!IMAGE_MEDIA_TYPES_ACEPTADOS.includes(file.type)) {
-      setError("Ese tipo de imagen no es compatible — prueba con un PNG, JPG, WEBP o GIF.");
+    prepararArchivo(file);
+  }
+
+  // Un solo lugar para imagen o PDF, venga del "+", de Ctrl+V o de
+  // arrastrar y soltar. Tope del PDF: 3 MB (el servidor de Vercel no acepta
+  // pedidos de más de ~4.5 MB y el base64 crece un tercio).
+  function prepararArchivo(file: File) {
+    const esPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+    if (!esPdf && !IMAGE_MEDIA_TYPES_ACEPTADOS.includes(file.type)) {
+      setError("Ese archivo no es compatible: usa un PDF o una imagen PNG, JPG, WEBP o GIF.");
       return;
     }
+    if (esPdf && file.size > 3 * 1024 * 1024) {
+      setError("El PDF pesa más de 3 MB. Prueba con uno más liviano o solo las páginas que necesitas.");
+      return;
+    }
+    setError(null);
     const reader = new FileReader();
     reader.onload = () => {
       const resultado = reader.result as string;
       const base64 = resultado.split(",")[1] || "";
-      setPendingImage({ dataUrl: resultado, base64, mediaType: file.type });
+      if (esPdf) setPendingImage({ dataUrl: "", base64, mediaType: "application/pdf", nombre: file.name || "documento.pdf" });
+      else setPendingImage({ dataUrl: resultado, base64, mediaType: file.type });
     };
     reader.readAsDataURL(file);
   }
@@ -592,7 +617,12 @@ export default function VictorChat({
     if (!opts?.hidden) {
       setMessages((prev) => [
         ...prev,
-        { role: "user", content: content || "Analiza esta imagen.", imageDataUrl: imagenAEnviar?.dataUrl },
+        {
+          role: "user",
+          content: content || (imagenAEnviar?.nombre ? "Analiza este documento." : "Analiza esta imagen."),
+          imageDataUrl: imagenAEnviar?.dataUrl || undefined,
+          archivoNombre: imagenAEnviar?.nombre,
+        },
       ]);
     }
     setLoading(true);
@@ -604,7 +634,9 @@ export default function VictorChat({
         body: JSON.stringify({
           message: content,
           conversationId,
-          ...(imagenAEnviar ? { imageBase64: imagenAEnviar.base64, imageMediaType: imagenAEnviar.mediaType } : {}),
+          ...(imagenAEnviar
+            ? { imageBase64: imagenAEnviar.base64, imageMediaType: imagenAEnviar.mediaType, archivoNombre: imagenAEnviar.nombre }
+            : {}),
         }),
       });
       const data = await res.json();
@@ -706,6 +738,22 @@ export default function VictorChat({
       {open && (
         <div
           className="fixed right-4 z-50 flex max-h-[70dvh] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+          // Arrastrar y soltar un PDF o una imagen en cualquier parte del chat.
+          onDragOver={(e) => {
+            if (bloqueado || !Array.from(e.dataTransfer.types).includes("Files")) return;
+            e.preventDefault();
+            if (!arrastrando) setArrastrando(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setArrastrando(false);
+          }}
+          onDrop={(e) => {
+            if (bloqueado) return;
+            e.preventDefault();
+            setArrastrando(false);
+            const file = e.dataTransfer.files?.[0];
+            if (file) prepararArchivo(file);
+          }}
           // Mismo ajuste que el botón flotante (safe-area-inset-bottom), y
           // max-h-[70dvh] en vez de 70vh — dvh (dynamic viewport height) se
           // recalcula cuando el teclado del celular aparece/desaparece al
@@ -713,6 +761,12 @@ export default function VictorChat({
           // era parte del "desajuste" que reportó Joel al abrir/cerrar.
           style={{ bottom: "calc(168px + env(safe-area-inset-bottom))" }}
         >
+          {arrastrando && (
+            <div className="pointer-events-none absolute inset-0 z-[70] flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-teal bg-card/95 text-sm font-medium text-teal">
+              <i className="ti ti-file-upload" style={{ fontSize: 32 }} />
+              Suelta el PDF o la imagen aquí
+            </div>
+          )}
           {/* Header */}
           <div className="flex items-center gap-2.5 px-4 py-3.5" style={{ background: "#1D9E75" }}>
             <img
@@ -818,11 +872,19 @@ export default function VictorChat({
           <div className="relative flex flex-col gap-2 border-t border-border bg-card p-3">
             {pendingImage && (
               <div className="flex items-center gap-2 rounded-xl border border-border bg-bg p-1.5">
-                <img src={pendingImage.dataUrl} alt="Imagen lista para enviar" className="h-11 w-11 flex-shrink-0 rounded-lg object-cover" />
-                <span className="flex-1 text-xs text-muted">Imagen lista — escribe algo o envíala así</span>
+                {pendingImage.nombre ? (
+                  <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-red/10 text-red">
+                    <i className="ti ti-file-type-pdf" style={{ fontSize: 22 }} />
+                  </span>
+                ) : (
+                  <img src={pendingImage.dataUrl} alt="Imagen lista para enviar" className="h-11 w-11 flex-shrink-0 rounded-lg object-cover" />
+                )}
+                <span className="min-w-0 flex-1 truncate text-xs text-muted">
+                  {pendingImage.nombre ? `${pendingImage.nombre} — escribe qué quieres saber o envíalo así` : "Imagen lista — escribe algo o envíala así"}
+                </span>
                 <button
                   onClick={() => setPendingImage(null)}
-                  title="Quitar imagen"
+                  title="Quitar archivo"
                   className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-border"
                 >
                   <i className="ti ti-x" style={{ fontSize: 14 }} />
@@ -862,23 +924,14 @@ export default function VictorChat({
                     // dejar que el navegador intente (y falle en silencio)
                     // pegarla como texto. Si es texto normal, no se hace
                     // nada aquí y el pegado sigue su curso normal.
-                    const item = Array.from(e.clipboardData.items).find((it) => it.type.startsWith("image/"));
+                    const item = Array.from(e.clipboardData.items).find(
+                      (it) => it.kind === "file" && (it.type.startsWith("image/") || it.type === "application/pdf")
+                    );
                     if (!item) return;
-                    if (!IMAGE_MEDIA_TYPES_ACEPTADOS.includes(item.type)) {
-                      e.preventDefault();
-                      setError("Ese tipo de imagen no es compatible — prueba con un PNG, JPG, WEBP o GIF.");
-                      return;
-                    }
                     e.preventDefault();
                     const file = item.getAsFile();
                     if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      const resultado = reader.result as string;
-                      const base64 = resultado.split(",")[1] || "";
-                      setPendingImage({ dataUrl: resultado, base64, mediaType: file.type });
-                    };
-                    reader.readAsDataURL(file);
+                    prepararArchivo(file);
                   }}
                   placeholder={listening ? "Escuchando…" : "Pregúntale a VICTOR..."}
                   className="vc-input w-full resize-none rounded-2xl leading-snug"
@@ -917,7 +970,7 @@ export default function VictorChat({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  accept="image/png,image/jpeg,image/webp,image/gif,application/pdf"
                   className="hidden"
                   onChange={handleFileSelected}
                 />
@@ -952,8 +1005,8 @@ export default function VictorChat({
                         }}
                         className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2.5 text-left text-sm text-text hover:bg-bg"
                       >
-                        <i className="ti ti-photo" style={{ fontSize: 16, color: "#1D9E75" }} />
-                        Elegir foto
+                        <i className="ti ti-paperclip" style={{ fontSize: 16, color: "#1D9E75" }} />
+                        Elegir foto o PDF
                       </button>
                     </div>
                   </>

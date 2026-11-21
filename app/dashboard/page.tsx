@@ -56,7 +56,7 @@ function etiquetaMes(mesYYYYMM: string): string {
 // reales a Supabase. Donde todavía no hay datos (Plaid sin conectar,
 // ninguna meta creada), se muestra un estado vacío honesto en vez de
 // inventar cifras.
-export default async function DashboardPage({ searchParams }: { searchParams: { mes?: string } }) {
+export default async function DashboardPage({ searchParams }: { searchParams: { mes?: string; cuenta?: string } }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -171,7 +171,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // seguía sumando en Personal aunque el usuario la hubiera movido.
   let cuentasQuery = supabase
     .from("plaid_accounts")
-    .select("id, name, nickname, mask, available_balance, current_balance, es_negocio, type, subtype, entity_id")
+    .select("id, plaid_account_id, name, nickname, mask, available_balance, current_balance, es_negocio, type, subtype, entity_id")
     .eq("owner_id", user.id)
     .is("entity_id", null);
   if (!esPro) cuentasQuery = cuentasQuery.eq("es_negocio", false);
@@ -204,10 +204,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         nombre: `${c.nickname || c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`,
         saldo: Number(c.current_balance || 0),
         disponible: c.available_balance == null ? null : Number(c.available_balance),
+        href: `/dashboard/gastos?cuentas=${encodeURIComponent(`plaid:${c.plaid_account_id}`)}`,
       })),
     ...(cuentasManuales ?? [])
       .filter((c) => c.type === "depository")
-      .map((c) => ({ id: `m-${c.id}`, nombre: `${c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`, saldo: Number(c.current_balance || 0), disponible: null })),
+      .map((c) => ({
+        id: `m-${c.id}`,
+        nombre: `${c.name || "Cuenta"}${c.mask ? ` ···${c.mask}` : ""}`,
+        saldo: Number(c.current_balance || 0),
+        disponible: null,
+        href: `/dashboard/gastos?cuentas=${encodeURIComponent(`manual:${c.id}`)}`,
+      })),
   ];
   const bancoConectado = todasLasCuentas.length > 0;
 
@@ -402,11 +409,29 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // Core.html), donde esto vivía como alerta pendiente en la primera
   // pantalla, no en una pestaña aparte.
   const LIMITE_PENDIENTES = 8;
-  const [{ data: pendientesRaw }, { count: totalPendientes }, { data: categorias }] = await Promise.all([
-    supabase
-      .from("transactions")
-      .select("id, description_raw, amount, fecha, tipo_flujo, pending, plaid_account_id, manual_account_id")
-      .eq("owner_id", user.id)
+  // Filtro por cuenta (20 nov 2026, pedido de una clienta en una demo: con
+  // varias tarjetas, entre ellas la de su hija, las pendientes salían todas
+  // mezcladas). ?cuenta=plaid:<plaid_account_id> | manual:<id>.
+  const [cuentaOrigen, ...cuentaResto] = (searchParams.cuenta ?? "").split(":");
+  const cuentaFiltro =
+    (cuentaOrigen === "plaid" || cuentaOrigen === "manual") && cuentaResto.join(":")
+      ? { origen: cuentaOrigen as "plaid" | "manual", id: cuentaResto.join(":") }
+      : null;
+  const columnaCuenta = cuentaFiltro?.origen === "manual" ? "manual_account_id" : "plaid_account_id";
+  let pendientesQuery = supabase
+    .from("transactions")
+    .select("id, description_raw, amount, fecha, tipo_flujo, pending, plaid_account_id, manual_account_id")
+    .eq("owner_id", user.id);
+  let totalPendientesQuery = supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", user.id);
+  if (cuentaFiltro) {
+    pendientesQuery = pendientesQuery.eq(columnaCuenta, cuentaFiltro.id);
+    totalPendientesQuery = totalPendientesQuery.eq(columnaCuenta, cuentaFiltro.id);
+  }
+  const [{ data: pendientesRaw }, { count: totalPendientes }, { data: categorias }, { data: pendientesPorCuentaRaw }] = await Promise.all([
+    pendientesQuery
       .is("entity_id", null)
       .is("hacienda_category_id", null)
       .eq("es_duplicada", false)
@@ -418,15 +443,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       .eq("pending", false)
       .order("fecha", { ascending: false })
       .limit(LIMITE_PENDIENTES),
-    supabase
-      .from("transactions")
-      .select("id", { count: "exact", head: true })
-      .eq("owner_id", user.id)
+    totalPendientesQuery
       .is("entity_id", null)
       .is("hacienda_category_id", null)
       .eq("es_duplicada", false)
       .eq("pending", false),
     supabase.from("hacienda_categories").select("id, nombre").eq("activo", true).order("nombre"),
+    // Cuántas pendientes tiene cada cuenta, para los botones de filtro.
+    supabase
+      .from("transactions")
+      .select("plaid_account_id, manual_account_id")
+      .eq("owner_id", user.id)
+      .is("entity_id", null)
+      .is("hacienda_category_id", null)
+      .eq("es_duplicada", false)
+      .eq("pending", false)
+      .limit(5000),
   ]);
 
   // Bug real (23 agosto 2026, reportado por Joel): con dos cuentas
@@ -450,6 +482,29 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     (t.plaid_account_id && nombrePorCuenta.get(`plaid:${t.plaid_account_id}`)) ||
     (t.manual_account_id && nombrePorCuenta.get(`manual:${t.manual_account_id}`)) ||
     null;
+  // Botones "Todas · Chase ···1234 (5) · Visa ···9876 (3)…" de la tarjeta de pendientes.
+  const conteoPorCuenta = new Map<string, number>();
+  for (const t of (pendientesPorCuentaRaw ?? []) as { plaid_account_id: string | null; manual_account_id: string | null }[]) {
+    const clave = t.plaid_account_id ? `plaid:${t.plaid_account_id}` : t.manual_account_id ? `manual:${t.manual_account_id}` : null;
+    if (clave) conteoPorCuenta.set(clave, (conteoPorCuenta.get(clave) ?? 0) + 1);
+  }
+  const cuentaActiva = cuentaFiltro ? `${cuentaFiltro.origen}:${cuentaFiltro.id}` : null;
+  const hrefCuenta = (clave: string | null) => {
+    const p = new URLSearchParams();
+    if (searchParams.mes) p.set("mes", searchParams.mes);
+    if (clave) p.set("cuenta", clave);
+    const q = p.toString();
+    return `/dashboard${q ? `?${q}` : ""}#pendientes`;
+  };
+  const filtrosPendientes =
+    conteoPorCuenta.size > 1 || cuentaActiva
+      ? [
+          { clave: "todas", nombre: "Todas", n: (pendientesPorCuentaRaw ?? []).length, href: hrefCuenta(null), activo: !cuentaActiva },
+          ...[...conteoPorCuenta.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([clave, n]) => ({ clave, nombre: nombrePorCuenta.get(clave) ?? "Cuenta", n, href: hrefCuenta(clave), activo: cuentaActiva === clave })),
+        ]
+      : [];
 
   // Para cada pendiente, le pedimos al motor una sugerencia (match_category
   // sin el filtro de confianza/confirmado que sí aplica el trigger) — así
@@ -964,9 +1019,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       )}
 
       <GastosPendientesCard
+        key={cuentaActiva ?? "todas"}
         pendientesIniciales={pendientesConSugerencia}
         totalPendientes={totalPendientes ?? 0}
         categorias={categorias ?? []}
+        filtros={filtrosPendientes}
+        hrefBase={cuentaActiva ? `/dashboard/gastos?cuentas=${encodeURIComponent(cuentaActiva)}` : "/dashboard/gastos"}
       />
 
       {/* Selector de mes — solo afecta Ingresos y Gastos, ver comentario

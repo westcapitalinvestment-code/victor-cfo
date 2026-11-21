@@ -131,6 +131,17 @@ export async function POST(req: NextRequest) {
       ? (imageMediaTypeRaw as ImageMediaTypePermitido)
       : null;
   const tieneImagen = !!imageBase64Raw && !!imageMediaType;
+  // PDF adjunto (20 nov 2026): arrastrado o elegido en el chat. Va como
+  // bloque "document" de Anthropic (lee texto y páginas escaneadas).
+  const tienePdf = !tieneImagen && !!imageBase64Raw && imageMediaTypeRaw === "application/pdf";
+  const archivoNombre: string =
+    typeof body?.archivoNombre === "string" && body.archivoNombre.trim() ? body.archivoNombre.trim().slice(0, 120) : "documento.pdf";
+  if (tienePdf && imageBase64Raw!.length > 4_300_000) {
+    return NextResponse.json(
+      { error: "El PDF es muy grande (máximo 3 MB). Prueba con uno más liviano o solo las páginas que necesitas." },
+      { status: 400 }
+    );
+  }
 
   // Tope de tamaño — un screenshot de pantalla completa en 4K en base64
   // puede pasar los ~5MB que Anthropic acepta por imagen sin comprimir.
@@ -148,7 +159,7 @@ export async function POST(req: NextRequest) {
   // usuario quiere que VICTOR simplemente la mire — igual que pegar una
   // imagen sin texto en cualquier chat de IA.
   const userMessage: string =
-    (typeof userMessageRaw === "string" && userMessageRaw.trim()) || (tieneImagen ? "Analiza esta imagen." : "");
+    (typeof userMessageRaw === "string" && userMessageRaw.trim()) || (tieneImagen ? "Analiza esta imagen." : tienePdf ? "Analiza este documento." : "");
 
   if (!userMessage) {
     return NextResponse.json({ error: "Falta el mensaje." }, { status: 400 });
@@ -159,7 +170,11 @@ export async function POST(req: NextRequest) {
   // subsiguiente que la incluya en el contexto). Con la etiqueta 📎 VICTOR
   // sabe, al releer el historial más adelante en la misma conversación,
   // que ese turno tuvo una imagen que ya no puede volver a ver.
-  const textoParaHistorial = tieneImagen ? `📎 [Imagen adjunta] ${userMessage}` : userMessage;
+  const textoParaHistorial = tieneImagen
+    ? `📎 [Imagen adjunta] ${userMessage}`
+    : tienePdf
+      ? `📎 [PDF adjunto: ${archivoNombre}] ${userMessage}`
+      : userMessage;
 
   // 1. Perfil del usuario (nombre, plan) para el bloque de contexto.
   // ciclo_inicio/ciclo_fin (migración 0026) son las fechas del ciclo de
@@ -745,7 +760,16 @@ export async function POST(req: NextRequest) {
         },
         { type: "text", text: userMessage },
       ]
-    : userMessage;
+    : tienePdf
+      ? [
+          {
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: imageBase64Raw as string },
+            title: archivoNombre,
+          },
+          { type: "text", text: userMessage },
+        ]
+      : userMessage;
 
   const apiMessages: Anthropic.MessageParam[] = [
     ...recentHistory.filter((m) => m.content && m.content.trim()).map((m) => ({ role: m.role, content: m.content })),
