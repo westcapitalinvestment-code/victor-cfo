@@ -10,7 +10,8 @@ import type { ReglasRiesgo } from "./trading";
 export type Experiencia = "nuevo" | "menos1" | "mas1";
 export type Estilo = "scalping" | "intradia" | "swing";
 export type Problema = "revancha" | "sobreoperar" | "sin_stop" | "mover_stop";
-export type Objetivo = "proteger" | "crecer" | "escalar" | "retiro";
+export type Objetivo = "proteger" | "crecer" | "rapido" | "escalar" | "retiro";
+export type Edad = "menos30" | "30a45" | "45a60" | "mas60";
 
 export type RespuestasPlan = {
   capital: number;
@@ -18,6 +19,7 @@ export type RespuestasPlan = {
   estilo: Estilo;
   problemas: Problema[];
   objetivo: Objetivo;
+  edad: Edad;
 };
 
 export type PlanSugerido = {
@@ -40,15 +42,31 @@ export function armarPlan(r: RespuestasPlan): PlanSugerido {
   const sobreopera = r.problemas.includes("sobreoperar");
   const razones: string[] = [];
 
-  // Riesgo por trade: menos cuando empiezas o quieres proteger.
+  // Riesgo por trade. Base por experiencia; luego objetivo y edad lo
+  // ajustan. La experiencia manda: un nuevo nunca pasa de 0.75%, aunque
+  // sea joven o quiera crecer rápido. Tope absoluto 1.5%.
   let riesgoPct = r.experiencia === "nuevo" ? 0.5 : r.experiencia === "menos1" ? 0.75 : 1;
   const conservador = r.objetivo === "proteger" || r.objetivo === "retiro";
-  if (conservador) riesgoPct = Math.min(riesgoPct, 0.5);
+  const rapido = r.objetivo === "rapido";
+  if (rapido) riesgoPct += 0.5;
+  if (r.edad === "menos30" && !conservador) riesgoPct += 0.25;
+  if (r.edad === "45a60") riesgoPct = Math.min(riesgoPct, 0.75);
+  if (conservador || r.edad === "mas60") riesgoPct = Math.min(riesgoPct, 0.5);
+  if (r.experiencia === "nuevo") riesgoPct = Math.min(riesgoPct, 0.75);
+  riesgoPct = Math.min(riesgoPct, 1.5);
   razones.push(
     riesgoPct <= 0.5
-      ? "Arriesgas 0.5% por trade: aguantas muchas pérdidas seguidas sin dañar la cuenta mientras aprendes."
-      : `Arriesgas ${riesgoPct}% por trade, cerca del 1% que usan las prop firms.`
+      ? "Arriesgas 0.5% por trade: aguantas muchas pérdidas seguidas sin dañar la cuenta."
+      : riesgoPct <= 1
+        ? `Arriesgas ${riesgoPct}% por trade, dentro del 1% que usan las prop firms.`
+        : `Arriesgas ${riesgoPct}% por trade: más que el 1% de las prop firms, así que las rachas malas pesan más. Pierdes con conciencia: sabes de antemano cuánto.`
   );
+  if (r.edad === "menos30" && !conservador)
+    razones.push("Tienes tiempo de tu lado para recuperarte, por eso un poco más de riesgo.");
+  if (r.edad === "mas60" && !conservador)
+    razones.push("A tu edad el capital pesa más que la velocidad: el riesgo se queda en 0.5%.");
+  if (r.experiencia === "nuevo" && (rapido || r.edad === "menos30"))
+    razones.push("Como estás empezando, el riesgo no pasa de 0.75% hasta que tengas historial en la bitácora.");
 
   // Pérdidas permitidas al día.
   const perdedores = revancha ? 2 : 3;
@@ -68,7 +86,8 @@ export function armarPlan(r: RespuestasPlan): PlanSugerido {
   if (revancha) razones.push("Esperas 60 minutos después de una pérdida antes de volver a entrar.");
 
   // Drawdown máximo de la cuenta (como el de una evaluación).
-  const drawdownPct = conservador || r.experiencia === "nuevo" ? 8 : 10;
+  const drawdownPct =
+    conservador || r.edad === "mas60" ? 8 : r.experiencia === "nuevo" ? (rapido ? 10 : 8) : rapido ? 12 : 10;
 
   if (r.problemas.includes("sin_stop")) razones.push("Stop obligatorio: el guardián no te deja abrir sin stop.");
 
@@ -93,6 +112,8 @@ export function armarPlan(r: RespuestasPlan): PlanSugerido {
   if (r.problemas.includes("mover_stop")) checklist.push("No moví el stop en contra");
   if (sobreopera) checklist.push("Esperé mi setup, no entré por aburrimiento");
 
+  if (rapido)
+    razones.push(`Crecer rápido también significa caídas más rápidas: el tope de ${drawdownPct}% es tu freno de emergencia. Si llegas ahí, el guardián te para.`);
   if (r.objetivo === "retiro")
     razones.push(`Pensado para largo plazo: riesgo bajo y un tope de ${drawdownPct}% de caída para que la cuenta crezca sin sustos que la pongan en peligro.`);
   if (r.objetivo === "escalar")
