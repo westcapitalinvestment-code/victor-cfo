@@ -6,6 +6,7 @@
 // el capital, que el cliente puede ajustar. Funciones puras, sin red.
 
 import type { ReglasRiesgo } from "./trading";
+import { SESIONES, type Sesion } from "./trading-bloqueos";
 
 export type Experiencia = "nuevo" | "menos1" | "mas1";
 export type Estilo = "scalping" | "intradia" | "swing";
@@ -20,6 +21,7 @@ export type RespuestasPlan = {
   problemas: Problema[];
   objetivo: Objetivo;
   edad: Edad;
+  sesiones: Sesion[]; // vacío = sin preferencia
 };
 
 export type PlanSugerido = {
@@ -32,6 +34,7 @@ export type PlanSugerido = {
   diasMalosHastaTope: number;
   checklist: string[];
   razones: string[];
+  sesiones: Sesion[];
 };
 
 const redondear = (n: number) => Math.floor(n * 100) / 100;
@@ -119,5 +122,10 @@ export function armarPlan(r: RespuestasPlan): PlanSugerido {
   if (r.objetivo === "escalar")
     razones.push(`Para escalar: subes el riesgo solo cuando la cuenta crece (el % se calcula sobre el balance nuevo), nunca para recuperar. Tope de caída de ${drawdownPct}%.`);
 
-  return { reglas, perdidaDiaUSD, riesgoTradeUSD, drawdownPct, equityMinimaUSD, diasMalosHastaTope, checklist, razones };
+  if (r.sesiones.length) {
+    razones.push(`Solo operas en ${r.sesiones.map((x) => SESIONES[x].corto).join(" o ")}: fuera de ese horario el guardián no te deja abrir trades. Así comparas resultados en el mismo horario.`);
+    checklist.push("Estoy dentro de mi horario");
+  }
+
+  return { reglas, perdidaDiaUSD, riesgoTradeUSD, drawdownPct, equityMinimaUSD, diasMalosHastaTope, checklist, razones, sesiones: r.sesiones };
 }

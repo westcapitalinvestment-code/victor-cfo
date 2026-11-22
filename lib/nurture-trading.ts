@@ -73,5 +73,33 @@ export async function procesarNurtureTrading(supabase: SupabaseClient): Promise<
     }
   }
 
+  // Fin del periodo de prueba del plan de reglas (22 nov 2026): un correo por prueba.
+  const { data: pruebas } = await supabase
+    .from("risk_rules")
+    .select("owner_id, prueba_inicio, prueba_dias")
+    .not("prueba_inicio", "is", null)
+    .eq("prueba_avisada", false);
+  const hoy = new Date(ahora).toISOString().slice(0, 10);
+  for (const p of (pruebas ?? []) as { owner_id: string; prueba_inicio: string; prueba_dias: number | null }[]) {
+    const fin = new Date(Date.parse(p.prueba_inicio + "T12:00:00Z") + Number(p.prueba_dias ?? 14) * dia).toISOString().slice(0, 10);
+    if (fin > hoy) continue;
+    try {
+      const { data: u } = await supabase
+        .from("users")
+        .select("id, email, full_name, email_marketing_baja_at")
+        .eq("id", p.owner_id)
+        .maybeSingle();
+      if (u?.email && !u.email_marketing_baja_at) {
+        const r = await sendCorreoTrading({ tipo: "prueba", toEmail: u.email, toName: u.full_name, userId: u.id });
+        if (r.sent) enviados++;
+        resultados[`trading-prueba:${p.owner_id}`] = { enviado: r.sent, razon: r.reason };
+        if (!r.sent && r.reason !== SIN_RESEND) continue;
+      }
+      await supabase.from("risk_rules").update({ prueba_avisada: true }).eq("owner_id", p.owner_id);
+    } catch (err) {
+      resultados[`trading-prueba:${p.owner_id}`] = { enviado: false, error: err instanceof Error ? err.message : "Error" };
+    }
+  }
+
   return { enviados, resultados };
 }

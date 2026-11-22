@@ -7,7 +7,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 const FROM = process.env.RESEND_FROM_EMAIL || "VICTOR CFO <onboarding@resend.dev>";
 const SITE_URL = "https://www.victorcfo.com";
 
-export type CorreoTrading = "d1" | "d3" | "d14" | "negocio";
+export type CorreoTrading = "d1" | "d3" | "d14" | "negocio" | "prueba";
 
 function esc(t: string): string {
   return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -46,6 +46,18 @@ const CORREOS: Record<CorreoTrading, { asunto: string; titulo: string; parrafos:
     ],
     cta: "Ver planes",
     path: "/dashboard/config#plan",
+  },
+  // 22 nov 2026: fin del periodo de prueba del plan de reglas
+  prueba: {
+    asunto: "Terminó tu prueba: revisemos tus resultados",
+    titulo: "Tus reglas ya tienen datos",
+    parrafos: [
+      "Terminó el periodo de prueba de tu plan de trading. Operaste con las mismas reglas todo este tiempo y eso hace que tus resultados se puedan medir de verdad.",
+      "Entra a Trading y toca \"Revisar con VICTOR\". Te muestra qué activos, horarios y días te funcionan, dónde rompiste el plan y cuánto te costó, y te propone ajustes. Tú decides cuáles aplicar.",
+      "Cada ajuste empieza una nueva prueba. Así tu trading se vuelve un sistema documentado, no una corazonada.",
+    ],
+    cta: "Revisar mis resultados",
+    path: "/dashboard/trading",
   },
   negocio: {
     asunto: "Tus números de trading van bien. Hablemos de impuestos",

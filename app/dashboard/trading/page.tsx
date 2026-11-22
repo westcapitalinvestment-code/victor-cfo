@@ -29,6 +29,19 @@ import Estadisticas from "./estadisticas";
 import ReglasPropias, { type ReglaPropia } from "./reglas-propias";
 import PlanSugeridoCard from "./plan-sugerido";
 import type { PlanSugerido } from "@/lib/trading-plan-sugerido";
+import BloqueosHorario from "./bloqueos-horario";
+import { PruebaPlan, CambiosPendientes } from "./prueba-plan";
+import { BLOQUEOS_VACIOS, bloqueosAColumnas, cfgGuardian, describirBloqueos, fechaLocal, normalizarBloqueos, type Bloqueos } from "@/lib/trading-bloqueos";
+
+type CambioPendiente = { id: string; cambios: Record<string, { antes: unknown; despues: unknown }>; aplicar_desde: string };
+
+// Mensaje después de guardar: lo que aplicó ya y lo que espera a mañana.
+function textoGuardado(j: { ahora?: string[]; manana?: string[] } | null): string {
+  const manana = j?.manana ?? [];
+  if (!manana.length) return "Reglas guardadas. El guardián las recibe solo en unos segundos (si es de antes del 22 nov, descárgalo una vez más).";
+  const ahora = j?.ahora ?? [];
+  return `${ahora.length ? `Aplicado ya: ${ahora.join(", ")}. ` : ""}Desde mañana: ${manana.join(", ")}. Aflojar una regla espera a mañana para que nadie se quite los frenos en caliente.`;
+}
 
 // Módulo Trading (oct 2026) — organizador, NO da señales ni consejos.
 // Panel (calendario, curva, perfil), Bitácora por mes y por día, y Riesgo
@@ -220,10 +233,17 @@ function TradingContenido() {
   // Cuestionario "VICTOR te arma tu plan" (21 nov 2026): se ofrece a quien aún no guardó reglas.
   const [tieneReglas, setTieneReglas] = useState(true);
   const [planAbierto, setPlanAbierto] = useState(false);
+  // Horario y bloqueos, cambios "desde mañana" y periodo de prueba (22 nov 2026)
+  const [bloqueos, setBloqueos] = useState<Bloqueos>(BLOQUEOS_VACIOS);
+  const [pendientes, setPendientes] = useState<CambioPendiente[]>([]);
+  const [prueba, setPrueba] = useState<{ inicio: string; dias: number } | null>(null);
 
   async function cargar(preferida?: string) {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return router.push("/login");
+    // Aplica los cambios "desde mañana" que ya vencieron y trae los que faltan.
+    const rp0 = await fetch("/api/trading/reglas").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    setPendientes((rp0?.pendientes ?? []) as CambioPendiente[]);
     const [{ data: cs }, { data: rr }] = await Promise.all([
       supabase.from("trading_accounts").select("id, nombre, tipo, balance_inicial, numero_cuenta, broker, balance_actual, equity_actual, last_sync_at").order("created_at"),
       supabase.from("risk_rules").select("*").eq("owner_id", u.user.id).maybeSingle(),
@@ -267,6 +287,8 @@ function TradingContenido() {
         guard_blocked_symbols: String(r.guard_blocked_symbols ?? ""),
         guard_pip_symbol: String(r.guard_pip_symbol ?? "XAUUSD"),
       });
+      setBloqueos(normalizarBloqueos(r));
+      setPrueba(r.prueba_inicio && r.prueba_dias ? { inicio: String(r.prueba_inicio), dias: Number(r.prueba_dias) } : null);
     }
     const id = preferida ?? cuentaId ?? lista[0]?.id ?? null;
     setCuentaId(id);
@@ -418,13 +440,26 @@ function TradingContenido() {
     setMsg(null);
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
-    const { error: e } = await supabase.from("risk_rules").upsert({ owner_id: u.user.id, ...reglas, ...guardian, updated_at: new Date().toISOString() });
-    if (e) return setError(`No se pudieron guardar las reglas: ${e.message}`);
-    setMsg("Reglas guardadas.");
+    const res = await fetch("/api/trading/reglas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cambios: { ...reglas, ...guardian, ...bloqueosAColumnas(bloqueos) } }),
+    });
+    const j = await res.json().catch(() => null);
+    if (!res.ok) return setError(j?.error ?? "No se pudieron guardar las reglas.");
+    await cargar(cuentaId ?? undefined);
+    setMsg(textoGuardado(j));
+  }
+
+  async function cancelarPendiente(id: string) {
+    const res = await fetch(`/api/trading/reglas?id=${id}`, { method: "DELETE" });
+    if (!res.ok) return setError("No se pudo cancelar el cambio.");
+    setPendientes((l) => l.filter((p) => p.id !== id));
+    setMsg("Cambio cancelado: tus reglas se quedan como están.");
   }
 
   // Guarda el plan del cuestionario: reglas + límites del guardián + checklist de entrada.
-  async function aplicarPlan(plan: PlanSugerido): Promise<string | null> {
+  async function aplicarPlan(plan: PlanSugerido, diasPrueba: number): Promise<string | null> {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return "Tu sesión expiró. Vuelve a entrar.";
     const nuevoGuardian: Guardian = {
@@ -433,10 +468,25 @@ function TradingContenido() {
       guard_min_equity_usd: plan.equityMinimaUSD > 0 ? plan.equityMinimaUSD : null,
       guard_max_open: 1,
     };
-    const { error: e } = await supabase
-      .from("risk_rules")
-      .upsert({ owner_id: u.user.id, ...plan.reglas, ...nuevoGuardian, updated_at: new Date().toISOString() });
-    if (e) return `No se pudo guardar el plan: ${e.message}`;
+    const nuevosBloqueos: Bloqueos = plan.sesiones.length ? { ...bloqueos, sesiones: plan.sesiones, ventanas: [] } : bloqueos;
+    const res = await fetch("/api/trading/reglas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        origen: "plan",
+        cambios: {
+          ...plan.reglas,
+          ...nuevoGuardian,
+          ...bloqueosAColumnas(nuevosBloqueos),
+          prueba_inicio: fechaLocal(nuevosBloqueos.zona, Date.now()),
+          prueba_dias: Math.max(14, diasPrueba),
+          prueba_avisada: false,
+          prueba_revisada: false,
+        },
+      }),
+    });
+    const j = await res.json().catch(() => null);
+    if (!res.ok) return j?.error ?? "No se pudo guardar el plan.";
     // Checklist: solo agrega las que no tenga ya (mismo texto).
     const existentes = new Set(reglasPropias.map((x) => x.texto.trim().toLowerCase()));
     const nuevas = plan.checklist.filter((t) => !existentes.has(t.trim().toLowerCase()));
@@ -450,11 +500,13 @@ function TradingContenido() {
       if (e2) return `Se guardaron tus reglas, pero no el checklist: ${e2.message}`;
       agregadas = (ins ?? []) as ReglaPropia[];
     }
-    setReglas(plan.reglas);
-    setGuardian(nuevoGuardian);
     if (agregadas.length) setReglasPropias((prev) => [...prev, ...agregadas]);
-    setTieneReglas(true);
-    setMsg("Plan guardado. Si ya tenías el guardián en MT5, descárgalo otra vez para que lleve tus reglas nuevas.");
+    await cargar(cuentaId ?? undefined);
+    setMsg(
+      `Plan guardado. Empieza tu prueba de ${Math.max(14, diasPrueba)} días: opera con estas reglas sin cambiarlas y al final VICTOR revisa tus resultados contigo. ` +
+        (j?.manana?.length ? `Lo que afloja tus reglas de antes (${j.manana.join(", ")}) aplica desde mañana. ` : "") +
+        "Si tu guardián en MT5 es de antes del 22 nov, descárgalo una vez más; desde ahí tus reglas le llegan solas."
+    );
     return null;
   }
 
@@ -495,6 +547,7 @@ function TradingContenido() {
   // Todo se evalúa con el historial completo (la revancha o el límite diario dependen de trades anteriores).
   // Modo simple: lo que puedo perder al día / pérdidas que aguanto al día = $ fijos por trade, en cualquier activo.
   // El total de trades del día es aparte: si vas ganando, sigues con el mismo riesgo hasta ese máximo.
+  const tradesEnPrueba = prueba ? trades.filter((t) => aHoraPR(t.hora_apertura).slice(0, 10) >= prueba.inicio).length : 0;
   const riesgoFijoUSD =
     guardian.guard_daily_loss_usd && guardian.guard_daily_loss_usd > 0 && reglas.max_perdedores_dia > 0
       ? Math.floor((guardian.guard_daily_loss_usd / reglas.max_perdedores_dia) * 100) / 100
@@ -640,6 +693,7 @@ function TradingContenido() {
       esperaTrasPerdidaMin: reglas.espera_tras_perdida_min,
       syncUrl: token ? `${window.location.origin}/api/trading/sync` : "",
       syncToken: token ?? "",
+      cfgInicial: cfgGuardian({ ...reglas, ...guardian, ...bloqueosAColumnas(bloqueos) }),
       modoBloqueo: guardian.guard_lock_mode,
       bloquearCierreManual: guardian.guard_block_manual_close,
     });
@@ -846,6 +900,7 @@ function TradingContenido() {
           )}
           {tab === "panel" && (
             <>
+              {prueba && <PruebaPlan inicio={prueba.inicio} dias={prueba.dias} trades={tradesEnPrueba} hoy={fechaLocal(bloqueos.zona, Date.now())} />}
               {trades.length === 0 ? (
                 <div className="vc-card text-center text-sm text-muted">Sube el reporte Excel de MT5 para ver tu panel.</div>
               ) : (
@@ -1025,6 +1080,9 @@ function TradingContenido() {
                   )}
                 </div>
               )}
+
+              <CambiosPendientes lista={pendientes} onCancelar={cancelarPendiente} />
+              {prueba && <PruebaPlan inicio={prueba.inicio} dias={prueba.dias} trades={tradesEnPrueba} hoy={fechaLocal(bloqueos.zona, Date.now())} />}
 
               <PlanSugeridoCard
                 capitalInicial={balanceInicial}
@@ -1270,6 +1328,7 @@ function TradingContenido() {
                     </details>
                   </div>
                 </details>
+                <BloqueosHorario valor={bloqueos} onCambio={setBloqueos} />
                 <div className="rounded-lg border border-teal/40 bg-teal/5 p-3 text-[14px]">
                   <p className="mb-2 font-medium">Tus límites de hoy (como una cuenta de fondeo)</p>
                   <div className="mb-3 flex flex-col gap-2">
@@ -1310,6 +1369,9 @@ function TradingContenido() {
                       {reglas.espera_tras_perdida_min > 0 ? <>; espera {reglas.espera_tras_perdida_min} min después de una pérdida</> : null}.
                     </li>
                     {guardian.guard_blocked_symbols.trim() && <li>Prohibido operar: {guardian.guard_blocked_symbols}.</li>}
+                    {describirBloqueos(bloqueos).map((t) => (
+                      <li key={t}>{t}</li>
+                    ))}
                     <li>
                       {guardian.guard_lock_mode === "flexible"
                         ? "El stop solo lo puedes mover a tu favor; nunca alejarlo ni quitarlo."
@@ -1329,7 +1391,7 @@ function TradingContenido() {
                   {syncToken ? (
                     <>
                       <p className="text-muted">
-                        Activa para <b>{cuenta?.nombre}</b>. El guardián envía tus trades cerrados y tu balance cada 30 segundos, y este panel se actualiza solo. Si cambiaste algo, <b>descarga el guardián otra vez</b> y reemplázalo en MT5 (lleva tu token adentro).
+                        Activa para <b>{cuenta?.nombre}</b>. El guardián envía tus trades cerrados y tu balance cada 30 segundos, este panel se actualiza solo y tus reglas le llegan solas. Si tu guardián es de antes del 22 nov 2026, <b>descárgalo una vez más</b> y reemplázalo en MT5.
                       </p>
                       <div className="mt-2 flex gap-3">
                         <button className="text-teal" onClick={() => activarSync()}>Generar token nuevo</button>
@@ -1383,7 +1445,7 @@ function TradingContenido() {
                     </li>
                     <li>Listo: arriba a la izquierda del gráfico verás VENDER / COMPRAR y tu estado. Vigila todas tus posiciones de la cuenta. Pruébalo primero en demo.</li>
                   </ol>
-                  <p className="mt-2">Si cambias tus reglas aquí, descárgalo otra vez y repite los pasos 2 y 3. También puedes ajustar valores en MT5, en la pestaña <b>Entradas</b> del guardián.</p>
+                  <p className="mt-2">Tus reglas (límites, horario, días, pausas y noticias) le llegan solas al guardián cada 30 segundos mientras MT5 esté abierto: cámbialas aquí o pídeselo a VICTOR en el chat. Si tu guardián es de antes del 22 nov 2026, descárgalo una vez más y repite los pasos 2 y 3.</p>
                 </details>
                 <p className="text-[13px] text-muted">Para MT4 el programa es distinto y todavía no está disponible. Es una herramienta de control propio, no una señal ni una garantía de resultados.</p>
               </div>

@@ -16,6 +16,115 @@ import { nominaIncluidaEnPlan } from "@/lib/stripe";
 import { cargarParametros, cargarConfigEntidad } from "@/lib/nomina-server";
 import { calcularEmpleado, PERIODOS_POR_ANIO, type EmpleadoNomina, type Frecuencia } from "@/lib/nomina";
 import { aHoraPR, evaluarCumplimiento, NOMBRE_REGLA, REGLAS_POR_DEFECTO, type ReglasRiesgo, type Trade, type TradeEvaluado } from "@/lib/trading";
+import {
+  clasificarCambios,
+  columnasDeGrupo,
+  cuandoLocal,
+  describirBloqueos,
+  estadoHorario,
+  ETIQUETA_CAMPO,
+  fechaLocal,
+  normalizarBloqueos,
+  offsetMin,
+  sesionDeInstante,
+  zonaValida,
+  type FilaReglas,
+} from "@/lib/trading-bloqueos";
+import { aplicarPendientes, guardarReglas, listarPendientes, textoValor } from "@/lib/trading-reglas-server";
+
+// ---------- Cambios de reglas de trading desde el chat (22 nov 2026) ----------
+const DIA_NUM: Record<string, number> = { domingo: 0, lunes: 1, martes: 2, "miércoles": 3, miercoles: 3, jueves: 4, viernes: 5, "sábado": 6, sabado: 6 };
+
+function cambiosTradingDesdeInput(input: Record<string, unknown>, actual: FilaReglas): { cambios: FilaReglas; reiniciar: boolean; diasPrueba: number; error?: string } {
+  const c: FilaReglas = {};
+  const def = (k: string) => input[k] !== undefined && input[k] !== null;
+  const entero = (k: string, min: number) => {
+    const v = Math.round(Number(input[k]));
+    return Number.isFinite(v) && v >= min ? v : null;
+  };
+  const fail = (error: string) => ({ cambios: {}, reiniciar: false, diasPrueba: 14, error });
+  if (def("perdida_max_dia_usd")) {
+    const v = Number(input.perdida_max_dia_usd);
+    if (!(v > 0)) return fail("La pérdida máxima del día tiene que ser mayor que $0.");
+    c.guard_daily_loss_usd = Math.round(v * 100) / 100;
+  }
+  if (def("max_perdedores_dia")) {
+    const v = entero("max_perdedores_dia", 1);
+    if (v === null) return fail("Las pérdidas permitidas al día tienen que ser 1 o más.");
+    c.max_perdedores_dia = v;
+  }
+  if (def("max_trades_dia")) {
+    const v = entero("max_trades_dia", 0);
+    if (v === null) return fail("Los trades al día tienen que ser 0 (sin límite) o más.");
+    c.max_trades_dia = v;
+  }
+  if (def("max_abiertos")) {
+    const v = entero("max_abiertos", 1);
+    if (v === null) return fail("Los trades abiertos a la vez tienen que ser 1 o más.");
+    c.guard_max_open = v;
+  }
+  if (def("espera_tras_perdida_min")) {
+    const v = entero("espera_tras_perdida_min", 0);
+    if (v === null) return fail("La espera después de perder tiene que ser 0 o más minutos.");
+    c.espera_tras_perdida_min = v;
+  }
+  if (def("riesgo_por_trade_pct")) {
+    const v = Number(input.riesgo_por_trade_pct);
+    if (!(v > 0 && v <= 100)) return fail("El riesgo por trade tiene que estar entre 0 y 100%.");
+    c.riesgo_por_trade_pct = v;
+  }
+  if (def("activos_prohibidos")) {
+    c.guard_blocked_symbols = String(input.activos_prohibidos).toUpperCase().replace(/[^A-Z0-9._,#-]/g, "").split(",").filter(Boolean).join(",");
+  }
+  if (def("horario_horas")) c.horario_ventanas = Array.isArray(input.horario_horas) ? input.horario_horas : [];
+  if (def("horario_sesiones")) c.horario_sesiones = Array.isArray(input.horario_sesiones) ? input.horario_sesiones : [];
+  if (def("dias_bloqueados")) {
+    const l = Array.isArray(input.dias_bloqueados) ? input.dias_bloqueados : [];
+    c.dias_bloqueados = l.map((d) => DIA_NUM[String(d).toLowerCase().trim()]).filter((d) => d !== undefined);
+  }
+  if (input.quitar_pausas === true || def("agregar_pausa")) {
+    let pausas = input.quitar_pausas === true ? [] : normalizarBloqueos(actual).pausas;
+    const p = input.agregar_pausa as Record<string, unknown> | undefined;
+    if (p && typeof p === "object") {
+      const re = /^\d{4}-\d{2}-\d{2}$/;
+      if (!re.test(String(p.desde ?? "")) || !re.test(String(p.hasta ?? ""))) return fail("Las fechas de la pausa tienen que ser YYYY-MM-DD.");
+      pausas = [...pausas, { desde: String(p.desde), hasta: String(p.hasta), ...(typeof p.motivo === "string" && p.motivo.trim() ? { motivo: p.motivo.trim().slice(0, 60) } : {}) }];
+    }
+    c.pausas = pausas;
+  }
+  if (def("noticias_min")) {
+    const v = entero("noticias_min", 0);
+    if (v === null || ![0, 15, 30, 60].includes(v)) return fail("El bloqueo por noticias es 0, 15, 30 o 60 minutos.");
+    c.noticias_min = v;
+  }
+  if (def("zona_horaria")) {
+    const z = zonaValida(input.zona_horaria);
+    if (z !== String(input.zona_horaria)) return fail(`No reconozco la zona horaria "${String(input.zona_horaria)}". Usa una como America/Puerto_Rico o Europe/Madrid.`);
+    c.zona_horaria = z;
+  }
+  const diasPrueba = Math.min(90, Math.max(14, Math.round(Number(input.prueba_dias ?? 14)) || 14));
+  return { cambios: c, reiniciar: input.reiniciar_prueba === true, diasPrueba };
+}
+
+function resumenCambiosTrading(actual: FilaReglas, cambios: FilaReglas): { lineas: string[]; afloja: boolean } {
+  const clas = clasificarCambios(actual, cambios);
+  const lineas: string[] = [];
+  const linea = (g: string, cuando: string) => {
+    if (g === "horario") {
+      const a = describirBloqueos({ ...normalizarBloqueos(actual), pausas: [], noticiasMin: 0 }).join(" ") || "sin límite de horario";
+      const d = describirBloqueos({ ...normalizarBloqueos({ ...actual, ...cambios }), pausas: [], noticiasMin: 0 }).join(" ") || "sin límite de horario";
+      lineas.push(`• Horario: antes "${a}" → ahora "${d}" — ${cuando}`);
+      return;
+    }
+    const cols = columnasDeGrupo(g);
+    const antes = cols.map((k) => textoValor(k, actual[k])).join(", ");
+    const despues = cols.map((k) => textoValor(k, cambios[k])).join(", ");
+    lineas.push(`• ${ETIQUETA_CAMPO[g] ?? g}: ${antes} → ${despues} — ${cuando}`);
+  };
+  for (const g of clas.aprieta) linea(g, "aplica AL INSTANTE (aprieta)");
+  for (const g of clas.afloja) linea(g, "aplica DESDE MAÑANA a medianoche en su hora (afloja)");
+  return { lineas, afloja: clas.afloja.length > 0 };
+}
 
 // El texto real del banco (description_raw) casi nunca coincide palabra
 // por palabra con cómo el usuario describe una transacción en el chat —
@@ -1365,8 +1474,8 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       properties: {
         periodo: {
           type: "string",
-          enum: ["hoy", "semana", "mes", "anio", "todo"],
-          description: "Período a revisar (hora de PR). semana = últimos 7 días; mes = mes en curso; anio = año en curso. Por defecto: mes.",
+          enum: ["hoy", "semana", "mes", "anio", "todo", "prueba"],
+          description: "Período a revisar. semana = últimos 7 días; mes = mes en curso; anio = año en curso; prueba = desde que empezó su periodo de prueba de reglas actual. Por defecto: mes (o prueba si la prueba ya terminó y no la han revisado).",
         },
         cuenta_nombre: {
           type: "string",
@@ -1374,6 +1483,74 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
         },
       },
       required: [],
+    },
+  },
+  {
+    // 22 nov 2026, pedido de Joel: VICTOR analiza y CAMBIA las reglas de trading
+    // con la confirmación del usuario (mismo patrón de dos pasos que las facturas).
+    name: "previsualizar_cambio_reglas_trading",
+    description:
+      "Módulo Trading — calcula (SIN guardar) cómo quedarían las reglas del guardián con los cambios que propones o que pide el usuario, " +
+      "y qué aplica AL INSTANTE (apretar una regla) y qué aplica DESDE MAÑANA a medianoche en su hora (aflojarla: más riesgo, más trades, " +
+      "más horario, quitar un bloqueo). SIEMPRE llámala antes de aplicar_cambio_reglas_trading, muéstrale al usuario el resumen tal cual y " +
+      "espera su confirmación explícita. Lo que existe y puedes cambiar: pérdida máxima del día en $, pérdidas permitidas al día, trades al " +
+      "día, trades abiertos a la vez, espera después de perder, riesgo % por trade, activos prohibidos, horario por horas (en su hora local), " +
+      "sesiones del mercado (asia, londres, solape = Londres+NY, nueva_york), días sin operar, pausas por fecha, bloqueo por noticias de " +
+      "alto impacto (0/15/30/60 min) y su zona horaria. Nada más: NUNCA le digas al usuario que configure algo que no está en esta lista. " +
+      "Solo envía los campos que cambian. Las listas (horas, sesiones, días, activos prohibidos) REEMPLAZAN la lista actual: incluye lo que se queda.",
+    input_schema: {
+      type: "object",
+      properties: {
+        perdida_max_dia_usd: { type: "number", description: "Pérdida máxima del día en dólares. Con max_perdedores_dia define el riesgo fijo por trade ($ / pérdidas)." },
+        max_perdedores_dia: { type: "integer", description: "Pérdidas permitidas al día (mín. 1)." },
+        max_trades_dia: { type: "integer", description: "Trades máximos al día, ganando o perdiendo (0 = sin límite)." },
+        max_abiertos: { type: "integer", description: "Trades abiertos a la vez (mín. 1)." },
+        espera_tras_perdida_min: { type: "integer", description: "Minutos de espera obligatoria después de una pérdida." },
+        riesgo_por_trade_pct: { type: "number", description: "Riesgo % por trade (solo se usa si no hay pérdida máxima en $)." },
+        activos_prohibidos: { type: "string", description: "Lista COMPLETA de activos prohibidos separados por coma (ej. \"XAUUSD,GBPJPY\"); \"\" = ninguno." },
+        horario_horas: {
+          type: "array",
+          description: "Lista COMPLETA de horarios permitidos en SU hora local, formato 24 h (ej. [{ini:'08:00', fin:'14:00'}]). [] = sin límite por horas.",
+          items: { type: "object", properties: { ini: { type: "string" }, fin: { type: "string" } }, required: ["ini", "fin"] },
+        },
+        horario_sesiones: {
+          type: "array",
+          description: "Lista COMPLETA de sesiones permitidas. [] = sin límite por sesión. Si hay horas y sesiones, puede operar en cualquiera de las dos.",
+          items: { type: "string", enum: ["asia", "londres", "solape", "nueva_york"] },
+        },
+        dias_bloqueados: {
+          type: "array",
+          description: "Lista COMPLETA de días sin operar (en su hora). [] = ninguno.",
+          items: { type: "string", enum: ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"] },
+        },
+        agregar_pausa: {
+          type: "object",
+          description: "Agrega una pausa por fechas (YYYY-MM-DD, ambas incluidas, en su hora), ej. vacaciones o la semana del NFP.",
+          properties: { desde: { type: "string" }, hasta: { type: "string" }, motivo: { type: "string" } },
+          required: ["desde", "hasta"],
+        },
+        quitar_pausas: { type: "boolean", description: "true = quita todas las pausas por fecha." },
+        noticias_min: { type: "integer", enum: [0, 15, 30, 60], description: "No abrir trades X min antes y después de noticias de alto impacto de la moneda del activo. 0 = apagado." },
+        zona_horaria: { type: "string", description: "Zona horaria IANA del usuario (ej. America/Puerto_Rico, America/Mexico_City, Europe/Madrid). Solo si la dice o está mal." },
+        reiniciar_prueba: { type: "boolean", description: "true = empieza un nuevo periodo de prueba con estas reglas (recomendado después de ajustar tras una revisión)." },
+        prueba_dias: { type: "integer", description: "Días del nuevo periodo de prueba (14 a 90; por defecto 14)." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "aplicar_cambio_reglas_trading",
+    description:
+      "Módulo Trading — GUARDA de verdad los cambios a las reglas del guardián. NUNCA la llames sin antes haber llamado " +
+      "previsualizar_cambio_reglas_trading con EXACTAMENTE los mismos datos, haberle mostrado el resumen al usuario y que él confirme " +
+      "explícitamente ('sí', 'dale', 'aplícalo'). Apretar aplica al instante; aflojar, desde mañana a medianoche en su hora. El guardián de " +
+      "MT5 recibe las reglas solo al sincronizar (si su guardián es de antes del 22 nov 2026, tiene que descargarlo una vez más en Trading → Riesgo).",
+    input_schema: {
+      type: "object",
+      properties: {
+        cambios: { type: "object", description: "Los MISMOS campos que mandaste a previsualizar_cambio_reglas_trading." },
+      },
+      required: ["cambios"],
     },
   },
   {
@@ -5554,9 +5731,28 @@ export async function executeVictorTool(
       const riesgoFijo = perdidaDiaUSD > 0 && reglas.max_perdedores_dia > 0 ? Math.floor((perdidaDiaUSD / reglas.max_perdedores_dia) * 100) / 100 : 0;
 
       const hoy = fechaHoyPR();
-      const periodo = (["hoy", "semana", "mes", "anio", "todo"] as const).includes(input.periodo as never) ? (input.periodo as string) : "mes";
+      // Periodo de prueba y bloqueos (22 nov 2026)
+      const bloq = normalizarBloqueos(reglaRow);
+      const pruebaIni = typeof reglaRow.prueba_inicio === "string" ? reglaRow.prueba_inicio : null;
+      const pruebaDias = Number(reglaRow.prueba_dias ?? 14) || 14;
+      const pruebaFin = pruebaIni ? new Date(Date.parse(pruebaIni + "T12:00:00Z") + pruebaDias * 86400000).toISOString().slice(0, 10) : null;
+      const pruebaTerminada = !!pruebaFin && pruebaFin <= hoy;
+      const periodo = (["hoy", "semana", "mes", "anio", "todo", "prueba"] as const).includes(input.periodo as never)
+        ? (input.periodo as string) === "prueba" && !pruebaIni ? "mes" : (input.periodo as string)
+        : pruebaTerminada && reglaRow.prueba_revisada !== true ? "prueba" : "mes";
+      if (periodo === "prueba" && pruebaTerminada && reglaRow.prueba_revisada !== true)
+        await supabase.from("risk_rules").update({ prueba_revisada: true }).eq("owner_id", ownerId);
+      const pend = await listarPendientes(supabase, ownerId);
+      const est = estadoHorario(bloq);
+      const lineaPlan =
+        (pruebaIni
+          ? `Periodo de prueba: empezó ${pruebaIni}, ${pruebaDias} días, ${pruebaTerminada ? `TERMINÓ el ${pruebaFin}` : `termina ${pruebaFin}`}.\n`
+          : "Sin periodo de prueba activo (puede empezar uno con el cuestionario 'Armar mi plan' en Trading → Riesgo, o tú puedes reiniciarlo al aplicar cambios).\n") +
+        `Bloqueos: ${describirBloqueos(bloq).join(" ") || "ninguno (puede operar a cualquier hora)."} Zona horaria: ${bloq.zona}. Ahora mismo: ${est.permitido ? "puede operar" : `bloqueado (${est.motivo})`}${est.cambiaA ? `, cambia ${cuandoLocal(bloq, est.cambiaA)}` : ""}.\n` +
+        (pend.length ? `Cambios pendientes (aplican desde mañana): ${pend.map((p) => Object.keys(p.cambios).join(", ")).join("; ")}.\n` : "");
       const desde =
-        periodo === "hoy" ? hoy
+        periodo === "prueba" ? (pruebaIni as string)
+        : periodo === "hoy" ? hoy
         : periodo === "semana" ? new Date(new Date(hoy + "T12:00:00Z").getTime() - 6 * 86400000).toISOString().slice(0, 10)
         : periodo === "mes" ? hoy.slice(0, 7) + "-01"
         : periodo === "anio" ? hoy.slice(0, 4) + "-01-01"
@@ -5599,7 +5795,7 @@ export async function executeVictorTool(
       if (lista.length === 0) {
         return {
           ok: true,
-          message: `Cuentas:\n${lineasCuentas.join("\n")}\n${reglasTxt}\n${lineaHoy}\nNo hay trades cerrados en el período "${periodo}" (desde ${desde}).`,
+          message: `Cuentas:\n${lineasCuentas.join("\n")}\n${reglasTxt}\n${lineaPlan}${lineaHoy}\nNo hay trades cerrados en el período "${periodo}" (desde ${desde}).`,
         };
       }
 
@@ -5627,8 +5823,12 @@ export async function executeVictorTool(
         return [...m.entries()].sort((a, b) => b[1].neto - a[1].neto)
           .map(([k, f]) => `${k}: ${f.n} trades, ${Math.round((f.g / f.n) * 100)}% aciertos, neto ${usd(f.neto)}, prom ${usd(f.neto / f.n)}`);
       };
-      const horaPR = (t: TradeEvaluado) => Number(aHoraPR(t.hora_apertura).slice(11, 13));
-      const sesion = (h: number) => (h >= 19 || h < 3 ? "Asia" : h < 8 ? "Londres" : h < 12 ? "Londres+NY" : h < 16 ? "NY tarde" : "Cierre");
+      // Hora del broker → UTC (aHoraPR da hora de PR = UTC−4) → hora local del usuario y sesión real del mercado
+      const utcDe = (t: TradeEvaluado) => Date.parse(aHoraPR(t.hora_apertura).replace(" ", "T") + "Z") + 4 * 3600000;
+      const horaLocal = (t: TradeEvaluado) => {
+        const u = utcDe(t);
+        return new Date(u + offsetMin(bloq.zona, u) * 60000).getUTCHours();
+      };
       const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
       const conteoViol = new Map<string, number>();
       for (const t of lista) for (const v of t.violaciones) conteoViol.set(NOMBRE_REGLA[v] ?? v, (conteoViol.get(NOMBRE_REGLA[v] ?? v) ?? 0) + 1);
@@ -5659,14 +5859,15 @@ export async function executeVictorTool(
       }
 
       const msg =
-        `Cuentas:\n${lineasCuentas.join("\n")}\n${reglasTxt}\n${lineaHoy}\n\n` +
+        `Cuentas:\n${lineasCuentas.join("\n")}\n${reglasTxt}\n${lineaPlan}${lineaHoy}\n\n` +
         `PERÍODO "${periodo}" (desde ${desde}, hora de PR): ${lista.length} trades cerrados, neto ${usd(neto)}, aciertos ${Math.round((g.length / lista.length) * 100)}%.\n` +
         `Ganancia promedio ${usd(promG)} · pérdida promedio ${usd(promP)} · ratio ganancia/pérdida ${promP < 0 ? (promG / -promP).toFixed(2) : "—"} · ` +
         `expectativa por trade ${usd(neto / lista.length)} · factor de beneficio ${brutoP > 0 ? (brutoG / brutoP).toFixed(2) : "∞"}.\n` +
         `Mejor racha ${rachaG} ganadores · peor racha ${rachaP} perdedores · duración mediana ${Math.round(durMed / 60)} min · trades sin SL: ${sinSL}.\n` +
         `Mejor trade ${usd(mejor.neto)} (${mejor.simbolo}) · peor trade ${usd(peor.neto)} (${peor.simbolo}).\n\n` +
         `Por activo:\n${agrupar((t) => t.simbolo).slice(0, 8).join("\n")}\n\n` +
-        `Por sesión (PR):\n${agrupar((t) => sesion(horaPR(t))).join("\n")}\n\n` +
+        `Por sesión del mercado:\n${agrupar((t) => sesionDeInstante(utcDe(t))).join("\n")}\n\n` +
+        `Por hora de apertura (su hora, ${bloq.zona}):\n${agrupar((t) => `${String(horaLocal(t)).padStart(2, "0")}:00`).join("\n")}\n\n` +
         `Por día:\n${agrupar((t) => DIAS[new Date(diaPR(t) + "T12:00:00Z").getUTCDay()]).join("\n")}\n\n` +
         `Compras vs ventas:\n${agrupar((t) => (t.lado === "buy" ? "compras" : "ventas")).join("\n")}\n\n` +
         (lista.some((t) => t.timeframe) ? `Por TF:\n${agrupar((t) => t.timeframe ?? null).join("\n")}\n\n` : "") +
@@ -5674,8 +5875,51 @@ export async function executeVictorTool(
         `Disciplina: ${limpios.length} trades cumpliendo todas las reglas (prom ${usd(prom(limpios))}) vs ${rotos.length} rompiendo alguna (prom ${usd(prom(rotos))}).\n` +
         (conteoViol.size ? `Reglas rotas: ${[...conteoViol.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ×${n}`).join(", ")}.\n` : "Ninguna regla rota en el período.\n") +
         (lineasCheck.length ? `\nChecklist propio:\n${lineasCheck.join("\n")}\n` : "") +
-        `\nRecuerda: datos del pasado del usuario. Dale feedback de proceso, riesgo y disciplina como coach; nada de señales ni de qué comprar/vender.`;
+        `\nRecuerda: datos del pasado del usuario. Dale feedback de proceso, riesgo y disciplina como coach; nada de señales ni de qué comprar/vender. ` +
+        `Si propones cambiar reglas (horario, días, trades, riesgo, activos prohibidos, noticias, pausas), usa previsualizar_cambio_reglas_trading y aplícalos solo con su confirmación; ofrece reiniciar el periodo de prueba.`;
       return { ok: true, message: msg };
+    }
+
+    case "previsualizar_cambio_reglas_trading":
+    case "aplicar_cambio_reglas_trading": {
+      const aplicar = toolName === "aplicar_cambio_reglas_trading";
+      const datos = (aplicar && input.cambios && typeof input.cambios === "object" ? input.cambios : input) as Record<string, unknown>;
+      await aplicarPendientes(supabase, ownerId);
+      const { data: rrC } = await supabase.from("risk_rules").select("*").eq("owner_id", ownerId).maybeSingle();
+      const actual = (rrC ?? {}) as FilaReglas;
+      const { cambios, reiniciar, diasPrueba, error } = cambiosTradingDesdeInput(datos, actual);
+      if (error) return { ok: false, message: error };
+      if (!Object.keys(cambios).length && !reiniciar) return { ok: false, message: "No hay ningún cambio para aplicar. Dime qué regla quieres cambiar." };
+      const zona = normalizarBloqueos({ ...actual, ...cambios }).zona;
+      const { lineas, afloja } = resumenCambiosTrading(actual, cambios);
+      const pruebaTxt = reiniciar ? `\n• Empieza un nuevo periodo de prueba de ${diasPrueba} días desde hoy (${fechaLocal(zona, Date.now())}).` : "";
+      const horarioFinal = describirBloqueos(normalizarBloqueos({ ...actual, ...cambios }));
+
+      if (!aplicar) {
+        return {
+          ok: true,
+          message:
+            `VISTA PREVIA (no se ha guardado nada):\n${lineas.join("\n") || "• (sin cambios en las reglas)"}${pruebaTxt}\n` +
+            (horarioFinal.length ? `Bloqueos como quedarían: ${horarioFinal.join(" ")}\n` : "") +
+            (afloja ? "Lo que afloja espera a mañana para que no se quite los frenos en caliente.\n" : "") +
+            "Muéstrale esto al usuario y pídele confirmación explícita antes de llamar aplicar_cambio_reglas_trading con los mismos datos.",
+        };
+      }
+
+      const extra: FilaReglas = reiniciar
+        ? { prueba_inicio: fechaLocal(zona, Date.now()), prueba_dias: diasPrueba, prueba_avisada: false, prueba_revisada: false }
+        : {};
+      const r = await guardarReglas(supabase, ownerId, { ...cambios, ...extra }, "chat");
+      if (!r.ok) return { ok: false, message: r.error ?? "No se pudieron guardar las reglas." };
+      return {
+        ok: true,
+        message:
+          `Reglas guardadas.${r.ahora.length ? ` Aplicado ya: ${r.ahora.join(", ")}.` : ""}` +
+          (r.manana.length ? ` Desde mañana a medianoche (su hora): ${r.manana.join(", ")}.` : "") +
+          (reiniciar ? ` Empezó un nuevo periodo de prueba de ${diasPrueba} días.` : "") +
+          " El guardián de MT5 las recibe solo al sincronizar (cada ~30 s con MT5 abierto). Si su guardián es de antes del 22 nov 2026, tiene que descargarlo una vez más en Trading → Riesgo." +
+          " El usuario puede ver o cancelar lo pendiente en Trading → Riesgo.",
+      };
     }
 
     default:

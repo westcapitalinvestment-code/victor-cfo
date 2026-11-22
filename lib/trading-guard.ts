@@ -32,6 +32,7 @@ export type ParametrosGuardian = {
   bloquearCierreManual: boolean;
   syncUrl?: string; // direccion de VICTOR para sincronizar (vacio = sin sincronizacion)
   syncToken?: string; // token de la cuenta
+  cfgInicial?: string; // reglas vivas (horario, pausas, noticias…) en formato K=V;K=V — ver lib/trading-bloqueos.ts
 };
 
 const n = (v: number, d = 2) => {
@@ -40,6 +41,8 @@ const n = (v: number, d = 2) => {
 };
 const b = (v: boolean) => (v ? "true" : "false");
 const q = (s: string) => s.replace(/[^A-Za-z0-9:/._-]/g, "");
+// cadena de reglas vivas (K=V;K=V): sin comillas ni barras para no romper el .mq5
+const q2 = (s: string) => s.replace(/[^A-Za-z0-9 :;=,.()+/_-]/g, "").slice(0, 4000);
 // Lista de simbolos: "*" (o vacio) = todos. Solo caracteres validos en nombres de MT5.
 const syms = (s: string) => {
   const t = s.toUpperCase().replace(/[^A-Z0-9._,#*-]/g, "").slice(0, 300);
@@ -64,11 +67,12 @@ export function generarGuardianMQ5(p: ParametrosGuardian): string {
 //|   - SL solo se mueve a tu favor; TP libre (modo flexible)         |
 //|   - limite de trades abiertos, perdedores y perdida del dia       |
 //|   - espera obligatoria tras una perdida                           |
-//|  Todos los valores se pueden cambiar en MT5 > pestana Entradas.   |
+//|  Horario, dias, pausas y noticias: bloquea abrir fuera de tu plan. |
+//|  Tus reglas llegan solas desde VICTOR cada 30 s (cambialas alla). |
 //|  Probar SIEMPRE en demo primero. No es asesoria financiera.       |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "3.00"
+#property version   "3.10"
 #include <Trade\Trade.mqh>
 
 CTrade trade;
@@ -77,8 +81,8 @@ enum ENUM_SL_MODE { SL_PIPS = 0, SL_PERCENT = 1, SL_ATR = 2 };
 
 input string AllowedSymbols     = "${syms(p.simbolos)}"; // simbolos permitidos separados por coma, o * = todos (forex, indices, acciones, futuros, cripto)
 input string BlockedSymbols     = "${syms(p.bloqueados ?? "").replace("*", "")}"; // simbolos PROHIBIDOS separados por coma: si los abres, se cierran
-input double RiskMoney          = ${n(p.riesgoUSD ?? 0)};      // $ fijos a arriesgar por trade, en cualquier activo (0 = usar RiskPercent)
-input double RiskPercent        = ${n(p.riesgoPct)};      // % del balance a arriesgar por trade (si RiskMoney = 0)
+input double InRiskMoney        = ${n(p.riesgoUSD ?? 0)};      // $ fijos a arriesgar por trade, en cualquier activo (0 = usar RiskPercent)
+input double InRiskPercent      = ${n(p.riesgoPct)};      // % del balance a arriesgar por trade (si RiskMoney = 0)
 input ENUM_SL_MODE SLMode       = ${MODO_MQ5[p.modoStop] ?? "SL_ATR"}; // como se calcula el stop: pips, % del precio o ATR
 input double SLPips             = ${n(p.distanciaPips, 2)};      // modo pips: distancia del SL en pips
 input double PipSize            = ${n(p.tamanoPip, 5)};      // modo pips: tamano de 1 pip de PipSymbol (oro 0.1, EURUSD 0.0001, NAS100 1)
@@ -88,14 +92,14 @@ input double ATRMult            = ${n(p.atrMult, 2)};      // modo ATR: stop = A
 input ENUM_TIMEFRAMES ATRTF     = ${TF_MQ5[p.atrTF] ?? "PERIOD_H1"}; // modo ATR: temporalidad del ATR
 input int    ATRPeriod          = 14;       // modo ATR: periodo del ATR
 input double RewardRatio        = ${n(p.relacionTP)};      // TP inicial = SL x este numero (0 = sin TP al abrir, lo pones tu)
-input int    MaxLosersPerDay    = ${Math.max(1, Math.round(p.maxPerdedoresDia))};        // perdedores maximos por dia
-input double MaxDailyLossPct    = ${n(p.perdidaMaxDiaPct)};      // perdida diaria maxima en % del balance con que empezo el dia
-input double MaxDailyLossUSD    = ${n(p.perdidaMaxDiaUSD)};      // o en dolares fijos (0 = usar el %)
-input double MinEquityPct       = ${n(p.equityMinimoPct)};     // si el equity baja de este % del balance de inicio del dia: bloqueo total
-input double MinEquityUSD       = ${n(p.equityMinimoUSD)};      // o en dolares fijos (0 = usar el %)
-input int    MaxOpenPositions   = ${Math.max(1, Math.round(p.maxAbiertos))};        // trades abiertos a la vez
-input int    MaxTradesPerDay    = ${Math.max(0, Math.round(p.maxTradesDia))};        // trades maximos por dia (0 = sin limite)
-input int    CooldownMin        = ${Math.max(0, Math.round(p.esperaTrasPerdidaMin))};       // minutos de espera tras una perdida (0 = sin espera)
+input int InMaxLosersPerDay  = ${Math.max(1, Math.round(p.maxPerdedoresDia))};        // perdedores maximos por dia
+input double InMaxDailyLossPct  = ${n(p.perdidaMaxDiaPct)};      // perdida diaria maxima en % del balance con que empezo el dia
+input double InMaxDailyLossUSD  = ${n(p.perdidaMaxDiaUSD)};      // o en dolares fijos (0 = usar el %)
+input double InMinEquityPct     = ${n(p.equityMinimoPct)};     // si el equity baja de este % del balance de inicio del dia: bloqueo total
+input double InMinEquityUSD     = ${n(p.equityMinimoUSD)};      // o en dolares fijos (0 = usar el %)
+input int InMaxOpenPositions = ${Math.max(1, Math.round(p.maxAbiertos))};        // trades abiertos a la vez
+input int InMaxTradesPerDay  = ${Math.max(0, Math.round(p.maxTradesDia))};        // trades maximos por dia (0 = sin limite)
+input int InCooldownMin      = ${Math.max(0, Math.round(p.esperaTrasPerdidaMin))};       // minutos de espera tras una perdida (0 = sin espera)
 input int    DeviationPts       = 30;       // deslizamiento maximo
 input bool   LockSLTP           = ${b(p.modoBloqueo !== "ninguno")};     // true = el guardian vigila el SL/TP
 input bool   FlexibleLock       = ${b(p.modoBloqueo === "flexible")};     // true = puedes mover el TP libremente y el SL solo a tu favor (nunca alejarlo ni quitarlo)
@@ -103,6 +107,23 @@ input bool   BlockOnManualClose = ${b(p.bloquearCierreManual)};     // true = ce
 input string SyncURL            = "${q(p.syncUrl ?? "")}"; // direccion de VICTOR (permitela en Herramientas > Opciones > Asesores Expertos > WebRequest)
 input string SyncToken          = "${q(p.syncToken ?? "")}"; // token de tu cuenta de trading. No lo compartas.
 input int    SyncDays           = 30;       // dias de historial a revisar al sincronizar
+
+// Reglas vivas: empiezan con las Entradas de arriba y VICTOR las actualiza en cada
+// sincronizacion (lo que cambies en la web o en el chat llega solo, sin reinstalar).
+double RiskMoney = 0;
+double RiskPercent = 0;
+int MaxLosersPerDay = 0;
+double MaxDailyLossPct = 0;
+double MaxDailyLossUSD = 0;
+double MinEquityPct = 0;
+double MinEquityUSD = 0;
+int MaxOpenPositions = 0;
+int MaxTradesPerDay = 0;
+int CooldownMin = 0;
+int    NewsMin = 0;          // minutos antes/despues de noticias de alto impacto (0 = apagado)
+int    TzOffsetMin = 0;      // tu zona horaria respecto a UTC (solo para mostrar horas)
+string g_horarioTxt = "";
+string CFG0 = "${q2(p.cfgInicial ?? "")}";
 
 // --- Entrada automatica: retroceso a la media en tendencia (APAGADA por defecto) ---
 // Vende cuando la media baja y el precio retrocede hacia arriba y la toca; compra al reves.
@@ -323,6 +344,170 @@ double FloatingPL()
 // Explicacion larga del ultimo bloqueo (para las alertas): por que te protegio y que hacer
 string g_detalle = "";
 
+//------------------------------------------------------------------
+// Reglas vivas desde VICTOR (horario, dias, pausas, noticias y limites).
+// Formato: "RM=7;RP=1;ML=3;...;BW=0-720,1080-3600;PZ=1796356800-1796443200;NW=15;TZO=-240;HL=..."
+//   BW = minutos BLOQUEADOS de la semana en UTC (0 = domingo 00:00 UTC ... 10080)
+//   PZ = pausas por fecha, en segundos UTC
+int  g_bwS[];
+int  g_bwE[];
+long g_pzS[];
+long g_pzE[];
+
+void ParseRanges(string v, bool weekly)
+{
+   string parts[];
+   int k = StringSplit(v, ',', parts);
+   if(weekly) { ArrayResize(g_bwS, 0); ArrayResize(g_bwE, 0); }
+   else       { ArrayResize(g_pzS, 0); ArrayResize(g_pzE, 0); }
+   for(int i = 0; i < k; i++)
+   {
+      int d = StringFind(parts[i], "-");
+      if(d < 1) continue;
+      long a = StringToInteger(StringSubstr(parts[i], 0, d));
+      long b = StringToInteger(StringSubstr(parts[i], d + 1));
+      if(b <= a) continue;
+      if(weekly)
+      {
+         int n = ArraySize(g_bwS);
+         ArrayResize(g_bwS, n + 1); ArrayResize(g_bwE, n + 1);
+         g_bwS[n] = (int)a; g_bwE[n] = (int)b;
+      }
+      else
+      {
+         int n = ArraySize(g_pzS);
+         ArrayResize(g_pzS, n + 1); ArrayResize(g_pzE, n + 1);
+         g_pzS[n] = a; g_pzE[n] = b;
+      }
+   }
+}
+
+void ApplyCfg(string cfg)
+{
+   if(cfg == "") return;
+   string parts[];
+   int k = StringSplit(cfg, ';', parts);
+   for(int i = 0; i < k; i++)
+   {
+      int eq = StringFind(parts[i], "=");
+      if(eq < 1) continue;
+      string key = StringSubstr(parts[i], 0, eq);
+      string val = StringSubstr(parts[i], eq + 1);
+      double x = StringToDouble(val);
+      if(key == "RM" && x >= 0) RiskMoney = x;
+      else if(key == "RP" && x > 0 && x <= 100) RiskPercent = x;
+      else if(key == "ML" && x >= 1) MaxLosersPerDay = (int)x;
+      else if(key == "DLP" && x > 0 && x <= 100) MaxDailyLossPct = x;
+      else if(key == "DLU" && x >= 0) MaxDailyLossUSD = x;
+      else if(key == "MEP" && x >= 0 && x <= 100) MinEquityPct = x;
+      else if(key == "MEU" && x >= 0) MinEquityUSD = x;
+      else if(key == "MO" && x >= 1) MaxOpenPositions = (int)x;
+      else if(key == "MT" && x >= 0) MaxTradesPerDay = (int)x;
+      else if(key == "CD" && x >= 0) CooldownMin = (int)x;
+      else if(key == "BW") ParseRanges(val, true);
+      else if(key == "PZ") ParseRanges(val, false);
+      else if(key == "NW" && x >= 0) NewsMin = (int)x;
+      else if(key == "TZO") TzOffsetMin = (int)StringToInteger(val);
+      else if(key == "HL") g_horarioTxt = val;
+   }
+}
+
+// hora local de la persona (HH:MM) para un minuto de la semana UTC
+string LocalHM(int mow)
+{
+   int m = ((mow + TzOffsetMin) % 1440 + 1440) % 1440;
+   return StringFormat("%02d:%02d", m / 60, m % 60);
+}
+
+// "08:00" si es hoy (tu hora), o "mar 08:00" si es otro dia
+string LocalWhen(int mow, int nowMow)
+{
+   string dn[7] = {"dom", "lun", "mar", "mie", "jue", "vie", "sab"};
+   int a = (((mow + TzOffsetMin) / 1440) % 7 + 7) % 7;
+   int b = (((nowMow + TzOffsetMin) / 1440) % 7 + 7) % 7;
+   if(mow + TzOffsetMin < 0) a = 6;
+   if(nowMow + TzOffsetMin < 0) b = 6;
+   return (a == b ? "" : dn[a] + " ") + LocalHM(mow);
+}
+
+// Fuera de horario, dia bloqueado o pausa por fecha: no deja ABRIR trades
+bool TimeBlocked(string &why)
+{
+   datetime g = TimeGMT();
+   for(int i = 0; i < ArraySize(g_pzS); i++)
+      if((long)g >= g_pzS[i] && (long)g < g_pzE[i])
+      {
+         datetime fin = (datetime)(g_pzE[i] + (long)TzOffsetMin * 60);
+         why = "EN PAUSA hasta " + TimeToString(fin - 60, TIME_DATE);
+         g_detalle = "estas en una pausa que pusiste en VICTOR (hasta el " + TimeToString(fin - 60, TIME_DATE) + "). Descansar tambien es parte del plan.";
+         return true;
+      }
+   if(ArraySize(g_bwS) == 0) return false;
+   MqlDateTime t; TimeToStruct(g, t);
+   int mow = t.day_of_week * 1440 + t.hour * 60 + t.min;
+   for(int i = 0; i < ArraySize(g_bwS); i++)
+      if(mow >= g_bwS[i] && mow < g_bwE[i])
+      {
+         int fin = g_bwE[i];
+         // si el bloqueo sigue al empezar la semana, busca donde termina
+         if(fin >= 10080)
+            for(int j = 0; j < ArraySize(g_bwS); j++) if(g_bwS[j] == 0) { fin = g_bwE[j]; break; }
+         why = "FUERA DE HORARIO: abres " + LocalWhen(fin % 10080, mow);
+         g_detalle = "estas fuera del horario que pusiste en VICTOR. Puedes volver a operar: " + LocalWhen(fin % 10080, mow) + " (tu hora).";
+         return true;
+      }
+   return false;
+}
+
+// Noticias de alto impacto del calendario economico de MT5
+struct VNews { datetime t; string cur; string name; };
+VNews    g_news[];
+datetime g_newsAt = 0;
+
+void LoadNews()
+{
+   if(NewsMin <= 0) return;
+   if(g_newsAt > 0 && TimeLocal() - g_newsAt < 900) return;
+   g_newsAt = TimeLocal();
+   ArrayResize(g_news, 0);
+   MqlCalendarValue v[];
+   datetime now = TimeTradeServer();
+   int k = CalendarValueHistory(v, now - 3 * 3600, now + 2 * 86400);
+   for(int i = 0; i < k; i++)
+   {
+      MqlCalendarEvent ev;
+      if(!CalendarEventById(v[i].event_id, ev)) continue;
+      if(ev.importance != CALENDAR_IMPORTANCE_HIGH) continue;
+      MqlCalendarCountry c;
+      if(!CalendarCountryById(ev.country_id, c)) continue;
+      int n = ArraySize(g_news);
+      ArrayResize(g_news, n + 1);
+      g_news[n].t = v[i].time;
+      g_news[n].cur = c.currency;
+      g_news[n].name = ev.name;
+   }
+}
+
+bool NewsBlocked(string s, string &why)
+{
+   if(NewsMin <= 0) return false;
+   LoadNews();
+   string b = SymbolInfoString(s, SYMBOL_CURRENCY_BASE), p = SymbolInfoString(s, SYMBOL_CURRENCY_PROFIT);
+   datetime now = TimeTradeServer();
+   for(int i = 0; i < ArraySize(g_news); i++)
+   {
+      if(g_news[i].cur != b && g_news[i].cur != p) continue;
+      long dif = (long)(g_news[i].t - now);
+      if(dif > (long)NewsMin * 60 || dif < -(long)NewsMin * 60) continue;
+      why = "NOTICIA " + g_news[i].cur + ": espera " + IntegerToString(NewsMin) + " min";
+      g_detalle = "hay una noticia de alto impacto de " + g_news[i].cur + " (" + g_news[i].name + "). Tu regla es no abrir trades "
+                + IntegerToString(NewsMin) + " min antes ni despues: el precio se mueve sin control en ese momento.";
+      return true;
+   }
+   return false;
+}
+
+
 bool IsBlocked(string &why)
 {
    int losers, manual, closed; double pl; datetime lastLoss;
@@ -365,6 +550,8 @@ bool IsBlocked(string &why)
 bool CanOpenNew(string s, string &why, ulong skipTk = 0, double riskOverride = -1)
 {
    if(IsBlocked(why)) return false;
+   if(TimeBlocked(why)) return false;
+   if(NewsBlocked(s, why)) return false;
    int losers, manual, closed; double pl; datetime lastLoss;
    DayStats(losers, pl, manual, closed, lastLoss);
 
@@ -925,6 +1112,15 @@ void SyncTick()
    else if(code == 200)
    {
       for(int q = 0; q < ns; q++) GlobalVariableSet(P + "SENT_" + (string)sentIds[q], 1);
+      // reglas vivas que manda VICTOR: "cfg":"K=V;K=V"
+      string resp = CharArrayToString(res, 0, WHOLE_ARRAY, CP_UTF8);
+      int c0 = StringFind(resp, "\"cfg\":\"");
+      if(c0 >= 0)
+      {
+         c0 += 7;
+         int c1 = StringFind(resp, "\"", c0);
+         if(c1 > c0) ApplyCfg(StringSubstr(resp, c0, c1 - c0));
+      }
       g_sync = "Sync OK " + TimeToString(TimeLocal(), TIME_MINUTES) + " (" + IntegerToString(ns) + " nuevos)";
    }
    else
@@ -934,6 +1130,11 @@ void SyncTick()
 
 int OnInit()
 {
+   RiskMoney = InRiskMoney; RiskPercent = InRiskPercent; MaxLosersPerDay = InMaxLosersPerDay;
+   MaxDailyLossPct = InMaxDailyLossPct; MaxDailyLossUSD = InMaxDailyLossUSD; MinEquityPct = InMinEquityPct;
+   MinEquityUSD = InMinEquityUSD; MaxOpenPositions = InMaxOpenPositions; MaxTradesPerDay = InMaxTradesPerDay;
+   CooldownMin = InCooldownMin;
+   ApplyCfg(CFG0);   // horario, dias, pausas y noticias con que se descargo (luego llegan al sincronizar)
    trade.SetDeviationInPoints(DeviationPts);
    ParseSymbols();
    ParseBlocked();

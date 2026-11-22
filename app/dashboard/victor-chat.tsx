@@ -304,12 +304,16 @@ export default function VictorChat({
   // notificaciones aparte, tocar el pill te trae directo a hablar con
   // VICTOR, que es donde de verdad están las alertas.
   useEffect(() => {
-    function handler() {
+    // Con detail.mensaje (ej. la tarjeta del periodo de prueba de Trading) además
+    // de abrir, le manda ese mensaje a VICTOR.
+    function handler(e: Event) {
       setOpen(true);
+      const mensaje = (e as CustomEvent<{ mensaje?: string }>).detail?.mensaje;
+      if (typeof mensaje === "string" && mensaje.trim()) setTimeout(() => sendStable(mensaje.trim()), 150);
     }
     window.addEventListener("victor:abrir", handler);
     return () => window.removeEventListener("victor:abrir", handler);
-  }, []);
+  }, [sendStable]);
 
   // VICTOR toma la iniciativa: si el usuario acaba de crear su cuenta y
   // todavía no pasó por el onboarding conversacional (Capa 2), el panel se

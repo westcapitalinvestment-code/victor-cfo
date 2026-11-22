@@ -696,6 +696,31 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Trading (22 nov 2026): periodo de prueba de sus reglas y cambios pendientes,
+  // para que VICTOR proponga la revisión cuando termina la prueba.
+  let contextoTrading = "";
+  try {
+    const { data: rrT } = await supabase
+      .from("risk_rules")
+      .select("prueba_inicio, prueba_dias, prueba_revisada, zona_horaria")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (rrT?.prueba_inicio) {
+      const dias = Number(rrT.prueba_dias ?? 14);
+      const finPrueba = new Date(Date.parse(String(rrT.prueba_inicio) + "T12:00:00Z") + dias * 86400000).toISOString().slice(0, 10);
+      const terminada = finPrueba <= hoyStrPR;
+      contextoTrading =
+        `\n\n## Trading: periodo de prueba de sus reglas\nEmpezó ${rrT.prueba_inicio}, dura ${dias} días (termina ${finPrueba}). ` +
+        (terminada
+          ? rrT.prueba_revisada
+            ? "Ya terminó y ya la revisaron juntos."
+            : "YA TERMINÓ y no la han revisado: si el usuario habla de trading o saluda, ofrécele revisar sus resultados (revisar_mi_trading con periodo \"prueba\") y proponer ajustes."
+          : "Está en curso: anímalo a no cambiar las reglas hasta que termine, salvo que pida apretarlas.");
+    }
+  } catch {
+    contextoTrading = "";
+  }
+
   const systemPrompt = getVictorBasePrompt();
 
   const systemBlocks: Anthropic.TextBlockParam[] = [
@@ -713,7 +738,7 @@ export async function POST(req: NextRequest) {
     // pero pasa muchas menos veces, así que el neto es mucho más barato
     // para este patrón de uso disperso. Ver docs.claude.com/prompt-caching.
     { type: "text", text: systemPrompt, cache_control: { type: "ephemeral", ttl: "1h" } },
-    { type: "text", text: contextBlock },
+    { type: "text", text: contextBlock + contextoTrading },
   ];
 
   // Historial en el formato que espera la API (puede traer content como

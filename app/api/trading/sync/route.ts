@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cfgGuardian } from "@/lib/trading-bloqueos";
+import { aplicarPendientes } from "@/lib/trading-reglas-server";
 
 // Sincronización en vivo con MT5 (oct 2026). El guardián (VictorGuard.mq5)
 // llama aquí cada ~30 s con WebRequest. No hay sesión de usuario: la
@@ -69,5 +71,18 @@ export async function POST(req: NextRequest) {
   await admin.from("trading_accounts").update(cuenta).eq("id", t.account_id);
   await admin.from("trading_sync_tokens").update({ last_sync_at: ahora }).eq("account_id", t.account_id);
 
-  return NextResponse.json({ ok: true, recibidos: filas.length });
+  // Reglas en vivo (22 nov 2026): el guardián recibe las reglas vigentes en cada
+  // sincronización, así lo que se cambia en la web o en el chat llega a MT5 sin
+  // volver a descargar el archivo. Primero se aplican los cambios "desde mañana"
+  // que ya vencieron.
+  let cfg = "";
+  try {
+    await aplicarPendientes(admin, t.owner_id);
+    const { data: rr } = await admin.from("risk_rules").select("*").eq("owner_id", t.owner_id).maybeSingle();
+    if (rr) cfg = cfgGuardian(rr as Record<string, unknown>);
+  } catch {
+    cfg = "";
+  }
+
+  return NextResponse.json({ ok: true, recibidos: filas.length, cfg });
 }

@@ -2,10 +2,12 @@
 
 import { useState, type ReactNode } from "react";
 import { formatMoney } from "@/lib/format";
+import { SESIONES, TODAS_SESIONES, type Sesion } from "@/lib/trading-bloqueos";
+import { DURACIONES_PRUEBA } from "./prueba-plan";
 import { armarPlan, type Edad, type Estilo, type Experiencia, type Objetivo, type PlanSugerido, type Problema } from "@/lib/trading-plan-sugerido";
 
 // Cuestionario "VICTOR te arma tu plan" (21 nov 2026, pedido de Joel): para
-// quien no tiene reglas. 6 preguntas → plan con números en dólares → un toque
+// quien no tiene reglas. 7 preguntas → plan con números en dólares → un toque
 // para guardarlo (reglas + guardián + checklist de entrada).
 
 type Opcion<T extends string> = { v: T; t: string };
@@ -53,6 +55,7 @@ const OBJETIVO: Opcion<Objetivo>[] = [
   { v: "escalar", t: "Escalar mi cuenta" },
   { v: "retiro", t: "Construir mi retiro" },
 ];
+const SESION_OPC: Opcion<Sesion>[] = TODAS_SESIONES.map((v) => ({ v, t: SESIONES[v].nombre }));
 const EDAD: Opcion<Edad>[] = [
   { v: "menos30", t: "Menos de 30" },
   { v: "30a45", t: "30 a 45" },
@@ -71,7 +74,7 @@ export default function PlanSugeridoCard({
   tieneReglas: boolean;
   abierto: boolean;
   onAbrir: (a: boolean) => void;
-  onAplicar: (plan: PlanSugerido) => Promise<string | null>;
+  onAplicar: (plan: PlanSugerido, diasPrueba: number) => Promise<string | null>;
 }) {
   const [capital, setCapital] = useState<string>(capitalInicial > 0 ? String(Math.round(capitalInicial)) : "");
   const [exp, setExp] = useState<Experiencia[]>([]);
@@ -79,6 +82,8 @@ export default function PlanSugeridoCard({
   const [problemas, setProblemas] = useState<Problema[]>([]);
   const [objetivo, setObjetivo] = useState<Objetivo[]>([]);
   const [edad, setEdad] = useState<Edad[]>([]);
+  const [sesiones, setSesiones] = useState<Sesion[]>([]);
+  const [diasPrueba, setDiasPrueba] = useState<number>(14);
   const [plan, setPlan] = useState<PlanSugerido | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +101,7 @@ export default function PlanSugeridoCard({
           <img src="/victor-avatar.png" width={40} height={40} alt="" className="shrink-0 rounded-full bg-white" />
           <span className="flex flex-col">
             <span className="text-base font-semibold text-[#1B3A5C]">¿Quieres que VICTOR te sugiera reglas según tu perfil?</span>
-            <span className="text-[14px] text-muted">6 preguntas y te arma un plan con los números para tu cuenta.</span>
+            <span className="text-[14px] text-muted">7 preguntas y te arma un plan con los números para tu cuenta.</span>
           </span>
         </span>
         <span className="shrink-0 rounded-pill bg-teal px-3 py-1.5 text-sm font-medium text-white">Armar plan →</span>
@@ -105,7 +110,7 @@ export default function PlanSugeridoCard({
       <div className="vc-card mb-4 border-2 border-teal/40">
         <p className="text-sm uppercase tracking-wide text-teal">¿No tienes reglas?</p>
         <p className="mt-1 text-lg font-semibold">VICTOR te arma tu plan en 1 minuto.</p>
-        <p className="mt-1 text-[14px] text-muted">Contestas 6 preguntas y te propone reglas como las de una prop firm, con los números en dólares para tu cuenta. Las puedes ajustar.</p>
+        <p className="mt-1 text-[14px] text-muted">Contestas 7 preguntas y te propone reglas como las de una prop firm, con los números en dólares para tu cuenta. Las puedes ajustar.</p>
         <button className="vc-btn-primary mt-3" onClick={() => onAbrir(true)}>
           Armar mi plan
         </button>
@@ -151,6 +156,24 @@ export default function PlanSugeridoCard({
           </ul>
         </div>
         <p className="mt-3 text-[12px] text-muted">VICTOR no es asesor financiero. Esto es una estrategia de manejo de riesgo para proteger tu capital y que, si pierdes, pierdas con conciencia: no es una recomendación de inversión ni promesa de resultados. El trading conlleva riesgo de pérdida. Lo puedes cambiar cuando quieras.</p>
+        <div className="mt-3 rounded-lg border border-teal/30 bg-teal/5 p-3">
+          <p className="text-[15px] font-medium">Pruébalas sin cambiarlas</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {DURACIONES_PRUEBA.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDiasPrueba(d)}
+                className={`rounded-pill border px-3 py-1.5 text-[14px] ${diasPrueba === d ? "border-teal bg-teal text-white" : "border-border bg-card"}`}
+              >
+                {d} días
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[13px] text-muted">
+            Opera {diasPrueba} días con estas reglas. Tu bitácora queda documentada y al final VICTOR revisa tus resultados contigo y ajustan juntos desde el chat. Menos de 14 días no alcanza para saber qué funciona.
+          </p>
+        </div>
         {error && <p className="mt-2 text-sm text-red">{error}</p>}
         <div className="mt-3 flex flex-wrap gap-2">
           <button
@@ -159,7 +182,7 @@ export default function PlanSugeridoCard({
             onClick={async () => {
               setGuardando(true);
               setError(null);
-              const e = await onAplicar(plan);
+              const e = await onAplicar(plan, diasPrueba);
               setGuardando(false);
               if (e) setError(e);
               else {
@@ -168,7 +191,7 @@ export default function PlanSugeridoCard({
               }
             }}
           >
-            {guardando ? "Guardando…" : "Usar este plan"}
+            {guardando ? "Guardando…" : `Empezar prueba de ${diasPrueba} días`}
           </button>
           <button className="rounded-lg border border-border px-4 py-2 text-sm" onClick={() => setPlan(null)}>
             Cambiar respuestas
@@ -192,7 +215,7 @@ export default function PlanSugeridoCard({
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-sm uppercase tracking-wide text-teal">Arma tu plan</p>
-          <p className="mt-1 text-lg font-semibold">6 preguntas y VICTOR te propone tus reglas.</p>
+          <p className="mt-1 text-lg font-semibold">7 preguntas y VICTOR te propone tus reglas.</p>
         </div>
         <button className="text-sm text-muted" onClick={() => onAbrir(false)} aria-label="Cerrar">
           ✕
@@ -214,10 +237,18 @@ export default function PlanSugeridoCard({
       {pregunta(4, "¿Qué te ha hecho perder dinero? (puedes marcar varias)", <Chips opciones={PROBLEMAS} valor={problemas} onCambio={setProblemas} multiple />)}
       {pregunta(5, "¿Qué buscas?", <Chips opciones={OBJETIVO} valor={objetivo} onCambio={setObjetivo} />)}
       {pregunta(6, "¿Qué edad tienes?", <Chips opciones={EDAD} valor={edad} onCambio={setEdad} />)}
+      {pregunta(
+        7,
+        "¿En qué sesión puedes operar? (puedes marcar varias; ninguna = sin límite)",
+        <>
+          <Chips opciones={SESION_OPC} valor={sesiones} onCambio={setSesiones} multiple />
+          <span className="text-[12px] text-muted">Se ajustan solas a tu hora. Después puedes poner horas exactas, días sin operar o pausas en Mis reglas.</span>
+        </>
+      )}
       <button
         className="vc-btn-primary self-start disabled:opacity-50"
         disabled={!completo}
-        onClick={() => setPlan(armarPlan({ capital: cap, experiencia: exp[0], estilo: estilo[0], problemas, objetivo: objetivo[0], edad: edad[0] }))}
+        onClick={() => setPlan(armarPlan({ capital: cap, experiencia: exp[0], estilo: estilo[0], problemas, objetivo: objetivo[0], edad: edad[0], sesiones }))}
       >
         Ver mi plan
       </button>
