@@ -47,9 +47,10 @@ const PROBLEMAS: Opcion<Problema>[] = [
   { v: "mover_stop", t: "Mover el stop" },
 ];
 const OBJETIVO: Opcion<Objetivo>[] = [
-  { v: "proteger", t: "Proteger mi capital" },
+  { v: "proteger", t: "Preservar mi capital" },
   { v: "crecer", t: "Crecer poco a poco" },
-  { v: "fondearme", t: "Prepararme para fondearme" },
+  { v: "escalar", t: "Escalar mi cuenta" },
+  { v: "retiro", t: "Construir mi retiro" },
 ];
 
 export default function PlanSugeridoCard({

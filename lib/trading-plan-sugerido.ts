@@ -10,7 +10,7 @@ import type { ReglasRiesgo } from "./trading";
 export type Experiencia = "nuevo" | "menos1" | "mas1";
 export type Estilo = "scalping" | "intradia" | "swing";
 export type Problema = "revancha" | "sobreoperar" | "sin_stop" | "mover_stop";
-export type Objetivo = "proteger" | "crecer" | "fondearme";
+export type Objetivo = "proteger" | "crecer" | "escalar" | "retiro";
 
 export type RespuestasPlan = {
   capital: number;
@@ -42,7 +42,8 @@ export function armarPlan(r: RespuestasPlan): PlanSugerido {
 
   // Riesgo por trade: menos cuando empiezas o quieres proteger.
   let riesgoPct = r.experiencia === "nuevo" ? 0.5 : r.experiencia === "menos1" ? 0.75 : 1;
-  if (r.objetivo === "proteger") riesgoPct = Math.min(riesgoPct, 0.5);
+  const conservador = r.objetivo === "proteger" || r.objetivo === "retiro";
+  if (conservador) riesgoPct = Math.min(riesgoPct, 0.5);
   razones.push(
     riesgoPct <= 0.5
       ? "Arriesgas 0.5% por trade: aguantas muchas pérdidas seguidas sin dañar la cuenta mientras aprendes."
@@ -67,7 +68,7 @@ export function armarPlan(r: RespuestasPlan): PlanSugerido {
   if (revancha) razones.push("Esperas 60 minutos después de una pérdida antes de volver a entrar.");
 
   // Drawdown máximo de la cuenta (como el de una evaluación).
-  const drawdownPct = r.objetivo === "proteger" || r.experiencia === "nuevo" ? 8 : 10;
+  const drawdownPct = conservador || r.experiencia === "nuevo" ? 8 : 10;
 
   if (r.problemas.includes("sin_stop")) razones.push("Stop obligatorio: el guardián no te deja abrir sin stop.");
 
@@ -92,8 +93,10 @@ export function armarPlan(r: RespuestasPlan): PlanSugerido {
   if (r.problemas.includes("mover_stop")) checklist.push("No moví el stop en contra");
   if (sobreopera) checklist.push("Esperé mi setup, no entré por aburrimiento");
 
-  if (r.objetivo === "fondearme")
-    razones.push(`Drawdown máximo de ${drawdownPct}%: así practicas con los mismos límites que te pedirían para fondearte.`);
+  if (r.objetivo === "retiro")
+    razones.push(`Pensado para largo plazo: riesgo bajo y un tope de ${drawdownPct}% de caída para que la cuenta crezca sin sustos que la pongan en peligro.`);
+  if (r.objetivo === "escalar")
+    razones.push(`Para escalar: subes el riesgo solo cuando la cuenta crece (el % se calcula sobre el balance nuevo), nunca para recuperar. Tope de caída de ${drawdownPct}%.`);
 
   return { reglas, perdidaDiaUSD, riesgoTradeUSD, drawdownPct, equityMinimaUSD, diasMalosHastaTope, checklist, razones };
 }
