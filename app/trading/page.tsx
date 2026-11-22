@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { marcarCookieTradingCliente, PRECIO_CORE_TRADING } from "@/lib/trading-plan";
 
 // Landing de VICTOR Core + Trading.
@@ -20,8 +19,18 @@ import { marcarCookieTradingCliente, PRECIO_CORE_TRADING } from "@/lib/trading-p
 // El botón lleva a /registro con Core + Trading (cookie vc_trading, que lee
 // el checkout) y conserva los UTM del anuncio.
 
-const sg = Space_Grotesk({ subsets: ["latin"], weight: ["500", "700"], display: "swap" });
-const jb = JetBrains_Mono({ subsets: ["latin"], weight: ["500", "700"], display: "swap" });
+// Fuentes servidas desde /public/fonts (no next/font/google: en el build de
+// Vercel del 21 nov 2026 falló al descargarlas de Google y tumbó el deploy).
+const sg = { className: "vt-sg" };
+const jb = { className: "vt-jb" };
+const FUENTES_CSS = [500, 700]
+  .map(
+    (w) =>
+      `@font-face{font-family:"VT Space Grotesk";font-weight:${w};font-display:swap;src:url(/fonts/space-grotesk-latin-${w}-normal.woff2) format("woff2")}` +
+      `@font-face{font-family:"VT JetBrains Mono";font-weight:${w};font-display:swap;src:url(/fonts/jetbrains-mono-latin-${w}-normal.woff2) format("woff2")}`,
+  )
+  .join("") +
+  `.vt-sg{font-family:"VT Space Grotesk",ui-sans-serif,system-ui,sans-serif}.vt-jb{font-family:"VT JetBrains Mono",ui-monospace,monospace}`;
 
 
 function Etiqueta({ children }: { children: ReactNode }) {
@@ -96,6 +105,7 @@ export default function TradingLanding() {
         backgroundSize: "100% 100%, 100% 100%, 54px 54px, 54px 54px",
       }}
     >
+      <style dangerouslySetInnerHTML={{ __html: FUENTES_CSS }} />
       <div className="mx-auto max-w-6xl px-5 py-8 md:py-10">
         <header className="mb-14 flex items-center justify-between md:mb-20">
           <Link href="/" className="flex items-center gap-3">
