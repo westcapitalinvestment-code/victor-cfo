@@ -149,7 +149,7 @@ export default function TradingLanding() {
             </p>
             <p className="mx-auto mt-3 max-w-xl text-lg text-[#C9D2DA]">Empieza con el mínimo que acepte tu broker y escálalo con VICTOR.</p>
             <div className={`${jb.className} mt-8 flex flex-wrap justify-center gap-3 text-sm font-bold`}>
-              {["Tu capital", "Tus reglas", "Tus ganancias"].map((x) => (
+              {["Tu capital", "Tus reglas", "Tus ganancias", "Retiras cuando quieras"].map((x) => (
                 <span key={x} className="rounded-full border border-[#19E68C]/40 px-4 py-2 text-[#19E68C]">
                   ✓ {x}
                 </span>
