@@ -199,6 +199,8 @@ function TradingContenido() {
   const [cContrato, setCContrato] = useState<number | null>(null);
   const [cPipSize, setCPipSize] = useState<number | null>(null);
   const [cFx, setCFx] = useState<number | null>(null);
+  // Riesgo por trade ($) solo para este cálculo; vacío = el de tus reglas (21 nov 2026, pedido de Joel).
+  const [cRiesgo, setCRiesgo] = useState<number | null>(null);
 
   const cuenta = cuentas.find((c) => c.id === cuentaId) ?? null;
 
@@ -602,8 +604,12 @@ function TradingContenido() {
   const usdPorQuote = quote === "USD" ? 1 : cFx ?? USD_POR_MONEDA[quote] ?? 1;
   const distPrecio = (cPips ?? 0) * pipSize;
   const balanceCalc = cBalance ?? (balanceActual > 0 ? balanceActual : 0);
+  // Mismo riesgo que usa el guardián: $ fijos por trade si pusiste tu pérdida del día; si no, el %.
+  const riesgoReglasUSD = riesgoFijoUSD > 0 ? riesgoFijoUSD : (balanceCalc * reglas.riesgo_por_trade_pct) / 100;
+  const riesgoCalcUSD = cRiesgo != null && cRiesgo > 0 ? cRiesgo : riesgoReglasUSD;
+  const riesgoCalcPct = balanceCalc > 0 ? (riesgoCalcUSD / balanceCalc) * 100 : 0;
   const lote = contrato && pipSize
-    ? calcularLote({ balance: balanceCalc, riesgoPct: reglas.riesgo_por_trade_pct, distanciaSL: distPrecio, contrato, usdPorQuote })
+    ? calcularLote({ balance: balanceCalc, riesgoPct: riesgoCalcPct, distanciaSL: distPrecio, contrato, usdPorQuote })
     : null;
 
   const todosActivos = guardian.guard_symbol.trim() === "" || guardian.guard_symbol.includes("*");
@@ -1396,6 +1402,9 @@ function TradingContenido() {
                   <label className="flex flex-col gap-1"><span className="text-muted">Distancia al stop (pips)</span>
                     <NumInput value={cPips} onChange={setCPips} />
                   </label>
+                  <label className="flex flex-col gap-1"><span className="text-muted">Riesgo por trade ($)</span>
+                    <NumInput value={cRiesgo} onChange={setCRiesgo} placeholder={`${riesgoReglasUSD > 0 ? riesgoReglasUSD.toFixed(2) : "0"} (tus reglas)`} />
+                  </label>
                   {!infoCalc && (
                     <>
                       <label className="flex flex-col gap-1"><span className="text-muted">Unidades por lote</span>
@@ -1419,7 +1428,16 @@ function TradingContenido() {
                 )}
                 {lote ? (
                   <div className="rounded-lg bg-bg p-3 text-base">
-                    <p>Riesgo permitido: <span className="font-medium">{formatMoney(lote.riesgoUSD)}</span> ({reglas.riesgo_por_trade_pct}%)</p>
+                    <p>
+                      Riesgo permitido: <span className="font-medium">{formatMoney(lote.riesgoUSD)}</span> ({riesgoCalcPct.toFixed(riesgoCalcPct < 1 ? 2 : 1).replace(/\.0+$/, "")}% del balance)
+                      <span className="block text-[13px] text-muted">
+                        {cRiesgo != null && cRiesgo > 0
+                          ? "Valor que pusiste solo para este cálculo."
+                          : riesgoFijoUSD > 0
+                            ? `De tus reglas: ${formatMoney(guardian.guard_daily_loss_usd ?? 0)} al día ÷ ${reglas.max_perdedores_dia} pérdidas.`
+                            : `De tus reglas: ${reglas.riesgo_por_trade_pct}% por trade.`}
+                      </span>
+                    </p>
                     <p>Lote máximo: <span className="font-medium">{lote.lote.toFixed(2)}</span></p>
                     {lote.loteMinimoExcede && (
                       <p className="mt-1 text-sm text-red">
