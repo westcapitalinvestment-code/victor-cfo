@@ -700,7 +700,7 @@ export default function VictorChat({
         // bottom-24 fija — así el botón no queda pegado a la barra de
         // gestos del celular (bug real reportado por Joel, 28 agosto 2026:
         // "la pantalla se desajusta").
-        style={{ background: "#1D9E75", bottom: "calc(6rem + env(safe-area-inset-bottom))" }}
+        style={{ background: "#1D9E75", bottom: "calc(4.75rem + env(safe-area-inset-bottom))" }}
       >
         {open ? (
           <i className="ti ti-minus" style={{ fontSize: 22, color: "#fff" }} />
@@ -728,7 +728,7 @@ export default function VictorChat({
           href={bloqueado ? "/dashboard/manual-gratis" : "/dashboard/manual"}
           aria-label="Abrir el Manual de Usuario"
           className="fixed right-4 z-40 flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-2 text-sm font-medium shadow-lg"
-          style={{ bottom: "calc(10rem + env(safe-area-inset-bottom))", color: "#1D9E75" }}
+          style={{ bottom: "calc(8.75rem + env(safe-area-inset-bottom))", color: "#1D9E75" }}
         >
           <i className="ti ti-book-2" style={{ fontSize: 18 }} />
           Manual de usuario
@@ -761,10 +761,11 @@ export default function VictorChat({
           // era parte del "desajuste" que reportó Joel al abrir/cerrar.
           // En pantallas bajas (laptop presentando, zoom alto) 70dvh + 168px
           // pasaba del alto de la ventana y se cortaba el header verde con el
-          // Manual. Ahora el alto nunca excede el espacio sobre el botón.
+          // Manual. Ahora el alto nunca excede el espacio sobre el botón, y el
+          // botón bajó de 6rem a 4.75rem (justo encima de la barra de abajo).
           style={{
-            bottom: "calc(168px + env(safe-area-inset-bottom))",
-            maxHeight: "min(70dvh, calc(100dvh - 168px - 1rem - env(safe-area-inset-bottom)))",
+            bottom: "calc(140px + env(safe-area-inset-bottom))",
+            maxHeight: "min(72dvh, calc(100dvh - 140px - 0.75rem - env(safe-area-inset-bottom)))",
           }}
         >
           {arrastrando && (
