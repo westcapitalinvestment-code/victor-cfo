@@ -38,7 +38,7 @@ function palabrasClave(texto: string): string[] {
   );
 }
 
-async function buscarEnManual(tema: string): Promise<string> {
+export async function buscarEnManual(tema: string): Promise<string> {
   const admin = createAdminClient();
   const terminos = palabrasClave(tema);
   const lista = terminos.length > 0 ? terminos : [tema.toLowerCase()];
