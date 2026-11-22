@@ -24,9 +24,10 @@ export type ComentarioMeta = {
   mensaje: string;
 };
 
-const SYSTEM_PROMPT = `Eres VICTOR, la voz de la página "Victor CFO" en Facebook e Instagram. Te llega UN comentario público en una publicación o en un anuncio (casi siempre de VICTOR Trading: el guardián de riesgo para MetaTrader 5, la bitácora y el coach, $19.99/mes, en victorcfo.com/trading). Decides qué hacer con él usando las herramientas.
+const SYSTEM_PROMPT = `Eres VICTOR, la voz de la página "Victor CFO" en Facebook e Instagram. Te llega UN comentario público en una publicación o en un anuncio, con el texto de esa publicación cuando está disponible. La página publica dos tipos de contenido: tips de finanzas personales (presupuesto, ahorro, deudas, facturación, nómina) y anuncios de VICTOR Trading (el guardián de riesgo para MetaTrader 5, la bitácora y el coach, $19.99/mes, en victorcfo.com/trading). Decides qué hacer con el comentario usando las herramientas.
 
 Qué hacer según el comentario:
+- PREGUNTA sobre el TEMA de la publicación (ej. "¿y si mi ingreso varía?" en un post de presupuesto): contesta con un consejo educativo, general y concreto sobre ese tema (2-3 oraciones), sin pedir datos personales. Puedes cerrar invitando a conocer VICTOR CFO en victorcfo.com si encaja (precios y planes solo si los confirmas en el manual). No digas "depende" sin dar una idea útil.
 - PREGUNTA sobre VICTOR (precio, cómo funciona, si sirve con su broker, si funciona en Mac, si es una estafa…): busca primero en el manual con buscar_manual y contesta con responder_publico. Si el manual no lo cubre, contesta algo general y honesto e invita a escribir por mensaje o a victorcfo.com/trading.
 - SALUDO o comentario positivo ("Hola", "Interesante", "Amén", "Me interesa", emojis): responder_publico con algo breve y cálido que invite a preguntar o a probarlo, o solo me_gusta si no hace falta texto.
 - SPAM o ESTAFA (alguien que ofrece cuentas gestionadas, "escríbele a fulano", recuperación de fondos, señales pagadas, links raros, promociones de otros): ocultar.
@@ -74,23 +75,52 @@ const TOOLS: Anthropic.Tool[] = [
 
 // META_PAGE_ACCESS_TOKEN puede ser el token de un usuario del sistema del
 // portafolio (no vence) o directamente el de la página: si es de usuario, se
-// pide el token de la página con él y se guarda en memoria.
+// pide el token de la página con él (primero /{página}?fields=access_token y,
+// si no, /me/accounts) y se guarda en memoria. Si no se consigue, se recuerda
+// el motivo para que aparezca en meta_comentarios.detalle.
 let tokenPagina: string | null = null;
+let errorTokenPagina = "";
 async function pageToken(): Promise<string | null> {
   if (tokenPagina) return tokenPagina;
   const base = process.env.META_PAGE_ACCESS_TOKEN;
   const pagina = process.env.META_PAGE_ID;
   if (!base) return null;
-  if (pagina) {
-    try {
-      const r = await fetch(`${GRAPH}/${pagina}?fields=access_token&access_token=${encodeURIComponent(base)}`);
-      const j = (await r.json().catch(() => ({}))) as { access_token?: string };
-      if (j.access_token) return (tokenPagina = j.access_token);
-    } catch {
-      /* se usa el token tal cual */
-    }
+  if (!pagina) return base;
+  const errores: string[] = [];
+  try {
+    const r = await fetch(`${GRAPH}/${pagina}?fields=access_token&access_token=${encodeURIComponent(base)}`);
+    const j = (await r.json().catch(() => ({}))) as { access_token?: string; error?: { message?: string } };
+    if (j.access_token) return (tokenPagina = j.access_token);
+    errores.push(`página: ${j.error?.message ?? `HTTP ${r.status}`}`);
+  } catch (e) {
+    errores.push(`página: ${e instanceof Error ? e.message : "red"}`);
   }
-  return (tokenPagina = base);
+  try {
+    const r = await fetch(`${GRAPH}/me/accounts?fields=id,access_token&limit=100&access_token=${encodeURIComponent(base)}`);
+    const j = (await r.json().catch(() => ({}))) as { data?: { id?: string; access_token?: string }[]; error?: { message?: string } };
+    const p = j.data?.find((x) => x.id === pagina);
+    if (p?.access_token) return (tokenPagina = p.access_token);
+    errores.push(`me/accounts: ${j.error?.message ?? `la página no aparece (${j.data?.length ?? 0} páginas)`}`);
+  } catch (e) {
+    errores.push(`me/accounts: ${e instanceof Error ? e.message : "red"}`);
+  }
+  // No se cachea: se reintenta en el próximo comentario.
+  errorTokenPagina = `No se pudo sacar el token de la página (${errores.join(" | ")}).`;
+  return base;
+}
+
+// Texto de la publicación comentada, para que VICTOR conteste sobre ese tema.
+async function textoPublicacion(postId: string | null): Promise<string> {
+  if (!postId) return "";
+  const token = await pageToken();
+  if (!token) return "";
+  try {
+    const r = await fetch(`${GRAPH}/${postId}?fields=message&access_token=${encodeURIComponent(token)}`);
+    const j = (await r.json().catch(() => ({}))) as { message?: string };
+    return (j.message ?? "").slice(0, 1500);
+  } catch {
+    return "";
+  }
 }
 
 // La página tiene que "instalar" la app para que Meta mande sus comentarios.
@@ -108,7 +138,7 @@ async function graph(path: string, params: Record<string, string>): Promise<{ ok
   try {
     const r = await fetch(`${GRAPH}/${path}`, { method: "POST", body });
     const j = (await r.json().catch(() => ({}))) as { id?: string; success?: boolean; error?: { message?: string } };
-    if (!r.ok || j.error) return { ok: false, error: j.error?.message ?? `HTTP ${r.status}` };
+    if (!r.ok || j.error) return { ok: false, error: `${j.error?.message ?? `HTTP ${r.status}`}${errorTokenPagina ? ` · ${errorTokenPagina}` : ""}` };
     return { ok: true, id: j.id };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Error de red con Meta." };
@@ -159,10 +189,13 @@ export async function procesarComentario(c: ComentarioMeta): Promise<ResultadoCo
 
   if (process.env.META_AGENTE_ACTIVO === "0") return guardar({ accion: "apagado", detalle: "META_AGENTE_ACTIVO=0", ok: true });
 
+  const publicacion = await textoPublicacion(c.postId);
   const mensajes: Anthropic.MessageParam[] = [
     {
       role: "user",
-      content: `Comentario en ${c.plataforma === "instagram" ? "Instagram" : "Facebook"} de ${c.autorNombre ?? "alguien"}:\n"""${c.mensaje.slice(0, 1500)}"""`,
+      content:
+        (publicacion ? `Publicación donde comentaron:\n"""${publicacion}"""\n\n` : "") +
+        `Comentario en ${c.plataforma === "instagram" ? "Instagram" : "Facebook"} de ${c.autorNombre ?? "alguien"}:\n"""${c.mensaje.slice(0, 1500)}"""`,
     },
   ];
   try {
