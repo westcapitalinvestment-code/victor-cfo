@@ -79,8 +79,18 @@ export default function PlanSugeridoCard({
 
   if (!abierto) {
     return tieneReglas ? (
-      <button className="mb-4 text-sm font-medium text-teal" onClick={() => onAbrir(true)}>
-        ¿Quieres que VICTOR te sugiera reglas según tu perfil? →
+      <button
+        className="mb-4 flex w-full items-center justify-between gap-3 rounded-xl border border-teal/30 bg-teal/10 p-4 text-left transition hover:bg-teal/15"
+        onClick={() => onAbrir(true)}
+      >
+        <span className="flex items-center gap-3">
+          <img src="/victor-avatar.png" width={40} height={40} alt="" className="shrink-0 rounded-full bg-white" />
+          <span className="flex flex-col">
+            <span className="text-base font-semibold text-[#1B3A5C]">¿Quieres que VICTOR te sugiera reglas según tu perfil?</span>
+            <span className="text-[14px] text-muted">5 preguntas y te arma un plan con los números para tu cuenta.</span>
+          </span>
+        </span>
+        <span className="shrink-0 rounded-pill bg-teal px-3 py-1.5 text-sm font-medium text-white">Armar plan →</span>
       </button>
     ) : (
       <div className="vc-card mb-4 border-2 border-teal/40">
