@@ -2,101 +2,56 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { marcarCookieTradingCliente, PRECIO_CORE_TRADING } from "@/lib/trading-plan";
 
-// Landing de VICTOR Core + Trading (19 nov 2026, pedido de Joel). Se vende por
-// redes, sin vendedor. Mensaje: no vendemos un bot que gana — vendemos lo que
-// evita que pierdas la cuenta. El botón lleva a /registro con Core + Trading
-// (cookie vc_trading, que lee el checkout) y conserva los UTM del anuncio.
+// Landing de VICTOR Core + Trading.
+// 19 nov 2026 — primera versión (pedido de Joel): no vendemos un bot que gana,
+// vendemos lo que evita que pierdas la cuenta.
+// 21 nov 2026 — rediseño para que se vea igual que los anuncios de Meta
+// (fondo oscuro, verde/rojo de trading, Space Grotesk + JetBrains Mono) y
+// repita su mensaje: "Fondéate tú", "Haz la cuenta", "Empresario del
+// trading", "Tu CFO y mentor de trading". Joel pidió que la gente se
+// empodere y lo vea como algo serio, y que sea CORTA (4 bloques, poco
+// texto). En vez de comparar precios de prop firms: "solo $179/año, lo que
+// gastabas en evaluaciones ponlo a trabajar en tu cuenta". La parte de
+// banco/presupuesto NO se vende aquí (distrae); se le muestra después por
+// email y por VICTOR.
+// El botón lleva a /registro con Core + Trading (cookie vc_trading, que lee
+// el checkout) y conserva los UTM del anuncio.
 
-function Punto({ children }: { children: ReactNode }) {
-  return (
-    <li className="flex items-start gap-2 text-base">
-      <span className="mt-0.5 text-teal" aria-hidden>
-        ✓
-      </span>
-      <span>{children}</span>
-    </li>
-  );
+const sg = Space_Grotesk({ subsets: ["latin"], weight: ["500", "700"], display: "swap" });
+const jb = JetBrains_Mono({ subsets: ["latin"], weight: ["500", "700"], display: "swap" });
+
+
+function Etiqueta({ children }: { children: ReactNode }) {
+  return <p className={`${jb.className} mb-3 text-xs font-bold uppercase tracking-[0.2em] text-[#19E68C]`}>{children}</p>;
 }
 
-function Seccion({ etiqueta, titulo, texto, puntos, mock, invertir }: { etiqueta: string; titulo: string; texto: string; puntos: string[]; mock: ReactNode; invertir?: boolean }) {
-  return (
-    <section className="mb-20 grid items-center gap-8 md:mb-28 md:grid-cols-2 md:gap-16">
-      <div className={invertir ? "md:order-2" : ""}>
-        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-teal">{etiqueta}</p>
-        <h2 className="mb-2 text-xl font-semibold leading-tight">{titulo}</h2>
-        <p className="mb-3 text-base text-muted">{texto}</p>
-        <ul className="flex flex-col gap-1.5">
-          {puntos.map((p) => (
-            <Punto key={p}>{p}</Punto>
-          ))}
-        </ul>
-      </div>
-      <div className={invertir ? "md:order-1" : ""}>{mock}</div>
-    </section>
-  );
+
+function Tarjeta({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`rounded-2xl border border-white/10 bg-[#0E131A] p-5 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.8)] ${className}`}>{children}</div>;
 }
+
 
 // Réplica del panel del guardián en MT5 (datos de ejemplo).
 function MockPanel() {
   return (
-    <div className="mx-auto w-full max-w-[360px] rounded-xl border border-border bg-white p-3 font-mono text-[12px] shadow-lg">
-      <p className="mb-2 text-[11px] text-muted">XAUUSD, M15 · Gold</p>
-      <div className="mb-2 flex gap-2">
-        <span className="rounded bg-[#B22222] px-4 py-1.5 font-sans text-white">VENDER</span>
-        <span className="rounded bg-[#2E8B57] px-4 py-1.5 font-sans text-white">COMPRAR</span>
+    <div>
+    <Tarjeta className={`${jb.className} mx-auto w-full max-w-[400px] text-[13px]`}>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[12px] text-[#7D8A96]">XAUUSD, M15 · Gold</span>
+        <span className="rounded-full bg-[#19E68C]/15 px-2 py-0.5 text-[11px] font-bold text-[#19E68C]">● GUARDIÁN ACTIVO</span>
       </div>
-      <p className="text-[#d97706]">OK | perdedores hoy: 1/3 | P/L hoy: +18.40</p>
-      <p className="text-[#228B22]">XAUUSD lote 0.06 | stop 1.15 | riesgo $6.90 / $7.00</p>
-      <p className="mt-1 text-[#bbb]">Sync OK 10:42</p>
-      <p className="mt-1 text-[15px] text-[#1E90FF]">P/L hoy: +$18.40</p>
-    </div>
-  );
-}
-
-function MockLimites() {
-  const barras = [
-    { k: "Pérdida del día", t: "$7.00 de $21.00", p: 33, c: "bg-teal" },
-    { k: "Trades perdedores", t: "1 de 3", p: 33, c: "bg-teal" },
-    { k: "Trades del día", t: "4 de 6", p: 66, c: "bg-[#d97706]" },
-  ];
-  return (
-    <div className="vc-card mx-auto w-full max-w-[360px] shadow-lg">
-      <p className="mb-2 text-sm font-medium">Tus límites de hoy</p>
-      <div className="flex flex-col gap-2">
-        {barras.map((b) => (
-          <div key={b.k}>
-            <div className="flex justify-between text-[13px]">
-              <span>{b.k}</span>
-              <span className="text-muted">{b.t}</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-border">
-              <div className={`h-full ${b.c}`} style={{ width: `${b.p}%` }} />
-            </div>
-          </div>
-        ))}
+      <div className="mb-3 flex gap-2">
+        <span className="flex-1 rounded-lg bg-[#FF3D5A] py-2 text-center font-bold text-white">VENDER</span>
+        <span className="flex-1 rounded-lg bg-[#19E68C] py-2 text-center font-bold text-[#07090D]">COMPRAR</span>
       </div>
-    </div>
-  );
-}
-
-function MockRendimiento() {
-  const t = [
-    { k: "Hoy", v: "+1.20%", d: "+$18.40" },
-    { k: "Este mes", v: "+4.85%", d: "+$71.30" },
-    { k: "Este año", v: "+11.2%", d: "+$152.00" },
-    { k: "Total", v: "+13.6%", d: "+$181.20" },
-  ];
-  return (
-    <div className="mx-auto grid w-full max-w-[360px] grid-cols-2 gap-2">
-      {t.map((x) => (
-        <div key={x.k} className="vc-card !p-3 shadow">
-          <p className="text-[12px] uppercase tracking-wide text-muted">{x.k}</p>
-          <p className="text-lg font-medium text-teal">{x.v}</p>
-          <p className="text-[12px] text-muted">{x.d}</p>
-        </div>
-      ))}
+      <p className="text-[#F5B544]">OK | perdedores hoy: 1/3 | P/L hoy: +18.40</p>
+      <p className="text-[#19E68C]">lote 0.06 | stop 1.15 | riesgo $6.90 / $7.00</p>
+      <p className="mt-2 text-[#5B6874]">Sync OK 10:42</p>
+    </Tarjeta>
+    <p className={`${jb.className} mt-2 text-center text-[11px] text-[#5B6874]`}>Ejemplo ilustrativo</p>
     </div>
   );
 }
@@ -115,91 +70,163 @@ export default function TradingLanding() {
   }, []);
 
   const boton = (texto: string) => (
-    <Link href={href} className="vc-btn-primary inline-block px-6 py-3 text-base">
-      {texto}
+    <Link
+      href={href}
+      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#19E68C] px-9 py-4 text-lg font-bold text-[#07090D] shadow-[0_0_40px_-5px_rgba(25,230,140,0.6)] transition hover:brightness-110 sm:w-auto"
+    >
+      {texto} <span aria-hidden>→</span>
     </Link>
   );
 
+  const anual = PRECIO_CORE_TRADING.anual;
+  const mensual = PRECIO_CORE_TRADING.mensual;
+
+  const pilares = [
+    { k: "El guardián", t: "Te frena antes de romper tus reglas.", d: "Calcula tu lote, pone tu stop y te cierra el día cuando llegas a tu límite. Como una prop firm, pero en tu cuenta.", s: "riesgo $6.90 / $7.00 ✓" },
+    { k: "Tu bitácora", t: "Tus libros, sin Excel.", d: "Cada trade llega solo desde MT5. Marcas si cumpliste tu plan y ves dónde ganas y dónde se te va el dinero.", s: "+4.9% este mes · plan 92%" },
+    { k: "Tu CFO y mentor", t: "Te lleva paso a paso.", d: "VICTOR conoce tu cuenta y tus reglas. Revisa tus números contigo y te dice qué te funciona, qué te cuesta y qué ajustar.", s: "“Nada de índices después de las 11”" },
+  ];
+
   return (
-    <main className="min-h-screen bg-bg">
-      <div className="mx-auto max-w-5xl px-5 py-10 md:py-16">
-        <header className="mb-10 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 font-semibold">
-            <img src="/victor-avatar.png" width={28} height={28} alt="VICTOR" className="rounded-full" />
-            VICTOR CFO
+    <main
+      className={`${sg.className} min-h-screen bg-[#07090D] text-[#F2F5F7]`}
+      style={{
+        backgroundImage:
+          "radial-gradient(circle at 85% 0%, rgba(25,230,140,0.16), rgba(25,230,140,0) 40%), radial-gradient(circle at 0% 55%, rgba(25,230,140,0.07), rgba(25,230,140,0) 35%), linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+        backgroundSize: "100% 100%, 100% 100%, 54px 54px, 54px 54px",
+      }}
+    >
+      <div className="mx-auto max-w-6xl px-5 py-8 md:py-10">
+        <header className="mb-14 flex items-center justify-between md:mb-20">
+          <Link href="/" className="flex items-center gap-3">
+            <img src="/victor-avatar.png" width={36} height={36} alt="VICTOR" className="rounded-full bg-white" />
+            <span className="flex flex-col leading-tight">
+              <span className="font-bold tracking-wide">VICTOR</span>
+              <span className={`${jb.className} text-[10px] tracking-[0.2em] text-[#19E68C]`}>TU CFO Y MENTOR DE TRADING</span>
+            </span>
           </Link>
-          <Link href="/login" className="text-sm text-muted underline">
+          <Link href="/login" className="text-sm text-[#C9D2DA] underline underline-offset-4">
             Entrar
           </Link>
         </header>
 
-        <section className="mb-20 text-center md:mb-28">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-teal">Para traders de MT5 · forex, oro, índices, cripto</p>
-          <h1 className="mx-auto mb-4 max-w-3xl text-3xl font-bold leading-tight md:text-5xl">Tus reglas de trading, cumplidas sin excepciones.</h1>
-          <p className="mx-auto mb-6 max-w-2xl text-lg text-muted">
-            No es un bot que promete ganar. Es el guardián que te impide perder la cuenta: calcula tu lote, pone tu stop y te bloquea cuando llegas a tu límite del día.
-          </p>
-          {boton("Pruébalo 7 días gratis")}
-          <p className="mt-3 text-sm text-muted">
-            Luego ${PRECIO_CORE_TRADING.mensual}/mes o ${PRECIO_CORE_TRADING.anual}/año. Cancela cuando quieras.
-          </p>
+        {/* 1. GANCHO */}
+        <section className="mb-24 grid items-center gap-12 md:mb-32 md:grid-cols-[1.15fr_1fr]">
+          <div>
+            <Etiqueta>Para traders de MT5</Etiqueta>
+            <h1 className="mb-5 text-5xl font-bold leading-[0.95] tracking-tight md:text-7xl">
+              Deja de pagar cuentas de fondeo.
+              <br />
+              <span className="text-[#19E68C]">Fondéate tú.</span>
+            </h1>
+            <p className="mb-8 max-w-xl text-lg text-[#C9D2DA] md:text-xl">Opera tu propio capital con reglas de prop firm y un CFO que te lleva paso a paso hacia la rentabilidad.</p>
+            {boton("Pruébalo 7 días gratis")}
+          </div>
+          <MockPanel />
         </section>
 
-        <Seccion
-          etiqueta="El guardián"
-          titulo="Pones cuánto puedes perder. Él hace la matemática."
-          texto="Ej. $21 al día y 3 pérdidas = $7 por trade. En cualquier activo, el guardián calcula el lote para que si toca el stop pierdas exactamente eso."
-          puntos={[
-            "Lote automático en forex, oro, índices, acciones y cripto",
-            "Stop según lo que se mueve cada activo (ATR)",
-            "Luz verde cuando el trade cabe en tu riesgo; rojo cuando no",
-            "Funciona con sus botones o con el Trading Panel de MT5",
-          ]}
-          mock={<MockPanel />}
-        />
-
-        <Seccion
-          invertir
-          etiqueta="Como una cuenta de fondeo"
-          titulo="Llegas a tu límite y se acabó el día."
-          texto="Las cuentas se queman en los días malos, por revancha y por operar de más. El guardián te bloquea antes de que eso pase y te explica por qué."
-          puntos={[
-            "Pérdida máxima del día y número de pérdidas",
-            "Máximo de trades al día y espera tras una pérdida",
-            "Activos prohibidos: los que te queman la cuenta",
-            "Si abres algo fuera de tus reglas, lo cierra al instante",
-          ]}
-          mock={<MockLimites />}
-        />
-
-        <Seccion
-          etiqueta="Bitácora y números"
-          titulo="Sabes si de verdad estás ganando."
-          texto="Tus trades llegan solos desde MT5. Ves tu % de hoy, del mes y del año, tu calendario y cuánto te costó romper tus reglas."
-          puntos={["Bitácora automática, sin Excel", "% ganado o perdido sobre la cuenta", "Calendario de días verdes y rojos", "Cumplimiento de reglas trade por trade"]}
-          mock={<MockRendimiento />}
-        />
-
-        <section className="mb-20 md:mb-28">
-          <div className="vc-card mx-auto max-w-2xl text-center">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-teal">Incluido</p>
-            <h2 className="mb-2 text-xl font-semibold">También organiza tu dinero</h2>
-            <p className="text-base text-muted">
-              Core + Trading trae todo VICTOR Core: presupuesto, deudas, metas y tu CFO con IA. Cuando tu trading crezca, VICTOR te dice cuándo conviene tratarlo como un
-              negocio.
+        {/* 2. EL DINERO */}
+        <section className="mb-24 md:mb-32">
+          <Tarjeta className="mx-auto max-w-4xl border-[#19E68C]/30 bg-[#0B1511] p-8 text-center md:p-14">
+            <p className="text-4xl font-bold tracking-tight text-[#19E68C] md:text-5xl">
+              ${mensual}
+              <span className="text-xl font-medium text-[#7D8A96] md:text-2xl"> /mes</span>
             </p>
+            <h2 className="mx-auto mt-5 max-w-2xl text-3xl font-bold leading-tight md:text-5xl">Se paga solo.</h2>
+            <p className="mx-auto mt-3 max-w-xl text-lg text-[#C9D2DA]">
+              Un solo trade de revancha que VICTOR te frena puede cubrir el mes. Y lo que gastabas en evaluaciones,{" "}
+              <b className="text-[#19E68C]">ponlo a trabajar en tu cuenta.</b>
+            </p>
+            <p className="mx-auto mt-3 max-w-xl text-lg text-[#C9D2DA]">Empieza con el mínimo que acepte tu broker y escálalo con VICTOR.</p>
+            <div className={`${jb.className} mt-8 flex flex-wrap justify-center gap-3 text-sm font-bold`}>
+              {["Tu capital", "Tus reglas", "Tus ganancias"].map((x) => (
+                <span key={x} className="rounded-full border border-[#19E68C]/40 px-4 py-2 text-[#19E68C]">
+                  ✓ {x}
+                </span>
+              ))}
+            </div>
+          </Tarjeta>
+        </section>
+
+        {/* 3. EMPRESARIO */}
+        <section className="mb-24 md:mb-32">
+          <div className="mb-10 text-center">
+            <Etiqueta>Empresario del trading</Etiqueta>
+            <h2 className="mx-auto max-w-3xl text-3xl font-bold leading-tight tracking-tight md:text-5xl">
+              El trading es un negocio rentable <span className="text-[#19E68C]">cuando tienes reglas claras y disciplina.</span>
+            </h2>
+          </div>
+          <div className="grid gap-5 md:grid-cols-3">
+            {pilares.map((p) => (
+              <Tarjeta key={p.k} className="flex flex-col">
+                <p className={`${jb.className} mb-3 text-xs font-bold uppercase tracking-widest text-[#19E68C]`}>{p.k}</p>
+                <p className="mb-2 text-2xl font-bold leading-tight">{p.t}</p>
+                <p className="mb-5 text-[#C9D2DA]">{p.d}</p>
+                <p className={`${jb.className} mt-auto rounded-lg bg-white/5 px-3 py-2 text-[13px] text-[#19E68C]`}>
+                  {p.s} <span className="text-[10px] font-medium text-[#5B6874]">· ej. ilustrativo</span>
+                </p>
+              </Tarjeta>
+            ))}
           </div>
         </section>
 
-        <section className="text-center">
-          <h2 className="mb-2 text-2xl font-semibold">Cuesta menos que lo que pierdes en un mal trade.</h2>
-          <p className="mb-5 text-base text-muted">
-            ${PRECIO_CORE_TRADING.mensual}/mes · 7 días gratis · solo MetaTrader 5 por ahora
-          </p>
+        {/* BROKERS — mucha gente no conoce MT5 ni los brokers (pedido de Joel,
+            21 nov 2026). Solo ejemplos verificados que ofrecen MT5; en EE.UU. y
+            PR solo brokers registrados en CFTC/NFA pueden ofrecerlo. No es
+            recomendación. */}
+        <section className="mb-24 md:mb-32">
+          <Tarjeta className="mx-auto max-w-4xl p-8 md:p-10">
+            <div className="mb-6 text-center">
+              <Etiqueta>¿No tienes broker?</Etiqueta>
+              <h2 className="text-2xl font-bold leading-tight md:text-3xl">MetaTrader 5 es gratis.</h2>
+              <p className="mt-2 text-[#C9D2DA]">Algunos brokers que lo ofrecen:</p>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2">
+              {[
+                // Axi primero: es el que usa Joel. Acepta PR, Latam y España,
+                // pero NO residentes de EE.UU. continental (no es NFA).
+                { r: "Puerto Rico, Latinoamérica y España", b: ["Axi", "IC Markets", "Pepperstone", "XM", "Exness"] },
+                { r: "Estados Unidos", b: ["FOREX.com", "OANDA", "Trading.com"] },
+              ].map((g) => (
+                <div key={g.r}>
+                  <p className={`${jb.className} mb-3 text-xs font-bold uppercase tracking-widest text-[#7D8A96]`}>{g.r}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {g.b.map((n, i) => (
+                      <span
+                        key={n}
+                        className={`rounded-full border px-4 py-2 text-sm font-bold ${i === 0 && n === "Axi" ? "border-[#19E68C]/60 bg-[#19E68C]/10 text-[#19E68C]" : "border-white/15 bg-white/5"}`}
+                      >
+                        {n}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-6 text-center text-xs text-[#5B6874]">
+              Ejemplos, no recomendaciones. Antes de abrir cuenta, verifica que el broker acepte clientes de tu país y permita asesores expertos (EAs). VICTOR te ayuda a
+              conectarlo.
+            </p>
+          </Tarjeta>
+        </section>
+
+        {/* 4. CIERRE */}
+        <section className="pb-10 text-center">
+          <h2 className="mx-auto mb-8 max-w-3xl text-4xl font-bold leading-tight tracking-tight md:text-6xl">
+            Empieza tu negocio <span className="text-[#19E68C]">de trading.</span>
+          </h2>
           {boton("Empezar mis 7 días gratis")}
-          <p className="mx-auto mt-6 max-w-2xl text-xs text-muted">
-            VICTOR no da señales ni opera por ti, y no es asesoría financiera. Trading con apalancamiento conlleva alto riesgo; el guardián ayuda a cumplir tus reglas,
-            pero no garantiza resultados. Deslizamientos y huecos de precio pueden hacer que una pérdida supere tu límite.
+          <p className="mt-6 text-base font-bold text-[#F2F5F7]">
+            <span className="text-[#19E68C]">Garantía:</span> pruébalo 7 días gratis. Si no es para ti, cancelas y no pagas nada.
+          </p>
+          <p className={`${jb.className} mt-3 text-xs leading-relaxed text-[#7D8A96]`}>
+            Luego ${mensual}/mes o ${anual}/año · Cancela cuando quieras
+            <br />
+            MetaTrader 5 · Windows y Mac · Incluye VICTOR Core
+          </p>
+          <p className="mx-auto mt-12 max-w-2xl text-xs leading-relaxed text-[#5B6874]">
+            VICTOR no da señales ni opera por ti, y no es asesoría financiera. Trading con apalancamiento conlleva alto riesgo; el guardián ayuda a cumplir tus reglas, pero no
+            garantiza resultados. Los números de esta página son ejemplos ilustrativos.
           </p>
         </section>
       </div>
