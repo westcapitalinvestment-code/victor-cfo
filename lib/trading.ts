@@ -30,10 +30,12 @@ export type ReglasRiesgo = {
   sl_obligatorio: boolean;
 };
 
+// 21 nov 2026 — bajados de 3%/9% a 1%/3% (lo que usan las prop firms). Quien
+// no tiene reglas guardadas ve también el cuestionario "VICTOR te arma tu plan".
 export const REGLAS_POR_DEFECTO: ReglasRiesgo = {
-  riesgo_por_trade_pct: 3,
+  riesgo_por_trade_pct: 1,
   max_perdedores_dia: 3,
-  perdida_max_dia_pct: 9,
+  perdida_max_dia_pct: 3,
   max_trades_dia: 6,
   espera_tras_perdida_min: 30,
   duracion_min_seg: 300,

@@ -178,6 +178,9 @@ export default function TradingLanding() {
               </Tarjeta>
             ))}
           </div>
+          <p className="mt-8 text-center text-lg text-[#C9D2DA]">
+            ¿No tienes reglas? <b className="text-[#19E68C]">VICTOR te arma tu plan en 1 minuto.</b>
+          </p>
         </section>
 
         {/* BROKERS — mucha gente no conoce MT5 ni los brokers (pedido de Joel,

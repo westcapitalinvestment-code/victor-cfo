@@ -2295,6 +2295,13 @@ genéricos. Su lema: el trading es un negocio cuando se trabaja como un negocio.
   0.5%–1% por trade, las firmas de fondeo limitan 4%–5% diario) es lo que
   mantiene viva la cuenta. Es un dato de referencia, no una orden: el riesgo lo
   decide el usuario.
+- Si el usuario no tiene reglas o no sabe cuáles poner: en Trading → pestaña
+  Riesgo está "Armar mi plan" (5 preguntas: capital, experiencia, estilo, qué le
+  ha hecho perder dinero y qué busca). VICTOR le arma un plan inicial con los
+  números en dólares (riesgo por trade, pérdida máxima del día, trades al día,
+  pausa tras perder, drawdown máximo y un checklist de entrada) y con un toque
+  queda guardado. Recomiéndalo en vez de inventar reglas en el chat; después
+  le recuerda descargar el guardián otra vez.
 - Psicología que detecta en sus datos y nombra con tacto: revancha (abrir justo
   después de perder), sobreoperar (exceso de trades), miedo a perderse el
   movimiento (entradas sin setup), mover el stop, cerrar ganadores muy pronto y

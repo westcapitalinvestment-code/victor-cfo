@@ -27,6 +27,8 @@ import { generarGuardianMQ5, type ModoStop, type TemporalidadATR } from "@/lib/t
 import { Anillo, BarrasMensuales, Calendario, CurvaCapital, nombreMes, type MesPct } from "./graficos";
 import Estadisticas from "./estadisticas";
 import ReglasPropias, { type ReglaPropia } from "./reglas-propias";
+import PlanSugeridoCard from "./plan-sugerido";
+import type { PlanSugerido } from "@/lib/trading-plan-sugerido";
 
 // Módulo Trading (oct 2026) — organizador, NO da señales ni consejos.
 // Panel (calendario, curva, perfil), Bitácora por mes y por día, y Riesgo
@@ -213,6 +215,9 @@ function TradingContenido() {
   // Mi checklist: reglas propias y sus marcas por trade (trade_id → regla_id → cumplida).
   const [reglasPropias, setReglasPropias] = useState<ReglaPropia[]>([]);
   const [checks, setChecks] = useState<Map<string, Record<string, boolean>>>(new Map());
+  // Cuestionario "VICTOR te arma tu plan" (21 nov 2026): se ofrece a quien aún no guardó reglas.
+  const [tieneReglas, setTieneReglas] = useState(true);
+  const [planAbierto, setPlanAbierto] = useState(false);
 
   async function cargar(preferida?: string) {
     const { data: u } = await supabase.auth.getUser();
@@ -239,6 +244,7 @@ function TradingContenido() {
       if (!ck || ck.length < 1000) break;
     }
     setChecks(mapa);
+    setTieneReglas(!!rr);
     if (rr) {
       const r = rr as Record<string, unknown>;
       setReglas({ ...REGLAS_POR_DEFECTO, ...(Object.fromEntries(Object.entries(r).filter(([k]) => k in REGLAS_POR_DEFECTO).map(([k, v]) => [k, typeof v === "string" ? Number(v) : v])) as Partial<ReglasRiesgo>) });
@@ -413,6 +419,41 @@ function TradingContenido() {
     const { error: e } = await supabase.from("risk_rules").upsert({ owner_id: u.user.id, ...reglas, ...guardian, updated_at: new Date().toISOString() });
     if (e) return setError(`No se pudieron guardar las reglas: ${e.message}`);
     setMsg("Reglas guardadas.");
+  }
+
+  // Guarda el plan del cuestionario: reglas + límites del guardián + checklist de entrada.
+  async function aplicarPlan(plan: PlanSugerido): Promise<string | null> {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return "Tu sesión expiró. Vuelve a entrar.";
+    const nuevoGuardian: Guardian = {
+      ...guardian,
+      guard_daily_loss_usd: plan.perdidaDiaUSD > 0 ? plan.perdidaDiaUSD : null,
+      guard_min_equity_usd: plan.equityMinimaUSD > 0 ? plan.equityMinimaUSD : null,
+      guard_max_open: 1,
+    };
+    const { error: e } = await supabase
+      .from("risk_rules")
+      .upsert({ owner_id: u.user.id, ...plan.reglas, ...nuevoGuardian, updated_at: new Date().toISOString() });
+    if (e) return `No se pudo guardar el plan: ${e.message}`;
+    // Checklist: solo agrega las que no tenga ya (mismo texto).
+    const existentes = new Set(reglasPropias.map((x) => x.texto.trim().toLowerCase()));
+    const nuevas = plan.checklist.filter((t) => !existentes.has(t.trim().toLowerCase()));
+    let agregadas: ReglaPropia[] = [];
+    if (nuevas.length) {
+      const base = reglasPropias.reduce((m, x) => Math.max(m, x.orden), 0);
+      const { data: ins, error: e2 } = await supabase
+        .from("trading_reglas_propias")
+        .insert(nuevas.map((texto, i) => ({ owner_id: u.user!.id, texto, orden: base + i + 1 })))
+        .select("id, texto, orden");
+      if (e2) return `Se guardaron tus reglas, pero no el checklist: ${e2.message}`;
+      agregadas = (ins ?? []) as ReglaPropia[];
+    }
+    setReglas(plan.reglas);
+    setGuardian(nuevoGuardian);
+    if (agregadas.length) setReglasPropias((prev) => [...prev, ...agregadas]);
+    setTieneReglas(true);
+    setMsg("Plan guardado. Si ya tenías el guardián en MT5, descárgalo otra vez para que lleve tus reglas nuevas.");
+    return null;
   }
 
   // Devuelve un texto de error si falló (null = guardado), para que la tarjeta lo muestre.
@@ -785,6 +826,18 @@ function TradingContenido() {
           {tab !== "riesgo" && trades.length > 0 && barraMeses}
 
           {/* ---------------- PANEL ---------------- */}
+          {tab !== "riesgo" && !tieneReglas && (
+            <button
+              className="vc-card mb-4 w-full border-2 border-teal/40 text-left"
+              onClick={() => {
+                setTab("riesgo");
+                setPlanAbierto(true);
+              }}
+            >
+              <p className="text-sm uppercase tracking-wide text-teal">¿No tienes reglas?</p>
+              <p className="mt-1 font-semibold">VICTOR te arma tu plan en 1 minuto →</p>
+            </button>
+          )}
           {tab === "panel" && (
             <>
               {trades.length === 0 ? (
@@ -966,6 +1019,14 @@ function TradingContenido() {
                   )}
                 </div>
               )}
+
+              <PlanSugeridoCard
+                capitalInicial={balanceInicial}
+                tieneReglas={tieneReglas}
+                abierto={planAbierto}
+                onAbrir={setPlanAbierto}
+                onAplicar={aplicarPlan}
+              />
 
               <div className="vc-card mb-4 flex flex-col gap-3">
                 <p className="text-sm uppercase tracking-wide text-muted">Mi cuenta</p>
