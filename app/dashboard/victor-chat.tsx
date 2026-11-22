@@ -737,7 +737,7 @@ export default function VictorChat({
 
       {open && (
         <div
-          className="fixed right-4 z-50 flex w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+          className="fixed right-4 z-[95] flex w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
           // Arrastrar y soltar un PDF o una imagen en cualquier parte del chat.
           onDragOver={(e) => {
             if (bloqueado || !Array.from(e.dataTransfer.types).includes("Files")) return;
@@ -763,6 +763,7 @@ export default function VictorChat({
           // pasaba del alto de la ventana y se cortaba el header verde con el
           // Manual. Ahora el alto nunca excede el espacio sobre el botón, y el
           // botón bajó de 6rem a 4.75rem (justo encima de la barra de abajo).
+          // z-[95]: el topbar es sticky con z-index 90 y tapaba el header del chat.
           style={{
             bottom: "calc(140px + env(safe-area-inset-bottom))",
             maxHeight: "min(72dvh, calc(100dvh - 140px - 0.75rem - env(safe-area-inset-bottom)))",
