@@ -72,8 +72,37 @@ const TOOLS: Anthropic.Tool[] = [
   },
 ];
 
+// META_PAGE_ACCESS_TOKEN puede ser el token de un usuario del sistema del
+// portafolio (no vence) o directamente el de la página: si es de usuario, se
+// pide el token de la página con él y se guarda en memoria.
+let tokenPagina: string | null = null;
+async function pageToken(): Promise<string | null> {
+  if (tokenPagina) return tokenPagina;
+  const base = process.env.META_PAGE_ACCESS_TOKEN;
+  const pagina = process.env.META_PAGE_ID;
+  if (!base) return null;
+  if (pagina) {
+    try {
+      const r = await fetch(`${GRAPH}/${pagina}?fields=access_token&access_token=${encodeURIComponent(base)}`);
+      const j = (await r.json().catch(() => ({}))) as { access_token?: string };
+      if (j.access_token) return (tokenPagina = j.access_token);
+    } catch {
+      /* se usa el token tal cual */
+    }
+  }
+  return (tokenPagina = base);
+}
+
+// La página tiene que "instalar" la app para que Meta mande sus comentarios.
+// Se llama cuando Meta verifica el webhook (botón Verify and save).
+export async function suscribirPagina(): Promise<{ ok: boolean; error?: string }> {
+  const pagina = process.env.META_PAGE_ID;
+  if (!pagina) return { ok: false, error: "Falta META_PAGE_ID." };
+  return graph(`${pagina}/subscribed_apps`, { subscribed_fields: "feed" });
+}
+
 async function graph(path: string, params: Record<string, string>): Promise<{ ok: boolean; error?: string; id?: string }> {
-  const token = process.env.META_PAGE_ACCESS_TOKEN;
+  const token = await pageToken();
   if (!token) return { ok: false, error: "Falta META_PAGE_ACCESS_TOKEN en el servidor." };
   const body = new URLSearchParams({ ...params, access_token: token });
   try {

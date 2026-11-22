@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { procesarComentario, type ComentarioMeta } from "@/lib/meta-comentarios";
+import { procesarComentario, suscribirPagina, type ComentarioMeta } from "@/lib/meta-comentarios";
 
 // Webhook de Meta (22 nov 2026): comentarios nuevos en la página Victor CFO y
 // en sus anuncios (campo "feed") y en Instagram (campo "comments"). Lo procesa
@@ -15,6 +15,8 @@ export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
   const esperado = process.env.META_VERIFY_TOKEN;
   if (esperado && p.get("hub.mode") === "subscribe" && p.get("hub.verify_token") === esperado) {
+    // De paso, conecta la página a la app (si ya hay token). No bloquea la verificación.
+    await suscribirPagina().catch(() => null);
     return new NextResponse(p.get("hub.challenge") ?? "", { status: 200 });
   }
   return new NextResponse("Forbidden", { status: 403 });
