@@ -64,7 +64,7 @@ const PanelMensajes = memo(function PanelMensajes({
   onSugerencia: (texto: string) => void;
 }) {
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4" style={{ minHeight: 240 }}>
+    <div ref={scrollRef} className="min-h-[120px] flex-1 overflow-y-auto p-4">
       {messages.length === 0 && !loading && (
         <div className="mb-3 flex items-start gap-2">
           <img src={avatar} alt="VICTOR" className="h-7 w-7 flex-shrink-0 rounded-full object-cover" />
@@ -737,7 +737,7 @@ export default function VictorChat({
 
       {open && (
         <div
-          className="fixed right-4 z-50 flex max-h-[70dvh] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+          className="fixed right-4 z-50 flex w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
           // Arrastrar y soltar un PDF o una imagen en cualquier parte del chat.
           onDragOver={(e) => {
             if (bloqueado || !Array.from(e.dataTransfer.types).includes("Files")) return;
@@ -759,7 +759,13 @@ export default function VictorChat({
           // recalcula cuando el teclado del celular aparece/desaparece al
           // abrir el chat; 100vh clásico en Safari/PWA no lo hace, y eso
           // era parte del "desajuste" que reportó Joel al abrir/cerrar.
-          style={{ bottom: "calc(168px + env(safe-area-inset-bottom))" }}
+          // En pantallas bajas (laptop presentando, zoom alto) 70dvh + 168px
+          // pasaba del alto de la ventana y se cortaba el header verde con el
+          // Manual. Ahora el alto nunca excede el espacio sobre el botón.
+          style={{
+            bottom: "calc(168px + env(safe-area-inset-bottom))",
+            maxHeight: "min(70dvh, calc(100dvh - 168px - 1rem - env(safe-area-inset-bottom)))",
+          }}
         >
           {arrastrando && (
             <div className="pointer-events-none absolute inset-0 z-[70] flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-teal bg-card/95 text-sm font-medium text-teal">
@@ -768,7 +774,7 @@ export default function VictorChat({
             </div>
           )}
           {/* Header */}
-          <div className="flex items-center gap-2.5 px-4 py-3.5" style={{ background: "#1D9E75" }}>
+          <div className="flex flex-shrink-0 items-center gap-2.5 px-4 py-3.5" style={{ background: "#1D9E75" }}>
             <img
               src={VICTOR_AVATAR}
               alt="VICTOR"
