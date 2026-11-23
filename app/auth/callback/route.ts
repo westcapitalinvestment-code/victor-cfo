@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { enviarBienvenidaInicial } from "@/lib/bienvenida-inicial";
 import { enviarEventoCAPI } from "@/lib/meta-capi";
 import { guardarOrigenRegistro } from "@/lib/origen-registro";
+import { avisarNuevoRegistro } from "@/lib/aviso-registro";
+import { COOKIE_TRADING } from "@/lib/trading-plan";
 
 // Callback de OAuth (Google/Apple) — Supabase redirige aquí con ?code=...
 // después de que el usuario autoriza en el proveedor (10 sept 2026, pedido
@@ -100,6 +102,9 @@ export async function GET(req: NextRequest) {
       p_gratis: gratis,
       p_telefono: tel,
     });
+  }
+  if (cuentaNueva && sesionData.user?.id) {
+    await avisarNuevoRegistro(sesionData.user.id, req.cookies.get(COOKIE_TRADING)?.value === "1").catch(() => {});
   }
 
   // El teléfono de la cookie ya se usó — se borra en cualquier salida de aquí.

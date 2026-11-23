@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { marcarEmbudo } from "@/lib/embudo";
 import { createClient } from "@/lib/supabase/client";
 import { esCicloValido, type Ciclo } from "@/lib/stripe";
 import { fbqTrack } from "@/lib/fbpixel";
@@ -159,7 +160,9 @@ function RegistroForm() {
   const [esTrading, setEsTrading] = useState(false);
   useEffect(() => {
     if (searchParams.get("trading") === "1") marcarCookieTradingCliente();
-    setEsTrading(leerCookieTradingCliente());
+    const t = leerCookieTradingCliente();
+    setEsTrading(t);
+    if (t) marcarEmbudo("vista_registro_trading");
   }, [searchParams]);
 
   function datosPrecio(planId: PlanPago) {
@@ -187,7 +190,9 @@ function RegistroForm() {
     const nombre = planId === "pro" ? "Pro" : planId === "proplus" ? "Business" : esTrading ? "Core + Trading" : "Core";
     return esReferido
       ? `Tu primer mes de ${nombre} es gratis, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
-      : `Gratis por 7 días, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`;
+      : planId === "core" && esTrading
+        ? `7 días gratis, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
+        : `Gratis por 7 días, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`;
   }
 
   const [email, setEmail] = useState("");
@@ -311,6 +316,7 @@ function RegistroForm() {
     // para "Lead" de Meta: alguien completó el formulario de registro, sin
     // importar si termina pagando o se queda en el plan gratis.
     fbqTrack("Lead", { plan: planEscogido, ciclo, gratis: esGratis });
+    marcarEmbudo("registro_email_ok");
 
     // Bienvenida al registro, pague o no (21 sept 2026, pedido de Joel).
     if (data.user?.id) {
@@ -612,23 +618,74 @@ function RegistroForm() {
                     </ul>
                   )}
                   <p className="text-sm text-muted">{finePrint("core")}</p>
-                  <TerminosCheckbox aceptaTerminos={!!terminos.core} setAceptaTerminos={setTerminosDe("core")} />
-                  <button
-                    type="button"
-                    className="vc-btn-primary flex items-center justify-center gap-2"
-                    disabled={loading || !!oauthEnCurso || !terminos.core}
-                    onClick={() => continuarConOAuth("google", false, "core")}
-                  >
-                    {oauthEnCurso === "google" ? "..." : esTrading ? "Empezar 7 días gratis" : esReferido ? "Activar Core — primer mes gratis" : "Activar Core"}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-sm text-muted underline"
-                    disabled={loading || !!oauthEnCurso}
-                    onClick={() => abrirEmailForm(false, "core")}
-                  >
-                    o con email
-                  </button>
+                  {esTrading ? (
+                    <>
+                      {/* Trading (23 nov 2026): sin casilla que apague el botón,
+                          Google y email al mismo nivel, y WhatsApp opcional para
+                          ayudar a instalar el guardián. */}
+                      <label className="flex flex-col gap-1 text-left text-sm">
+                        <span className="font-medium text-text">Tu WhatsApp (opcional)</span>
+                        <input
+                          type="tel"
+                          inputMode="tel"
+                          value={telefono}
+                          onChange={(e) => setTelefono(e.target.value)}
+                          placeholder="787-555-1234"
+                          className="w-full rounded-lg border border-border p-2 text-sm"
+                          autoComplete="tel"
+                        />
+                        <span className="text-[0.7rem] leading-snug text-muted">Te escribimos para ayudarte a instalar el guardián. Al dejarlo aceptas que VICTOR te contacte por WhatsApp sobre tu cuenta; puedes pedir que paremos cuando quieras.</span>
+                      </label>
+                      <button
+                        type="button"
+                        className="vc-btn-primary flex items-center justify-center gap-2"
+                        disabled={loading || !!oauthEnCurso}
+                        onClick={() => {
+                          marcarEmbudo("clic_google");
+                          continuarConOAuth("google", false, "core");
+                        }}
+                      >
+                        {oauthEnCurso === "google" ? "..." : "Empezar gratis con Google"}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg border border-[#1B3A5C] px-4 py-2 text-base font-medium text-[#1B3A5C]"
+                        disabled={loading || !!oauthEnCurso}
+                        onClick={() => {
+                          marcarEmbudo("clic_email");
+                          setTerminosDe("core")(true);
+                          abrirEmailForm(false, "core");
+                        }}
+                      >
+                        Empezar con mi email
+                      </button>
+                      <p className="text-[0.7rem] leading-snug text-muted">
+                        Al continuar aceptas la{" "}
+                        <Link href="/privacidad" target="_blank" className="text-teal underline">Política de Privacidad</Link> y los{" "}
+                        <Link href="/terminos" target="_blank" className="text-teal underline">Términos de Servicio</Link>.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <TerminosCheckbox aceptaTerminos={!!terminos.core} setAceptaTerminos={setTerminosDe("core")} />
+                      <button
+                        type="button"
+                        className="vc-btn-primary flex items-center justify-center gap-2"
+                        disabled={loading || !!oauthEnCurso || !terminos.core}
+                        onClick={() => continuarConOAuth("google", false, "core")}
+                      >
+                        {oauthEnCurso === "google" ? "..." : esReferido ? "Activar Core — primer mes gratis" : "Activar Core"}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-sm text-muted underline"
+                        disabled={loading || !!oauthEnCurso}
+                        onClick={() => abrirEmailForm(false, "core")}
+                      >
+                        o con email
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 {!esTrading && (

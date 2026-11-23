@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enviarBienvenidaInicial } from "@/lib/bienvenida-inicial";
 import { guardarOrigenRegistro } from "@/lib/origen-registro";
+import { avisarNuevoRegistro } from "@/lib/aviso-registro";
+import { COOKIE_TRADING } from "@/lib/trading-plan";
 
 // Ruta PÚBLICA a propósito (21 sept 2026) — se llama desde
 // app/registro/page.tsx justo después de supabase.auth.signUp(), momento en
@@ -22,6 +24,8 @@ export async function POST(req: NextRequest) {
   // viaja sola en este fetch (mismo dominio). Misma protección que la
   // bienvenida: solo cuentas nuevas y sin origen guardado.
   await guardarOrigenRegistro(userId, req.cookies.get("vc_origen")?.value);
+
+  await avisarNuevoRegistro(userId, req.cookies.get(COOKIE_TRADING)?.value === "1").catch(() => {});
 
   try {
     await enviarBienvenidaInicial(userId);

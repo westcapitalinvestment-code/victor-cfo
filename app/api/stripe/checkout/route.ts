@@ -206,7 +206,11 @@ export async function POST(req: NextRequest) {
       subscription_data: {
         metadata: { supabase_user_id: user.id, plan, ciclo, ...(conTrading ? { trading: "1" } : {}) },
         ...(trialDias > 0 ? { trial_period_days: trialDias } : {}),
+        // Trading (23 nov 2026): la prueba empieza SIN tarjeta. Si al final no
+        // la agregó, la suscripción se cancela sola (no se cobra nada).
+        ...(trialDias > 0 && conTrading ? { trial_settings: { end_behavior: { missing_payment_method: "cancel" as const } } } : {}),
       },
+      ...(trialDias > 0 && conTrading ? { payment_method_collection: "if_required" as const } : {}),
       success_url: `${origin}${returnTo}${separadorReturn}pago=exitoso`,
       cancel_url: `${origin}${cancelTo}${separadorCancel}plan=${plan}&ciclo=${ciclo}`,
       allow_promotion_codes: true,

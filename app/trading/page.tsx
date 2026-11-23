@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { marcarEmbudo } from "@/lib/embudo";
 import { marcarCookieTradingCliente, PRECIO_CORE_TRADING } from "@/lib/trading-plan";
 
 // Landing de VICTOR Core + Trading.
@@ -69,6 +70,7 @@ export default function TradingLanding() {
   const [href, setHref] = useState("/registro?plan=core&ciclo=mensual&trading=1");
   useEffect(() => {
     marcarCookieTradingCliente();
+    marcarEmbudo("vista_trading");
     // Conserva los UTM del anuncio en el enlace de registro.
     const q = new URLSearchParams(window.location.search);
     const p = new URLSearchParams({ plan: "core", ciclo: "mensual", trading: "1" });
@@ -81,6 +83,7 @@ export default function TradingLanding() {
   const boton = (texto: string) => (
     <Link
       href={href}
+      onClick={() => marcarEmbudo("clic_cta_trading")}
       className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#19E68C] px-9 py-4 text-lg font-bold text-[#07090D] shadow-[0_0_40px_-5px_rgba(25,230,140,0.6)] transition hover:brightness-110 sm:w-auto"
     >
       {texto} <span aria-hidden>→</span>
