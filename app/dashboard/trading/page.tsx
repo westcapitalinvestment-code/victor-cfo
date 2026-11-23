@@ -718,7 +718,7 @@ function TradingContenido() {
       esperaTrasPerdidaMin: reglas.espera_tras_perdida_min,
       syncUrl: token ? `${window.location.origin}/api/trading/sync` : "",
       syncToken: token ?? "",
-      cfgInicial: cfgGuardian({ ...reglas, ...guardian, ...bloqueosAColumnas(bloqueos) }),
+      cfgInicial: cfgGuardian({ ...reglas, ...guardian, ...bloqueosAColumnas(bloqueos) }, Date.now(), { demo: cuenta?.tipo === "demo" }),
       modoBloqueo: guardian.guard_lock_mode,
       bloquearCierreManual: guardian.guard_block_manual_close,
     });

@@ -309,7 +309,11 @@ const TF_CFG: Record<string, number> = { M5: 5, M15: 15, M30: 30, H1: 60, H4: 24
 const LOCK_CFG: Record<string, number> = { ninguno: 0, total: 1, flexible: 2 };
 
 // "RM=7;RP=1;ML=3;...;BW=0-480,1020-1920;PZ=...;NW=15;TZO=-240;HL=..."
-export function cfgGuardian(r: FilaReglas, ahora = Date.now()): string {
+// demo: en cuentas demo no aplican días/horarios bloqueados, pausas ni la
+// ventana de noticias (23 nov 2026), para poder practicar y probar el guardián
+// cualquier día. Riesgo, stop, pérdida máxima y candados siguen igual.
+export function cfgGuardian(r: FilaReglas, ahora = Date.now(), opciones: { demo?: boolean } = {}): string {
+  const demo = opciones.demo === true;
   const b = normalizarBloqueos(r);
   const n = (v: unknown, d: number) => {
     const x = Number(v);
@@ -326,11 +330,11 @@ export function cfgGuardian(r: FilaReglas, ahora = Date.now()): string {
     ["MO", Math.max(1, Math.round(n(r.guard_max_open, 1)))],
     ["MT", Math.max(0, Math.round(n(r.max_trades_dia, 0)))],
     ["CD", Math.max(0, Math.round(n(r.espera_tras_perdida_min, 0)))],
-    ["BW", plantillaBloqueada(b, ahora).map(([i, f]) => `${i}-${f}`).join(",")],
-    ["PZ", pausasUTC(b, ahora).map(([i, f]) => `${i}-${f}`).join(",")],
-    ["NW", b.noticiasMin],
+    ["BW", demo ? "" : plantillaBloqueada(b, ahora).map(([i, f]) => `${i}-${f}`).join(",")],
+    ["PZ", demo ? "" : pausasUTC(b, ahora).map(([i, f]) => `${i}-${f}`).join(",")],
+    ["NW", demo ? 0 : b.noticiasMin],
     ["TZO", offsetMin(b.zona, ahora)],
-    ["HL", ascii(describirBloqueos({ ...b, noticiasMin: 0, pausas: [] }).join(" ") || "Sin limite de horario")],
+    ["HL", demo ? "Demo: sin limite de horario" : ascii(describirBloqueos({ ...b, noticiasMin: 0, pausas: [] }).join(" ") || "Sin limite de horario")],
     // Ajustes del guardián (desde la 3.20 llegan por sincronización: el .ex5
     // precompilado es igual para todos y toma todo de aquí).
     ["AS", simbolosCfg(r.guard_symbol, "XAUUSD")],

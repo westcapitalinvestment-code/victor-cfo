@@ -83,8 +83,11 @@ export async function POST(req: NextRequest) {
   let cfg = "";
   try {
     await aplicarPendientes(admin, t.owner_id);
-    const { data: rr } = await admin.from("risk_rules").select("*").eq("owner_id", t.owner_id).maybeSingle();
-    if (rr) cfg = cfgGuardian(rr as Record<string, unknown>);
+    const [{ data: rr }, { data: ac }] = await Promise.all([
+      admin.from("risk_rules").select("*").eq("owner_id", t.owner_id).maybeSingle(),
+      admin.from("trading_accounts").select("tipo").eq("id", t.account_id).maybeSingle(),
+    ]);
+    if (rr) cfg = cfgGuardian(rr as Record<string, unknown>, Date.now(), { demo: ac?.tipo === "demo" });
   } catch {
     cfg = "";
   }
