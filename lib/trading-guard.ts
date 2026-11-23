@@ -34,13 +34,14 @@ export type ParametrosGuardian = {
   syncToken?: string; // token de la cuenta
   cfgInicial?: string; // reglas vivas (horario, pausas, noticias…) en formato K=V;K=V — ver lib/trading-bloqueos.ts
   // true = versión para compilar UNA vez y repartir como .ex5: sin token ni reglas
-  // dentro; la persona pega su código en Entradas > SyncToken y todo llega por sync.
+  // dentro; desde la 3.21 se conecta solo con un código de 6 dígitos que sale en
+  // el gráfico y la persona escribe en VICTOR (SyncToken queda como opción avanzada).
   generico?: boolean;
 };
 
 // Dirección fija de sincronización para el .ex5 precompilado.
 export const SYNC_URL_PRODUCCION = "https://www.victorcfo.com/api/trading/sync";
-export const VERSION_GUARDIAN = "3.20";
+export const VERSION_GUARDIAN = "3.21";
 
 const n = (v: number, d = 2) => {
   const x = Number.isFinite(v) ? v : 0;
@@ -112,7 +113,7 @@ input bool   InLockSLTP           = ${b(p.modoBloqueo !== "ninguno")};     // tr
 input bool   InFlexibleLock       = ${b(p.modoBloqueo === "flexible")};     // true = puedes mover el TP libremente y el SL solo a tu favor (nunca alejarlo ni quitarlo)
 input bool   InBlockOnManualClose = ${b(p.bloquearCierreManual)};     // true = cerrar un trade a mano bloquea el resto del dia
 input string SyncURL            = "${q(p.generico ? SYNC_URL_PRODUCCION : p.syncUrl ?? "")}"; // direccion de VICTOR (permitela en Herramientas > Opciones > Asesores Expertos > WebRequest)
-input string SyncToken          = "${q(p.generico ? "" : p.syncToken ?? "")}"; // tu codigo de conexion de VICTOR (pegalo aqui). No lo compartas.
+input string SyncToken          = "${q(p.generico ? "" : p.syncToken ?? "")}"; // dejalo vacio: el guardian se conecta solo con el codigo de 6 digitos del grafico
 input int    SyncDays           = 30;       // dias de historial a revisar al sincronizar
 
 // Ajustes del guardian: empiezan con las Entradas y VICTOR los actualiza al sincronizar.
@@ -130,6 +131,9 @@ bool   LockSLTP = true;
 bool   FlexibleLock = true;
 bool   BlockOnManualClose = true;
 bool   g_cfgOk = false;      // false = aun no hay reglas de VICTOR (version precompilada): no deja abrir
+string g_token = "";         // codigo de conexion: el de Entradas o el guardado al vincular (por cuenta de MT5)
+string g_codigo = "";        // codigo de 6 digitos que la persona escribe en VICTOR
+long   g_login = 0;          // cuenta de MT5 con que arranco (si cambia, espera las reglas de la nueva)
 
 // Reglas vivas: empiezan con las Entradas de arriba y VICTOR las actualiza en cada
 // sincronizacion (lo que cambies en la web o en el chat llega solo, sin reinstalar).
@@ -614,9 +618,10 @@ bool CanOpenNew(string s, string &why, ulong skipTk = 0, double riskOverride = -
 {
    if(!g_cfgOk)
    {
-      why = (SyncToken == "") ? "FALTA TU CODIGO DE VICTOR" : "ESPERANDO TUS REGLAS DE VICTOR";
-      g_detalle = (SyncToken == "")
-         ? "pega tu codigo de conexion de VICTOR en Entradas > SyncToken (lo copias en victorcfo.com > Trading)."
+      why = (g_token == "") ? "CONECTA CON VICTOR" : "ESPERANDO TUS REGLAS DE VICTOR";
+      g_detalle = (g_token == "")
+         ? (g_codigo != "" ? "escribe el codigo " + g_codigo + " en victorcfo.com > Trading > Conectar guardian."
+                           : "pidiendo tu codigo a VICTOR. Permite " + SyncURL + " en Herramientas > Opciones > Asesores Expertos > WebRequest.")
          : "todavia no llegan tus reglas. Permite " + SyncURL + " en Herramientas > Opciones > Asesores Expertos > WebRequest.";
       return false;
    }
@@ -1076,9 +1081,133 @@ string JStr(string s)
 }
 string JTime(datetime t) { return JStr(TimeToString(t, TIME_DATE | TIME_SECONDS)); }
 
+// ---- Conexion con codigo de 6 digitos (3.21) ----
+// Sin token, el guardian pide un codigo a VICTOR y lo muestra grande en el grafico.
+// La persona lo escribe en victorcfo.com y VICTOR le entrega el token, que se guarda
+// en un archivo por cuenta de MT5 (asi demo y real tienen cada una el suyo).
+datetime g_lastPair = 0;
+
+string FileTxt(string name)
+{
+   int h = FileOpen(name, FILE_READ | FILE_TXT | FILE_COMMON | FILE_ANSI);
+   if(h == INVALID_HANDLE) return "";
+   string s = FileReadString(h);
+   FileClose(h);
+   StringTrimLeft(s);
+   StringTrimRight(s);
+   return s;
+}
+bool FileSave(string name, string s)
+{
+   int h = FileOpen(name, FILE_WRITE | FILE_TXT | FILE_COMMON | FILE_ANSI);
+   if(h == INVALID_HANDLE) return false;
+   FileWriteString(h, s);
+   FileClose(h);
+   return true;
+}
+string TokenFile() { return "VictorGuard_t_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".txt"; }
+string InstallId()
+{
+   string id = FileTxt("VictorGuard_install.txt");
+   if(StringLen(id) >= 16) return id;
+   MathSrand((int)(GetTickCount() ^ (uint)GetMicrosecondCount() ^ (uint)TimeLocal() ^ (uint)AccountInfoInteger(ACCOUNT_LOGIN)));
+   string hx = "0123456789abcdef";
+   id = "";
+   for(int i = 0; i < 40; i++) id += StringSubstr(hx, (MathRand() ^ (int)(GetMicrosecondCount() & 0xFF)) % 16, 1);
+   FileSave("VictorGuard_install.txt", id);
+   return id;
+}
+string JGet(string resp, string key)
+{
+   string k = "\"" + key + "\":\"";
+   int a = StringFind(resp, k);
+   if(a < 0) return "";
+   a += StringLen(k);
+   int e = StringFind(resp, "\"", a);
+   if(e <= a) return "";
+   return StringSubstr(resp, a, e - a);
+}
+void BigLabel(string name, string txt, int y, int size)
+{
+   if(ObjectFind(0, name) < 0) ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS) / 2);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clrDodgerBlue);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, size);
+   ObjectSetString(0, name, OBJPROP_TEXT, txt);
+}
+void ShowCode(string cd)
+{
+   if(cd == "")
+   {
+      ObjectDelete(0, P + "CD");
+      ObjectDelete(0, P + "CD2");
+      ChartRedraw();
+      return;
+   }
+   BigLabel(P + "CD", "Tu codigo VICTOR:  " + StringSubstr(cd, 0, 3) + " " + StringSubstr(cd, 3), 170, 30);
+   BigLabel(P + "CD2", "Escribelo en victorcfo.com  >  Trading  >  Conectar guardian", 225, 13);
+   ChartRedraw();
+}
+
+void PairTick()
+{
+   if(g_token != "" || SyncURL == "") return;
+   if(AccountInfoInteger(ACCOUNT_LOGIN) <= 0) return;
+   if(TimeLocal() - g_lastPair < 5) return;
+   g_lastPair = TimeLocal();
+   // si esta cuenta ya se habia conectado antes, usa su codigo guardado
+   string guardado = FileTxt(TokenFile());
+   if(StringLen(guardado) >= 32) { g_token = guardado; g_lastTry = 0; ShowCode(""); return; }
+
+   string body = "{\"pair\":{\"install\":" + JStr(InstallId())
+      + ",\"login\":" + JStr(IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)))
+      + ",\"server\":" + JStr(AccountInfoString(ACCOUNT_SERVER)) + "}}";
+   char data[], res[];
+   string rh;
+   StringToCharArray(body, data, 0, StringLen(body), CP_UTF8);
+   int code = WebRequest("POST", SyncURL, "Content-Type: application/json\r\n", 8000, data, res, rh);
+   if(code == -1)
+   {
+      g_sync = "Permite " + SyncURL + " en Opciones > Asesores Expertos";
+      ObjectSetString(0, P + "SY", OBJPROP_TEXT, g_sync);
+      return;
+   }
+   if(code != 200)
+   {
+      g_sync = "Conexion: error HTTP " + IntegerToString(code);
+      ObjectSetString(0, P + "SY", OBJPROP_TEXT, g_sync);
+      return;
+   }
+   string resp = CharArrayToString(res, 0, WHOLE_ARRAY, CP_UTF8);
+   string tk = JGet(resp, "token");
+   if(StringLen(tk) >= 32)
+   {
+      g_token = tk;
+      FileSave(TokenFile(), tk);
+      g_codigo = "";
+      ShowCode("");
+      g_lastTry = 0;
+      g_sync = "Conectado con VICTOR";
+      ObjectSetString(0, P + "SY", OBJPROP_TEXT, g_sync);
+      Alert("VictorGuard: conectado con VICTOR. Tus reglas llegan en segundos.");
+      return;
+   }
+   string cd = JGet(resp, "codigo");
+   if(StringLen(cd) == 6)
+   {
+      g_codigo = cd;
+      ShowCode(cd);
+      g_sync = "Esperando que escribas el codigo en VICTOR";
+      ObjectSetString(0, P + "SY", OBJPROP_TEXT, g_sync);
+   }
+}
+
 void SyncTick()
 {
-   if(SyncToken == "" || SyncURL == "") return;
+   if(g_token == "" || SyncURL == "") return;
    if(TimeLocal() - g_lastTry < 30) return;
    g_lastTry = TimeLocal();
 
@@ -1170,7 +1299,7 @@ void SyncTick()
    }
 
    // 3) enviar (siempre, aunque no haya trades nuevos: asi se actualiza el balance)
-   string body = "{\"token\":" + JStr(SyncToken)
+   string body = "{\"token\":" + JStr(g_token)
       + ",\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2)
       + ",\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
       + ",\"trades\":[" + items + "]}";
@@ -1194,6 +1323,14 @@ void SyncTick()
       }
       g_sync = "Sync OK " + TimeToString(TimeLocal(), TIME_MINUTES) + " (" + IntegerToString(ns) + " nuevos)";
    }
+   else if(code == 401 && SyncToken == "")
+   {
+      // el codigo guardado ya no sirve (se desactivo en VICTOR): pedir uno nuevo
+      FileDelete(TokenFile(), FILE_COMMON);
+      g_token = "";
+      g_lastPair = 0;
+      g_sync = "Vuelve a conectar con VICTOR";
+   }
    else
       g_sync = "Sync error HTTP " + IntegerToString(code);
    ObjectSetString(0, P + "SY", OBJPROP_TEXT, g_sync);
@@ -1209,6 +1346,12 @@ int OnInit()
    SLPips = InSLPips; PipSize = InPipSize; PipSymbol = InPipSymbol; SLPercent = InSLPercent;
    ATRMult = InATRMult; ATRTF = InATRTF; RewardRatio = InRewardRatio; LockSLTP = InLockSLTP;
    FlexibleLock = InFlexibleLock; BlockOnManualClose = InBlockOnManualClose;
+   long lg = AccountInfoInteger(ACCOUNT_LOGIN);
+   if(lg != g_login) { g_cfgOk = false; g_login = lg; }   // cambio de cuenta: espera las reglas de esta cuenta
+   g_token = (SyncToken != "") ? SyncToken : (lg > 0 ? FileTxt(TokenFile()) : "");
+   g_codigo = "";
+   g_lastTry = 0;
+   g_lastPair = 0;
    ApplyCfg(CFG0);   // horario, dias, pausas y noticias con que se descargo (luego llegan al sincronizar)
    trade.SetDeviationInPoints(DeviationPts);
    ParseSymbols();
@@ -1217,7 +1360,6 @@ int OnInit()
    if(SLMode == SL_ATR && ATRMult <= 0)           { Alert("VictorGuard: ATRMult debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }
    if(SLPercent <= 0)                              { Alert("VictorGuard: SLPercent debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }
    PrepAtr();
-   if(SyncToken == "") Alert("VictorGuard: pega tu codigo de conexion de VICTOR en Entradas > SyncToken.");
    hMA = iMA(_Symbol, MaTF, MaPeriod, 0, MaMethod, PRICE_CLOSE);
    MakeButton(P + "SELL", "VENDER",  10, 30, clrFireBrick);   // mismo orden que MT5: vender a la izquierda
    MakeButton(P + "BUY",  "COMPRAR", 130, 30, clrSeaGreen);
@@ -1264,7 +1406,7 @@ void OnDeinit(const int reason)
    ObjectsDeleteAll(0, P);
 }
 
-void OnTimer()  { Guard(); GuardOrders(); UpdatePanel(); SyncTick(); }
+void OnTimer()  { Guard(); GuardOrders(); UpdatePanel(); PairTick(); SyncTick(); }
 void OnTick()   { Guard(); GuardOrders(); AutoEntryCheck(); }
 
 void OnChartEvent(const int id, const long &lp, const double &dp, const string &sp)

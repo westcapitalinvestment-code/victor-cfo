@@ -227,6 +227,9 @@ function TradingContenido() {
     return () => clearTimeout(t);
   }, [error, msg]);
   const [syncToken, setSyncToken] = useState<string | null>(null);
+  const [codigoVinc, setCodigoVinc] = useState("");
+  const [vinculando, setVinculando] = useState(false);
+  const [vincMsg, setVincMsg] = useState<{ ok: boolean; texto: string } | null>(null);
   // Mi checklist: reglas propias y sus marcas por trade (trade_id → regla_id → cumplida).
   const [reglasPropias, setReglasPropias] = useState<ReglaPropia[]>([]);
   const [checks, setChecks] = useState<Map<string, Record<string, boolean>>>(new Map());
@@ -373,7 +376,7 @@ function TradingContenido() {
       return null;
     }
     setSyncToken(token);
-    if (!silencioso) setMsg("Sincronización activada. Descarga el guardián otra vez para que lleve tu token.");
+    if (!silencioso) setMsg("Código nuevo creado. Si conectaste a mano, pégalo otra vez en el guardián (Entradas → SyncToken).");
     return token;
   }
 
@@ -671,14 +674,36 @@ function TradingContenido() {
   const todosActivos = guardian.guard_symbol.trim() === "" || guardian.guard_symbol.includes("*");
 
   // Guardián listo para usar (.ex5 precompilado, igual para todos): no hay que
-  // compilar nada; la persona pega su código de conexión en Entradas > SyncToken.
+  // compilar nada; se conecta con el código de 6 dígitos que muestra en el gráfico.
   async function descargarGuardianListo() {
-    const token = syncToken ?? (await activarSync(true));
-    if (!token) return;
     const a = document.createElement("a");
     a.href = "/descargas/VictorGuard.ex5";
     a.download = "VictorGuard.ex5";
     a.click();
+  }
+
+  // Conectar con el código de 6 dígitos que el guardián muestra en el gráfico (23 nov 2026).
+  async function vincular() {
+    if (!cuenta) return;
+    setVincMsg(null);
+    setVinculando(true);
+    const r = await fetch("/api/trading/vincular", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ codigo: codigoVinc, account_id: cuenta.id }),
+    })
+      .then(async (x) => ({ ok: x.ok, j: (await x.json().catch(() => ({}))) as { error?: string; login?: string } }))
+      .catch(() => ({ ok: false, j: { error: "Sin conexión. Intenta otra vez." } as { error?: string; login?: string } }));
+    setVinculando(false);
+    if (!r.ok) {
+      setVincMsg({ ok: false, texto: r.j.error ?? "No se pudo conectar." });
+      return;
+    }
+    setCodigoVinc("");
+    setVincMsg({ ok: true, texto: `¡Listo! Tu MT5 (cuenta ${r.j.login ?? ""}) quedó conectado a ${cuenta.nombre}. En unos segundos el guardián dice "Sync OK".` });
+    const id = cuenta.id;
+    await cargarTrades(id);
+    setTimeout(() => cargar(id), 20000);
   }
 
   async function copiarCodigo() {
@@ -947,7 +972,7 @@ function TradingContenido() {
                   {
                     ok: !!cuenta?.last_sync_at,
                     titulo: "Conecta el guardián en MT5",
-                    detalle: cuenta?.last_sync_at ? "Conectado" : "Descárgalo, ponlo en un gráfico y pega tu código",
+                    detalle: cuenta?.last_sync_at ? "Conectado" : "Descárgalo, ponlo en un gráfico y escribe el código que te sale",
                     accion: () => {
                       setTab("riesgo");
                       setTimeout(() => document.getElementById("vg-instalar")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
@@ -1459,77 +1484,75 @@ function TradingContenido() {
                     </li>
                   </ul>
                 </div>
-                <div id="vg-instalar" className="flex scroll-mt-4 gap-2">
+                <div className="flex gap-2">
                   <button className="vc-btn-primary" onClick={guardarReglas}>Guardar reglas</button>
-                  <button className="rounded-lg border border-[#1B3A5C] px-4 text-base font-medium text-[#1B3A5C]" onClick={descargarGuardianListo}>Descargar guardián para MT5</button>
                 </div>
-                <div className="rounded-lg border border-teal/40 bg-teal/5 p-3 text-sm">
-                  <p className="font-medium">Tu código de conexión</p>
-                  <p className="text-muted">Lo pegas una sola vez en el guardián (Entradas → SyncToken). Con él le llegan tus reglas. No lo compartas.</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <code className="break-all rounded bg-bg px-2 py-1 text-[13px]">{syncToken ?? "—"}</code>
-                    <button className="rounded-lg border border-[#1B3A5C] px-3 py-1 font-medium text-[#1B3A5C]" onClick={copiarCodigo}>{syncToken ? "Copiar código" : "Crear mi código"}</button>
-                  </div>
-                </div>
-                <div className="rounded-lg border border-border p-3 text-sm">
-                  <p className="mb-1 font-medium">Sincronización en vivo</p>
-                  {syncToken ? (
-                    <>
-                      <p className="text-muted">
-                        Activa para <b>{cuenta?.nombre}</b>. El guardián envía tus trades cerrados y tu balance cada 30 segundos, este panel se actualiza solo y tus reglas le llegan solas. Si tu guardián es de antes del 22 nov 2026, <b>descárgalo una vez más</b> y reemplázalo en MT5.
-                      </p>
-                      <div className="mt-2 flex gap-3">
-                        <button className="text-teal" onClick={() => activarSync()}>Generar token nuevo</button>
-                        <button className="text-red" onClick={desactivarSync}>Desactivar</button>
-                      </div>
-                    </>
+                <div id="vg-instalar" className="scroll-mt-4 rounded-xl border-2 border-teal/40 p-4">
+                  <p className="text-lg font-semibold text-[#1B3A5C]">Conecta el guardián en MT5</p>
+                  {cuenta?.last_sync_at ? (
+                    <p className="mt-1 text-sm text-teal">✓ Conectado a <b>{cuenta.nombre}</b>. Tus reglas le llegan solas.</p>
                   ) : (
-                    <>
-                      <p className="text-muted">Sin subir reportes: el guardián manda tus trades y tu balance a este panel mientras MT5 esté abierto.</p>
-                      <button className="mt-2 rounded-lg border border-[#1B3A5C] px-3 py-1.5 font-medium text-[#1B3A5C]" onClick={() => activarSync()}>Activar sincronización</button>
-                    </>
+                    <p className="mt-1 text-sm text-muted">Una sola vez, unos 3 minutos.</p>
                   )}
-                  {syncToken && (
-                    <p className="mt-2 text-[13px] text-muted">
-                      Una sola vez en MT5: <b>Herramientas → Opciones → Asesores Expertos</b>, marca <b>Permitir WebRequest para las URL listadas</b> y agrega <b>{typeof window !== "undefined" ? window.location.origin : ""}</b>.
-                    </p>
-                  )}
-                </div>
-                <details className="text-[14px] text-muted" open={!cuenta?.last_sync_at}>
-                  <summary className="cursor-pointer text-sm font-medium text-teal">Cómo instalarlo en MT5 (3 minutos, una sola vez)</summary>
-                  <div className="mt-2 rounded-lg border border-border bg-bg p-2.5">
-                    <p className="font-medium text-[#1B3A5C]">¿Tienes Mac?</p>
-                    <p>
-                      Funciona igual. Baja <b>MT5 para Mac</b> (app de escritorio) desde tu broker o desde metatrader5.com: necesita macOS Catalina o más nuevo, Intel o Apple M1 en adelante.
-                      El MT5 del navegador (web) <b>no sirve</b>: no acepta asesores expertos. Diferencias en los pasos de abajo:
-                    </p>
-                    <ul className="mt-1 list-disc pl-4">
-                      <li>
-                        Paso 2: si “Abrir carpeta de datos” no te deja pegar el archivo, en el <b>Finder</b> pulsa <b>Cmd+Shift+G</b> y pega{" "}
-                        <b className="break-all">~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts</b>, y arrastra ahí el archivo desde Descargas.
-                      </li>
-                      <li>Dentro de MT5 los atajos van con <b>Control</b>, no con Command: Ctrl+N.</li>
-                      <li>La Mac tiene que estar prendida, sin dormir y con MT5 abierto para que el guardián te proteja. Para 24/7 usa un VPS con Windows.</li>
-                    </ul>
-                  </div>
-                  <ol className="mt-2 flex list-decimal flex-col gap-1 pl-4">
-                    <li>Arriba, pulsa <b>Descargar guardián para MT5</b> y copia tu <b>código de conexión</b>. El guardián ya viene listo: no hay que compilar nada.</li>
-                    <li>En MT5 abre <b>Archivo → Abrir carpeta de datos</b>, entra a <b>MQL5 → Experts</b> y copia ahí <b>VictorGuard.ex5</b> (si ya tenías uno, reemplázalo). En el <b>Navegador</b> (Ctrl+N), clic derecho en <b>Asesores Expertos → Actualizar</b>.</li>
+                  <ol className="mt-3 flex flex-col gap-3 text-[15px]">
                     <li>
-                      En MT5: <b>Herramientas → Opciones → Asesores Expertos</b>, marca <b>Permitir WebRequest para las URL listadas</b> y agrega <b>https://www.victorcfo.com</b>.
-                      Desmarca también <b>“Deshabilitar el trading algorítmico al cambiar de cuenta / de perfil”</b>.
+                      <b>1.</b>{" "}
+                      <button className="rounded-lg bg-[#1B3A5C] px-3 py-1 font-medium text-white" onClick={descargarGuardianListo}>Descargar guardián</button>{" "}
+                      y cópialo en MT5: <b>Archivo → Abrir carpeta de datos → MQL5 → Experts</b>.
                     </li>
-                    <li>Activa el botón <b>Algo Trading</b> de la barra de MT5 (debe quedar verde). Si se apaga, el guardián te avisa en rojo.</li>
                     <li>
-                      Arrastra <b>VictorGuard</b> a <b>un solo gráfico</b>, de cualquier activo. En la pestaña <b>Común</b> marca <b>Permitir Algo Trading</b>; en <b>Entradas</b>, pega tu código en
-                      <b> SyncToken</b> y pulsa Aceptar.
+                      <b>2.</b> En MT5: <b>Herramientas → Opciones → Asesores Expertos</b>. Marca <b>Permitir WebRequest</b> y agrega <b>https://www.victorcfo.com</b>.
                     </li>
-                    <li>Listo: en unos segundos el guardián dice <b>Sync OK</b> y toma tus reglas. Arriba a la izquierda verás VENDER / COMPRAR y tu estado. Pruébalo primero en demo.</li>
+                    <li>
+                      <b>3.</b> Activa el botón <b>Algo Trading</b> (verde). Arrastra <b>VictorGuard</b> a cualquier gráfico y dale <b>Aceptar</b>. Te sale un código de 6 números.
+                    </li>
+                    <li>
+                      <b>4.</b> Escribe ese código aquí:
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <input
+                          className="vc-input w-40 text-center text-xl tracking-[0.3em]"
+                          inputMode="numeric"
+                          maxLength={7}
+                          placeholder="000 000"
+                          value={codigoVinc}
+                          onChange={(e) => setCodigoVinc(e.target.value.replace(/[^0-9 ]/g, ""))}
+                          onKeyDown={(e) => e.key === "Enter" && vincular()}
+                        />
+                        <button className="vc-btn-primary" disabled={vinculando || codigoVinc.replace(/\D/g, "").length !== 6} onClick={vincular}>
+                          {vinculando ? "Conectando…" : "Conectar"}
+                        </button>
+                      </div>
+                      {vincMsg && <p className={`mt-2 text-sm ${vincMsg.ok ? "text-teal" : "text-red"}`}>{vincMsg.texto}</p>}
+                    </li>
                   </ol>
-                  <p className="mt-2">Tus reglas (riesgo, stop, activos, límites, horario, días, pausas y noticias) le llegan solas al guardián cada 30 segundos mientras MT5 esté abierto: cámbialas aquí o pídeselo a VICTOR en el chat. Mientras no tenga tu código o no le lleguen tus reglas, no deja abrir trades.</p>
-                  <p className="mt-2">
-                    ¿Prefieres el código fuente? <button className="text-teal underline" onClick={descargarGuardian}>Descargar VictorGuard.mq5</button> (ya trae tu código y tus reglas; se compila con F7 en MetaEditor).
-                  </p>
+                </div>
+                <details className="text-[14px] text-muted">
+                  <summary className="cursor-pointer text-sm font-medium text-teal">Opciones avanzadas</summary>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <p>
+                      <b>¿No aparece VictorGuard en MT5?</b> En el Navegador (Ctrl+N), clic derecho en <b>Asesores Expertos → Actualizar</b>.
+                    </p>
+                    <p>
+                      <b>¿Mac?</b> Usa MT5 de escritorio para Mac (el del navegador no acepta asesores). La carpeta está en{" "}
+                      <span className="break-all">~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts</span>.
+                    </p>
+                    <p>El guardián te protege mientras MT5 esté abierto. Para 24/7, usa un VPS con Windows.</p>
+                    <p>
+                      Conexión manual: copia tu código largo y pégalo en el guardián (Entradas → SyncToken).{" "}
+                      <button className="text-teal underline" onClick={copiarCodigo}>{syncToken ? "Copiar código" : "Crear código"}</button>
+                      {syncToken && (
+                        <>
+                          {" · "}
+                          <button className="text-teal underline" onClick={() => activarSync()}>Generar uno nuevo</button>
+                          {" · "}
+                          <button className="text-red underline" onClick={desactivarSync}>Desconectar</button>
+                        </>
+                      )}
+                    </p>
+                    <p>
+                      Código fuente: <button className="text-teal underline" onClick={descargarGuardian}>Descargar VictorGuard.mq5</button> (se compila con F7 en MetaEditor).
+                    </p>
+                  </div>
                 </details>
                 <p className="text-[13px] text-muted">Para MT4 el programa es distinto y todavía no está disponible. Es una herramienta de control propio, no una señal ni una garantía de resultados.</p>
               </div>

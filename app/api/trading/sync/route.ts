@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cfgGuardian } from "@/lib/trading-bloqueos";
 import { aplicarPendientes } from "@/lib/trading-reglas-server";
+import { pedirVinculo } from "@/lib/trading-vinculo";
 
 // Sincronización en vivo con MT5 (oct 2026). El guardián (VictorGuard.mq5)
 // llama aquí cada ~30 s con WebRequest. No hay sesión de usuario: la
@@ -23,9 +24,20 @@ const fecha = (v: unknown): string | null => {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const token = typeof body?.token === "string" ? body.token : "";
-  if (token.length < 32 || token.length > 128) return NextResponse.json({ error: "Token inválido." }, { status: 401 });
-
   const admin = createAdminClient();
+
+  // Guardián sin token (3.21+): pide su código de 6 dígitos o recoge su token.
+  if (!token && body?.pair && typeof body.pair === "object") {
+    const r = await pedirVinculo(admin, {
+      install: String(body.pair.install ?? ""),
+      login: String(body.pair.login ?? ""),
+      servidor: String(body.pair.server ?? ""),
+    });
+    if (r.error) return NextResponse.json({ error: r.error }, { status: 400 });
+    return NextResponse.json({ ok: true, ...r });
+  }
+
+  if (token.length < 32 || token.length > 128) return NextResponse.json({ error: "Token inválido." }, { status: 401 });
   const { data: t } = await admin.from("trading_sync_tokens").select("account_id, owner_id").eq("token", token).maybeSingle();
   if (!t) return NextResponse.json({ error: "Token inválido." }, { status: 401 });
 
