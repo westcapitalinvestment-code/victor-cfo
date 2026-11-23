@@ -19,7 +19,7 @@ const CORREOS: Record<CorreoTrading, { asunto: string; titulo: string; parrafos:
     titulo: "Tu guardián de trading está listo",
     parrafos: [
       "En Trading → Riesgo pon cuánto puedes perder al día y cuántas pérdidas aguantas. Ej. $21 y 3 = $7 por trade, en cualquier activo.",
-      "Pulsa \"Descargar para MT5\", cópialo en MQL5 → Experts, compílalo con F7 y ponlo en un solo gráfico con Algo Trading activado. La guía paso a paso está en la misma pantalla.",
+      "Pulsa \"Descargar guardián para MT5\" (ya viene listo, sin compilar), cópialo en MQL5 → Experts y ponlo en un solo gráfico con Algo Trading activado; en Entradas pega tu código de conexión. La guía paso a paso está en la misma pantalla.",
       "Desde ese momento calcula tu lote, pone tu stop y te bloquea cuando llegas a tu límite. Pruébalo primero en tu cuenta demo.",
     ],
     cta: "Configurar mis reglas",

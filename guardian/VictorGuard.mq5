@@ -1,0 +1,1220 @@
+//+------------------------------------------------------------------+
+//|  VictorGuard.mq5 - Guardian de riesgo (generado por VICTOR CFO)   |
+//|  Generado: 2026-11-23                                               |
+//|  Sirve para cualquier activo de tu broker: forex, oro, indices,   |
+//|  acciones, futuros y cripto (lista o * = todos).                  |
+//|  Ponlo en UN SOLO grafico: vigila todas las posiciones de la      |
+//|  cuenta. Cambia el simbolo del grafico y los botones lo siguen.   |
+//|  Tu decides las entradas (o activas AutoEntry: retroceso a la     |
+//|  media en tendencia). El guardian impone TUS reglas:              |
+//|   - calcula el lote segun tu riesgo                               |
+//|   - pone SL (obligatorio) y TP a todo trade                       |
+//|   - SL solo se mueve a tu favor; TP libre (modo flexible)         |
+//|   - limite de trades abiertos, perdedores y perdida del dia       |
+//|   - espera obligatoria tras una perdida                           |
+//|  Horario, dias, pausas y noticias: bloquea abrir fuera de tu plan. |
+//|  Tus reglas llegan solas desde VICTOR cada 30 s (cambialas alla). |
+//|  Probar SIEMPRE en demo primero. No es asesoria financiera.       |
+//+------------------------------------------------------------------+
+#property strict
+#property version   "3.20"
+#include <Trade\Trade.mqh>
+
+CTrade trade;
+
+enum ENUM_SL_MODE { SL_PIPS = 0, SL_PERCENT = 1, SL_ATR = 2 };
+
+input string InAllowedSymbols     = "*"; // simbolos permitidos separados por coma, o * = todos (forex, indices, acciones, futuros, cripto)
+input string InBlockedSymbols     = ""; // simbolos PROHIBIDOS separados por coma: si los abres, se cierran
+input double InRiskMoney        = 0;      // $ fijos a arriesgar por trade, en cualquier activo (0 = usar RiskPercent)
+input double InRiskPercent      = 1;      // % del balance a arriesgar por trade (si RiskMoney = 0)
+input ENUM_SL_MODE InSLMode       = SL_ATR; // como se calcula el stop: pips, % del precio o ATR
+input double InSLPips             = 60;      // modo pips: distancia del SL en pips
+input double InPipSize            = 0.1;      // modo pips: tamano de 1 pip de PipSymbol (oro 0.1, EURUSD 0.0001, NAS100 1)
+input string InPipSymbol          = "XAUUSD"; // modo pips: activo al que aplican esos pips. Forex usa sus pips; los demas, el ATR
+input double InSLPercent          = 0.5;      // modo %: stop a este % del precio (tambien es el respaldo si falta el ATR)
+input double InATRMult            = 1.5;      // modo ATR: stop = ATR x este numero
+input ENUM_TIMEFRAMES InATRTF     = PERIOD_M15; // modo ATR: temporalidad del ATR
+input int    ATRPeriod          = 14;       // modo ATR: periodo del ATR
+input double InRewardRatio        = 2;      // TP inicial = SL x este numero (0 = sin TP al abrir, lo pones tu)
+input int InMaxLosersPerDay  = 3;        // perdedores maximos por dia
+input double InMaxDailyLossPct  = 3;      // perdida diaria maxima en % del balance con que empezo el dia
+input double InMaxDailyLossUSD  = 0;      // o en dolares fijos (0 = usar el %)
+input double InMinEquityPct     = 80;     // si el equity baja de este % del balance de inicio del dia: bloqueo total
+input double InMinEquityUSD     = 0;      // o en dolares fijos (0 = usar el %)
+input int InMaxOpenPositions = 1;        // trades abiertos a la vez
+input int InMaxTradesPerDay  = 0;        // trades maximos por dia (0 = sin limite)
+input int InCooldownMin      = 0;       // minutos de espera tras una perdida (0 = sin espera)
+input int    DeviationPts       = 30;       // deslizamiento maximo
+input bool   InLockSLTP           = true;     // true = el guardian vigila el SL/TP
+input bool   InFlexibleLock       = true;     // true = puedes mover el TP libremente y el SL solo a tu favor (nunca alejarlo ni quitarlo)
+input bool   InBlockOnManualClose = true;     // true = cerrar un trade a mano bloquea el resto del dia
+input string SyncURL            = "https://www.victorcfo.com/api/trading/sync"; // direccion de VICTOR (permitela en Herramientas > Opciones > Asesores Expertos > WebRequest)
+input string SyncToken          = ""; // tu codigo de conexion de VICTOR (pegalo aqui). No lo compartas.
+input int    SyncDays           = 30;       // dias de historial a revisar al sincronizar
+
+// Ajustes del guardian: empiezan con las Entradas y VICTOR los actualiza al sincronizar.
+string AllowedSymbols = "";
+string BlockedSymbols = "";
+ENUM_SL_MODE SLMode = SL_ATR;
+double SLPips = 0;
+double PipSize = 0;
+string PipSymbol = "";
+double SLPercent = 0;
+double ATRMult = 0;
+ENUM_TIMEFRAMES ATRTF = PERIOD_M15;
+double RewardRatio = 0;
+bool   LockSLTP = true;
+bool   FlexibleLock = true;
+bool   BlockOnManualClose = true;
+bool   g_cfgOk = false;      // false = aun no hay reglas de VICTOR (version precompilada): no deja abrir
+
+// Reglas vivas: empiezan con las Entradas de arriba y VICTOR las actualiza en cada
+// sincronizacion (lo que cambies en la web o en el chat llega solo, sin reinstalar).
+double RiskMoney = 0;
+double RiskPercent = 0;
+int MaxLosersPerDay = 0;
+double MaxDailyLossPct = 0;
+double MaxDailyLossUSD = 0;
+double MinEquityPct = 0;
+double MinEquityUSD = 0;
+int MaxOpenPositions = 0;
+int MaxTradesPerDay = 0;
+int CooldownMin = 0;
+int    NewsMin = 0;          // minutos antes/despues de noticias de alto impacto (0 = apagado)
+int    TzOffsetMin = 0;      // tu zona horaria respecto a UTC (solo para mostrar horas)
+string g_horarioTxt = "";
+string CFG0 = "";
+
+// --- Entrada automatica: retroceso a la media en tendencia (APAGADA por defecto) ---
+// Vende cuando la media baja y el precio retrocede hacia arriba y la toca; compra al reves.
+// Una entrada por vela. SL/TP/lote/limites vienen de las reglas de arriba.
+input bool   AutoEntry          = false;    // true = el guardian entra solo con esta regla
+input int    MaPeriod           = 50;       // periodo de la media movil
+input ENUM_MA_METHOD MaMethod   = MODE_EMA; // tipo de media (EMA, SMA...)
+input ENUM_TIMEFRAMES MaTF      = PERIOD_M15; // temporalidad de la media y de la tendencia
+input int    SlopeBars          = 10;       // velas para medir la pendiente de la media
+input double MinSlopeUSD        = 1.0;      // pendiente minima (en precio) en esas velas: filtra rangos
+
+string P = "VG_";
+int      hMA = INVALID_HANDLE;
+datetime lastAutoBar = 0;
+
+//------------------------------------------------------------------
+// Simbolos permitidos
+bool   g_all = true;
+string g_syms[];
+string g_block[];
+
+string Up(string s) { string u = s; StringTrimLeft(u); StringTrimRight(u); StringToUpper(u); return u; }
+
+void ParseSymbols()
+{
+   ArrayResize(g_syms, 0);
+   string s = Up(AllowedSymbols);
+   g_all = (s == "" || StringFind(s, "*") >= 0);
+   if(g_all) return;
+   string parts[];
+   int k = StringSplit(s, ',', parts);
+   for(int i = 0; i < k; i++)
+   {
+      string x = Up(parts[i]);
+      if(x == "") continue;
+      int n = ArraySize(g_syms);
+      ArrayResize(g_syms, n + 1);
+      g_syms[n] = x;
+   }
+   if(ArraySize(g_syms) == 0) g_all = true;
+}
+
+void ParseBlocked()
+{
+   ArrayResize(g_block, 0);
+   string parts[];
+   int k = StringSplit(Up(BlockedSymbols), ',', parts);
+   for(int i = 0; i < k; i++)
+   {
+      string x = Up(parts[i]);
+      if(x == "") continue;
+      int n = ArraySize(g_block);
+      ArrayResize(g_block, n + 1);
+      g_block[n] = x;
+   }
+}
+
+// acepta sufijos del broker: "XAUUSD" permite "XAUUSD.r" o "XAUUSDm"
+bool SymbolAllowed(string s)
+{
+   string u = Up(s);
+   for(int b = 0; b < ArraySize(g_block); b++)
+      if(u == g_block[b] || StringFind(u, g_block[b]) == 0) return false;   // prohibido
+   if(g_all) return true;
+   for(int i = 0; i < ArraySize(g_syms); i++)
+      if(u == g_syms[i] || StringFind(u, g_syms[i]) == 0) return true;
+   return false;
+}
+
+// activo al que aplican los pips configurados (nunca el simbolo del grafico por accidente)
+bool IsMain(string s)
+{
+   string u = Up(s);
+   string m = Up(PipSymbol);
+   if(m == "") return false;
+   return (u == m || StringFind(u, m) == 0);
+}
+
+//------------------------------------------------------------------
+// Distancia del stop (en precio) para cada simbolo
+string g_atrSym[];
+int    g_atrH[];
+
+int AtrHandle(string s)
+{
+   for(int i = 0; i < ArraySize(g_atrSym); i++) if(g_atrSym[i] == s) return g_atrH[i];
+   SymbolSelect(s, true);
+   int h = iATR(s, ATRTF, ATRPeriod);
+   int n = ArraySize(g_atrSym);
+   ArrayResize(g_atrSym, n + 1); ArrayResize(g_atrH, n + 1);
+   g_atrSym[n] = s; g_atrH[n] = h;
+   return h;
+}
+
+void ResetAtr()
+{
+   for(int i = 0; i < ArraySize(g_atrH); i++) if(g_atrH[i] != INVALID_HANDLE) IndicatorRelease(g_atrH[i]);
+   ArrayResize(g_atrSym, 0); ArrayResize(g_atrH, 0);
+}
+
+void PrepAtr()
+{
+   if(SLMode == SL_PERCENT) return;
+   AtrHandle(_Symbol);
+   for(int a = 0; a < ArraySize(g_syms); a++) AtrHandle(g_syms[a]);
+   for(int c = 0; c < PositionsTotal(); c++) if(PositionGetTicket(c) > 0) AtrHandle(PositionGetString(POSITION_SYMBOL));
+}
+
+double AtrDist(string s)
+{
+   int h = AtrHandle(s);
+   double b[];
+   if(h != INVALID_HANDLE && CopyBuffer(h, 0, 1, 1, b) == 1 && b[0] > 0) return b[0] * ATRMult;
+   return 0;
+}
+
+double RawSLDist(string s)
+{
+   double price = SymbolInfoDouble(s, SYMBOL_BID);
+   if(SLMode == SL_PERCENT) return price * SLPercent / 100.0;
+   if(SLMode == SL_PIPS)
+   {
+      if(IsMain(s)) return SLPips * PipSize;
+      int dg = (int)SymbolInfoInteger(s, SYMBOL_DIGITS);
+      string base = SymbolInfoString(s, SYMBOL_CURRENCY_BASE), prof = SymbolInfoString(s, SYMBOL_CURRENCY_PROFIT);
+      bool fx = (dg == 3 || dg == 5) && StringLen(base) == 3 && StringLen(prof) == 3 && base != prof && base != "XAU" && base != "XAG";
+      if(fx) return SLPips * SymbolInfoDouble(s, SYMBOL_POINT) * 10;   // forex: sus pips de siempre
+   }
+   // ATR (modo ATR, o los demas activos en modo pips); si aun no hay datos, % del precio
+   double a = AtrDist(s);
+   if(a > 0) return a;
+   return price * SLPercent / 100.0;
+}
+
+// Distancia del stop, nunca mas cerca que 3 spreads ni que el minimo del broker
+double SLDist(string s)
+{
+   double d = RawSLDist(s);
+   double pt = SymbolInfoDouble(s, SYMBOL_POINT);
+   double spread = SymbolInfoDouble(s, SYMBOL_ASK) - SymbolInfoDouble(s, SYMBOL_BID);
+   double lvl = (double)SymbolInfoInteger(s, SYMBOL_TRADE_STOPS_LEVEL) * pt * 1.1;
+   double minD = MathMax(spread * 3, lvl);
+   if(d < minD) d = minD;
+   return d;
+}
+
+//------------------------------------------------------------------
+// Lo que se puede perder en un trade si toca el stop
+double RiskAllowed()
+{
+   if(RiskMoney > 0) return RiskMoney;
+   return AccountInfoDouble(ACCOUNT_BALANCE) * RiskPercent / 100.0;
+}
+
+double LossPerLot(string s, double dist)
+{
+   double ts = SymbolInfoDouble(s, SYMBOL_TRADE_TICK_SIZE);
+   double tv = SymbolInfoDouble(s, SYMBOL_TRADE_TICK_VALUE_LOSS);
+   if(tv <= 0) tv = SymbolInfoDouble(s, SYMBOL_TRADE_TICK_VALUE);
+   if(ts <= 0) return 0;
+   return dist / ts * tv;
+}
+
+double CalcLot(string s, double dist)
+{
+   double lpl = LossPerLot(s, dist);
+   if(lpl <= 0) return 0;
+   double risk = RiskAllowed();
+   double step = SymbolInfoDouble(s, SYMBOL_VOLUME_STEP);
+   double minL = SymbolInfoDouble(s, SYMBOL_VOLUME_MIN);
+   double maxL = SymbolInfoDouble(s, SYMBOL_VOLUME_MAX);
+   if(step <= 0) step = minL > 0 ? minL : 0.01;
+   double lot  = MathFloor(risk / lpl / step) * step;
+   if(lot < minL) lot = minL;
+   if(lot > maxL) lot = maxL;
+   int vd = (int)MathMax(0, MathCeil(-MathLog10(step) - 1e-9));   // decimales del lote (acciones = 0, forex = 2)
+   return NormalizeDouble(lot, vd);
+}
+
+// true si hasta el lote minimo excede el riesgo permitido (cuenta muy chica)
+bool RiskTooHigh(string s, double lot, double dist)
+{
+   double risk = RiskAllowed();
+   return (lot * LossPerLot(s, dist) > risk * 1.5);
+}
+
+//------------------------------------------------------------------
+void DayStats(int &losers, double &pl, int &manual, int &closed, datetime &lastLoss)
+{
+   losers = 0; pl = 0; manual = 0; closed = 0; lastLoss = 0;
+   MqlDateTime t; TimeToStruct(TimeCurrent(), t);
+   t.hour = 0; t.min = 0; t.sec = 0;
+   datetime start = StructToTime(t);
+   if(!HistorySelect(start, TimeCurrent() + 60)) return;
+   int n = HistoryDealsTotal();
+   for(int i = 0; i < n; i++)
+   {
+      ulong tk = HistoryDealGetTicket(i);
+      long entry = HistoryDealGetInteger(tk, DEAL_ENTRY);
+      long type  = HistoryDealGetInteger(tk, DEAL_TYPE);
+      if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_INOUT) continue;
+      if(type != DEAL_TYPE_BUY && type != DEAL_TYPE_SELL) continue;
+      double p = HistoryDealGetDouble(tk, DEAL_PROFIT) + HistoryDealGetDouble(tk, DEAL_COMMISSION)
+               + HistoryDealGetDouble(tk, DEAL_SWAP) + HistoryDealGetDouble(tk, DEAL_FEE);
+      pl += p;
+      closed++;
+      if(p < 0)
+      {
+         losers++;
+         datetime dt = (datetime)HistoryDealGetInteger(tk, DEAL_TIME);
+         if(dt > lastLoss) lastLoss = dt;
+      }
+      // cierre manual (terminal, celular o web). Los cierres por SL/TP o del EA no cuentan.
+      long reason = HistoryDealGetInteger(tk, DEAL_REASON);
+      if(reason == DEAL_REASON_CLIENT || reason == DEAL_REASON_MOBILE || reason == DEAL_REASON_WEB) manual++;
+   }
+}
+
+double FloatingPL()
+{
+   double f = 0;
+   for(int i = 0; i < PositionsTotal(); i++)
+   {
+      ulong tk = PositionGetTicket(i);
+      if(tk == 0) continue;
+      f += PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+   }
+   return f;
+}
+
+// bloqueo duro: cierra todo y no deja operar
+// Explicacion larga del ultimo bloqueo (para las alertas): por que te protegio y que hacer
+string g_detalle = "";
+
+//------------------------------------------------------------------
+// Reglas vivas desde VICTOR (horario, dias, pausas, noticias y limites).
+// Formato: "RM=7;RP=1;ML=3;...;BW=0-720,1080-3600;PZ=1796356800-1796443200;NW=15;TZO=-240;HL=..."
+//   BW = minutos BLOQUEADOS de la semana en UTC (0 = domingo 00:00 UTC ... 10080)
+//   PZ = pausas por fecha, en segundos UTC
+int  g_bwS[];
+int  g_bwE[];
+long g_pzS[];
+long g_pzE[];
+
+void ParseRanges(string v, bool weekly)
+{
+   string parts[];
+   int k = StringSplit(v, ',', parts);
+   if(weekly) { ArrayResize(g_bwS, 0); ArrayResize(g_bwE, 0); }
+   else       { ArrayResize(g_pzS, 0); ArrayResize(g_pzE, 0); }
+   for(int i = 0; i < k; i++)
+   {
+      int d = StringFind(parts[i], "-");
+      if(d < 1) continue;
+      long a = StringToInteger(StringSubstr(parts[i], 0, d));
+      long b = StringToInteger(StringSubstr(parts[i], d + 1));
+      if(b <= a) continue;
+      if(weekly)
+      {
+         int n = ArraySize(g_bwS);
+         ArrayResize(g_bwS, n + 1); ArrayResize(g_bwE, n + 1);
+         g_bwS[n] = (int)a; g_bwE[n] = (int)b;
+      }
+      else
+      {
+         int n = ArraySize(g_pzS);
+         ArrayResize(g_pzS, n + 1); ArrayResize(g_pzE, n + 1);
+         g_pzS[n] = a; g_pzE[n] = b;
+      }
+   }
+}
+
+ENUM_TIMEFRAMES TfDeMin(int m)
+{
+   if(m <= 5) return PERIOD_M5;
+   if(m <= 15) return PERIOD_M15;
+   if(m <= 30) return PERIOD_M30;
+   if(m <= 60) return PERIOD_H1;
+   if(m <= 240) return PERIOD_H4;
+   return PERIOD_D1;
+}
+
+void ApplyCfg(string cfg)
+{
+   if(cfg == "") return;
+   bool resym = false, reatr = false;
+   string parts[];
+   int k = StringSplit(cfg, ';', parts);
+   for(int i = 0; i < k; i++)
+   {
+      int eq = StringFind(parts[i], "=");
+      if(eq < 1) continue;
+      string key = StringSubstr(parts[i], 0, eq);
+      string val = StringSubstr(parts[i], eq + 1);
+      double x = StringToDouble(val);
+      if(key == "RM" && x >= 0) RiskMoney = x;
+      else if(key == "RP" && x > 0 && x <= 100) RiskPercent = x;
+      else if(key == "ML" && x >= 1) MaxLosersPerDay = (int)x;
+      else if(key == "DLP" && x > 0 && x <= 100) MaxDailyLossPct = x;
+      else if(key == "DLU" && x >= 0) MaxDailyLossUSD = x;
+      else if(key == "MEP" && x >= 0 && x <= 100) MinEquityPct = x;
+      else if(key == "MEU" && x >= 0) MinEquityUSD = x;
+      else if(key == "MO" && x >= 1) MaxOpenPositions = (int)x;
+      else if(key == "MT" && x >= 0) MaxTradesPerDay = (int)x;
+      else if(key == "CD" && x >= 0) CooldownMin = (int)x;
+      else if(key == "BW") ParseRanges(val, true);
+      else if(key == "PZ") ParseRanges(val, false);
+      else if(key == "NW" && x >= 0) NewsMin = (int)x;
+      else if(key == "TZO") TzOffsetMin = (int)StringToInteger(val);
+      else if(key == "HL") g_horarioTxt = val;
+      else if(key == "AS") { if(val != AllowedSymbols) { AllowedSymbols = val; resym = true; } }
+      else if(key == "BS") { if(val != BlockedSymbols) { BlockedSymbols = val; resym = true; } }
+      else if(key == "SM" && x >= 0 && x <= 2) SLMode = (ENUM_SL_MODE)(int)x;
+      else if(key == "SP" && x > 0) SLPips = x;
+      else if(key == "PS" && x > 0) PipSize = x;
+      else if(key == "PY" && val != "") PipSymbol = val;
+      else if(key == "SC" && x > 0) SLPercent = x;
+      else if(key == "AM" && x > 0) ATRMult = x;
+      else if(key == "AT" && x > 0) { ENUM_TIMEFRAMES tf = TfDeMin((int)x); if(tf != ATRTF) { ATRTF = tf; reatr = true; } }
+      else if(key == "RR" && x >= 0) RewardRatio = x;
+      else if(key == "LK" && x >= 0 && x <= 2) { LockSLTP = (x > 0); FlexibleLock = (x == 2); }
+      else if(key == "BM") BlockOnManualClose = (x > 0);
+   }
+   g_cfgOk = true;
+   if(reatr) ResetAtr();
+   if(resym || reatr) { ParseSymbols(); ParseBlocked(); PrepAtr(); }
+}
+
+// hora local de la persona (HH:MM) para un minuto de la semana UTC
+string LocalHM(int mow)
+{
+   int m = ((mow + TzOffsetMin) % 1440 + 1440) % 1440;
+   return StringFormat("%02d:%02d", m / 60, m % 60);
+}
+
+// "08:00" si es hoy (tu hora), o "mar 08:00" si es otro dia
+string LocalWhen(int mow, int nowMow)
+{
+   string dn[7] = {"dom", "lun", "mar", "mie", "jue", "vie", "sab"};
+   int a = (((mow + TzOffsetMin) / 1440) % 7 + 7) % 7;
+   int b = (((nowMow + TzOffsetMin) / 1440) % 7 + 7) % 7;
+   if(mow + TzOffsetMin < 0) a = 6;
+   if(nowMow + TzOffsetMin < 0) b = 6;
+   return (a == b ? "" : dn[a] + " ") + LocalHM(mow);
+}
+
+// Fuera de horario, dia bloqueado o pausa por fecha: no deja ABRIR trades
+bool TimeBlocked(string &why)
+{
+   datetime g = TimeGMT();
+   for(int i = 0; i < ArraySize(g_pzS); i++)
+      if((long)g >= g_pzS[i] && (long)g < g_pzE[i])
+      {
+         datetime fin = (datetime)(g_pzE[i] + (long)TzOffsetMin * 60);
+         why = "EN PAUSA hasta " + TimeToString(fin - 60, TIME_DATE);
+         g_detalle = "estas en una pausa que pusiste en VICTOR (hasta el " + TimeToString(fin - 60, TIME_DATE) + "). Descansar tambien es parte del plan.";
+         return true;
+      }
+   if(ArraySize(g_bwS) == 0) return false;
+   MqlDateTime t; TimeToStruct(g, t);
+   int mow = t.day_of_week * 1440 + t.hour * 60 + t.min;
+   for(int i = 0; i < ArraySize(g_bwS); i++)
+      if(mow >= g_bwS[i] && mow < g_bwE[i])
+      {
+         int fin = g_bwE[i];
+         // si el bloqueo sigue al empezar la semana, busca donde termina
+         if(fin >= 10080)
+            for(int j = 0; j < ArraySize(g_bwS); j++) if(g_bwS[j] == 0) { fin = g_bwE[j]; break; }
+         why = "FUERA DE HORARIO: abres " + LocalWhen(fin % 10080, mow);
+         g_detalle = "estas fuera del horario que pusiste en VICTOR. Puedes volver a operar: " + LocalWhen(fin % 10080, mow) + " (tu hora).";
+         return true;
+      }
+   return false;
+}
+
+// Noticias de alto impacto del calendario economico de MT5
+struct VNews { datetime t; string cur; string name; };
+VNews    g_news[];
+datetime g_newsAt = 0;
+
+void LoadNews()
+{
+   if(NewsMin <= 0) return;
+   if(g_newsAt > 0 && TimeLocal() - g_newsAt < 900) return;
+   g_newsAt = TimeLocal();
+   ArrayResize(g_news, 0);
+   MqlCalendarValue v[];
+   datetime now = TimeTradeServer();
+   int k = CalendarValueHistory(v, now - 3 * 3600, now + 2 * 86400);
+   for(int i = 0; i < k; i++)
+   {
+      MqlCalendarEvent ev;
+      if(!CalendarEventById(v[i].event_id, ev)) continue;
+      if(ev.importance != CALENDAR_IMPORTANCE_HIGH) continue;
+      MqlCalendarCountry c;
+      if(!CalendarCountryById(ev.country_id, c)) continue;
+      int n = ArraySize(g_news);
+      ArrayResize(g_news, n + 1);
+      g_news[n].t = v[i].time;
+      g_news[n].cur = c.currency;
+      g_news[n].name = ev.name;
+   }
+}
+
+bool NewsBlocked(string s, string &why)
+{
+   if(NewsMin <= 0) return false;
+   LoadNews();
+   string b = SymbolInfoString(s, SYMBOL_CURRENCY_BASE), p = SymbolInfoString(s, SYMBOL_CURRENCY_PROFIT);
+   datetime now = TimeTradeServer();
+   for(int i = 0; i < ArraySize(g_news); i++)
+   {
+      if(g_news[i].cur != b && g_news[i].cur != p) continue;
+      long dif = (long)(g_news[i].t - now);
+      if(dif > (long)NewsMin * 60 || dif < -(long)NewsMin * 60) continue;
+      why = "NOTICIA " + g_news[i].cur + ": espera " + IntegerToString(NewsMin) + " min";
+      g_detalle = "hay una noticia de alto impacto de " + g_news[i].cur + " (" + g_news[i].name + "). Tu regla es no abrir trades "
+                + IntegerToString(NewsMin) + " min antes ni despues: el precio se mueve sin control en ese momento.";
+      return true;
+   }
+   return false;
+}
+
+
+bool IsBlocked(string &why)
+{
+   int losers, manual, closed; double pl; datetime lastLoss;
+   DayStats(losers, pl, manual, closed, lastLoss);
+   double total = pl + FloatingPL();
+   double startBal = AccountInfoDouble(ACCOUNT_BALANCE) - pl;   // balance con que empezo el dia
+   double maxLoss  = (MaxDailyLossUSD > 0) ? MaxDailyLossUSD : startBal * MaxDailyLossPct / 100.0;
+   double minEq    = (MinEquityUSD > 0) ? MinEquityUSD : startBal * MinEquityPct / 100.0;
+   if(BlockOnManualClose && manual > 0)
+   {
+      why = "BLOQUEADO: cerraste un trade a mano hoy";
+      g_detalle = "hoy cerraste un trade a mano y tu regla es no hacerlo. Quedas bloqueado hasta manana para no operar con emocion.";
+      return true;
+   }
+   if(losers >= MaxLosersPerDay)
+   {
+      why = "BLOQUEADO: " + IntegerToString(losers) + " perdedores hoy (tu limite)";
+      g_detalle = "hoy ya perdiste " + IntegerToString(losers) + " trades, que es tu limite. Despues de varias perdidas seguidas es cuando mas se quema una cuenta. Manana se reinicia.";
+      return true;
+   }
+   if(total <= -maxLoss)
+   {
+      why = "BLOQUEADO: llegaste a tu perdida del dia ($" + DoubleToString(maxLoss, 2) + ")";
+      g_detalle = "llegaste a tu perdida maxima del dia ($" + DoubleToString(maxLoss, 2) + "). Te bloqueo hasta manana para que un mal dia no se convierta en una cuenta quemada.";
+      return true;
+   }
+   if(AccountInfoDouble(ACCOUNT_EQUITY) <= minEq)
+   {
+      why = "BLOQUEADO: la cuenta llego a tu piso ($" + DoubleToString(minEq, 2) + ")";
+      g_detalle = "tu cuenta bajo de tu piso de $" + DoubleToString(minEq, 2) + ". Todo queda bloqueado para que no la pierdas completa. Revisa tu plan antes de seguir.";
+      return true;
+   }
+   why = "OK | perdedores hoy: " + IntegerToString(losers) + "/" + IntegerToString(MaxLosersPerDay)
+       + " | P/L hoy: " + DoubleToString(total, 2);
+   return false;
+}
+
+// bloqueo suave: no cierra nada, solo impide ABRIR otro trade ahora
+// skipTk/riskOverride: para revisar un trade que YA se abrio (ej. desde el Trading Panel de MT5)
+bool CanOpenNew(string s, string &why, ulong skipTk = 0, double riskOverride = -1)
+{
+   if(!g_cfgOk)
+   {
+      why = (SyncToken == "") ? "FALTA TU CODIGO DE VICTOR" : "ESPERANDO TUS REGLAS DE VICTOR";
+      g_detalle = (SyncToken == "")
+         ? "pega tu codigo de conexion de VICTOR en Entradas > SyncToken (lo copias en victorcfo.com > Trading)."
+         : "todavia no llegan tus reglas. Permite " + SyncURL + " en Herramientas > Opciones > Asesores Expertos > WebRequest.";
+      return false;
+   }
+   if(IsBlocked(why)) return false;
+   if(TimeBlocked(why)) return false;
+   if(NewsBlocked(s, why)) return false;
+   int losers, manual, closed; double pl; datetime lastLoss;
+   DayStats(losers, pl, manual, closed, lastLoss);
+
+   // presupuesto de riesgo del dia: lo que pierden los trades abiertos si tocan su SL
+   // + el nuevo trade no puede pasar la perdida diaria maxima (con varios trades abiertos).
+   double startBal = AccountInfoDouble(ACCOUNT_BALANCE) - pl;
+   double maxLoss  = (MaxDailyLossUSD > 0) ? MaxDailyLossUSD : startBal * MaxDailyLossPct / 100.0;
+   double openRisk = 0;
+   for(int i = 0; i < PositionsTotal(); i++)
+   {
+      ulong ptk = PositionGetTicket(i);
+      if(ptk == 0 || ptk == skipTk) continue;
+      string psym  = PositionGetString(POSITION_SYMBOL);
+      double popen = PositionGetDouble(POSITION_PRICE_OPEN);
+      double psl   = PositionGetDouble(POSITION_SL);
+      double pvol  = PositionGetDouble(POSITION_VOLUME);
+      bool pbuy    = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY);
+      double d = (psl == 0) ? SLDist(psym) : (pbuy ? popen - psl : psl - popen);
+      if(d > 0) openRisk += LossPerLot(psym, d) * pvol;
+   }
+   double nd = SLDist(s);
+   double newRisk = (riskOverride >= 0) ? riskOverride : CalcLot(s, nd) * LossPerLot(s, nd);
+   // margen de 10% de un trade para deslizamiento (ej. 3 trades de $7 con perdidas de $7.05)
+   if(maxLoss > 0 && openRisk + newRisk > maxLoss + pl + RiskAllowed() * 0.10 + 0.01)
+   {
+      double queda = MathMax(0, maxLoss + pl - openRisk);
+      why = "No cabe hoy: te quedan $" + DoubleToString(queda, 2) + ", este arriesga $" + DoubleToString(newRisk, 2);
+      g_detalle = "te quedan $" + DoubleToString(queda, 2) + " para perder hoy" + (openRisk > 0 ? " (contando lo que arriesgan tus trades abiertos)" : "")
+                + " y este trade en " + s + " arriesgaria $" + DoubleToString(newRisk, 2) + ". Si sale mal pasarias tu limite de $" + DoubleToString(maxLoss, 2)
+                + ". Espera a que cierre un trade abierto o vuelve manana.";
+      return false;
+   }
+
+   if(MaxTradesPerDay > 0 && closed + PositionsTotal() - (skipTk > 0 ? 1 : 0) >= MaxTradesPerDay)
+   {
+      why = "Ya hiciste tus " + IntegerToString(MaxTradesPerDay) + " trades de hoy";
+      g_detalle = "ya hiciste tus " + IntegerToString(MaxTradesPerDay) + " trades de hoy. Operar de mas es la forma mas comun de devolver lo ganado. Manana se reinicia.";
+      return false;
+   }
+   if(CooldownMin > 0 && lastLoss > 0)
+   {
+      long left = (long)CooldownMin * 60 - (long)(TimeCurrent() - lastLoss);
+      if(left > 0)
+      {
+         why = "ESPERA " + IntegerToString((int)(left / 60) + 1) + " min tras la perdida";
+         g_detalle = "tu regla es esperar " + IntegerToString(CooldownMin) + " min despues de una perdida para no entrar con revancha. Faltan " + IntegerToString((int)(left / 60) + 1) + " min.";
+         return false;
+      }
+   }
+   return true;
+}
+
+//------------------------------------------------------------------
+// Cierre robusto: 1 intento cada 3 s por ticket, prueba los 3 modos de llenado
+// (un modo no aceptado por el broker deja ordenes de cierre atascadas).
+datetime lastCloseTry = 0;
+ulong    lastCloseTk  = 0;
+bool SafeClose(ulong tk)
+{
+   if(tk == lastCloseTk && TimeCurrent() - lastCloseTry < 3) return false;
+   lastCloseTk = tk; lastCloseTry = TimeCurrent();
+   ENUM_ORDER_TYPE_FILLING modes[3] = {ORDER_FILLING_IOC, ORDER_FILLING_FOK, ORDER_FILLING_RETURN};
+   for(int m = 0; m < 3; m++)
+   {
+      trade.SetTypeFilling(modes[m]);
+      if(trade.PositionClose(tk)) return true;
+      uint rc = trade.ResultRetcode();
+      if(rc == TRADE_RETCODE_MARKET_CLOSED || rc == TRADE_RETCODE_CONNECTION ||
+         rc == TRADE_RETCODE_TRADE_DISABLED) break;
+   }
+   Print("VictorGuard: no pude cerrar #", tk, " retcode=", trade.ResultRetcode(), " ", trade.ResultRetcodeDescription());
+   return false;
+}
+
+//------------------------------------------------------------------
+void Guard()
+{
+   string why;
+   bool blocked = IsBlocked(why);
+   int kept = 0;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong tk = PositionGetTicket(i);
+      if(tk == 0) continue;
+      string sym = PositionGetString(POSITION_SYMBOL);
+      double vol = PositionGetDouble(POSITION_VOLUME);
+      long   typ = PositionGetInteger(POSITION_TYPE);
+      double op  = PositionGetDouble(POSITION_PRICE_OPEN);
+      double sl  = PositionGetDouble(POSITION_SL);
+      double tp  = PositionGetDouble(POSITION_TP);
+
+      // reglas que cierran el trade (se explica una sola vez por trade)
+      if(blocked || !SymbolAllowed(sym) || kept >= MaxOpenPositions)
+      {
+         string kav = P + "AV_" + (string)tk;
+         if(!GlobalVariableCheck(kav))
+         {
+            GlobalVariableSet(kav, 1);
+            if(blocked) Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: ", g_detalle);
+            else if(!SymbolAllowed(sym)) Alert("VictorGuard cerro tu trade de ", sym, ": esta en tus activos prohibidos o fuera de tu lista.");
+            else Alert("VictorGuard cerro tu trade de ", sym, ": ya tenias ", IntegerToString(MaxOpenPositions), " trades abiertos, tu maximo.");
+         }
+         SafeClose(tk);
+         continue;
+      }
+      bool isBuy = (typ == POSITION_TYPE_BUY);
+      double dist = SLDist(sym);
+      int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      double pt = SymbolInfoDouble(sym, SYMBOL_POINT);
+
+      // lote: se revisa una vez por trade, contra el riesgo real a su stop
+      string kok = P + "OK_" + (string)tk;
+      if(!GlobalVariableCheck(kok) && dist > 0)
+      {
+         double lossDist = dist;
+         if(sl != 0)
+         {
+            double d = isBuy ? op - sl : sl - op;
+            if(d > 0 && d <= dist * 1.5) lossDist = d;
+         }
+         // margen de 10% por deslizamiento y redondeo; el lote minimo siempre se permite
+         double allowed = RiskAllowed();
+         double minL = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
+         if(vol > minL + 0.0000001 && vol * LossPerLot(sym, lossDist) > allowed * 1.10)
+         {
+            Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: con ", DoubleToString(vol, 2), " lotes arriesgabas $",
+                  DoubleToString(vol * LossPerLot(sym, lossDist), 2), " y tu limite por trade es $", DoubleToString(allowed, 2), ". Abre con el boton del guardian y te calcula el lote correcto.");
+            SafeClose(tk);
+            continue;
+         }
+         // el lote minimo solo se permite si no pasa 1.5 veces tu riesgo (igual que los botones)
+         if(vol <= minL + 0.0000001 && RiskTooHigh(sym, vol, lossDist))
+         {
+            Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: hasta el lote mas pequeno (", DoubleToString(vol, 2), ") arriesgaba $",
+                  DoubleToString(vol * LossPerLot(sym, lossDist), 2), " y tu limite por trade es $", DoubleToString(allowed, 2),
+                  ". Ahora mismo este activo se mueve demasiado para tu cuenta.");
+            SafeClose(tk);
+            continue;
+         }
+         // mismas reglas que los botones: presupuesto del dia, trades del dia y espera tras perdida
+         string wn;
+         if(!CanOpenNew(sym, wn, tk, vol * LossPerLot(sym, lossDist)))
+         {
+            Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: ", g_detalle);
+            SafeClose(tk);
+            continue;
+         }
+         GlobalVariableSet(kok, 1);
+         GlobalVariableSet(P + "RK_" + (string)tk, vol * LossPerLot(sym, lossDist));   // riesgo al abrir, para la bitacora
+      }
+      kept++;
+      if(dist <= 0) continue;
+
+      // SL/TP vigilados: si ya los fijamos antes, se aplica el modo de bloqueo
+      string ksl = P + "SL_" + (string)tk, ktp = P + "TP_" + (string)tk;
+      if(LockSLTP && GlobalVariableCheck(ksl) && GlobalVariableCheck(ktp))
+      {
+         double lsl = GlobalVariableGet(ksl), ltp = GlobalVariableGet(ktp);
+         if(FlexibleLock)
+         {
+            // SL: solo puede acercarse a tu favor (protegerte / perseguir el precio). Nunca alejarse ni quitarse.
+            bool slOk = (sl != 0) && (isBuy ? (sl >= lsl - pt / 2) : (sl <= lsl + pt / 2));
+            if(slOk && MathAbs(sl - lsl) > pt / 2) GlobalVariableSet(ksl, sl);
+            // TP: libre (mover o quitar no aumenta tu riesgo)
+            if(MathAbs(tp - ltp) > pt / 2) GlobalVariableSet(ktp, tp);
+            if(!slOk) trade.PositionModify(tk, lsl, tp);
+         }
+         else if(MathAbs(sl - lsl) > pt / 2 || MathAbs(tp - ltp) > pt / 2)
+            trade.PositionModify(tk, lsl, ltp);
+         continue;
+      }
+
+      // SL/TP obligatorios y SL no mas lejos de 1.5x lo permitido
+      bool buy = isBuy;
+      double newSL = sl, newTP = tp;
+      if(sl == 0 || MathAbs(op - sl) > dist * 1.5)
+         newSL = buy ? op - dist : op + dist;
+      if(tp == 0 && RewardRatio > 0)
+         newTP = buy ? op + dist * RewardRatio : op - dist * RewardRatio;
+      newSL = NormalizeDouble(newSL, digits);
+      newTP = NormalizeDouble(newTP, digits);
+      if(newSL != sl || newTP != tp)
+         trade.PositionModify(tk, newSL, newTP);
+      if(LockSLTP)
+      {
+         GlobalVariableSet(ksl, newSL);
+         GlobalVariableSet(ktp, newTP);
+      }
+   }
+}
+
+//------------------------------------------------------------------
+void OpenTrade(bool buy)
+{
+   string why;
+   if(!SymbolAllowed(_Symbol)) { Alert("VictorGuard te protegio: ", _Symbol, " esta en tus activos prohibidos o fuera de tu lista. Lo pusiste ahi para cuidarte."); return; }
+   if(!CanOpenNew(_Symbol, why)) { Alert("VictorGuard te protegio: ", g_detalle); return; }
+   if(PositionsTotal() >= MaxOpenPositions) { Alert("VictorGuard te protegio: ya tienes ", IntegerToString(MaxOpenPositions), " trades abiertos, tu maximo. Cierra o espera uno antes de abrir otro."); return; }
+
+   double dist = SLDist(_Symbol);
+   if(dist <= 0) { Alert("VictorGuard: no pude calcular el stop de ", _Symbol); return; }
+   double lot = CalcLot(_Symbol, dist);
+   if(lot <= 0 || RiskTooHigh(_Symbol, lot, dist))
+   {
+      int dg = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+      double lim = RiskAllowed();
+      Alert("VictorGuard te protegio: en ", _Symbol, " el lote mas pequeno (", DoubleToString(lot, 2), ") con el stop a ", DoubleToString(dist, dg),
+            " arriesgaria $", DoubleToString(lot * LossPerLot(_Symbol, dist), 2), " y tu limite por trade es $", DoubleToString(lim, 2),
+            ". Ahora mismo este activo se mueve demasiado para tu cuenta. Prueba stop Ajustado, otro activo, o sube tu riesgo por trade.");
+      return;
+   }
+
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   double price = buy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double sl = buy ? price - dist : price + dist;
+   double tp = (RewardRatio > 0) ? (buy ? price + dist * RewardRatio : price - dist * RewardRatio) : 0;
+   sl = NormalizeDouble(sl, digits);
+   tp = NormalizeDouble(tp, digits);
+
+   bool ok = buy ? trade.Buy(lot, _Symbol, 0, sl, tp, "VictorGuard")
+                 : trade.Sell(lot, _Symbol, 0, sl, tp, "VictorGuard");
+   if(!ok) Alert("VictorGuard: error al abrir (", trade.ResultRetcode(), ")");
+}
+
+//------------------------------------------------------------------
+// Ordenes pendientes (limit/stop): al ponerlas reciben SL y TP segun tus reglas,
+// medidos desde el PRECIO DE LA ORDEN, asi abren ya con SL/TP. Si pones tu propio
+// SL/TP y respeta la regla, se respeta. Si el guardian esta bloqueado, se borran.
+void GuardOrders()
+{
+   string why;
+   bool blocked = IsBlocked(why);
+
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      ulong tk = OrderGetTicket(i);
+      if(tk == 0) continue;
+      string osym = OrderGetString(ORDER_SYMBOL);
+      if(blocked || !SymbolAllowed(osym))
+      {
+         trade.OrderDelete(tk);
+         continue;
+      }
+      double dist = SLDist(osym);
+      if(dist <= 0) continue;
+      int digits = (int)SymbolInfoInteger(osym, SYMBOL_DIGITS);
+
+      ENUM_ORDER_TYPE t = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+      bool buy  = (t == ORDER_TYPE_BUY_LIMIT  || t == ORDER_TYPE_BUY_STOP  || t == ORDER_TYPE_BUY_STOP_LIMIT);
+      bool sell = (t == ORDER_TYPE_SELL_LIMIT || t == ORDER_TYPE_SELL_STOP || t == ORDER_TYPE_SELL_STOP_LIMIT);
+      if(!buy && !sell) continue;
+
+      double price = OrderGetDouble(ORDER_PRICE_OPEN);
+      double sl = OrderGetDouble(ORDER_SL);
+      double tp = OrderGetDouble(ORDER_TP);
+      double nsl = sl, ntp = tp;
+      if(sl == 0 || MathAbs(price - sl) > dist * 1.5)
+         nsl = buy ? price - dist : price + dist;
+      if(tp == 0 && RewardRatio > 0)
+         ntp = buy ? price + dist * RewardRatio : price - dist * RewardRatio;
+      nsl = NormalizeDouble(nsl, digits);
+      ntp = NormalizeDouble(ntp, digits);
+
+      if(nsl != sl || ntp != tp)
+      {
+         ENUM_ORDER_TYPE_TIME tt = (ENUM_ORDER_TYPE_TIME)OrderGetInteger(ORDER_TYPE_TIME);
+         datetime exp = (datetime)OrderGetInteger(ORDER_TIME_EXPIRATION);
+         double stoplimit = OrderGetDouble(ORDER_PRICE_STOPLIMIT);
+         if(!trade.OrderModify(tk, price, nsl, ntp, tt, exp, stoplimit))
+            Print("VictorGuard: no pude poner SL/TP a la orden #", tk, " ", trade.ResultRetcodeDescription());
+      }
+   }
+}
+
+//------------------------------------------------------------------
+// Entrada automatica: tendencia bajista = la media cae y la ultima vela cerrada esta
+// bajo la media; el precio retrocede hacia arriba y la TOCA -> VENDE (espejo: compra).
+void AutoEntryCheck()
+{
+   if(!AutoEntry || !SymbolAllowed(_Symbol) || hMA == INVALID_HANDLE) return;
+   datetime bar = iTime(_Symbol, MaTF, 0);
+   if(bar == lastAutoBar) return;
+   if(PositionsTotal() >= MaxOpenPositions) return;
+   string why;
+   if(!CanOpenNew(_Symbol, why)) return;
+   double dist = SLDist(_Symbol);
+   if(dist <= 0) return;
+
+   double ma[];
+   ArraySetAsSeries(ma, true);
+   if(CopyBuffer(hMA, 0, 0, SlopeBars + 2, ma) < SlopeBars + 2) return;
+   double ma0 = ma[0];
+   double slope = ma[1] - ma[1 + SlopeBars];
+   double c1  = iClose(_Symbol, MaTF, 1);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+
+   bool sell = (slope <= -MinSlopeUSD && c1 < ma[1] && bid >= ma0 && bid <= ma0 + dist);
+   bool buy  = (slope >=  MinSlopeUSD && c1 > ma[1] && ask <= ma0 && ask >= ma0 - dist);
+   if(!sell && !buy) return;
+
+   lastAutoBar = bar;   // una sola entrada por vela
+   double lot = CalcLot(_Symbol, dist);
+   if(lot <= 0 || RiskTooHigh(_Symbol, lot, dist))
+   { Print("VictorGuard AutoEntry: el lote minimo arriesga demasiado para esta cuenta."); return; }
+   OpenTrade(buy);
+}
+
+//------------------------------------------------------------------
+void MakeButton(string name, string text, int x, int y, color bg)
+{
+   ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, 110);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, 32);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+}
+
+
+// P/L del dia (cerrado + flotante) en grande, y P/L flotante pegado a cada entrada
+string Money(double v) { return (v >= 0 ? "+$" : "-$") + DoubleToString(MathAbs(v), 2); }
+
+void UpdatePL()
+{
+   int losers, manual; double pl;
+   int closed; datetime lastLoss;
+   DayStats(losers, pl, manual, closed, lastLoss);
+   double fl = FloatingPL();
+   double tot = pl + fl;
+   ObjectSetString(0, P + "PL", OBJPROP_TEXT, "P/L hoy: " + Money(tot)
+                   + "  (cerrado " + Money(pl) + " | abierto " + Money(fl) + ")");
+   ObjectSetInteger(0, P + "PL", OBJPROP_COLOR, tot > 0 ? clrDodgerBlue : (tot < 0 ? clrRed : clrSilver));
+
+   // etiqueta junto a la linea de entrada de cada posicion abierta
+   // quita etiquetas/botones de posiciones que ya no existen
+   for(int k = ObjectsTotal(0) - 1; k >= 0; k--)
+   {
+      string on = ObjectName(0, k);
+      if(StringFind(on, P + "EP") == 0 || StringFind(on, P + "XB") == 0)
+      {
+         ulong otk = (ulong)StringToInteger(StringSubstr(on, StringLen(P) + 2));
+         if(!PositionSelectByTicket(otk)) ObjectDelete(0, on);
+      }
+   }
+   datetime tx = iTime(_Symbol, _Period, 0) + (datetime)(PeriodSeconds() * 3);
+   double step = (ChartGetDouble(0, CHART_PRICE_MAX) - ChartGetDouble(0, CHART_PRICE_MIN)) / 35.0;
+   int shown = 0;
+   for(int i = 0; i < PositionsTotal(); i++)
+   {
+      ulong tk = PositionGetTicket(i);
+      if(tk == 0 || PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+      double fp = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+      string nm = P + "EP" + (string)tk;
+      double py = PositionGetDouble(POSITION_PRICE_OPEN) - step * shown;
+      shown++;
+      if(ObjectFind(0, nm) < 0) ObjectCreate(0, nm, OBJ_TEXT, 0, tx, py);
+      ObjectSetInteger(0, nm, OBJPROP_TIME, tx);
+      ObjectSetDouble(0, nm, OBJPROP_PRICE, py);
+      ObjectSetString(0, nm, OBJPROP_TEXT, "<< entrada " + Money(fp));
+      ObjectSetInteger(0, nm, OBJPROP_COLOR, fp >= 0 ? clrDodgerBlue : clrRed);
+      ObjectSetInteger(0, nm, OBJPROP_FONTSIZE, 11);
+      ObjectSetInteger(0, nm, OBJPROP_ANCHOR, ANCHOR_LEFT);
+
+      // boton X para cerrar este trade (sirve en pantalla completa)
+      string bn = P + "XB" + (string)tk;
+      int bx, by;
+      if(ChartTimePriceToXY(0, 0, tx, py, bx, by))
+      {
+         if(ObjectFind(0, bn) < 0)
+         {
+            ObjectCreate(0, bn, OBJ_BUTTON, 0, 0, 0);
+            ObjectSetInteger(0, bn, OBJPROP_XSIZE, 26);
+            ObjectSetInteger(0, bn, OBJPROP_YSIZE, 22);
+            ObjectSetString(0, bn, OBJPROP_TEXT, "X");
+            ObjectSetInteger(0, bn, OBJPROP_COLOR, clrWhite);
+            ObjectSetInteger(0, bn, OBJPROP_BGCOLOR, clrFireBrick);
+            ObjectSetInteger(0, bn, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+         }
+         ObjectSetInteger(0, bn, OBJPROP_XDISTANCE, bx + 150);
+         ObjectSetInteger(0, bn, OBJPROP_YDISTANCE, by - 11);
+      }
+   }
+}
+
+// Algo Trading apagado = el guardian no puede poner stops, cerrar ni bloquear
+bool g_algoAvisado = false;
+bool AlgoOff()
+{
+   return !TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) || !MQLInfoInteger(MQL_TRADE_ALLOWED);
+}
+
+void UpdatePanel()
+{
+   if(AlgoOff())
+   {
+      if(!g_algoAvisado) Alert("VictorGuard: Algo Trading esta APAGADO. No puedo poner stops ni cerrar trades. Activa el boton Algo Trading.");
+      g_algoAvisado = true;
+      ObjectSetString(0, P + "ST", OBJPROP_TEXT, "ALGO TRADING APAGADO: NO te estoy protegiendo");
+      ObjectSetInteger(0, P + "ST", OBJPROP_COLOR, clrRed);
+      ObjectSetString(0, P + "LT", OBJPROP_TEXT, "Activa el boton Algo Trading (verde) en la barra de MT5");
+      ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, clrRed);
+      ChartRedraw();
+      return;
+   }
+   g_algoAvisado = false;
+   ObjectSetInteger(0, P + "ST", OBJPROP_COLOR, clrOrange);
+   string why;
+   if(!IsBlocked(why))
+   {
+      string w2;
+      if(!SymbolAllowed(_Symbol)) why = _Symbol + " no esta permitido";
+      else if(!CanOpenNew(_Symbol, w2)) why = w2;
+   }
+   double dist = SLDist(_Symbol);
+   double lot = CalcLot(_Symbol, dist);
+   double rk  = lot * LossPerLot(_Symbol, dist);
+   double lim = RiskAllowed();
+   // MT5 corta las etiquetas a 63 letras: estado y riesgo van en lineas separadas
+   ObjectSetString(0, P + "ST", OBJPROP_TEXT, StringSubstr(why, 0, 63));
+   string lt = _Symbol + " lote " + DoubleToString(lot, 2) + " | stop " + DoubleToString(dist, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS))
+             + " | riesgo $" + DoubleToString(rk, 2) + " / $" + DoubleToString(lim, 2);
+   ObjectSetString(0, P + "LT", OBJPROP_TEXT, StringSubstr(lt, 0, 63));
+   // verde = el trade cabe en tu riesgo; rojo = ni el lote minimo cabe
+   ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, (rk > lim * 1.5) ? clrRed : clrForestGreen);
+
+   // Cuenta regresiva para el cierre de la vela actual
+   long left = (long)PeriodSeconds() - (long)(TimeCurrent() - iTime(_Symbol, _Period, 0));
+   if(left < 0) left = 0;
+   long h = left / 3600, m = (left % 3600) / 60, s = left % 60;
+   string tm = (h > 0 ? IntegerToString(h) + ":" : "")
+             + StringFormat("%02d:%02d", (int)m, (int)s);
+   ObjectSetString(0, P + "TM", OBJPROP_TEXT, "Cierra la vela en " + tm);
+   UpdatePL();
+}
+
+//------------------------------------------------------------------
+// Sincronizacion con VICTOR: envia los trades cerrados y el balance cada ~30 s.
+string g_sync = "";
+datetime g_lastTry = 0;
+
+string JStr(string s)
+{
+   StringReplace(s, "\\", "");
+   StringReplace(s, "\"", "");
+   return "\"" + s + "\"";
+}
+string JTime(datetime t) { return JStr(TimeToString(t, TIME_DATE | TIME_SECONDS)); }
+
+void SyncTick()
+{
+   if(SyncToken == "" || SyncURL == "") return;
+   if(TimeLocal() - g_lastTry < 30) return;
+   g_lastTry = TimeLocal();
+
+   datetime to = TimeCurrent();
+   if(!HistorySelect(to - (datetime)SyncDays * 86400, to + 60)) return;
+   int n = HistoryDealsTotal();
+
+   // 1) posiciones ya cerradas que todavia no enviamos
+   ulong pids[];
+   int np = 0;
+   for(int i = 0; i < n && np < 100; i++)
+   {
+      ulong tk = HistoryDealGetTicket(i);
+      long entry = HistoryDealGetInteger(tk, DEAL_ENTRY);
+      long type  = HistoryDealGetInteger(tk, DEAL_TYPE);
+      if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_INOUT) continue;
+      if(type != DEAL_TYPE_BUY && type != DEAL_TYPE_SELL) continue;
+      ulong pid = (ulong)HistoryDealGetInteger(tk, DEAL_POSITION_ID);
+      if(GlobalVariableCheck(P + "SENT_" + (string)pid)) continue;
+      if(PositionSelectByTicket(pid)) continue;   // sigue abierta
+      bool dup = false;
+      for(int k = 0; k < np; k++) if(pids[k] == pid) { dup = true; break; }
+      if(dup) continue;
+      ArrayResize(pids, np + 1);
+      pids[np] = pid;
+      np++;
+   }
+
+   // 2) armar el detalle de cada una
+   string items = "";
+   ulong sentIds[];
+   int ns = 0;
+   for(int j = 0; j < np; j++)
+   {
+      if(!HistorySelectByPosition(pids[j])) continue;
+      int m = HistoryDealsTotal();
+      datetime tOpen = 0, tClose = 0;
+      double pOpen = 0, pClose = 0, vol = 0, sl = 0, tp = 0, com = 0, swp = 0, prof = 0;
+      string side = "buy", sym = "";
+      for(int d = 0; d < m; d++)
+      {
+         ulong tk = HistoryDealGetTicket(d);
+         long entry = HistoryDealGetInteger(tk, DEAL_ENTRY);
+         long type  = HistoryDealGetInteger(tk, DEAL_TYPE);
+         com  += HistoryDealGetDouble(tk, DEAL_COMMISSION) + HistoryDealGetDouble(tk, DEAL_FEE);
+         swp  += HistoryDealGetDouble(tk, DEAL_SWAP);
+         prof += HistoryDealGetDouble(tk, DEAL_PROFIT);
+         if(entry == DEAL_ENTRY_IN)
+         {
+            if(tOpen == 0)
+            {
+               tOpen = (datetime)HistoryDealGetInteger(tk, DEAL_TIME);
+               pOpen = HistoryDealGetDouble(tk, DEAL_PRICE);
+               side  = (type == DEAL_TYPE_BUY) ? "buy" : "sell";
+               sym   = HistoryDealGetString(tk, DEAL_SYMBOL);
+            }
+            vol += HistoryDealGetDouble(tk, DEAL_VOLUME);
+         }
+         else if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT)
+         {
+            tClose = (datetime)HistoryDealGetInteger(tk, DEAL_TIME);
+            pClose = HistoryDealGetDouble(tk, DEAL_PRICE);
+            sl = HistoryDealGetDouble(tk, DEAL_SL);
+            tp = HistoryDealGetDouble(tk, DEAL_TP);
+         }
+      }
+      if(tOpen == 0 || tClose == 0 || sym == "") continue;
+      if(sl == 0 && GlobalVariableCheck(P + "SL_" + (string)pids[j])) sl = GlobalVariableGet(P + "SL_" + (string)pids[j]);
+      // riesgo en dinero al abrir (sirve para cualquier activo: acciones, cripto, futuros...)
+      double rk = -1;
+      if(GlobalVariableCheck(P + "RK_" + (string)pids[j])) rk = GlobalVariableGet(P + "RK_" + (string)pids[j]);
+      else if(sl > 0)
+      {
+         double dd = (side == "buy") ? pOpen - sl : sl - pOpen;
+         if(dd > 0) rk = LossPerLot(sym, dd) * vol;
+      }
+      string it = "{\"ticket\":" + JStr((string)pids[j]) + ",\"symbol\":" + JStr(sym) + ",\"side\":" + JStr(side)
+         + ",\"volume\":" + DoubleToString(vol, 2)
+         + ",\"open_time\":" + JTime(tOpen) + ",\"open_price\":" + DoubleToString(pOpen, 8)
+         + ",\"sl\":" + DoubleToString(sl, 8) + ",\"tp\":" + DoubleToString(tp, 8)
+         + ",\"close_time\":" + JTime(tClose) + ",\"close_price\":" + DoubleToString(pClose, 8)
+         + ",\"commission\":" + DoubleToString(com, 2) + ",\"swap\":" + DoubleToString(swp, 2)
+         + ",\"profit\":" + DoubleToString(prof, 2)
+         + (rk >= 0 ? ",\"risk\":" + DoubleToString(rk, 2) : "") + "}";
+      items += (items == "" ? "" : ",") + it;
+      ArrayResize(sentIds, ns + 1);
+      sentIds[ns] = pids[j];
+      ns++;
+   }
+
+   // 3) enviar (siempre, aunque no haya trades nuevos: asi se actualiza el balance)
+   string body = "{\"token\":" + JStr(SyncToken)
+      + ",\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2)
+      + ",\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
+      + ",\"trades\":[" + items + "]}";
+   char data[], res[];
+   string rh;
+   StringToCharArray(body, data, 0, StringLen(body), CP_UTF8);
+   int code = WebRequest("POST", SyncURL, "Content-Type: application/json\r\n", 8000, data, res, rh);
+   if(code == -1)
+      g_sync = "Sync: permite " + SyncURL + " en Opciones > Asesores Expertos";
+   else if(code == 200)
+   {
+      for(int q = 0; q < ns; q++) GlobalVariableSet(P + "SENT_" + (string)sentIds[q], 1);
+      // reglas vivas que manda VICTOR: "cfg":"K=V;K=V"
+      string resp = CharArrayToString(res, 0, WHOLE_ARRAY, CP_UTF8);
+      int c0 = StringFind(resp, "\"cfg\":\"");
+      if(c0 >= 0)
+      {
+         c0 += 7;
+         int c1 = StringFind(resp, "\"", c0);
+         if(c1 > c0) ApplyCfg(StringSubstr(resp, c0, c1 - c0));
+      }
+      g_sync = "Sync OK " + TimeToString(TimeLocal(), TIME_MINUTES) + " (" + IntegerToString(ns) + " nuevos)";
+   }
+   else
+      g_sync = "Sync error HTTP " + IntegerToString(code);
+   ObjectSetString(0, P + "SY", OBJPROP_TEXT, g_sync);
+}
+
+int OnInit()
+{
+   RiskMoney = InRiskMoney; RiskPercent = InRiskPercent; MaxLosersPerDay = InMaxLosersPerDay;
+   MaxDailyLossPct = InMaxDailyLossPct; MaxDailyLossUSD = InMaxDailyLossUSD; MinEquityPct = InMinEquityPct;
+   MinEquityUSD = InMinEquityUSD; MaxOpenPositions = InMaxOpenPositions; MaxTradesPerDay = InMaxTradesPerDay;
+   CooldownMin = InCooldownMin;
+   AllowedSymbols = InAllowedSymbols; BlockedSymbols = InBlockedSymbols; SLMode = InSLMode;
+   SLPips = InSLPips; PipSize = InPipSize; PipSymbol = InPipSymbol; SLPercent = InSLPercent;
+   ATRMult = InATRMult; ATRTF = InATRTF; RewardRatio = InRewardRatio; LockSLTP = InLockSLTP;
+   FlexibleLock = InFlexibleLock; BlockOnManualClose = InBlockOnManualClose;
+   ApplyCfg(CFG0);   // horario, dias, pausas y noticias con que se descargo (luego llegan al sincronizar)
+   trade.SetDeviationInPoints(DeviationPts);
+   ParseSymbols();
+   ParseBlocked();
+   if(SLMode == SL_PIPS && SLPips * PipSize <= 0) { Alert("VictorGuard: SLPips y PipSize deben ser mayores que 0"); return INIT_PARAMETERS_INCORRECT; }
+   if(SLMode == SL_ATR && ATRMult <= 0)           { Alert("VictorGuard: ATRMult debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }
+   if(SLPercent <= 0)                              { Alert("VictorGuard: SLPercent debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }
+   PrepAtr();
+   if(SyncToken == "") Alert("VictorGuard: pega tu codigo de conexion de VICTOR en Entradas > SyncToken.");
+   hMA = iMA(_Symbol, MaTF, MaPeriod, 0, MaMethod, PRICE_CLOSE);
+   MakeButton(P + "SELL", "VENDER",  10, 30, clrFireBrick);   // mismo orden que MT5: vender a la izquierda
+   MakeButton(P + "BUY",  "COMPRAR", 130, 30, clrSeaGreen);
+   ObjectCreate(0, P + "ST", OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, P + "ST", OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, P + "ST", OBJPROP_YDISTANCE, 70);
+   ObjectSetInteger(0, P + "ST", OBJPROP_COLOR, clrOrange);
+   ObjectSetInteger(0, P + "ST", OBJPROP_FONTSIZE, 10);
+   ObjectCreate(0, P + "LT", OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, P + "LT", OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, P + "LT", OBJPROP_YDISTANCE, 88);
+   ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, clrSilver);
+   ObjectSetInteger(0, P + "LT", OBJPROP_FONTSIZE, 10);
+   ObjectCreate(0, P + "TM", OBJ_LABEL, 0, 0, 0);
+   // cierre de la vela abajo a la derecha
+   ObjectSetInteger(0, P + "TM", OBJPROP_CORNER, CORNER_RIGHT_LOWER);
+   ObjectSetInteger(0, P + "TM", OBJPROP_ANCHOR, ANCHOR_RIGHT_LOWER);
+   ObjectSetInteger(0, P + "TM", OBJPROP_XDISTANCE, 15);
+   ObjectSetInteger(0, P + "TM", OBJPROP_YDISTANCE, 15);
+   ObjectSetInteger(0, P + "TM", OBJPROP_COLOR, clrDodgerBlue);
+   ObjectSetString(0, P + "TM", OBJPROP_FONT, "Arial Bold");
+   ObjectSetInteger(0, P + "TM", OBJPROP_FONTSIZE, 12);
+   ObjectCreate(0, P + "SY", OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, P + "SY", OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, P + "SY", OBJPROP_YDISTANCE, 110);
+   ObjectSetInteger(0, P + "SY", OBJPROP_COLOR, clrSilver);
+   ObjectSetInteger(0, P + "SY", OBJPROP_FONTSIZE, 9);
+   ObjectCreate(0, P + "PL", OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, P + "PL", OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, P + "PL", OBJPROP_YDISTANCE, 133);
+   ObjectSetInteger(0, P + "PL", OBJPROP_COLOR, clrSilver);
+   ObjectSetInteger(0, P + "PL", OBJPROP_FONTSIZE, 13);
+   EventSetTimer(1);
+   UpdatePanel();
+   return INIT_SUCCEEDED;
+}
+
+void OnDeinit(const int reason)
+{
+   EventKillTimer();
+   if(hMA != INVALID_HANDLE) IndicatorRelease(hMA);
+   for(int i = 0; i < ArraySize(g_atrH); i++) if(g_atrH[i] != INVALID_HANDLE) IndicatorRelease(g_atrH[i]);
+   ArrayResize(g_atrSym, 0); ArrayResize(g_atrH, 0);
+   ObjectsDeleteAll(0, P);
+}
+
+void OnTimer()  { Guard(); GuardOrders(); UpdatePanel(); SyncTick(); }
+void OnTick()   { Guard(); GuardOrders(); AutoEntryCheck(); }
+
+void OnChartEvent(const int id, const long &lp, const double &dp, const string &sp)
+{
+   if(id != CHARTEVENT_OBJECT_CLICK) return;
+   if(sp == P + "BUY")  { ObjectSetInteger(0, sp, OBJPROP_STATE, false); OpenTrade(true); }
+   if(sp == P + "SELL") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); OpenTrade(false); }
+   if(StringFind(sp, P + "XB") == 0)
+   {
+      ObjectSetInteger(0, sp, OBJPROP_STATE, false);
+      ulong tk = (ulong)StringToInteger(StringSubstr(sp, StringLen(P) + 2));
+      // cierre con la X del grafico: NO bloquea el dia (lo hace el EA, no cuenta como cierre manual)
+      if(PositionSelectByTicket(tk)) SafeClose(tk);
+   }
+}

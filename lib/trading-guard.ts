@@ -33,7 +33,14 @@ export type ParametrosGuardian = {
   syncUrl?: string; // direccion de VICTOR para sincronizar (vacio = sin sincronizacion)
   syncToken?: string; // token de la cuenta
   cfgInicial?: string; // reglas vivas (horario, pausas, noticias…) en formato K=V;K=V — ver lib/trading-bloqueos.ts
+  // true = versión para compilar UNA vez y repartir como .ex5: sin token ni reglas
+  // dentro; la persona pega su código en Entradas > SyncToken y todo llega por sync.
+  generico?: boolean;
 };
+
+// Dirección fija de sincronización para el .ex5 precompilado.
+export const SYNC_URL_PRODUCCION = "https://www.victorcfo.com/api/trading/sync";
+export const VERSION_GUARDIAN = "3.20";
 
 const n = (v: number, d = 2) => {
   const x = Number.isFinite(v) ? v : 0;
@@ -72,26 +79,26 @@ export function generarGuardianMQ5(p: ParametrosGuardian): string {
 //|  Probar SIEMPRE en demo primero. No es asesoria financiera.       |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "3.10"
+#property version   "${VERSION_GUARDIAN}"
 #include <Trade\Trade.mqh>
 
 CTrade trade;
 
 enum ENUM_SL_MODE { SL_PIPS = 0, SL_PERCENT = 1, SL_ATR = 2 };
 
-input string AllowedSymbols     = "${syms(p.simbolos)}"; // simbolos permitidos separados por coma, o * = todos (forex, indices, acciones, futuros, cripto)
-input string BlockedSymbols     = "${syms(p.bloqueados ?? "").replace("*", "")}"; // simbolos PROHIBIDOS separados por coma: si los abres, se cierran
+input string InAllowedSymbols     = "${syms(p.simbolos)}"; // simbolos permitidos separados por coma, o * = todos (forex, indices, acciones, futuros, cripto)
+input string InBlockedSymbols     = "${syms(p.bloqueados ?? "").replace("*", "")}"; // simbolos PROHIBIDOS separados por coma: si los abres, se cierran
 input double InRiskMoney        = ${n(p.riesgoUSD ?? 0)};      // $ fijos a arriesgar por trade, en cualquier activo (0 = usar RiskPercent)
 input double InRiskPercent      = ${n(p.riesgoPct)};      // % del balance a arriesgar por trade (si RiskMoney = 0)
-input ENUM_SL_MODE SLMode       = ${MODO_MQ5[p.modoStop] ?? "SL_ATR"}; // como se calcula el stop: pips, % del precio o ATR
-input double SLPips             = ${n(p.distanciaPips, 2)};      // modo pips: distancia del SL en pips
-input double PipSize            = ${n(p.tamanoPip, 5)};      // modo pips: tamano de 1 pip de PipSymbol (oro 0.1, EURUSD 0.0001, NAS100 1)
-input string PipSymbol          = "${(syms(p.simboloPips ?? "") === "*" ? "XAUUSD" : syms(p.simboloPips ?? "").split(",")[0])}"; // modo pips: activo al que aplican esos pips. Forex usa sus pips; los demas, el ATR
-input double SLPercent          = ${n(p.stopPct, 3)};      // modo %: stop a este % del precio (tambien es el respaldo si falta el ATR)
-input double ATRMult            = ${n(p.atrMult, 2)};      // modo ATR: stop = ATR x este numero
-input ENUM_TIMEFRAMES ATRTF     = ${TF_MQ5[p.atrTF] ?? "PERIOD_H1"}; // modo ATR: temporalidad del ATR
+input ENUM_SL_MODE InSLMode       = ${MODO_MQ5[p.modoStop] ?? "SL_ATR"}; // como se calcula el stop: pips, % del precio o ATR
+input double InSLPips             = ${n(p.distanciaPips, 2)};      // modo pips: distancia del SL en pips
+input double InPipSize            = ${n(p.tamanoPip, 5)};      // modo pips: tamano de 1 pip de PipSymbol (oro 0.1, EURUSD 0.0001, NAS100 1)
+input string InPipSymbol          = "${(syms(p.simboloPips ?? "") === "*" ? "XAUUSD" : syms(p.simboloPips ?? "").split(",")[0])}"; // modo pips: activo al que aplican esos pips. Forex usa sus pips; los demas, el ATR
+input double InSLPercent          = ${n(p.stopPct, 3)};      // modo %: stop a este % del precio (tambien es el respaldo si falta el ATR)
+input double InATRMult            = ${n(p.atrMult, 2)};      // modo ATR: stop = ATR x este numero
+input ENUM_TIMEFRAMES InATRTF     = ${TF_MQ5[p.atrTF] ?? "PERIOD_H1"}; // modo ATR: temporalidad del ATR
 input int    ATRPeriod          = 14;       // modo ATR: periodo del ATR
-input double RewardRatio        = ${n(p.relacionTP)};      // TP inicial = SL x este numero (0 = sin TP al abrir, lo pones tu)
+input double InRewardRatio        = ${n(p.relacionTP)};      // TP inicial = SL x este numero (0 = sin TP al abrir, lo pones tu)
 input int InMaxLosersPerDay  = ${Math.max(1, Math.round(p.maxPerdedoresDia))};        // perdedores maximos por dia
 input double InMaxDailyLossPct  = ${n(p.perdidaMaxDiaPct)};      // perdida diaria maxima en % del balance con que empezo el dia
 input double InMaxDailyLossUSD  = ${n(p.perdidaMaxDiaUSD)};      // o en dolares fijos (0 = usar el %)
@@ -101,12 +108,28 @@ input int InMaxOpenPositions = ${Math.max(1, Math.round(p.maxAbiertos))};       
 input int InMaxTradesPerDay  = ${Math.max(0, Math.round(p.maxTradesDia))};        // trades maximos por dia (0 = sin limite)
 input int InCooldownMin      = ${Math.max(0, Math.round(p.esperaTrasPerdidaMin))};       // minutos de espera tras una perdida (0 = sin espera)
 input int    DeviationPts       = 30;       // deslizamiento maximo
-input bool   LockSLTP           = ${b(p.modoBloqueo !== "ninguno")};     // true = el guardian vigila el SL/TP
-input bool   FlexibleLock       = ${b(p.modoBloqueo === "flexible")};     // true = puedes mover el TP libremente y el SL solo a tu favor (nunca alejarlo ni quitarlo)
-input bool   BlockOnManualClose = ${b(p.bloquearCierreManual)};     // true = cerrar un trade a mano bloquea el resto del dia
-input string SyncURL            = "${q(p.syncUrl ?? "")}"; // direccion de VICTOR (permitela en Herramientas > Opciones > Asesores Expertos > WebRequest)
-input string SyncToken          = "${q(p.syncToken ?? "")}"; // token de tu cuenta de trading. No lo compartas.
+input bool   InLockSLTP           = ${b(p.modoBloqueo !== "ninguno")};     // true = el guardian vigila el SL/TP
+input bool   InFlexibleLock       = ${b(p.modoBloqueo === "flexible")};     // true = puedes mover el TP libremente y el SL solo a tu favor (nunca alejarlo ni quitarlo)
+input bool   InBlockOnManualClose = ${b(p.bloquearCierreManual)};     // true = cerrar un trade a mano bloquea el resto del dia
+input string SyncURL            = "${q(p.generico ? SYNC_URL_PRODUCCION : p.syncUrl ?? "")}"; // direccion de VICTOR (permitela en Herramientas > Opciones > Asesores Expertos > WebRequest)
+input string SyncToken          = "${q(p.generico ? "" : p.syncToken ?? "")}"; // tu codigo de conexion de VICTOR (pegalo aqui). No lo compartas.
 input int    SyncDays           = 30;       // dias de historial a revisar al sincronizar
+
+// Ajustes del guardian: empiezan con las Entradas y VICTOR los actualiza al sincronizar.
+string AllowedSymbols = "";
+string BlockedSymbols = "";
+ENUM_SL_MODE SLMode = SL_ATR;
+double SLPips = 0;
+double PipSize = 0;
+string PipSymbol = "";
+double SLPercent = 0;
+double ATRMult = 0;
+ENUM_TIMEFRAMES ATRTF = PERIOD_M15;
+double RewardRatio = 0;
+bool   LockSLTP = true;
+bool   FlexibleLock = true;
+bool   BlockOnManualClose = true;
+bool   g_cfgOk = false;      // false = aun no hay reglas de VICTOR (version precompilada): no deja abrir
 
 // Reglas vivas: empiezan con las Entradas de arriba y VICTOR las actualiza en cada
 // sincronizacion (lo que cambies en la web o en el chat llega solo, sin reinstalar).
@@ -123,7 +146,7 @@ int CooldownMin = 0;
 int    NewsMin = 0;          // minutos antes/despues de noticias de alto impacto (0 = apagado)
 int    TzOffsetMin = 0;      // tu zona horaria respecto a UTC (solo para mostrar horas)
 string g_horarioTxt = "";
-string CFG0 = "${q2(p.cfgInicial ?? "")}";
+string CFG0 = "${q2(p.generico ? "" : p.cfgInicial ?? "")}";
 
 // --- Entrada automatica: retroceso a la media en tendencia (APAGADA por defecto) ---
 // Vende cuando la media baja y el precio retrocede hacia arriba y la toca; compra al reves.
@@ -216,6 +239,20 @@ int AtrHandle(string s)
    ArrayResize(g_atrSym, n + 1); ArrayResize(g_atrH, n + 1);
    g_atrSym[n] = s; g_atrH[n] = h;
    return h;
+}
+
+void ResetAtr()
+{
+   for(int i = 0; i < ArraySize(g_atrH); i++) if(g_atrH[i] != INVALID_HANDLE) IndicatorRelease(g_atrH[i]);
+   ArrayResize(g_atrSym, 0); ArrayResize(g_atrH, 0);
+}
+
+void PrepAtr()
+{
+   if(SLMode == SL_PERCENT) return;
+   AtrHandle(_Symbol);
+   for(int a = 0; a < ArraySize(g_syms); a++) AtrHandle(g_syms[a]);
+   for(int c = 0; c < PositionsTotal(); c++) if(PositionGetTicket(c) > 0) AtrHandle(PositionGetString(POSITION_SYMBOL));
 }
 
 double AtrDist(string s)
@@ -382,9 +419,20 @@ void ParseRanges(string v, bool weekly)
    }
 }
 
+ENUM_TIMEFRAMES TfDeMin(int m)
+{
+   if(m <= 5) return PERIOD_M5;
+   if(m <= 15) return PERIOD_M15;
+   if(m <= 30) return PERIOD_M30;
+   if(m <= 60) return PERIOD_H1;
+   if(m <= 240) return PERIOD_H4;
+   return PERIOD_D1;
+}
+
 void ApplyCfg(string cfg)
 {
    if(cfg == "") return;
+   bool resym = false, reatr = false;
    string parts[];
    int k = StringSplit(cfg, ';', parts);
    for(int i = 0; i < k; i++)
@@ -409,7 +457,22 @@ void ApplyCfg(string cfg)
       else if(key == "NW" && x >= 0) NewsMin = (int)x;
       else if(key == "TZO") TzOffsetMin = (int)StringToInteger(val);
       else if(key == "HL") g_horarioTxt = val;
+      else if(key == "AS") { if(val != AllowedSymbols) { AllowedSymbols = val; resym = true; } }
+      else if(key == "BS") { if(val != BlockedSymbols) { BlockedSymbols = val; resym = true; } }
+      else if(key == "SM" && x >= 0 && x <= 2) SLMode = (ENUM_SL_MODE)(int)x;
+      else if(key == "SP" && x > 0) SLPips = x;
+      else if(key == "PS" && x > 0) PipSize = x;
+      else if(key == "PY" && val != "") PipSymbol = val;
+      else if(key == "SC" && x > 0) SLPercent = x;
+      else if(key == "AM" && x > 0) ATRMult = x;
+      else if(key == "AT" && x > 0) { ENUM_TIMEFRAMES tf = TfDeMin((int)x); if(tf != ATRTF) { ATRTF = tf; reatr = true; } }
+      else if(key == "RR" && x >= 0) RewardRatio = x;
+      else if(key == "LK" && x >= 0 && x <= 2) { LockSLTP = (x > 0); FlexibleLock = (x == 2); }
+      else if(key == "BM") BlockOnManualClose = (x > 0);
    }
+   g_cfgOk = true;
+   if(reatr) ResetAtr();
+   if(resym || reatr) { ParseSymbols(); ParseBlocked(); PrepAtr(); }
 }
 
 // hora local de la persona (HH:MM) para un minuto de la semana UTC
@@ -549,6 +612,14 @@ bool IsBlocked(string &why)
 // skipTk/riskOverride: para revisar un trade que YA se abrio (ej. desde el Trading Panel de MT5)
 bool CanOpenNew(string s, string &why, ulong skipTk = 0, double riskOverride = -1)
 {
+   if(!g_cfgOk)
+   {
+      why = (SyncToken == "") ? "FALTA TU CODIGO DE VICTOR" : "ESPERANDO TUS REGLAS DE VICTOR";
+      g_detalle = (SyncToken == "")
+         ? "pega tu codigo de conexion de VICTOR en Entradas > SyncToken (lo copias en victorcfo.com > Trading)."
+         : "todavia no llegan tus reglas. Permite " + SyncURL + " en Herramientas > Opciones > Asesores Expertos > WebRequest.";
+      return false;
+   }
    if(IsBlocked(why)) return false;
    if(TimeBlocked(why)) return false;
    if(NewsBlocked(s, why)) return false;
@@ -1134,6 +1205,10 @@ int OnInit()
    MaxDailyLossPct = InMaxDailyLossPct; MaxDailyLossUSD = InMaxDailyLossUSD; MinEquityPct = InMinEquityPct;
    MinEquityUSD = InMinEquityUSD; MaxOpenPositions = InMaxOpenPositions; MaxTradesPerDay = InMaxTradesPerDay;
    CooldownMin = InCooldownMin;
+   AllowedSymbols = InAllowedSymbols; BlockedSymbols = InBlockedSymbols; SLMode = InSLMode;
+   SLPips = InSLPips; PipSize = InPipSize; PipSymbol = InPipSymbol; SLPercent = InSLPercent;
+   ATRMult = InATRMult; ATRTF = InATRTF; RewardRatio = InRewardRatio; LockSLTP = InLockSLTP;
+   FlexibleLock = InFlexibleLock; BlockOnManualClose = InBlockOnManualClose;
    ApplyCfg(CFG0);   // horario, dias, pausas y noticias con que se descargo (luego llegan al sincronizar)
    trade.SetDeviationInPoints(DeviationPts);
    ParseSymbols();
@@ -1141,12 +1216,8 @@ int OnInit()
    if(SLMode == SL_PIPS && SLPips * PipSize <= 0) { Alert("VictorGuard: SLPips y PipSize deben ser mayores que 0"); return INIT_PARAMETERS_INCORRECT; }
    if(SLMode == SL_ATR && ATRMult <= 0)           { Alert("VictorGuard: ATRMult debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }
    if(SLPercent <= 0)                              { Alert("VictorGuard: SLPercent debe ser mayor que 0"); return INIT_PARAMETERS_INCORRECT; }
-   if(SLMode != SL_PERCENT)
-   {
-      AtrHandle(_Symbol);
-      for(int a = 0; a < ArraySize(g_syms); a++) AtrHandle(g_syms[a]);
-      for(int c = 0; c < PositionsTotal(); c++) if(PositionGetTicket(c) > 0) AtrHandle(PositionGetString(POSITION_SYMBOL));
-   }
+   PrepAtr();
+   if(SyncToken == "") Alert("VictorGuard: pega tu codigo de conexion de VICTOR en Entradas > SyncToken.");
    hMA = iMA(_Symbol, MaTF, MaPeriod, 0, MaMethod, PRICE_CLOSE);
    MakeButton(P + "SELL", "VENDER",  10, 30, clrFireBrick);   // mismo orden que MT5: vender a la izquierda
    MakeButton(P + "BUY",  "COMPRAR", 130, 30, clrSeaGreen);

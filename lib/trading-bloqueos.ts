@@ -299,6 +299,15 @@ export function riesgoFijoDe(r: FilaReglas): number {
   return dl > 0 && mp > 0 ? Math.floor((dl / mp) * 100) / 100 : 0;
 }
 
+// Símbolos para el guardián: "*" o vacío = todos; solo caracteres válidos en MT5.
+function simbolosCfg(v: unknown, porDefecto: string): string {
+  const t = String(v ?? porDefecto).toUpperCase().replace(/[^A-Z0-9._,#*-]/g, "").slice(0, 300);
+  return !t || t.includes("*") ? "*" : t.split(",").filter(Boolean).join(",");
+}
+const MODO_STOP_CFG: Record<string, number> = { pips: 0, porcentaje: 1, atr: 2 };
+const TF_CFG: Record<string, number> = { M5: 5, M15: 15, M30: 30, H1: 60, H4: 240, D1: 1440 };
+const LOCK_CFG: Record<string, number> = { ninguno: 0, total: 1, flexible: 2 };
+
 // "RM=7;RP=1;ML=3;...;BW=0-480,1020-1920;PZ=...;NW=15;TZO=-240;HL=..."
 export function cfgGuardian(r: FilaReglas, ahora = Date.now()): string {
   const b = normalizarBloqueos(r);
@@ -322,6 +331,20 @@ export function cfgGuardian(r: FilaReglas, ahora = Date.now()): string {
     ["NW", b.noticiasMin],
     ["TZO", offsetMin(b.zona, ahora)],
     ["HL", ascii(describirBloqueos({ ...b, noticiasMin: 0, pausas: [] }).join(" ") || "Sin limite de horario")],
+    // Ajustes del guardián (desde la 3.20 llegan por sincronización: el .ex5
+    // precompilado es igual para todos y toma todo de aquí).
+    ["AS", simbolosCfg(r.guard_symbol, "XAUUSD")],
+    ["BS", simbolosCfg(r.guard_blocked_symbols, "").replace("*", "")],
+    ["SM", MODO_STOP_CFG[String(r.guard_sl_mode ?? "atr")] ?? 2],
+    ["SP", n(r.guard_sl_pips, 60)],
+    ["PS", n(r.guard_pip_size, 0.1)],
+    ["PY", simbolosCfg(r.guard_pip_symbol, "XAUUSD").split(",")[0].replace("*", "XAUUSD")],
+    ["SC", n(r.guard_sl_pct, 0.5)],
+    ["AM", n(r.guard_atr_mult, 1.5)],
+    ["AT", TF_CFG[String(r.guard_atr_tf ?? "M15")] ?? 15],
+    ["RR", n(r.guard_reward_ratio, 2)],
+    ["LK", LOCK_CFG[String(r.guard_lock_mode ?? "flexible")] ?? 2],
+    ["BM", r.guard_block_manual_close === false ? 0 : 1],
   ];
   return kv.map(([k, v]) => `${k}=${v}`).join(";");
 }
