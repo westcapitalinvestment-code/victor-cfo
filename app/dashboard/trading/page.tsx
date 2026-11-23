@@ -873,10 +873,17 @@ function TradingContenido() {
               ))}
             </select>
             <button className="rounded-lg border border-border px-3 text-sm whitespace-nowrap" onClick={() => setMostrarNueva(true)}>+ Cuenta</button>
-            <label className="vc-btn-primary cursor-pointer whitespace-nowrap text-center">
-              Subir reporte
-              <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && subirReporte(e.target.files[0])} />
-            </label>
+            {!cuenta?.last_sync_at && (
+              <button
+                className="vc-btn-primary whitespace-nowrap"
+                onClick={() => {
+                  setTab("riesgo");
+                  setTimeout(() => document.getElementById("vg-instalar")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                }}
+              >
+                Conectar guardián
+              </button>
+            )}
           </div>
 
           {syncToken && (
@@ -916,6 +923,13 @@ function TradingContenido() {
           </div>
 
           {tab !== "riesgo" && trades.length > 0 && barraMeses}
+
+          {tab !== "riesgo" && (
+            <label className="mb-3 inline-block cursor-pointer text-[13px] text-muted underline">
+              Importar historial viejo (Excel de MT5)
+              <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && subirReporte(e.target.files[0])} />
+            </label>
+          )}
 
           {/* ---------------- PANEL ---------------- */}
           {!(tieneReglas && cuenta?.last_sync_at) && (
