@@ -17,7 +17,7 @@
 //|  Probar SIEMPRE en demo primero. No es asesoria financiera.       |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "3.21"
+#property version   "3.22"
 #include <Trade\Trade.mqh>
 
 CTrade trade;
@@ -370,9 +370,22 @@ ENUM_TIMEFRAMES TfDeMin(int m)
    return PERIOD_D1;
 }
 
+string g_cfgLast = "";       // ultimas reglas recibidas (se vuelven a aplicar al reiniciar)
+string CfgFile() { return "VictorGuard_c_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".txt"; }
+
 void ApplyCfg(string cfg)
 {
    if(cfg == "") return;
+   if(cfg != g_cfgLast && cfg != CFG0)
+   {
+      g_cfgLast = cfg;
+      // guardar en disco: si MT5 se reinicia o cambias el grafico, siguen TUS reglas
+      if(AccountInfoInteger(ACCOUNT_LOGIN) > 0)
+      {
+         int h = FileOpen(CfgFile(), FILE_WRITE | FILE_TXT | FILE_COMMON | FILE_ANSI);
+         if(h != INVALID_HANDLE) { FileWriteString(h, cfg); FileClose(h); }
+      }
+   }
    bool resym = false, reatr = false;
    string parts[];
    int k = StringSplit(cfg, ';', parts);
@@ -642,6 +655,9 @@ bool SafeClose(ulong tk)
 //------------------------------------------------------------------
 void Guard()
 {
+   // sin TUS reglas cargadas no se toca ningun trade (antes, al cambiar de grafico o
+   // temporalidad, usaba los valores por defecto y podia cerrar trades por error)
+   if(!g_cfgOk) return;
    string why;
    bool blocked = IsBlocked(why);
    int kept = 0;
@@ -796,6 +812,7 @@ void OpenTrade(bool buy)
 // SL/TP y respeta la regla, se respeta. Si el guardian esta bloqueado, se borran.
 void GuardOrders()
 {
+   if(!g_cfgOk) return;
    string why;
    bool blocked = IsBlocked(why);
 
@@ -1237,6 +1254,7 @@ void SyncTick()
 
    // 3) enviar (siempre, aunque no haya trades nuevos: asi se actualiza el balance)
    string body = "{\"token\":" + JStr(g_token)
+      + ",\"login\":" + JStr(IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)))
       + ",\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2)
       + ",\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
       + ",\"trades\":[" + items + "]}";
@@ -1259,6 +1277,13 @@ void SyncTick()
          if(c1 > c0) ApplyCfg(StringSubstr(resp, c0, c1 - c0));
       }
       g_sync = "Sync OK " + TimeToString(TimeLocal(), TIME_MINUTES) + " (" + IntegerToString(ns) + " nuevos)";
+   }
+   else if(code == 409)
+   {
+      // el codigo es de OTRA cuenta de MT5 (ej. el de la real puesto en la demo)
+      g_sync = "Este codigo es de otra cuenta de MT5";
+      if(SyncToken == "") { FileDelete(TokenFile(), FILE_COMMON); g_token = ""; g_lastPair = 0; }
+      else Alert("VictorGuard: el SyncToken de Entradas es de otra cuenta. Borralo y conecta con el codigo de 6 digitos.");
    }
    else if(code == 401 && SyncToken == "")
    {
@@ -1284,12 +1309,17 @@ int OnInit()
    ATRMult = InATRMult; ATRTF = InATRTF; RewardRatio = InRewardRatio; LockSLTP = InLockSLTP;
    FlexibleLock = InFlexibleLock; BlockOnManualClose = InBlockOnManualClose;
    long lg = AccountInfoInteger(ACCOUNT_LOGIN);
-   if(lg != g_login) { g_cfgOk = false; g_login = lg; }   // cambio de cuenta: espera las reglas de esta cuenta
+   if(lg != g_login) { g_cfgOk = false; g_cfgLast = ""; g_login = lg; }   // cambio de cuenta: reglas de esta cuenta
    g_token = (SyncToken != "") ? SyncToken : (lg > 0 ? FileTxt(TokenFile()) : "");
    g_codigo = "";
    g_lastTry = 0;
    g_lastPair = 0;
    ApplyCfg(CFG0);   // horario, dias, pausas y noticias con que se descargo (luego llegan al sincronizar)
+   // Las Entradas de arriba son solo valores de arranque: si ya habian llegado TUS reglas
+   // (en esta sesion o guardadas en disco para esta cuenta) se vuelven a aplicar al
+   // instante, asi cambiar de grafico, de temporalidad o reiniciar MT5 no las pierde.
+   string cache = (g_cfgLast != "") ? g_cfgLast : (lg > 0 ? FileTxt(CfgFile()) : "");
+   if(cache != "") ApplyCfg(cache);
    trade.SetDeviationInPoints(DeviationPts);
    ParseSymbols();
    ParseBlocked();
@@ -1301,16 +1331,19 @@ int OnInit()
    MakeButton(P + "SELL", "VENDER",  10, 30, clrFireBrick);   // mismo orden que MT5: vender a la izquierda
    MakeButton(P + "BUY",  "COMPRAR", 130, 30, clrSeaGreen);
    ObjectCreate(0, P + "ST", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, P + "ST", OBJPROP_TEXT, " ");
    ObjectSetInteger(0, P + "ST", OBJPROP_XDISTANCE, 10);
    ObjectSetInteger(0, P + "ST", OBJPROP_YDISTANCE, 70);
    ObjectSetInteger(0, P + "ST", OBJPROP_COLOR, clrOrange);
    ObjectSetInteger(0, P + "ST", OBJPROP_FONTSIZE, 10);
    ObjectCreate(0, P + "LT", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, P + "LT", OBJPROP_TEXT, " ");
    ObjectSetInteger(0, P + "LT", OBJPROP_XDISTANCE, 10);
    ObjectSetInteger(0, P + "LT", OBJPROP_YDISTANCE, 88);
    ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, clrSilver);
    ObjectSetInteger(0, P + "LT", OBJPROP_FONTSIZE, 10);
    ObjectCreate(0, P + "TM", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, P + "TM", OBJPROP_TEXT, " ");
    // cierre de la vela abajo a la derecha
    ObjectSetInteger(0, P + "TM", OBJPROP_CORNER, CORNER_RIGHT_LOWER);
    ObjectSetInteger(0, P + "TM", OBJPROP_ANCHOR, ANCHOR_RIGHT_LOWER);
@@ -1320,11 +1353,13 @@ int OnInit()
    ObjectSetString(0, P + "TM", OBJPROP_FONT, "Arial Bold");
    ObjectSetInteger(0, P + "TM", OBJPROP_FONTSIZE, 12);
    ObjectCreate(0, P + "SY", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, P + "SY", OBJPROP_TEXT, " ");
    ObjectSetInteger(0, P + "SY", OBJPROP_XDISTANCE, 10);
    ObjectSetInteger(0, P + "SY", OBJPROP_YDISTANCE, 110);
    ObjectSetInteger(0, P + "SY", OBJPROP_COLOR, clrSilver);
    ObjectSetInteger(0, P + "SY", OBJPROP_FONTSIZE, 9);
    ObjectCreate(0, P + "PL", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, P + "PL", OBJPROP_TEXT, " ");
    ObjectSetInteger(0, P + "PL", OBJPROP_XDISTANCE, 10);
    ObjectSetInteger(0, P + "PL", OBJPROP_YDISTANCE, 133);
    ObjectSetInteger(0, P + "PL", OBJPROP_COLOR, clrSilver);

@@ -41,6 +41,16 @@ export async function POST(req: NextRequest) {
   const { data: t } = await admin.from("trading_sync_tokens").select("account_id, owner_id").eq("token", token).maybeSingle();
   if (!t) return NextResponse.json({ error: "Token inválido." }, { status: 401 });
 
+  // 3.21+: el guardián manda su número de cuenta de MT5. Si la cuenta de VICTOR ya
+  // tiene otro número, se rechaza (evita mezclar la demo con la real).
+  const loginMT5 = typeof body?.login === "string" ? body.login.replace(/\D/g, "") : "";
+  if (loginMT5) {
+    const { data: ac0 } = await admin.from("trading_accounts").select("numero_cuenta").eq("id", t.account_id).maybeSingle();
+    const num = String(ac0?.numero_cuenta ?? "").replace(/\D/g, "");
+    if (num && num !== loginMT5) return NextResponse.json({ error: "Este código es de otra cuenta de MT5." }, { status: 409 });
+    if (!num) await admin.from("trading_accounts").update({ numero_cuenta: loginMT5 }).eq("id", t.account_id);
+  }
+
   const lista = Array.isArray(body?.trades) ? body.trades.slice(0, 200) : [];
   const filas: Record<string, unknown>[] = [];
   for (const x of lista) {
