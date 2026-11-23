@@ -69,6 +69,11 @@ export async function POST(req: NextRequest) {
   if (typeof body?.balance === "number" && Number.isFinite(body.balance)) cuenta.balance_actual = body.balance;
   if (typeof body?.equity === "number" && Number.isFinite(body.equity)) cuenta.equity_actual = body.equity;
   await admin.from("trading_accounts").update(cuenta).eq("id", t.account_id);
+  // Si la persona no puso balance inicial al crear la cuenta, se toma el de MT5
+  // en la primera sincronización (así no tiene que escribirlo a mano).
+  if (typeof body?.balance === "number" && Number.isFinite(body.balance) && body.balance > 0) {
+    await admin.from("trading_accounts").update({ balance_inicial: body.balance }).eq("id", t.account_id).or("balance_inicial.is.null,balance_inicial.eq.0");
+  }
   await admin.from("trading_sync_tokens").update({ last_sync_at: ahora }).eq("account_id", t.account_id);
 
   // Reglas en vivo (22 nov 2026): el guardián recibe las reglas vigentes en cada

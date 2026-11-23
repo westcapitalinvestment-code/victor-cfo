@@ -386,12 +386,12 @@ function TradingContenido() {
 
   async function crearCuenta() {
     setError(null);
-    if (!nNombre.trim()) return setError("Ponle un nombre a la cuenta.");
+    const nombre = nNombre.trim() || (nTipo === "demo" ? "Mi cuenta demo" : "Mi cuenta");
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
     const { data, error: e } = await supabase
       .from("trading_accounts")
-      .insert({ owner_id: u.user.id, nombre: nNombre.trim(), tipo: nTipo, balance_inicial: nBalance ?? 0 })
+      .insert({ owner_id: u.user.id, nombre, tipo: nTipo, balance_inicial: nBalance ?? 0 })
       .select("id")
       .single();
     if (e || !data) return setError("No se pudo crear la cuenta.");
@@ -505,8 +505,11 @@ function TradingContenido() {
     setMsg(
       `Plan guardado. Empieza tu prueba de ${Math.max(14, diasPrueba)} días: opera con estas reglas sin cambiarlas y al final VICTOR revisa tus resultados contigo. ` +
         (j?.manana?.length ? `Lo que afloja tus reglas de antes (${j.manana.join(", ")}) aplica desde mañana. ` : "") +
-        "Si tu guardián en MT5 es de antes del 22 nov, descárgalo una vez más; desde ahí tus reglas le llegan solas."
+        (cuenta?.last_sync_at
+          ? "Tu guardián recibe las reglas solo en unos segundos."
+          : "Último paso: descarga el guardián y conéctalo en MT5 (abajo).")
     );
+    if (!cuenta?.last_sync_at) setTimeout(() => document.getElementById("vg-instalar")?.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
     return null;
   }
 
@@ -832,16 +835,23 @@ function TradingContenido() {
 
       {cuentas.length === 0 || mostrarNueva ? (
         <div className="vc-card flex flex-col gap-3">
-          <p className="text-base font-medium">{cuentas.length === 0 ? "Crea tu primera cuenta" : "Nueva cuenta"}</p>
-          <input className="vc-input" placeholder="Nombre (ej. Axi real)" value={nNombre} onChange={(e) => setNNombre(e.target.value)} maxLength={80} />
+          <p className="text-base font-medium">{cuentas.length === 0 ? "Paso 1 · ¿Dónde operas?" : "Nueva cuenta"}</p>
+          {cuentas.length === 0 && <p className="text-sm text-muted">Solo para separar tus trades por cuenta. El balance llega solo desde MT5 cuando conectes el guardián.</p>}
           <div className="flex gap-2">
-            <select className="vc-input" value={nTipo} onChange={(e) => setNTipo(e.target.value as "demo" | "real")}>
-              <option value="demo">Demo</option>
-              <option value="real">Real</option>
-            </select>
-            <NumInput value={nBalance} onChange={setNBalance} placeholder="Balance inicial $" />
+            {(["demo", "real"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setNTipo(t)}
+                className={`flex-1 rounded-lg border px-3 py-2 text-base font-medium ${nTipo === t ? "border-[#1B3A5C] bg-[#1B3A5C] text-white" : "border-border"}`}
+              >
+                {t === "demo" ? "Cuenta demo" : "Cuenta real"}
+              </button>
+            ))}
           </div>
-          <button className="vc-btn-primary" onClick={crearCuenta}>Crear cuenta</button>
+          <input className="vc-input" placeholder="Nombre (opcional, ej. Axi real)" value={nNombre} onChange={(e) => setNNombre(e.target.value)} maxLength={80} />
+          <NumInput value={nBalance} onChange={setNBalance} placeholder="Balance $ (opcional)" />
+          <button className="vc-btn-primary" onClick={crearCuenta}>{cuentas.length === 0 ? "Continuar" : "Crear cuenta"}</button>
           {cuentas.length > 0 && (
             <button className="text-sm text-muted" onClick={() => setMostrarNueva(false)}>Cancelar</button>
           )}
@@ -908,23 +918,54 @@ function TradingContenido() {
           {tab !== "riesgo" && trades.length > 0 && barraMeses}
 
           {/* ---------------- PANEL ---------------- */}
-          {tab !== "riesgo" && !tieneReglas && (
-            <button
-              className="vc-card mb-4 w-full border-2 border-teal/40 text-left"
-              onClick={() => {
-                setTab("riesgo");
-                setPlanAbierto(true);
-              }}
-            >
-              <p className="text-sm uppercase tracking-wide text-teal">¿No tienes reglas?</p>
-              <p className="mt-1 font-semibold">VICTOR te arma tu plan en 1 minuto →</p>
-            </button>
+          {!(tieneReglas && cuenta?.last_sync_at) && (
+            <div className="vc-card mb-4 border-2 border-teal/40">
+              <p className="text-sm uppercase tracking-wide text-teal">Empieza en 3 pasos</p>
+              <ol className="mt-2 flex flex-col gap-2">
+                {([
+                  { ok: true, titulo: "Cuenta creada", detalle: cuenta?.nombre ?? "", accion: null },
+                  {
+                    ok: tieneReglas,
+                    titulo: "Arma tus reglas con VICTOR",
+                    detalle: tieneReglas ? "Listas" : "7 preguntas, 1 minuto",
+                    accion: () => { setTab("riesgo"); setPlanAbierto(true); },
+                  },
+                  {
+                    ok: !!cuenta?.last_sync_at,
+                    titulo: "Conecta el guardián en MT5",
+                    detalle: cuenta?.last_sync_at ? "Conectado" : "Descárgalo, ponlo en un gráfico y pega tu código",
+                    accion: () => {
+                      setTab("riesgo");
+                      setTimeout(() => document.getElementById("vg-instalar")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                    },
+                  },
+                ] as { ok: boolean; titulo: string; detalle: string; accion: (() => void) | null }[]).map((paso, i) => (
+                  <li key={i}>
+                    <button
+                      type="button"
+                      disabled={paso.ok || !paso.accion}
+                      onClick={() => paso.accion?.()}
+                      className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left ${paso.ok ? "border-border opacity-70" : "border-teal bg-teal/5"}`}
+                    >
+                      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${paso.ok ? "bg-teal text-white" : "border-2 border-teal text-teal"}`}>
+                        {paso.ok ? "✓" : i + 1}
+                      </span>
+                      <span className="flex-1">
+                        <span className="block font-medium">{paso.titulo}</span>
+                        {paso.detalle && <span className="block text-[13px] text-muted">{paso.detalle}</span>}
+                      </span>
+                      {!paso.ok && paso.accion && <span className="text-teal">→</span>}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </div>
           )}
           {tab === "panel" && (
             <>
               {prueba && <PruebaPlan inicio={prueba.inicio} dias={prueba.dias} trades={tradesEnPrueba} hoy={fechaLocal(bloqueos.zona, Date.now())} />}
               {trades.length === 0 ? (
-                <div className="vc-card text-center text-sm text-muted">Sube el reporte Excel de MT5 para ver tu panel.</div>
+                <div className="vc-card text-center text-sm text-muted">Todavía no hay trades. Con el guardián conectado llegan solos; también puedes subir el reporte Excel de MT5.</div>
               ) : (
                 <>
                   <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -1023,7 +1064,7 @@ function TradingContenido() {
               </label>
               {gruposDia.length === 0 ? (
                 <div className="vc-card text-center text-sm text-muted">
-                  {trades.length === 0 ? "Sube el reporte Excel de MT5 para ver tus trades." : "Ningún trade con esos filtros."}
+                  {trades.length === 0 ? "Todavía no hay trades. Con el guardián conectado llegan solos (o sube el reporte Excel de MT5)." : "Ningún trade con esos filtros."}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -1404,7 +1445,7 @@ function TradingContenido() {
                     </li>
                   </ul>
                 </div>
-                <div className="flex gap-2">
+                <div id="vg-instalar" className="flex scroll-mt-4 gap-2">
                   <button className="vc-btn-primary" onClick={guardarReglas}>Guardar reglas</button>
                   <button className="rounded-lg border border-[#1B3A5C] px-4 text-base font-medium text-[#1B3A5C]" onClick={descargarGuardianListo}>Descargar guardián para MT5</button>
                 </div>
