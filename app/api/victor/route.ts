@@ -397,6 +397,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ conversationId: conversation!.id, reply: mensaje });
   }
 
+  // Prueba gratis (24 nov 2026, Joel): su tope es ~$1 de IA por día. Si se le
+  // acaba el de hoy, no hay "1 mensaje por hora": sigue mañana (el presupuesto
+  // a ritmo parejo crece cada día) o activa su plan ya con un clic.
+  const enPrueba = !!profile?.prueba_hasta && new Date(profile.prueba_hasta).getTime() > Date.now();
+  if (estadoUso === "restringido_hora" && enPrueba) {
+    return responderSinLlamarAClaude(
+      "Por hoy llegaste al límite de tu prueba gratis. **Mañana seguimos** justo donde lo dejamos 🙌\n\n" +
+        "Si no quieres esperar, activa tu plan ahora y sigues sin este límite:\n" +
+        "- [Activar Core — tus finanzas personales](/api/stripe/activar-ya?plan=core)\n" +
+        "- [Activar Pro — personal + tu negocio](/api/stripe/activar-ya?plan=pro)\n" +
+        "- [Activar Business — negocio con empleados o varias cuentas](/api/stripe/activar-ya?plan=proplus)\n\n" +
+        "Mientras tanto puedes seguir usando el resto de la app sin problema."
+    );
+  }
+
   if (estadoUso === "restringido_hora") {
     const ultimoMensajeEn = new Date(conversation.updated_at);
     const unaHoraDespues = new Date(ultimoMensajeEn.getTime() + 60 * 60 * 1000);

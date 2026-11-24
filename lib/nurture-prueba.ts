@@ -8,7 +8,7 @@ import { urlBajaCorreos } from "./email-baja";
 // (users.prueba_hasta en el futuro) y no es de Trading (esos tienen su serie).
 //   d1 — conecta tu banco / pregúntale qué te cobran cada mes
 //   d3 — ¿cuándo sales de tus tarjetas?
-//   d5 — te quedan 2 días: agrega tu tarjeta para seguir (VICTOR recomienda plan en el chat)
+//   d5 — te quedan 2 días: VICTOR te recomienda plan en el chat y lo activas con un clic
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM = process.env.RESEND_FROM_EMAIL || "VICTOR CFO <onboarding@resend.dev>";
 const SITE_URL = "https://www.victorcfo.com";
@@ -61,12 +61,12 @@ function correoD5(dias: number): Correo {
     asunto: dias <= 1 ? "Tu prueba termina mañana" : `Te quedan ${dias} días de prueba`,
     titulo: "¿Seguimos?",
     parrafos: [
-      "Tu prueba gratis está por terminar. Si quieres seguir con VICTOR, agrega tu tarjeta en Configuración → Plan; no se te cobra nada antes de que termine.",
-      "¿No sabes qué plan te conviene? Pregúntale a VICTOR en el chat: ya conoce tus números y te dice cuál.",
-      "Si no la agregas, tu prueba se cancela sola. Sin cargos.",
+      "Tu prueba gratis está por terminar. ¿Qué plan te conviene? Pregúntale a VICTOR en el chat: ya conoce tus números (personales y de negocio) y te dice cuál, con el enlace para activarlo en un clic.",
+      "Core es para tus finanzas personales; Pro suma tu negocio; Business, si tienes empleados o varias cuentas de negocio.",
+      "Si no activas ninguno, tu prueba se cancela sola. Sin cargos.",
     ],
-    cta: "Seguir con VICTOR",
-    path: "/dashboard/config",
+    cta: "Preguntarle a VICTOR",
+    path: "/dashboard",
   };
 }
 

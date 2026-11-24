@@ -19,17 +19,17 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
 
   const body = await req.json().catch(() => null);
-  const plan = body?.plan;
+  const planPedido = body?.plan;
   const ciclo = body?.ciclo;
   const returnTo = typeof body?.returnTo === "string" ? body.returnTo : "/onboarding";
   const cancelTo = typeof body?.cancelTo === "string" ? body.cancelTo : "/registro/completar-pago";
 
-  if (!esPlanValido(plan) || !esCicloValido(ciclo)) {
+  if (!esPlanValido(planPedido) || !esCicloValido(ciclo)) {
     return NextResponse.json({ error: "Plan o ciclo inválido." }, { status: 400 });
   }
   // Core + Trading (19 nov 2026): lo pide el body o la cookie que pone la
   // página /trading. Solo aplica a Core (Pro y Business ya incluyen Trading).
-  const conTrading = plan === "core" && (body?.trading === true || req.cookies.get(COOKIE_TRADING)?.value === "1");
+  const conTrading = planPedido === "core" && (body?.trading === true || req.cookies.get(COOKIE_TRADING)?.value === "1");
 
   // Red de seguridad de la atribución por prospecto (13 oct 2026, migración
   // 0150): el cruce principal ocurre al registrarse, pero si por cualquier
@@ -97,13 +97,6 @@ export async function POST(req: NextRequest) {
     // 1 nov 2026: todos los vendedores (vendedor/influencer/otro) pagan como
     // cualquier cliente nuevo, con 7 días de prueba; solo 'cpa' conserva los 30.
     !!perfil?.referred_by || (!!perfil?.referido_por_socio_id && socioTipo === "cpa");
-  const priceId = conTrading ? priceIdCoreTrading(ciclo) : priceIdPara(plan, ciclo);
-  if (!priceId) {
-    return NextResponse.json(
-      { error: `Falta configurar el Price ID de Stripe para ${conTrading ? "core+trading" : plan}/${ciclo} en las variables de entorno.` },
-      { status: 500 }
-    );
-  }
 
   // Se confirmó que checkout.session.completed escribe plan_status="active"
   // e igual customer.subscription.updated trata "trialing" como "active",
@@ -116,7 +109,7 @@ export async function POST(req: NextRequest) {
   // como cualquier cliente nuevo. El mes gratis queda solo para quien entra
   // directo a pagar por un link de referido.
   const esReferidoConTrial =
-    esReferidoPeerOEmbajador && perfil?.plan !== "gratis" && (plan === "core" || plan === "pro");
+    esReferidoPeerOEmbajador && perfil?.plan !== "gratis" && (planPedido === "core" || planPedido === "pro");
 
   // Trial de 7 días para CUALQUIER primera suscripción (10 sept 2026,
   // pedido de Joel tras comparar con la competencia — Luna Money muestra
@@ -129,6 +122,22 @@ export async function POST(req: NextRequest) {
   // nuevo — 7 días, nunca 30.
   const esPrimeraSuscripcion = !perfil?.stripe_customer_id;
   let trialDias = esReferidoConTrial ? 30 : esPrimeraSuscripcion ? 7 : 0;
+
+  // Prueba en Pro para todos (24 nov 2026, Joel: "vamos a llevarlos a todos a
+  // plan PRO"): quien entra a la prueba de 7 días sin tarjeta escogiendo Core
+  // la hace en Pro, para que VICTOR vea también sus cuentas de negocio (en
+  // Core se esconden). Al final escoge su plan con /api/stripe/activar-ya —
+  // nunca se le cobra Pro sin escogerlo. Trading (Core + Trading) y el mes
+  // gratis de referidos se quedan como estaban.
+  const pruebaEnPro = planPedido === "core" && !conTrading && trialDias > 0 && !esReferidoConTrial;
+  const plan = pruebaEnPro ? "pro" : planPedido;
+  const priceId = conTrading ? priceIdCoreTrading(ciclo) : priceIdPara(plan, ciclo);
+  if (!priceId) {
+    return NextResponse.json(
+      { error: `Falta configurar el Price ID de Stripe para ${conTrading ? "core+trading" : plan}/${ciclo} en las variables de entorno.` },
+      { status: 500 }
+    );
+  }
 
   // Crédito de referido pendiente de activación (25 sept 2026, migración
   // 0099) — si este usuario refirió gente mientras estaba en plan gratis y
@@ -207,9 +216,9 @@ export async function POST(req: NextRequest) {
       client_reference_id: user.id,
       customer: perfil?.stripe_customer_id || undefined,
       customer_email: perfil?.stripe_customer_id ? undefined : user.email,
-      metadata: { supabase_user_id: user.id, plan, ciclo, ...(conTrading ? { trading: "1" } : {}), ...metaMetadata },
+      metadata: { supabase_user_id: user.id, plan, plan_elegido: planPedido, ciclo, ...(conTrading ? { trading: "1" } : {}), ...metaMetadata },
       subscription_data: {
-        metadata: { supabase_user_id: user.id, plan, ciclo, ...(conTrading ? { trading: "1" } : {}) },
+        metadata: { supabase_user_id: user.id, plan, plan_elegido: planPedido, ciclo, ...(conTrading ? { trading: "1" } : {}) },
         ...(trialDias > 0 ? { trial_period_days: trialDias } : {}),
         // Trading (23 nov 2026): la prueba empieza SIN tarjeta. Si al final no
         // la agregó, la suscripción se cancela sola (no se cobra nada).
@@ -217,7 +226,7 @@ export async function POST(req: NextRequest) {
       },
       ...(sinTarjeta ? { payment_method_collection: "if_required" as const } : {}),
       success_url: `${origin}${returnTo}${separadorReturn}pago=exitoso`,
-      cancel_url: `${origin}${cancelTo}${separadorCancel}plan=${plan}&ciclo=${ciclo}`,
+      cancel_url: `${origin}${cancelTo}${separadorCancel}plan=${planPedido}&ciclo=${ciclo}`,
       allow_promotion_codes: true,
     });
 

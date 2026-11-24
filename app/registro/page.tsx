@@ -193,7 +193,10 @@ function RegistroForm() {
       ? `Tu primer mes de ${nombre} es gratis, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
       : planId === "core" && esTrading
         ? `7 días gratis, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
-        : `7 días gratis, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`;
+        : planId === "core"
+          ? // La prueba corre en Pro (24 nov 2026); al final escoge plan y nunca se le cobra sin escogerlo.
+            `7 días gratis con todo Pro, sin tarjeta. Al final escoges tu plan (Core $${precioMostrar}${sufijo}). Si no lo activas, no se cobra nada.`
+          : `7 días gratis, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`;
   }
 
   const [email, setEmail] = useState("");

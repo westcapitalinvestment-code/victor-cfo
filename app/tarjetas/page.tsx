@@ -90,7 +90,7 @@ export default function Tarjetas() {
   }, []);
 
   const res = useMemo(() => (deuda > 0 && pago !== null ? proyectar(deuda, pago, apr) : null), [deuda, pago, apr]);
-  const registro = `/registro?plan=${negocio ? "pro" : "core"}&ciclo=mensual${utm ? `&${utm}` : ""}`;
+  const registro = `/registro?plan=${negocio ? "pro" : "core"}&ciclo=mensual${utm ? `&${utm}` : ""}`; // Core también prueba en Pro (checkout)
 
   function verResultado(esNegocio: boolean) {
     setNegocio(esNegocio);

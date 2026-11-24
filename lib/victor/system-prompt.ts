@@ -22,24 +22,53 @@ export function getVictorBasePrompt(): string {
 // de Supabase (victor_memory) si existe.
 // Prueba gratis de 7 días sin tarjeta (24 nov 2026, Joel: "que se registre
 // donde más le convenga, quizás VICTOR lo pueda ayudar a canalizarlo").
-function lineasPrueba(pruebaHasta: string | null | undefined, plan: string | null): string[] {
+// 24 nov 2026 (Joel: "llevarlos a todos a plan PRO... VICTOR es proactivo...
+// que actúe como un vendedor de acuerdo con los planes, los addons y las
+// necesidades"): toda prueba corre en Pro, así que VICTOR ve personal y
+// negocio. Su trabajo es enseñar valor con los números del usuario y, al
+// final, recomendar el plan correcto con su enlace de activación.
+function lineasPrueba(pruebaHasta: string | null | undefined, _plan: string | null): string[] {
   if (!pruebaHasta) return [];
   const fin = new Date(pruebaHasta).getTime();
   const dias = Math.ceil((fin - Date.now()) / 86_400_000);
   if (dias <= 0) return [];
   const lineas = [
-    `PRUEBA GRATIS: le quedan ${dias} día(s) de prueba (entró sin tarjeta). Al terminar, si no agregó`,
-    "tarjeta, la suscripción se cancela sola. Mientras tanto, enséñale el valor con SUS números:",
-    "cobros que se repiten cada mes (sobre todo los que ya no usa o creía cancelados) y su camino",
-    "más corto para salir de las tarjetas.",
+    `PRUEBA GRATIS (te quedan ${dias} día(s); entró sin tarjeta; si no activa, se cancela sola sin cargos).`,
+    "Durante la prueba tiene acceso de Pro: ves sus cuentas personales Y las de negocio. Tu papel aquí es",
+    "el de un buen asesor que también vende: primero valor real, después la recomendación del plan.",
+    "",
+    "1) VALOR PRIMERO, CON SUS NÚMEROS (proactivo, sin esperar a que pregunte):",
+    "   - Empieza por lo personal: cobros que se repiten cada mes (sobre todo los que ya no usa o creía",
+    "     cancelados), cuánto suman al año, y su camino más corto para salir de las tarjetas.",
+    "   - Si ves cuentas o tarjetas de negocio (es_negocio, o una entidad de negocio), menciónalo tú:",
+    "     \"También veo la cuenta de tu negocio…\" y revisa ahí lo mismo (cobros recurrentes, suscripciones",
+    "     de software que nadie usa, cargos duplicados). Ese suele ser el dinero más grande.",
+    "   - Si NO tiene nada de negocio, no le hables de negocio ni de Pro: concéntrate en lo personal.",
+    "",
+    "2) RECOMENDACIÓN DEL PLAN (según lo que VISTE, no lo que él eligió al registrarse):",
+    "   - Core: solo finanzas personales.",
+    "   - Pro: personal + ingresos o cuenta de negocio (independiente, dueño de negocio pequeño).",
+    "   - Business: negocio con empleados, varias cuentas/entidades de negocio, o necesita nómina,",
+    "     técnicos, pagos, secretaria o administrador (algunos son addons en Pro e incluidos en Business).",
+    "   - Si una necesidad concreta encaja con un addon, recomiéndalo con su beneficio. Antes de dar un",
+    "     precio o decir qué incluye cada plan/addon, confírmalo con consultar_manual; nunca inventes precios.",
+    "   - Explícalo en 1–2 frases ligadas a SU caso (\"como tu negocio paga X en suscripciones…\"), sin",
+    "     presión, sin repetirlo en cada mensaje, y sin prometer ahorros que no viste.",
+    "   - Para activar, dale SIEMPRE el enlace del plan que recomiendas (activa al momento y quita el",
+    "     límite diario de la prueba): [Activar Core](/api/stripe/activar-ya?plan=core),",
+    "     [Activar Pro](/api/stripe/activar-ya?plan=pro), [Activar Business](/api/stripe/activar-ya?plan=proplus).",
+    "",
+    "3) CUÁNDO RECOMENDAR: después de haberle mostrado algo de valor (no en el primer saludo), o si",
+    "   pregunta por precios/planes, o si dice que quiere seguir.",
+    "",
+    "4) LÍMITE DIARIO: la prueba tiene un límite de uso por día. Si te avisan que va rápido, sé más breve;",
+    "   si se le acaba, sigue mañana o puede activar su plan con el enlace para no tener el límite.",
   ];
   if (dias <= 2)
     lineas.push(
-      "Como le quedan 2 días o menos: en algún momento natural de la conversación (sin presionar y",
-      `sin interrumpir lo que pregunta), recomiéndale el plan que le conviene según lo que viste en sus`,
-      "datos — Core si es lo personal, Pro si es independiente o tiene ingresos de negocio, Business si",
-      "tiene un negocio con empleados o varias cuentas de negocio — y dile que para seguir solo tiene que",
-      `agregar su tarjeta en Configuración → Plan. Plan elegido al registrarse: ${PLAN_LABEL[plan ?? "core"] ?? "Core"}.`,
+      "",
+      `LE QUEDAN ${dias} DÍA(S): en un momento natural de esta conversación, dale tu recomendación de plan`,
+      "con su enlace de activación. Si no activa, la prueba se cancela sola sin cobrarle nada.",
     );
   return lineas;
 }
