@@ -170,8 +170,8 @@ export default function TradingLanding() {
                   <span className="text-[#19E68C]">Maneja tu trading como un negocio.</span>
                 </h1>
                 <p className="mb-4 max-w-xl text-lg text-[#C9D2DA] md:text-xl">
-                  El mercado premia la disciplina. Toma ventaja como lo hacen los profesionales: con reglas claras, riesgo controlado y números que se revisan cada
-                  semana. Así se construye riqueza paso a paso, para tu retiro, la vida que quieres vivir y tu legado.
+                  La riqueza en el trading no viene de un gran trade, viene de trades bien manejados. Toma ventaja como lo hacen los profesionales: con reglas
+                  claras, riesgo controlado y números que se revisan cada semana. Para tu retiro, la vida que quieres vivir y tu legado.
                 </p>
                 <p className="mb-8 max-w-xl text-lg text-[#C9D2DA] md:text-xl">
                   Los grandes no ganan todos los trades: <b className="text-[#F2F5F7]">pierden poco cuando pierden.</b> VICTOR aplica tu plan en MT5 y revisa tus

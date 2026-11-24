@@ -42,6 +42,15 @@ const PROBLEMAS: { v: Problema; t: string }[] = [
   { v: "mover_stop", t: "Muevo el stop en contra" },
 ];
 
+// "Tu mayor riesgo hoy" (24 nov 2026): el resultado nombra el problema que la
+// persona marcó, para que el plan se sienta hecho para ella.
+const RIESGO_HOY: Record<Problema, { t: string; d: string }> = {
+  revancha: { t: "Entrar a recuperar después de perder.", d: "Tu plan corta el día en tu límite, para que una pérdida no se convierta en tres." },
+  sobreoperar: { t: "Operar de más.", d: "Tu plan pone un máximo de trades al día: menos trades, mejor escogidos." },
+  sin_stop: { t: "Entrar sin stop.", d: "Tu plan define el stop y el lote antes de entrar, así sabes cuánto arriesgas en cada trade." },
+  mover_stop: { t: "Mover el stop en contra.", d: "Tu plan fija cuánto arriesgas por trade; mover el stop en contra rompe esa regla." },
+};
+
 function utmActual(): Record<string, string> {
   const u: Record<string, string> = {};
   try {
@@ -229,7 +238,19 @@ export default function PlanGratis() {
         {paso === 4 && plan && (
           <section>
             <p className="vt-jb mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#19E68C]">Tu plan para ${capital.toLocaleString("en-US")}</p>
-            <h1 className="mb-5 text-3xl font-bold leading-tight">Así protegerías tu cuenta como una prop firm.</h1>
+            <h1 className="mb-5 text-3xl font-bold leading-tight">Así protegerías tu cuenta como un profesional.</h1>
+            {(() => {
+              const r = problemas.length > 0 ? RIESGO_HOY[problemas[0]] : null;
+              const t = r?.t ?? (exp === "nuevo" ? "Empezar sin reglas fijas." : "Operar sin un límite diario claro.");
+              const d = r?.d ?? "Tu plan te da reglas simples desde el primer trade: cuánto arriesgar, cuándo parar y cuántos trades al día.";
+              return (
+                <div className="mb-5 rounded-2xl border border-[#FF3D5A]/40 bg-[#FF3D5A]/10 p-5">
+                  <p className="vt-jb mb-1 text-xs font-bold uppercase tracking-[0.2em] text-[#FF3D5A]">Tu mayor riesgo hoy</p>
+                  <p className="text-xl font-bold">{t}</p>
+                  <p className="mt-1 text-[#C9D2DA]">{d}</p>
+                </div>
+              );
+            })()}
             <div className="rounded-2xl border border-white/10 bg-[#0E131A] p-5">
               {lineasPlan(plan).map((l) => (
                 <div key={l.k} className="flex flex-col border-b border-white/5 py-3 last:border-0">
