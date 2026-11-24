@@ -447,14 +447,14 @@ function RegistroForm() {
             </button>
             <button
               type="button"
-              className="text-sm text-muted underline"
+              className="flex items-center justify-center gap-2 rounded-lg border-2 border-teal bg-teal/10 px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/20"
               disabled={loading || !!oauthEnCurso}
               onClick={() => {
                 marcarEmbudo("clic_email");
                 abrirEmailForm(false, planDestacado);
               }}
             >
-              o con email
+              ✉️ Entrar con otro email
             </button>
 
             <details className="rounded-lg border border-border bg-bg px-3 py-2 text-left text-xs">
@@ -683,11 +683,11 @@ function RegistroForm() {
                   </button>
                   <button
                     type="button"
-                    className="text-sm text-muted underline"
+                    className="flex items-center justify-center gap-2 rounded-lg border-2 border-teal bg-teal/10 px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/20"
                     disabled={loading || !!oauthEnCurso}
                     onClick={() => abrirEmailForm(true, "core")}
                   >
-                    o con email
+                    ✉️ Entrar con otro email
                   </button>
                 </div>
 
@@ -788,11 +788,11 @@ function RegistroForm() {
                       </button>
                       <button
                         type="button"
-                        className="text-sm text-muted underline"
+                        className="flex items-center justify-center gap-2 rounded-lg border-2 border-teal bg-teal/10 px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/20"
                         disabled={loading || !!oauthEnCurso}
                         onClick={() => abrirEmailForm(false, "core")}
                       >
-                        o con email
+                        ✉️ Entrar con otro email
                       </button>
                     </>
                   )}
@@ -835,11 +835,11 @@ function RegistroForm() {
                   </button>
                   <button
                     type="button"
-                    className="text-sm text-muted underline"
+                    className="flex items-center justify-center gap-2 rounded-lg border-2 border-teal bg-teal/10 px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/20"
                     disabled={loading || !!oauthEnCurso}
                     onClick={() => abrirEmailForm(false, "pro")}
                   >
-                    o con email
+                    ✉️ Entrar con otro email
                   </button>
                 </div>
 
@@ -885,11 +885,11 @@ function RegistroForm() {
                   </button>
                   <button
                     type="button"
-                    className="text-sm text-muted underline"
+                    className="flex items-center justify-center gap-2 rounded-lg border-2 border-teal bg-teal/10 px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/20"
                     disabled={loading || !!oauthEnCurso}
                     onClick={() => abrirEmailForm(false, "proplus")}
                   >
-                    o con email
+                    ✉️ Entrar con otro email
                   </button>
                 </div>
                 </>
