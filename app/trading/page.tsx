@@ -104,23 +104,21 @@ export default function TradingLanding() {
     </Link>
   );
 
-  const boton = (texto: string) => (
-    <Link
-      href={href}
-      onClick={() => marcarEmbudo("clic_cta_trading")}
-      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#19E68C] px-9 py-4 text-lg font-bold text-[#07090D] shadow-[0_0_40px_-5px_rgba(25,230,140,0.6)] transition hover:brightness-110 sm:w-auto"
-    >
-      {texto} <span aria-hidden>→</span>
-    </Link>
-  );
-
   const anual = PRECIO_CORE_TRADING.anual;
   const mensual = PRECIO_CORE_TRADING.mensual;
 
-  const pilares = [
-    { k: "El guardián", t: "Te frena antes de romper tus reglas.", d: "Calcula tu lote, pone tu stop y te cierra el día cuando llegas a tu límite. Como una prop firm, pero en tu cuenta.", s: "riesgo $6.90 / $7.00 ✓" },
-    { k: "Tu bitácora", t: "Tus libros, sin Excel.", d: "Cada trade llega solo desde MT5. Marcas si cumpliste tu plan y ves dónde ganas y dónde se te va el dinero.", s: "+4.9% este mes · plan 92%" },
-    { k: "Tu CFO y mentor", t: "Te lleva paso a paso.", d: "VICTOR conoce tu cuenta y tus reglas. Revisa tus números contigo y te dice qué te funciona, qué te cuesta y qué ajustar.", s: "“Nada de índices después de las 11”" },
+  const pasos = [
+    { t: "Arma tu plan", d: "Contestas 4 preguntas y VICTOR te propone cuánto arriesgar por trade, tu límite del día y cuándo parar. Gratis, sin registrarte.", s: "riesgo $7 · límite $21/día" },
+    { t: "Conecta tu MT5", d: "Instalas el guardián en tu MetaTrader 5 y lo vinculas con un código de 6 dígitos. Sin contraseñas ni configuraciones raras.", s: "Código: 482 913 ✓" },
+    { t: "Opera como siempre", d: "Tú decides las entradas. El guardián calcula tu lote, pone tu stop y te frena cuando llegas a tu límite del día.", s: "lote 0.06 · stop 1.15" },
+    { t: "Revisa con VICTOR", d: "Cada trade llega solo a tu bitácora. VICTOR revisa tus números contigo y te dice qué te funciona y qué ajustar.", s: "plan cumplido 92% este mes" },
+  ];
+
+  const confianza = [
+    { t: "No mueve tu dinero", d: "Tu capital se queda en tu broker, a tu nombre. VICTOR no deposita, no retira ni mueve tu dinero." },
+    { t: "No opera por ti", d: "No da señales ni abre trades. Solo aplica las reglas que tú pusiste, para que un mal día no te borre la semana." },
+    { t: "Tus reglas, siempre", d: "Tú decides los límites y los puedes cambiar cuando quieras. VICTOR te sugiere, tú apruebas." },
+    { t: "Sin compromiso", d: "7 días gratis sin tarjeta. Si no es para ti, no haces nada y no pagas nada." },
   ];
 
   return (
@@ -183,55 +181,63 @@ export default function TradingLanding() {
           <MockPanel />
         </section>
 
-        {/* 2. EL DINERO */}
+        {/* 2. CONFIANZA — 24 nov 2026 (Joel: quitar el precio de arriba, que se vea
+            como un paso a paso, confiable y que den ganas de probarlo). */}
         <section className="mb-24 md:mb-32">
-          <Tarjeta className="mx-auto max-w-4xl border-[#19E68C]/30 bg-[#0B1511] p-8 text-center md:p-14">
-            <p className="text-4xl font-bold tracking-tight text-[#19E68C] md:text-5xl">
-              ${mensual}
-              <span className="text-xl font-medium text-[#7D8A96] md:text-2xl"> /mes</span>
-            </p>
-            <h2 className="mx-auto mt-5 max-w-2xl text-3xl font-bold leading-tight md:text-5xl">Se paga solo.</h2>
-            <p className="mx-auto mt-3 max-w-xl text-lg text-[#C9D2DA]">
-              Un solo trade de revancha que VICTOR te frena puede cubrir el mes. Y lo que gastabas en evaluaciones,{" "}
-              <b className="text-[#19E68C]">ponlo a trabajar en tu cuenta.</b>
-            </p>
-            <p className="mx-auto mt-3 max-w-xl text-lg text-[#C9D2DA]">Empieza con el mínimo que acepte tu broker y escálalo con VICTOR.</p>
-            <div className={`${jb.className} mt-8 flex flex-wrap justify-center gap-3 text-sm font-bold`}>
-              {["Tu capital", "Tus reglas", "Tus ganancias", "Retiras cuando quieras"].map((x) => (
-                <span key={x} className="rounded-full border border-[#19E68C]/40 px-4 py-2 text-[#19E68C]">
-                  ✓ {x}
-                </span>
-              ))}
-            </div>
-          </Tarjeta>
+          <div className={`${jb.className} flex flex-wrap justify-center gap-3 text-sm font-bold`}>
+            {["7 días gratis", "Sin tarjeta", "No mueve tu dinero", "Tú decides tus trades"].map((x) => (
+              <span key={x} className="rounded-full border border-[#19E68C]/40 bg-[#19E68C]/5 px-4 py-2 text-[#19E68C]">
+                ✓ {x}
+              </span>
+            ))}
+          </div>
         </section>
 
-        {/* 3. EMPRESARIO */}
+        {/* 3. PASO A PASO */}
         <section className="mb-24 md:mb-32">
-          <div className="mb-10 text-center">
-            <Etiqueta>Empresario del trading</Etiqueta>
+          <div className="mb-12 text-center">
+            <Etiqueta>Cómo funciona</Etiqueta>
             <h2 className="mx-auto max-w-3xl text-3xl font-bold leading-tight tracking-tight md:text-5xl">
-              El trading es un negocio rentable <span className="text-[#19E68C]">cuando tienes reglas claras y disciplina.</span>
+              De cero a operar con reglas <span className="text-[#19E68C]">en 4 pasos.</span>
             </h2>
           </div>
-          <div className="grid gap-5 md:grid-cols-3">
-            {pilares.map((p) => (
-              <Tarjeta key={p.k} className="flex flex-col">
-                <p className={`${jb.className} mb-3 text-xs font-bold uppercase tracking-widest text-[#19E68C]`}>{p.k}</p>
-                <p className="mb-2 text-2xl font-bold leading-tight">{p.t}</p>
-                <p className="mb-5 text-[#C9D2DA]">{p.d}</p>
-                <p className={`${jb.className} mt-auto rounded-lg bg-white/5 px-3 py-2 text-[13px] text-[#19E68C]`}>
-                  {p.s} <span className="text-[10px] font-medium text-[#5B6874]">· ej. ilustrativo</span>
+          <ol className="mx-auto grid max-w-4xl gap-5">
+            {pasos.map((p, i) => (
+              <li key={p.t}>
+                <Tarjeta className="flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
+                  <span
+                    className={`${jb.className} flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#19E68C]/50 bg-[#19E68C]/10 text-lg font-bold text-[#19E68C]`}
+                  >
+                    {i + 1}
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-2xl font-bold leading-tight">{p.t}</p>
+                    <p className="mt-1 text-[#C9D2DA]">{p.d}</p>
+                  </div>
+                  <p className={`${jb.className} rounded-lg bg-white/5 px-3 py-2 text-[13px] text-[#19E68C] md:max-w-[240px]`}>{p.s}</p>
+                </Tarjeta>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-10 text-center">{botonPlan("Empezar por el paso 1")}</div>
+        </section>
+
+        {/* 4. TRANQUILIDAD */}
+        <section className="mb-24 md:mb-32">
+          <div className="mb-10 text-center">
+            <Etiqueta>Tu cuenta, tus reglas</Etiqueta>
+            <h2 className="mx-auto max-w-3xl text-3xl font-bold leading-tight tracking-tight md:text-5xl">Lo que VICTOR hace, y lo que no.</h2>
+          </div>
+          <div className="mx-auto grid max-w-4xl gap-5 md:grid-cols-2">
+            {confianza.map((c) => (
+              <Tarjeta key={c.t}>
+                <p className="text-xl font-bold leading-tight">
+                  <span className="text-[#19E68C]">✓</span> {c.t}
                 </p>
+                <p className="mt-2 text-[#C9D2DA]">{c.d}</p>
               </Tarjeta>
             ))}
           </div>
-          <p className="mt-8 text-center text-lg text-[#C9D2DA]">
-            ¿No tienes reglas?{" "}
-            <Link href={planHref} onClick={() => marcarEmbudo("clic_plan")} className="font-bold text-[#19E68C] underline underline-offset-4">
-              VICTOR te arma tu plan gratis en 1 minuto.
-            </Link>
-          </p>
         </section>
 
         {/* BROKERS — mucha gente no conoce MT5 ni los brokers (pedido de Joel,
@@ -279,12 +285,17 @@ export default function TradingLanding() {
           <h2 className="mx-auto mb-8 max-w-3xl text-4xl font-bold leading-tight tracking-tight md:text-6xl">
             Empieza tu negocio <span className="text-[#19E68C]">de trading.</span>
           </h2>
-          {boton("Empezar mis 7 días gratis")}
+          <div className="flex flex-col items-center gap-3">
+            {botonPlan("Arma tu plan gratis en 1 minuto")}
+            <Link href={href} onClick={() => marcarEmbudo("clic_cta_trading")} className="text-[#C9D2DA] underline underline-offset-4">
+              o empieza tus 7 días gratis
+            </Link>
+          </div>
           <p className="mt-6 text-base font-bold text-[#F2F5F7]">
-            <span className="text-[#19E68C]">Garantía:</span> pruébalo 7 días gratis. Si no es para ti, cancelas y no pagas nada.
+            <span className="text-[#19E68C]">Sin tarjeta.</span> Si no es para ti, no haces nada y no pagas nada.
           </p>
           <p className={`${jb.className} mt-3 text-xs leading-relaxed text-[#7D8A96]`}>
-            Luego ${mensual}/mes o ${anual}/año · Cancela cuando quieras
+            Después de la prueba: ${mensual}/mes o ${anual}/año · Cancela cuando quieras
             <br />
             MetaTrader 5 · Windows y Mac · Incluye VICTOR Core
           </p>
