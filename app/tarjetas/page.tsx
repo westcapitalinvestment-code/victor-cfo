@@ -27,6 +27,18 @@ const INTERESES: { v: number; t: string }[] = [
 ];
 const SUSCRIPCIONES = ["0 a 2", "3 a 5", "6 o más", "Ni idea"];
 
+// Anuncios que hablan de cobros/suscripciones olvidadas ("intriga" y
+// "olvidados"): la página abre por ahí, sin fricción, en vez de por la deuda.
+// ?v=cobros fuerza el modo para pruebas.
+const ANUNCIOS_COBROS = ["52632311582245", "52632321552845"];
+const SUMAS: { v: number; t: string }[] = [
+  { v: 25, t: "Menos de $25" },
+  { v: 50, t: "$25 a $75" },
+  { v: 110, t: "$75 a $150" },
+  { v: 200, t: "Más de $150" },
+  { v: 0, t: "Ni idea" },
+];
+
 type Resultado = { meses: number | null; intereses: number };
 
 // Proyección mes a mes. "El mínimo" = lo que suelen pedir los bancos: 1% del
@@ -63,6 +75,8 @@ export default function Tarjetas() {
   const [apr, setApr] = useState(24);
   const [negocio, setNegocio] = useState(false);
   const [utm, setUtm] = useState("");
+  const [cobros, setCobros] = useState(false);
+  const [suma, setSuma] = useState(0);
 
   useEffect(() => {
     marcarEmbudo("vista_tarjetas");
@@ -72,6 +86,7 @@ export default function Tarjetas() {
       if (k.startsWith("utm_")) p.set(k, v);
     });
     setUtm(p.toString());
+    if (q.get("v") === "cobros" || ANUNCIOS_COBROS.includes(q.get("utm_content") ?? "")) setCobros(true);
   }, []);
 
   const res = useMemo(() => (deuda > 0 && pago !== null ? proyectar(deuda, pago, apr) : null), [deuda, pago, apr]);
@@ -79,7 +94,7 @@ export default function Tarjetas() {
 
   function verResultado(esNegocio: boolean) {
     setNegocio(esNegocio);
-    setPaso(5);
+    setPaso(cobros ? 13 : 5);
     marcarEmbudo("tarjetas_resultado");
     window.scrollTo({ top: 0 });
   }
@@ -101,10 +116,102 @@ export default function Tarjetas() {
             <img src="/victor-avatar.png" width={32} height={32} alt="VICTOR" className="rounded-full bg-white" />
             <span className="font-bold tracking-wide">VICTOR</span>
           </span>
-          {paso < 5 && <span className="text-xs text-[#7D8A96]">{paso + 1} de 5</span>}
+          {!cobros && paso < 5 && <span className="text-xs text-[#7D8A96]">{paso + 1} de 5</span>}
+          {cobros && paso < 13 && <span className="text-xs text-[#7D8A96]">{paso === 0 ? 1 : paso - 9} de 3</span>}
         </header>
 
-        {paso === 0 && (
+        {cobros && paso === 0 && (
+          <section>
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#19E68C]">20 segundos · sin registrarte</p>
+            <h1 className="mb-2 text-3xl font-bold leading-tight">¿Qué te están cobrando que ya olvidaste?</h1>
+            <p className="mb-6 text-[#C9D2DA]">
+              Streaming, apps, membresías, ese servicio que probaste una vez… ¿Cuántos crees que pagas cada mes?
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {SUSCRIPCIONES.map((t) => (
+                <button key={t} className={opcion(false)} onClick={() => setPaso(11)}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {cobros && paso === 11 && (
+          <section>
+            <h1 className="mb-2 text-3xl font-bold leading-tight">¿Cuánto crees que suman al mes?</h1>
+            <p className="mb-6 text-[#C9D2DA]">A ojo. No hay respuesta mala.</p>
+            <div className="flex flex-col gap-3">
+              {SUMAS.map((o) => (
+                <button
+                  key={o.t}
+                  className={opcion(false)}
+                  onClick={() => {
+                    setSuma(o.v);
+                    setPaso(12);
+                  }}
+                >
+                  {o.t}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {cobros && paso === 12 && (
+          <section>
+            <h1 className="mb-6 text-3xl font-bold leading-tight">¿Salen de tu tarjeta personal o la de tu negocio?</h1>
+            <div className="flex flex-col gap-3">
+              <button className={opcion(false)} onClick={() => verResultado(false)}>
+                Personal
+              </button>
+              <button className={opcion(false)} onClick={() => verResultado(true)}>
+                De mi negocio
+              </button>
+              <button className={opcion(false)} onClick={() => verResultado(true)}>
+                Las dos
+              </button>
+            </div>
+          </section>
+        )}
+
+        {cobros && paso === 13 && (
+          <section>
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-[#FF3D5A]">Lo que sale de tu tarjeta</p>
+            {suma > 0 ? (
+              <h1 className="mb-3 text-4xl font-bold leading-tight">
+                Son <span className="text-[#FF3D5A]">{usd(suma * 12)} al año</span>.
+              </h1>
+            ) : (
+              <h1 className="mb-3 text-4xl font-bold leading-tight">No sabes cuánto te cobran.</h1>
+            )}
+            <p className="text-lg text-[#C9D2DA]">
+              {suma > 0 ? "Y eso es lo que recuerdas. " : "Y eso es justo lo que les pasa a casi todos. "}
+              Lo que se te olvidó no aparece en tu cuenta mental: aparece en el estado de cuenta.
+            </p>
+
+            <div className="mt-8 rounded-2xl border border-white/10 bg-[#0E131A] p-5">
+              <p className="text-xl font-bold">Caso real</p>
+              <p className="mt-2 text-[15px] text-[#C9D2DA]">
+                Un dueño de negocio creía que había cancelado un servicio. Seguía saliendo:{" "}
+                <b className="text-[#F2F5F7]">$38 al mes</b>, <b className="text-[#19E68C]">$456 al año</b> por nada.
+              </p>
+            </div>
+
+            <div className="mt-8 text-center">
+              <Link href={registro} onClick={() => marcarEmbudo("clic_tarjetas_registro")} className={verde}>
+                Ver qué me están cobrando →
+              </Link>
+              <p className="mt-3 text-sm text-[#7D8A96]">7 días gratis · sin tarjeta · cancela cuando quieras</p>
+            </div>
+
+            <p className="mt-10 text-xs leading-relaxed text-[#5B6874]">
+              Estimado con los datos que diste. VICTOR no es asesoría financiera.
+            </p>
+          </section>
+        )}
+
+        {!cobros && paso === 0 && (
           <section>
             <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#19E68C]">30 segundos · sin registrarte</p>
             <h1 className="mb-2 text-3xl font-bold leading-tight">¿Cuándo sales de tus tarjetas?</h1>
@@ -276,8 +383,8 @@ export default function Tarjetas() {
           </section>
         )}
 
-        {paso > 0 && paso < 5 && (
-          <button className="mt-8 text-sm text-[#7D8A96] underline" onClick={() => setPaso(paso - 1)}>
+        {((paso > 0 && paso < 5) || paso === 11 || paso === 12) && (
+          <button className="mt-8 text-sm text-[#7D8A96] underline" onClick={() => setPaso(paso === 11 ? 0 : paso - 1)}>
             ← Atrás
           </button>
         )}
