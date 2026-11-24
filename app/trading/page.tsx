@@ -57,8 +57,8 @@ function MockPanel() {
         <span className="flex-1 rounded-lg bg-[#FF3D5A] py-2 text-center font-bold text-white">VENDER</span>
         <span className="flex-1 rounded-lg bg-[#19E68C] py-2 text-center font-bold text-[#07090D]">COMPRAR</span>
       </div>
-      <p className="text-[#F5B544]">OK | perdedores hoy: 1/3 | P/L hoy: +18.40</p>
-      <p className="text-[#19E68C]">lote 0.06 | stop 1.15 | riesgo $6.90 / $7.00</p>
+      <p className="text-[#F5B544]">OK | perdedores hoy: 1/3 | P/L hoy: +86.40</p>
+      <p className="text-[#19E68C]">lote 0.26 | stop 1.15 | riesgo $29.90 / $30.00</p>
       <p className="mt-2 text-[#5B6874]">Sync OK 10:42</p>
     </Tarjeta>
     <p className={`${jb.className} mt-2 text-center text-[11px] text-[#5B6874]`}>Ejemplo ilustrativo</p>
@@ -108,9 +108,9 @@ export default function TradingLanding() {
   const mensual = PRECIO_CORE_TRADING.mensual;
 
   const pasos = [
-    { t: "Arma tu plan", d: "Contestas 4 preguntas y VICTOR te propone cuánto arriesgar por trade, tu límite del día y cuándo parar. Gratis, sin registrarte.", s: "riesgo $7 · límite $21/día" },
+    { t: "Arma tu plan", d: "Contestas 4 preguntas y VICTOR te propone cuánto arriesgar por trade, tu límite del día y cuándo parar. Gratis, sin registrarte.", s: "cuenta $3,000 · riesgo $30 · límite $90/día" },
     { t: "Conecta tu MT5", d: "Instalas el guardián en tu MetaTrader 5 y lo vinculas con un código de 6 dígitos. Sin contraseñas ni configuraciones raras.", s: "Código: 482 913 ✓" },
-    { t: "Opera como siempre", d: "Tú decides las entradas. El guardián calcula tu lote, pone tu stop y te frena cuando llegas a tu límite del día.", s: "lote 0.06 · stop 1.15" },
+    { t: "Opera como siempre", d: "Tú decides las entradas. El guardián calcula tu lote, pone tu stop y te frena cuando llegas a tu límite del día.", s: "lote 0.26 · stop 1.15 · riesgo $29.90" },
     { t: "Revisa con VICTOR", d: "Cada trade llega solo a tu bitácora. VICTOR revisa tus números contigo y te dice qué te funciona y qué ajustar.", s: "plan cumplido 92% este mes" },
   ];
 
@@ -148,7 +148,7 @@ export default function TradingLanding() {
         {/* 1. GANCHO */}
         <section className="mb-24 grid items-center gap-12 md:mb-32 md:grid-cols-[1.15fr_1fr]">
           <div>
-            <Etiqueta>Para traders de MT5</Etiqueta>
+            <Etiqueta>Trading con disciplina · MT5</Etiqueta>
             {malDia ? (
               <>
                 <h1 className="mb-5 text-5xl font-bold leading-[0.95] tracking-tight md:text-7xl">
@@ -162,12 +162,21 @@ export default function TradingLanding() {
               </>
             ) : (
               <>
+                {/* 24 nov 2026 (Joel): fuera "Deja de pagar cuentas de fondeo"; que se
+                    vea como inversión y disciplina, algo que la gente recomiende. */}
                 <h1 className="mb-5 text-5xl font-bold leading-[0.95] tracking-tight md:text-7xl">
-                  Deja de pagar cuentas de fondeo.
+                  Conviértete en inversionista.
                   <br />
-                  <span className="text-[#19E68C]">Fondéate tú.</span>
+                  <span className="text-[#19E68C]">Maneja tu trading como un negocio.</span>
                 </h1>
-                <p className="mb-8 max-w-xl text-lg text-[#C9D2DA] md:text-xl">Opera tu propio capital con reglas de prop firm y un CFO que te lleva paso a paso hacia la rentabilidad.</p>
+                <p className="mb-4 max-w-xl text-lg text-[#C9D2DA] md:text-xl">
+                  El mercado premia la disciplina. Toma ventaja como lo hacen los profesionales: con reglas claras, riesgo controlado y números que se revisan cada
+                  semana. Así se construye riqueza paso a paso, para tu retiro, la vida que quieres vivir y tu legado.
+                </p>
+                <p className="mb-8 max-w-xl text-lg text-[#C9D2DA] md:text-xl">
+                  Los grandes no ganan todos los trades: <b className="text-[#F2F5F7]">pierden poco cuando pierden.</b> VICTOR aplica tu plan en MT5 y revisa tus
+                  números contigo, como lo haría un CFO.
+                </p>
               </>
             )}
             {botonPlan("Arma tu plan gratis en 1 minuto")}
@@ -185,12 +194,19 @@ export default function TradingLanding() {
             como un paso a paso, confiable y que den ganas de probarlo). */}
         <section className="mb-24 md:mb-32">
           <div className={`${jb.className} flex flex-wrap justify-center gap-3 text-sm font-bold`}>
-            {["7 días gratis", "Sin tarjeta", "No mueve tu dinero", "Tú decides tus trades"].map((x) => (
+            {["Tu capital se queda en tu broker", "Tú decides cada trade", "7 días gratis, sin tarjeta"].map((x) => (
               <span key={x} className="rounded-full border border-[#19E68C]/40 bg-[#19E68C]/5 px-4 py-2 text-[#19E68C]">
                 ✓ {x}
               </span>
             ))}
           </div>
+        </section>
+
+        <section className="-mt-12 mb-24 md:-mt-16 md:mb-32">
+          <p className="text-center text-3xl font-bold tracking-tight md:text-5xl">
+            Invertir <span className="text-[#19E68C]">·</span> Proteger <span className="text-[#19E68C]">·</span> Crecer{" "}
+            <span className="text-[#19E68C]">·</span> <span className="text-[#19E68C]">Legado</span>
+          </p>
         </section>
 
         {/* 3. PASO A PASO */}
