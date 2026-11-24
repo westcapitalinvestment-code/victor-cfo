@@ -41,7 +41,7 @@ export type ParametrosGuardian = {
 
 // Dirección fija de sincronización para el .ex5 precompilado.
 export const SYNC_URL_PRODUCCION = "https://www.victorcfo.com/api/trading/sync";
-export const VERSION_GUARDIAN = "3.22";
+export const VERSION_GUARDIAN = "3.23";
 
 const n = (v: number, d = 2) => {
   const x = Number.isFinite(v) ? v : 0;
@@ -770,8 +770,22 @@ void Guard()
          double minL = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
          if(vol > minL + 0.0000001 && vol * LossPerLot(sym, lossDist) > allowed * 1.10)
          {
+            // 3.23: en vez de cerrar todo el trade (ej. una orden limit que se lleno con
+            // el lote que escribiste a mano), se reduce al lote correcto y sigue abierto.
+            double lpl  = LossPerLot(sym, lossDist);
+            double step = SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP);
+            if(step <= 0) step = minL > 0 ? minL : 0.01;
+            int vd = (int)MathMax(0, MathCeil(-MathLog10(step) - 1e-9));
+            double okLot = (lpl > 0) ? NormalizeDouble(MathFloor(allowed / lpl / step) * step, vd) : 0;
+            double cut = NormalizeDouble(vol - okLot, vd);
+            if(okLot >= minL - 0.0000001 && cut >= minL - 0.0000001 && trade.PositionClosePartial(tk, cut))
+            {
+               Alert("VictorGuard ajusto tu trade de ", sym, ": tenia ", DoubleToString(vol, 2), " lotes y arriesgaba $", DoubleToString(vol * lpl, 2),
+                     ". Lo deje en ", DoubleToString(okLot, 2), " lotes para arriesgar $", DoubleToString(okLot * lpl, 2), " (tu limite por trade es $", DoubleToString(allowed, 2), ").");
+               continue;   // en el proximo ciclo se revisa con el lote nuevo
+            }
             Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: con ", DoubleToString(vol, 2), " lotes arriesgabas $",
-                  DoubleToString(vol * LossPerLot(sym, lossDist), 2), " y tu limite por trade es $", DoubleToString(allowed, 2), ". Abre con el boton del guardian y te calcula el lote correcto.");
+                  DoubleToString(vol * lpl, 2), " y tu limite por trade es $", DoubleToString(allowed, 2), ". Abre con el boton del guardian y te calcula el lote correcto.");
             SafeClose(tk);
             continue;
          }
@@ -908,6 +922,37 @@ void GuardOrders()
          ntp = buy ? price + dist * RewardRatio : price - dist * RewardRatio;
       nsl = NormalizeDouble(nsl, digits);
       ntp = NormalizeDouble(ntp, digits);
+
+      // 3.23: el lote de la orden se ajusta a tu riesgo ANTES de que se llene (MT5 no
+      // deja cambiar el volumen de una orden: se borra y se vuelve a poner igual,
+      // con el lote correcto). Asi la orden limit entra con su SL y su lote bien.
+      double ovol = OrderGetDouble(ORDER_VOLUME_CURRENT);
+      double odist = MathAbs(price - nsl);
+      double olpl = LossPerLot(osym, odist);
+      double allowedO = RiskAllowed();
+      double ominL = SymbolInfoDouble(osym, SYMBOL_VOLUME_MIN);
+      if(olpl > 0 && ovol > ominL + 0.0000001 && ovol * olpl > allowedO * 1.10)
+      {
+         double ostep = SymbolInfoDouble(osym, SYMBOL_VOLUME_STEP);
+         if(ostep <= 0) ostep = ominL > 0 ? ominL : 0.01;
+         int ovd = (int)MathMax(0, MathCeil(-MathLog10(ostep) - 1e-9));
+         double oLot = NormalizeDouble(MathFloor(allowedO / olpl / ostep) * ostep, ovd);
+         if(oLot >= ominL - 0.0000001)
+         {
+            ENUM_ORDER_TYPE_TIME ott = (ENUM_ORDER_TYPE_TIME)OrderGetInteger(ORDER_TYPE_TIME);
+            datetime oexp = (datetime)OrderGetInteger(ORDER_TIME_EXPIRATION);
+            double ostl = OrderGetDouble(ORDER_PRICE_STOPLIMIT);
+            if(trade.OrderDelete(tk))
+            {
+               if(trade.OrderOpen(osym, t, oLot, ostl, price, nsl, ntp, ott, oexp, "VictorGuard"))
+                  Alert("VictorGuard ajusto tu orden de ", osym, ": de ", DoubleToString(ovol, 2), " a ", DoubleToString(oLot, 2),
+                        " lotes para arriesgar $", DoubleToString(oLot * olpl, 2), " con su stop (tu limite por trade es $", DoubleToString(allowedO, 2), ").");
+               else
+                  Alert("VictorGuard: no pude volver a poner tu orden de ", osym, " con el lote correcto (", trade.ResultRetcodeDescription(), "). Ponla otra vez con ", DoubleToString(oLot, 2), " lotes.");
+            }
+            continue;
+         }
+      }
 
       if(nsl != sl || ntp != tp)
       {
