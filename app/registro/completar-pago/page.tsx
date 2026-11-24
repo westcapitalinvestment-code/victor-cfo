@@ -38,6 +38,12 @@ function CompletarPagoForm() {
 
   const planQuery = searchParams.get("plan");
   const cicloQuery = searchParams.get("ciclo");
+  // Registro simple (24 nov 2026, Joel: "sin mucha fricción"): si viene de la
+  // prueba gratis (auto=1 desde /auth/callback, o prueba_simple en los
+  // metadatos de quien confirmó su correo), la prueba arranca sola — sin
+  // escoger plan ni tocar "Continuar al pago". Si cancela en Stripe vuelve con
+  // ?plan= (sin auto) y ve la pantalla normal, así que no hay bucle.
+  const [auto, setAuto] = useState(searchParams.get("auto") === "1");
 
   // Si alguien llega con ?plan=proplus (Enterprise, no autoservicio), lo
   // dejamos en Core en vez de "seleccionado" en un plan que el botón de
@@ -65,7 +71,8 @@ function CompletarPagoForm() {
     createClient()
       .auth.getUser()
       .then(({ data }) => {
-        const meta = data.user?.user_metadata as { plan_elegido?: string; ciclo_elegido?: string } | undefined;
+        const meta = data.user?.user_metadata as { plan_elegido?: string; ciclo_elegido?: string; prueba_simple?: string } | undefined;
+        if (!planQuery && meta?.prueba_simple === "true") setAuto(true);
         if (!esPlanValido(planQuery) && esPlanValido(meta?.plan_elegido ?? null)) setPlan(meta!.plan_elegido as PlanId);
         if (!esCicloValido(cicloQuery) && esCicloValido(meta?.ciclo_elegido ?? null)) setCiclo(meta!.ciclo_elegido as Ciclo);
       })
@@ -73,14 +80,19 @@ function CompletarPagoForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function pagar() {
+  useEffect(() => {
+    if (auto) pagar(plan);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto]);
+
+  async function pagar(planElegido: PlanId = plan) {
     setLoading(true);
     setError(null);
 
     const res = await fetch("/api/stripe/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan, ciclo, returnTo: "/onboarding", cancelTo: "/registro/completar-pago" }),
+      body: JSON.stringify({ plan: planElegido, ciclo, returnTo: "/onboarding", cancelTo: "/registro/completar-pago" }),
     });
     const json = await res.json().catch(() => null);
 
@@ -90,7 +102,20 @@ function CompletarPagoForm() {
     }
 
     setLoading(false);
+    setAuto(false);
     setError(json?.error || "No se pudo iniciar el pago. Intenta de nuevo en un momento.");
+  }
+
+  if (auto) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-6">
+        <div className="w-full max-w-sm text-center">
+          <img src="/victor-avatar.png" alt="VICTOR" className="mx-auto mb-4 h-12 w-12 rounded-full object-cover" style={{ background: "#fff" }} />
+          <p className="text-base font-medium text-text">Preparando tu prueba gratis de 7 días…</p>
+          <p className="mt-1 text-sm text-muted">Sin tarjeta. En un momento entras.</p>
+        </div>
+      </div>
+    );
   }
 
   async function cerrarSesion() {
@@ -153,7 +178,7 @@ function CompletarPagoForm() {
 
           {error && <p className="text-sm text-red">{error}</p>}
 
-          <button type="button" onClick={pagar} className="vc-btn-primary mt-2" disabled={loading}>
+          <button type="button" onClick={() => pagar()} className="vc-btn-primary mt-2" disabled={loading}>
             {loading ? "Conectando con Stripe..." : "Continuar al pago"}
           </button>
           <button type="button" onClick={cerrarSesion} className="text-center text-sm text-muted">

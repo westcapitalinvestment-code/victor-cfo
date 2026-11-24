@@ -150,6 +150,12 @@ function RegistroForm() {
   // quien de verdad activa el trial de 30 días; esto solo decide qué
   // mensaje MOSTRAR en pantalla).
   const esReferido = !!refId || !!socioCodigo;
+  // Registro simple (24 nov 2026, Joel: "entra gratis, utilízalo y en 7 días
+  // VICTOR te recomienda el plan que te conviene… sin mucha fricción"). Una
+  // sola tarjeta, sin escoger plan: la prueba corre en Pro (ver checkout) y al
+  // final VICTOR recomienda Core/Pro/Business. Las 4 tarjetas siguen en
+  // ?planes=1 y para Trading y referidos (que tienen su propia oferta).
+  const verPlanes = searchParams.get("planes") === "1";
 
   // Toggle Mensual/Anual compartido por las tarjetas de Core y Pro (10 sept
   // 2026, pedido de Joel tras comparar con Luna Money).
@@ -158,10 +164,14 @@ function RegistroForm() {
   // Core + Trading (19 nov 2026): llega desde /trading (cookie) o con ?trading=1.
   // La tarjeta de Core pasa a mostrar Core + Trading; el checkout lee la misma cookie.
   const [esTrading, setEsTrading] = useState(false);
+  // Hasta leer la cookie de Trading no se sabe si va el registro simple o el
+  // de Trading — se espera para no mostrar uno y saltar al otro.
+  const [cookieLeida, setCookieLeida] = useState(false);
   useEffect(() => {
     if (searchParams.get("trading") === "1") marcarCookieTradingCliente();
     const t = leerCookieTradingCliente();
     setEsTrading(t);
+    setCookieLeida(true);
     if (t) marcarEmbudo("vista_registro_trading");
     else marcarEmbudo("vista_registro");
   }, [searchParams]);
@@ -194,8 +204,8 @@ function RegistroForm() {
       : planId === "core" && esTrading
         ? `7 días gratis, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
         : planId === "core"
-          ? // La prueba corre en Pro (24 nov 2026); al final escoge plan y nunca se le cobra sin escogerlo.
-            `7 días gratis con todo Pro, sin tarjeta. Al final escoges tu plan (Core $${precioMostrar}${sufijo}). Si no lo activas, no se cobra nada.`
+          ? // La prueba tiene acceso Pro (24 nov 2026); se cobra Core solo si lo activa.
+            `7 días gratis con todo Pro, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
           : `7 días gratis, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`;
   }
 
@@ -256,6 +266,7 @@ function RegistroForm() {
     if (refId) params.set("ref", refId);
     if (socioEfectivo) params.set("socio", socioEfectivo);
     if (esGratis) params.set("gratis", "true");
+    if (!esGratis && !verPlanes && !esTrading && !esReferido) params.set("prueba", "1");
     // El teléfono NO va en la URL (quedaría en logs/historial): viaja en una
     // cookie de 15 min que /auth/callback lee y borra.
     if (telefonoValido) {
@@ -302,6 +313,7 @@ function RegistroForm() {
           // sesión todavía), /registro/completar-pago los lee de aquí para
           // no perder lo que la persona eligió.
           ...(esGratis ? {} : { plan_elegido: planEscogido, ciclo_elegido: ciclo }),
+          ...(!esGratis && !verPlanes && !esTrading && !esReferido ? { prueba_simple: "true" } : {}),
           ...(refId ? { ref_id: refId } : {}),
           ...(socioEfectivo ? { socio_codigo: socioEfectivo } : {}),
           ...(telefonoValido ? { telefono: telefonoDigitos } : {}),
@@ -384,6 +396,100 @@ function RegistroForm() {
                 : " continuar con tu pago."}
             </p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  const simple = !verPlanes && !esTrading && !esReferido;
+  if (!cookieLeida) return null;
+  if (simple && !mostrarEmailForm) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-teal/10 via-teal/5 to-transparent px-5 py-10">
+        <div className="w-full max-w-md">
+          <div className="mb-6 flex items-center justify-center gap-2">
+            <img src="/victor-avatar.png" alt="VICTOR" className="h-9 w-9 rounded-full object-cover" style={{ background: "#fff" }} />
+            <span className="text-lg font-medium">VICTOR</span>
+          </div>
+          <div className="vc-card flex flex-col gap-4 p-7">
+            <div className="text-center">
+              <h1 className="text-2xl font-semibold text-text">Entra gratis 7 días</h1>
+              <p className="mt-1 text-sm text-muted">Sin tarjeta. Sin escoger plan. Sin compromiso.</p>
+            </div>
+            <ol className="flex flex-col gap-3 text-sm">
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal/15 text-xs font-bold text-teal">1</span>
+                <span className="text-text">Conecta tu banco o tus tarjetas en 1 minuto.</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal/15 text-xs font-bold text-teal">2</span>
+                <span className="text-text">VICTOR revisa tus números y te enseña lo que no estás viendo.</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal/15 text-xs font-bold text-teal">3</span>
+                <span className="text-text">Al final, VICTOR te recomienda el plan que te conviene. Si no te sirve, no pagas nada.</span>
+              </li>
+            </ol>
+
+            {error && <p className="text-center text-sm text-red">{error}</p>}
+
+            <TerminosCheckbox aceptaTerminos={!!terminos[planDestacado]} setAceptaTerminos={setTerminosDe(planDestacado)} />
+            <button
+              type="button"
+              className="vc-btn-primary flex items-center justify-center gap-2"
+              disabled={loading || !!oauthEnCurso || !terminos[planDestacado]}
+              onClick={() => {
+                marcarEmbudo("clic_google");
+                continuarConOAuth("google", false, planDestacado);
+              }}
+            >
+              {oauthEnCurso === "google" ? "..." : "Entrar gratis con Google"}
+            </button>
+            <button
+              type="button"
+              className="text-sm text-muted underline"
+              disabled={loading || !!oauthEnCurso}
+              onClick={() => {
+                marcarEmbudo("clic_email");
+                abrirEmailForm(false, planDestacado);
+              }}
+            >
+              o con email
+            </button>
+
+            <details className="rounded-lg border border-border bg-bg px-3 py-2 text-left text-xs">
+              <summary className="cursor-pointer text-muted">¿Te presentó VICTOR un vendedor? (opcional)</summary>
+              <div className="mt-2 flex flex-col gap-2">
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  value={telefono}
+                  onChange={(e) => setTelefono(e.target.value)}
+                  placeholder="Tu teléfono (787-555-1234)"
+                  className="w-full rounded-lg border border-border p-2 text-sm"
+                  autoComplete="tel"
+                />
+                <input
+                  type="text"
+                  value={codigoManual}
+                  onChange={(e) => setCodigoManual(e.target.value)}
+                  placeholder="Código del vendedor"
+                  className="w-full rounded-lg border border-border p-2 text-sm"
+                  autoCapitalize="characters"
+                />
+              </div>
+            </details>
+          </div>
+          <p className="mt-5 text-center text-sm text-muted">
+            <Link href="/registro?planes=1" className="underline">
+              Ver planes y precios
+            </Link>
+            {" · "}
+            ¿Ya tienes cuenta?{" "}
+            <Link href="/login" className="font-medium text-teal">
+              Entra aquí
+            </Link>
+          </p>
         </div>
       </div>
     );
@@ -816,7 +922,9 @@ function RegistroForm() {
           ) : (
             <form onSubmit={handleRegistro} className="vc-card flex flex-col gap-3 p-8">
               <p className="text-center text-sm font-medium text-text">
-                {emailFlujo.gratis
+                {simple
+                  ? "Entra gratis 7 días — sin tarjeta"
+                  : emailFlujo.gratis
                   ? "Creando tu cuenta gratis"
                   : `Creando tu cuenta ${
                       emailFlujo.plan === "proplus" ? "Business" : emailFlujo.plan === "pro" ? "Pro" : "Core"
@@ -849,7 +957,7 @@ function RegistroForm() {
               <button type="submit" className="vc-btn-primary mt-1" disabled={loading || !terminos[claveEmail]}>
                 {loading
                   ? "Creando cuenta..."
-                  : emailFlujo.gratis
+                  : emailFlujo.gratis || simple
                     ? "Crear cuenta gratis"
                     : "Crear cuenta y pagar"}
               </button>

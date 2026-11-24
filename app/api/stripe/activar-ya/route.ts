@@ -16,8 +16,8 @@ import { getStripe, priceIdPara, esPlanValido, todosLosPriceIdsDePlanes, planDes
 //    primer periodo en ese momento). Se limpia prueba_hasta para quitar el
 //    tope de $7 de IA de la prueba; el webhook customer.subscription.updated
 //    sincroniza plan/estado igual que siempre.
-// Todos entran a la prueba en Pro; por eso el plan se escoge aquí y nunca se
-// cobra Pro a quien escogió Core.
+// La prueba da acceso Pro a todos (metadata prueba_pro); aquí se escoge el
+// plan real que se cobra.
 
 function volver(req: NextRequest, path: string) {
   return NextResponse.redirect(new URL(path, req.nextUrl.origin), 303);
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
     await stripe.subscriptions.update(sub.id, {
       default_payment_method: pm,
       ...(nuevoPrice && itemPlan ? { items: [{ id: itemPlan.id, price: nuevoPrice }] } : {}),
-      metadata: { ...sub.metadata, plan: planPedido },
+      metadata: { ...sub.metadata, plan: planPedido, prueba_pro: "" },
       proration_behavior: "none",
       trial_end: "now",
     });

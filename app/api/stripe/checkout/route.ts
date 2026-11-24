@@ -125,12 +125,14 @@ export async function POST(req: NextRequest) {
 
   // Prueba en Pro para todos (24 nov 2026, Joel: "vamos a llevarlos a todos a
   // plan PRO"): quien entra a la prueba de 7 días sin tarjeta escogiendo Core
-  // la hace en Pro, para que VICTOR vea también sus cuentas de negocio (en
-  // Core se esconden). Al final escoge su plan con /api/stripe/activar-ya —
-  // nunca se le cobra Pro sin escogerlo. Trading (Core + Trading) y el mes
-  // gratis de referidos se quedan como estaban.
+  // tiene acceso de Pro DURANTE la prueba, para que VICTOR vea también sus
+  // cuentas de negocio (en Core se esconden). El precio en Stripe sigue siendo
+  // el de Core (el checkout dice "luego $14.99"), así que nunca se le cobra Pro
+  // sin escogerlo: el acceso Pro lo da la metadata prueba_pro mientras la
+  // suscripción está en "trialing" (ver webhook). Al final escoge su plan con
+  // /api/stripe/activar-ya. Trading y el mes gratis de referidos, igual.
   const pruebaEnPro = planPedido === "core" && !conTrading && trialDias > 0 && !esReferidoConTrial;
-  const plan = pruebaEnPro ? "pro" : planPedido;
+  const plan = planPedido;
   const priceId = conTrading ? priceIdCoreTrading(ciclo) : priceIdPara(plan, ciclo);
   if (!priceId) {
     return NextResponse.json(
@@ -216,9 +218,9 @@ export async function POST(req: NextRequest) {
       client_reference_id: user.id,
       customer: perfil?.stripe_customer_id || undefined,
       customer_email: perfil?.stripe_customer_id ? undefined : user.email,
-      metadata: { supabase_user_id: user.id, plan, plan_elegido: planPedido, ciclo, ...(conTrading ? { trading: "1" } : {}), ...metaMetadata },
+      metadata: { supabase_user_id: user.id, plan: pruebaEnPro ? "pro" : plan, plan_elegido: planPedido, ciclo, ...(conTrading ? { trading: "1" } : {}), ...metaMetadata },
       subscription_data: {
-        metadata: { supabase_user_id: user.id, plan, plan_elegido: planPedido, ciclo, ...(conTrading ? { trading: "1" } : {}) },
+        metadata: { supabase_user_id: user.id, plan, plan_elegido: planPedido, ciclo, ...(conTrading ? { trading: "1" } : {}), ...(pruebaEnPro ? { prueba_pro: "1" } : {}) },
         ...(trialDias > 0 ? { trial_period_days: trialDias } : {}),
         // Trading (23 nov 2026): la prueba empieza SIN tarjeta. Si al final no
         // la agregó, la suscripción se cancela sola (no se cobra nada).

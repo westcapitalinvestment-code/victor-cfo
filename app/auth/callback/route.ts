@@ -29,6 +29,9 @@ export async function GET(req: NextRequest) {
   const ref = searchParams.get("ref");
   const socio = searchParams.get("socio");
   const gratis = searchParams.get("gratis") === "true";
+  // Registro simple (24 nov 2026): completar-pago arranca la prueba solo, sin
+  // que la persona tenga que escoger plan ni tocar "Continuar al pago".
+  const prueba = searchParams.get("prueba") === "1";
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=oauth`);
@@ -122,7 +125,7 @@ export async function GET(req: NextRequest) {
   // ahí el botón "Continuar al pago" crea el Checkout Session (con el
   // trial de 7 días, ver checkout/route.ts) a un solo tap más. Si no venía
   // plan (ej. login normal de un usuario ya pagando), sigue a `next`.
-  let destino = plan ? `/registro/completar-pago?plan=${plan}&ciclo=${ciclo}` : next;
+  let destino = plan ? `/registro/completar-pago?plan=${plan}&ciclo=${ciclo}${prueba ? "&auto=1" : ""}` : next;
 
   // Fix (2 oct 2026, hallazgo de Joel: entró con Google como CPA invitado y
   // le salió su propio /dashboard) — /login manda next=/dashboard explícito

@@ -442,7 +442,13 @@ export async function POST(req: NextRequest) {
         const precioPlanActual = subscription.items.data
           .map((it) => planDesdePriceId(it.price.id))
           .find((p) => p !== null);
-        const plan = precioPlanActual?.plan ?? subscription.metadata?.plan;
+        // Prueba con acceso Pro (24 nov 2026): mientras está en "trialing" y la
+        // suscripción tiene prueba_pro, el usuario es Pro aunque el precio sea
+        // Core. Al activar o terminar la prueba vuelve a mandar el precio.
+        const plan =
+          estado === "trialing" && subscription.metadata?.prueba_pro === "1"
+            ? "pro"
+            : precioPlanActual?.plan ?? subscription.metadata?.plan;
 
         // Mapeamos los estados de Stripe a los 3 valores que ya usa el
         // resto de la app (active | incomplete | cancelled) en vez de
