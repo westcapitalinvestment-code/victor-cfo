@@ -9,6 +9,11 @@ const PERMITIDOS = [
   "clic_google",
   "clic_email",
   "registro_email_ok",
+  // 24 nov 2026: plan gratis sin registro (/trading/plan)
+  "clic_plan",
+  "vista_plan",
+  "plan_listo",
+  "lead_ok",
 ] as const;
 export type EventoEmbudo = (typeof PERMITIDOS)[number];
 export const EVENTOS_EMBUDO: readonly string[] = PERMITIDOS;

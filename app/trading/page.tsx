@@ -66,8 +66,15 @@ function MockPanel() {
   );
 }
 
+// 24 nov 2026: el anuncio "5 – Un mal día" trae casi todo el tráfico y habla
+// del trade de revancha; la portada hablaba de cuentas de fondeo. Quien llega de
+// ese anuncio (o con ?v=maldia) ve una portada con su mismo mensaje.
+const ANUNCIOS_MAL_DIA = ["52631811859045"];
+
 export default function TradingLanding() {
   const [href, setHref] = useState("/registro?plan=core&ciclo=mensual&trading=1");
+  const [planHref, setPlanHref] = useState("/trading/plan");
+  const [malDia, setMalDia] = useState(false);
   useEffect(() => {
     marcarCookieTradingCliente();
     marcarEmbudo("vista_trading");
@@ -78,7 +85,24 @@ export default function TradingLanding() {
       if (k.startsWith("utm_")) p.set(k, v);
     });
     setHref(`/registro?${p.toString()}`);
+    const pu = new URLSearchParams();
+    q.forEach((v, k) => {
+      if (k.startsWith("utm_")) pu.set(k, v);
+    });
+    setPlanHref(`/trading/plan${pu.toString() ? `?${pu.toString()}` : ""}`);
+    setMalDia(q.get("v") === "maldia" || ANUNCIOS_MAL_DIA.includes(q.get("utm_content") ?? ""));
   }, []);
+
+  // Primer paso fácil (24 nov 2026): plan gratis sin registro, pensado para el celular.
+  const botonPlan = (texto: string) => (
+    <Link
+      href={planHref}
+      onClick={() => marcarEmbudo("clic_plan")}
+      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#19E68C] px-9 py-4 text-lg font-bold text-[#07090D] shadow-[0_0_40px_-5px_rgba(25,230,140,0.6)] transition hover:brightness-110 sm:w-auto"
+    >
+      {texto} <span aria-hidden>→</span>
+    </Link>
+  );
 
   const boton = (texto: string) => (
     <Link
@@ -127,13 +151,34 @@ export default function TradingLanding() {
         <section className="mb-24 grid items-center gap-12 md:mb-32 md:grid-cols-[1.15fr_1fr]">
           <div>
             <Etiqueta>Para traders de MT5</Etiqueta>
-            <h1 className="mb-5 text-5xl font-bold leading-[0.95] tracking-tight md:text-7xl">
-              Deja de pagar cuentas de fondeo.
-              <br />
-              <span className="text-[#19E68C]">Fondéate tú.</span>
-            </h1>
-            <p className="mb-8 max-w-xl text-lg text-[#C9D2DA] md:text-xl">Opera tu propio capital con reglas de prop firm y un CFO que te lleva paso a paso hacia la rentabilidad.</p>
-            {boton("Pruébalo 7 días gratis")}
+            {malDia ? (
+              <>
+                <h1 className="mb-5 text-5xl font-bold leading-[0.95] tracking-tight md:text-7xl">
+                  ¿Un mal día te borra la semana?
+                  <br />
+                  <span className="text-[#19E68C]">VICTOR te frena antes del trade de revancha.</span>
+                </h1>
+                <p className="mb-8 max-w-xl text-lg text-[#C9D2DA] md:text-xl">
+                  Tu stop, tu lote y tu límite del día, puestos solos en MT5. Como una prop firm, pero en tu cuenta.
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="mb-5 text-5xl font-bold leading-[0.95] tracking-tight md:text-7xl">
+                  Deja de pagar cuentas de fondeo.
+                  <br />
+                  <span className="text-[#19E68C]">Fondéate tú.</span>
+                </h1>
+                <p className="mb-8 max-w-xl text-lg text-[#C9D2DA] md:text-xl">Opera tu propio capital con reglas de prop firm y un CFO que te lleva paso a paso hacia la rentabilidad.</p>
+              </>
+            )}
+            {botonPlan("Arma tu plan gratis en 1 minuto")}
+            <p className="mt-4 text-[#C9D2DA]">
+              ¿Ya tienes reglas?{" "}
+              <Link href={href} onClick={() => marcarEmbudo("clic_cta_trading")} className="font-bold text-[#19E68C] underline underline-offset-4">
+                Pruébalo 7 días gratis
+              </Link>
+            </p>
           </div>
           <MockPanel />
         </section>
@@ -182,7 +227,10 @@ export default function TradingLanding() {
             ))}
           </div>
           <p className="mt-8 text-center text-lg text-[#C9D2DA]">
-            ¿No tienes reglas? <b className="text-[#19E68C]">VICTOR te arma tu plan en 1 minuto.</b>
+            ¿No tienes reglas?{" "}
+            <Link href={planHref} onClick={() => marcarEmbudo("clic_plan")} className="font-bold text-[#19E68C] underline underline-offset-4">
+              VICTOR te arma tu plan gratis en 1 minuto.
+            </Link>
           </p>
         </section>
 
