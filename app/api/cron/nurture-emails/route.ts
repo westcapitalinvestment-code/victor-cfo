@@ -9,6 +9,7 @@ import {
 } from "@/lib/email";
 import { TIPS_VICTOR } from "@/lib/tips-victor";
 import { procesarNurtureTrading } from "@/lib/nurture-trading";
+import { procesarNurturePrueba } from "@/lib/nurture-prueba";
 
 // Cron diario (25 sept 2026, pedido de Joel) — secuencia de nurture para
 // cuentas plan='gratis', pensada para convertir a Core/Pro usando el email
@@ -213,7 +214,17 @@ export async function GET(req: NextRequest) {
     resultados.trading = { error: err instanceof Error ? err.message : "Error desconocido" };
   }
 
-  console.log("[nurture-emails]", JSON.stringify({ enviadosDia2, enviadosDia5, enviadosDia8, enviadosCsv, enviadosTips, enviadosTrading, resultados }));
+  // Prueba gratis de 7 días sin tarjeta (24 nov 2026, migración 0231).
+  let enviadosPrueba = 0;
+  try {
+    const p = await procesarNurturePrueba(supabase);
+    enviadosPrueba = p.enviados;
+    Object.assign(resultados, p.resultados);
+  } catch (err) {
+    resultados.prueba = { error: err instanceof Error ? err.message : "Error desconocido" };
+  }
 
-  return NextResponse.json({ ok: true, enviadosDia2, enviadosDia5, enviadosDia8, enviadosCsv, enviadosTips, enviadosTrading, resultados });
+  console.log("[nurture-emails]", JSON.stringify({ enviadosDia2, enviadosDia5, enviadosDia8, enviadosCsv, enviadosTips, enviadosTrading, enviadosPrueba, resultados }));
+
+  return NextResponse.json({ ok: true, enviadosDia2, enviadosDia5, enviadosDia8, enviadosCsv, enviadosTips, enviadosTrading, enviadosPrueba, resultados });
 }

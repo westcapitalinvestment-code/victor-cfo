@@ -14,6 +14,11 @@ const PERMITIDOS = [
   "vista_plan",
   "plan_listo",
   "lead_ok",
+  // 24 nov 2026: embudo de tarjetas (/tarjetas) y registro general
+  "vista_tarjetas",
+  "tarjetas_resultado",
+  "clic_tarjetas_registro",
+  "vista_registro",
 ] as const;
 export type EventoEmbudo = (typeof PERMITIDOS)[number];
 export const EVENTOS_EMBUDO: readonly string[] = PERMITIDOS;

@@ -20,10 +20,35 @@ export function getVictorBasePrompt(): string {
 // DESPUÉS del system prompt base — esto es lo que la Capa 2 y la Capa 4
 // (continuidad) del prompt piden: nombre, plan, y el resumen de memoria
 // de Supabase (victor_memory) si existe.
+// Prueba gratis de 7 días sin tarjeta (24 nov 2026, Joel: "que se registre
+// donde más le convenga, quizás VICTOR lo pueda ayudar a canalizarlo").
+function lineasPrueba(pruebaHasta: string | null | undefined, plan: string | null): string[] {
+  if (!pruebaHasta) return [];
+  const fin = new Date(pruebaHasta).getTime();
+  const dias = Math.ceil((fin - Date.now()) / 86_400_000);
+  if (dias <= 0) return [];
+  const lineas = [
+    `PRUEBA GRATIS: le quedan ${dias} día(s) de prueba (entró sin tarjeta). Al terminar, si no agregó`,
+    "tarjeta, la suscripción se cancela sola. Mientras tanto, enséñale el valor con SUS números:",
+    "cobros que se repiten cada mes (sobre todo los que ya no usa o creía cancelados) y su camino",
+    "más corto para salir de las tarjetas.",
+  ];
+  if (dias <= 2)
+    lineas.push(
+      "Como le quedan 2 días o menos: en algún momento natural de la conversación (sin presionar y",
+      `sin interrumpir lo que pregunta), recomiéndale el plan que le conviene según lo que viste en sus`,
+      "datos — Core si es lo personal, Pro si es independiente o tiene ingresos de negocio, Business si",
+      "tiene un negocio con empleados o varias cuentas de negocio — y dile que para seguir solo tiene que",
+      `agregar su tarjeta en Configuración → Plan. Plan elegido al registrarse: ${PLAN_LABEL[plan ?? "core"] ?? "Core"}.`,
+    );
+  return lineas;
+}
+
 export function buildUserContextBlock(params: {
   fullName: string | null;
   plan: string | null;
   planStatus: string | null;
+  pruebaHasta?: string | null;
   memorySummary: string | null;
   goals: unknown[] | null;
   activeStrategies: unknown[] | null;
@@ -88,6 +113,7 @@ export function buildUserContextBlock(params: {
     fullName,
     plan,
     planStatus,
+    pruebaHasta,
     memorySummary,
     goals,
     activeStrategies,
@@ -123,6 +149,7 @@ export function buildUserContextBlock(params: {
     // misma tabla que ya usa el Dashboard de Operaciones — hoy dice
     // "Business" para ese nivel.
     `Plan activo: ${PLAN_LABEL[plan ?? "core"] ?? plan ?? "Core"} (${planStatus ?? "trialing"})`,
+    ...lineasPrueba(pruebaHasta, plan),
     "",
     isFounder
       ? [

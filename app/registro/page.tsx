@@ -163,6 +163,7 @@ function RegistroForm() {
     const t = leerCookieTradingCliente();
     setEsTrading(t);
     if (t) marcarEmbudo("vista_registro_trading");
+    else marcarEmbudo("vista_registro");
   }, [searchParams]);
 
   function datosPrecio(planId: PlanPago) {
@@ -192,7 +193,7 @@ function RegistroForm() {
       ? `Tu primer mes de ${nombre} es gratis, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
       : planId === "core" && esTrading
         ? `7 días gratis, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
-        : `Gratis por 7 días, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`;
+        : `7 días gratis, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`;
   }
 
   const [email, setEmail] = useState("");

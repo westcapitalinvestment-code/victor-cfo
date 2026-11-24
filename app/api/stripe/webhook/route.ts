@@ -120,6 +120,12 @@ function periodoDeSuscripcion(subscription: Stripe.Subscription): { inicio: stri
 // verificación de firma (constructEvent) es lo único que nos garantiza que
 // el POST viene realmente de Stripe y no de cualquiera que adivine esta
 // URL y mande un "pago exitoso" falso.
+// Fin de la prueba gratis (24 nov 2026): mientras users.prueba_hasta esté en el
+// futuro, la IA tiene tope de $7 (lib/limites-ia). null = no está en prueba.
+function pruebaHasta(sub: Stripe.Subscription): string | null {
+  return sub.status === "trialing" && sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+}
+
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("stripe-signature");
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -345,6 +351,7 @@ export async function POST(req: NextRequest) {
         if (subscriptionId) {
           try {
             const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+            datosActualizar.prueba_hasta = pruebaHasta(subscription);
             const ciclo = periodoDeSuscripcion(subscription);
             if (ciclo) {
               // Si esta cuenta ya tenía un ciclo anterior con crédito de IA
@@ -463,6 +470,7 @@ export async function POST(req: NextRequest) {
           plan_status,
         };
         if (esPlanValido(plan)) datosActualizar.plan = plan;
+        datosActualizar.prueba_hasta = pruebaHasta(subscription);
         // Trading incluido = el precio que Stripe cobra es Core + Trading. En
         // Pro/Business el acceso viene del plan, así que esto solo importa en Core.
         if (precioPlanActual) {

@@ -3069,7 +3069,7 @@ export async function executeVictorTool(
       // bloquea — si eso cambia allá, hay que cambiarlo aquí también.
       const { data: yo, error: errorYo } = await supabase
         .from("users")
-        .select("plan, email, ciclo_inicio, ciclo_fin, billed_by_firma_id")
+        .select("plan, email, ciclo_inicio, ciclo_fin, billed_by_firma_id, prueba_hasta")
         .eq("id", ownerId)
         .maybeSingle();
       if (errorYo || !yo) {
@@ -3121,7 +3121,7 @@ export async function executeVictorTool(
       const cicloClave = claveCicloUso(yo);
       const { diaDelPeriodo, diasEnElPeriodo } = progresoCicloUso(yo);
       const planActual = yo.plan ?? "core";
-      const limiteMensual = limiteMensualIaCentavos(planActual, yo.billed_by_firma_id);
+      const limiteMensual = limiteMensualIaCentavos(planActual, yo.billed_by_firma_id, yo.prueba_hasta);
 
       const [{ data: usoCiclo }, { data: creditosCiclo }] = await Promise.all([
         supabase.from("uso_ia_mensual").select("costo_centavos").eq("owner_id", ownerId).eq("ciclo_clave", cicloClave).maybeSingle(),

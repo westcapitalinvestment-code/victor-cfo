@@ -196,6 +196,11 @@ export async function POST(req: NextRequest) {
   };
 
   try {
+    // Prueba de 7 días SIN tarjeta para todos los planes (24 nov 2026, Joel:
+    // "sera que entren gratis"; antes solo Trading). Stripe no pide tarjeta y, si
+    // al terminar no la agregó, cancela solo. El mes gratis de referidos sigue
+    // pidiendo tarjeta. Durante la prueba la IA tiene tope de $7 (lib/limites-ia).
+    const sinTarjeta = trialDias > 0 && !esReferidoConTrial;
     const session = await getStripe().checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
@@ -208,9 +213,9 @@ export async function POST(req: NextRequest) {
         ...(trialDias > 0 ? { trial_period_days: trialDias } : {}),
         // Trading (23 nov 2026): la prueba empieza SIN tarjeta. Si al final no
         // la agregó, la suscripción se cancela sola (no se cobra nada).
-        ...(trialDias > 0 && conTrading ? { trial_settings: { end_behavior: { missing_payment_method: "cancel" as const } } } : {}),
+        ...(sinTarjeta ? { trial_settings: { end_behavior: { missing_payment_method: "cancel" as const } } } : {}),
       },
-      ...(trialDias > 0 && conTrading ? { payment_method_collection: "if_required" as const } : {}),
+      ...(sinTarjeta ? { payment_method_collection: "if_required" as const } : {}),
       success_url: `${origin}${returnTo}${separadorReturn}pago=exitoso`,
       cancel_url: `${origin}${cancelTo}${separadorCancel}plan=${plan}&ciclo=${ciclo}`,
       allow_promotion_codes: true,

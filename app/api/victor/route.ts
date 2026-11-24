@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
   // cuándo Stripe realmente cobra.
   const { data: profile } = await supabase
     .from("users")
-    .select("full_name, plan, plan_status, ciclo_inicio, ciclo_fin, billed_by_firma_id")
+    .select("full_name, plan, plan_status, ciclo_inicio, ciclo_fin, billed_by_firma_id, prueba_hasta")
     .eq("id", user.id)
     .single();
 
@@ -362,7 +362,7 @@ export async function POST(req: NextRequest) {
         .maybeSingle(),
     ]);
     const costoCicloHastaAhora = Number(usoCiclo?.costo_centavos ?? 0);
-    const limiteMensual = limiteMensualIaCentavos(planActual, profile?.billed_by_firma_id);
+    const limiteMensual = limiteMensualIaCentavos(planActual, profile?.billed_by_firma_id, profile?.prueba_hasta);
     // Los créditos comprados (migración 0064) se suman COMPLETOS al
     // presupuesto de este ciclo — a diferencia del tope del plan, no se les
     // aplica ritmo-parejo, porque la persona los compró específicamente
@@ -624,6 +624,7 @@ export async function POST(req: NextRequest) {
     fullName: profile?.full_name ?? null,
     plan: profile?.plan ?? null,
     planStatus: profile?.plan_status ?? null,
+    pruebaHasta: profile?.prueba_hasta ?? null,
     memorySummary: memory?.last_conversation_summary ?? null,
     goals: (memory?.goals as unknown[]) ?? null,
     activeStrategies: (memory?.active_strategies as unknown[]) ?? null,

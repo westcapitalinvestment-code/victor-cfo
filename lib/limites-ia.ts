@@ -24,10 +24,21 @@ export const LIMITES_MENSUALES_CENTAVOS: Record<string, number> = { core: 750, p
 // espejo en tools.ts y el rollover de créditos del webhook no diverjan.
 export const LIMITE_IA_FIRMA_CENTAVOS = 2000;
 
-export function limiteMensualIaCentavos(plan: string | null | undefined, billedByFirmaId?: string | null): number {
+// Prueba gratis de 7 días sin tarjeta (24 nov 2026, Joel: "$7 de IA por los 7
+// días, $1 por día"): mientras users.prueba_hasta esté en el futuro el tope es
+// $7 en cualquier plan. El ciclo de la prueba dura 7 días, así que el
+// ritmo-parejo de route.ts lo reparte en ~$1 por día.
+export const LIMITE_IA_PRUEBA_CENTAVOS = 700;
+
+export function limiteMensualIaCentavos(
+  plan: string | null | undefined,
+  billedByFirmaId?: string | null,
+  pruebaHasta?: string | null,
+): number {
   const p = plan ?? "core";
-  if (p === "proplus" && billedByFirmaId) return LIMITE_IA_FIRMA_CENTAVOS;
-  return LIMITES_MENSUALES_CENTAVOS[p] ?? LIMITES_MENSUALES_CENTAVOS.core;
+  const base = p === "proplus" && billedByFirmaId ? LIMITE_IA_FIRMA_CENTAVOS : LIMITES_MENSUALES_CENTAVOS[p] ?? LIMITES_MENSUALES_CENTAVOS.core;
+  if (pruebaHasta && new Date(pruebaHasta).getTime() > Date.now()) return Math.min(base, LIMITE_IA_PRUEBA_CENTAVOS);
+  return base;
 }
 
 // "Microtokens" — 8 sept 2026, pedido explícito de Joel: invertir el
