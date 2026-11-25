@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { cfgGuardian } from "@/lib/trading-bloqueos";
 import { aplicarPendientes } from "@/lib/trading-reglas-server";
 import { pedirVinculo } from "@/lib/trading-vinculo";
+import { avisosTrading } from "@/lib/trading-avisos";
 
 // Sincronización en vivo con MT5 (oct 2026). El guardián (VictorGuard.mq5)
 // llama aquí cada ~30 s con WebRequest. No hay sesión de usuario: la
@@ -81,9 +82,16 @@ export async function POST(req: NextRequest) {
       riesgo_usd: num(x.risk, -1) > 0 ? num(x.risk) : null,
     });
   }
+  // .select() devuelve solo las filas NUEVAS (las que ya estaban se ignoran): con eso
+  // salen los avisos al celular de "trade cerrado" sin repetirse.
+  let nuevos: { ticket: string; simbolo: string; ganancia: number; comision: number; swap: number }[] = [];
   if (filas.length) {
-    const { error } = await admin.from("trades").upsert(filas, { onConflict: "account_id,ticket", ignoreDuplicates: true });
+    const { data: ins, error } = await admin
+      .from("trades")
+      .upsert(filas, { onConflict: "account_id,ticket", ignoreDuplicates: true })
+      .select("ticket, simbolo, ganancia, comision, swap");
     if (error) return NextResponse.json({ error: "No se pudieron guardar los trades." }, { status: 500 });
+    nuevos = ins ?? [];
   }
 
   const ahora = new Date().toISOString();
@@ -113,6 +121,10 @@ export async function POST(req: NextRequest) {
   } catch {
     cfg = "";
   }
+
+  // Avisos al celular (guardián 3.25+ manda open/lock/events; con versiones viejas
+  // solo salen los de trades cerrados).
+  await avisosTrading(admin, t, body as Record<string, unknown>, nuevos);
 
   return NextResponse.json({ ok: true, recibidos: filas.length, cfg });
 }

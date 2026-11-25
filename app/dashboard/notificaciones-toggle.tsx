@@ -21,7 +21,8 @@ function base64UrlAUint8Array(base64Url: string): Uint8Array {
 
 type Estado = "cargando" | "no_soportado" | "no_instalada" | "desactivada" | "activada" | "error";
 
-export default function NotificacionesToggle() {
+export default function NotificacionesToggle({ contexto = "general" }: { contexto?: "general" | "trading" }) {
+  const trading = contexto === "trading";
   const [estado, setEstado] = useState<Estado>("cargando");
   const [trabajando, setTrabajando] = useState(false);
 
@@ -39,7 +40,10 @@ export default function NotificacionesToggle() {
         window.matchMedia("(display-mode: standalone)").matches ||
         (navigator as unknown as { standalone?: boolean }).standalone === true;
 
-      if (!instalada) {
+      // Solo iPhone/iPad exige instalar la app para recibir push; Android y la
+      // computadora (Chrome/Edge) lo permiten desde el navegador.
+      const esIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (esIOS && !instalada) {
         setEstado("no_instalada");
         return;
       }
@@ -119,7 +123,7 @@ export default function NotificacionesToggle() {
 
   return (
     <div className="vc-card mb-4">
-      <p className="text-sm font-semibold">Notificaciones</p>
+      <p className="text-sm font-semibold">{trading ? "Avisos al celular" : "Notificaciones"}</p>
 
       {estado === "no_soportado" && (
         <p className="mt-2 text-sm text-muted">Tu navegador no soporta notificaciones push todavía.</p>
@@ -127,7 +131,7 @@ export default function NotificacionesToggle() {
 
       {estado === "no_instalada" && (
         <p className="mt-2 text-sm text-muted">
-          Para recibir avisos (documentos por vencer, gastos sin categorizar) primero instala VICTOR CFO en tu
+          Para recibir avisos {trading ? "de tus trades" : "(documentos por vencer, gastos sin categorizar)"} primero instala VICTOR CFO en tu
           celular: en Safari/Chrome toca "Compartir" → "Agregar a pantalla de inicio", y entra a la app desde ese
           ícono.
         </p>
@@ -140,9 +144,13 @@ export default function NotificacionesToggle() {
       {(estado === "desactivada" || estado === "activada") && (
         <div className="mt-2 flex items-center justify-between">
           <p className="text-sm text-text">
-            {estado === "activada"
-              ? "Activadas — te avisamos de documentos por vencer y gastos sin categorizar."
-              : "Recibe un aviso cuando tengas documentos por vencer o gastos sin categorizar."}
+            {trading
+              ? estado === "activada"
+                ? "Activados en este equipo — te avisamos al abrir y cerrar trades, cuando te quede 1 pérdida y si VictorGuard te bloquea."
+                : "Recibe un aviso cuando abras o cierres un trade (con tu riesgo y lo que te queda del día) y si VictorGuard te bloquea. Actívalo en tu celular."
+              : estado === "activada"
+                ? "Activadas — te avisamos de documentos por vencer y gastos sin categorizar."
+                : "Recibe un aviso cuando tengas documentos por vencer o gastos sin categorizar."}
           </p>
           <button
             onClick={estado === "activada" ? desactivar : activar}

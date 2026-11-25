@@ -30,6 +30,7 @@ import ReglasPropias, { type ReglaPropia } from "./reglas-propias";
 import PlanSugeridoCard from "./plan-sugerido";
 import type { PlanSugerido } from "@/lib/trading-plan-sugerido";
 import BloqueosHorario from "./bloqueos-horario";
+import NotificacionesToggle from "../notificaciones-toggle";
 import { PruebaPlan, CambiosPendientes } from "./prueba-plan";
 import { BLOQUEOS_VACIOS, bloqueosAColumnas, cfgGuardian, describirBloqueos, fechaLocal, normalizarBloqueos, type Bloqueos } from "@/lib/trading-bloqueos";
 
@@ -1002,6 +1003,7 @@ function TradingContenido() {
           )}
           {tab === "panel" && (
             <>
+              {cuenta?.last_sync_at && <NotificacionesToggle contexto="trading" />}
               {prueba && <PruebaPlan inicio={prueba.inicio} dias={prueba.dias} trades={tradesEnPrueba} hoy={fechaLocal(bloqueos.zona, Date.now())} />}
               {trades.length === 0 ? (
                 <div className="vc-card text-center text-sm text-muted">Todavía no hay trades. Con el guardián conectado llegan solos; también puedes subir el reporte Excel de MT5.</div>

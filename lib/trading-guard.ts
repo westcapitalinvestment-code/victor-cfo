@@ -41,7 +41,7 @@ export type ParametrosGuardian = {
 
 // Dirección fija de sincronización para el .ex5 precompilado.
 export const SYNC_URL_PRODUCCION = "https://www.victorcfo.com/api/trading/sync";
-export const VERSION_GUARDIAN = "3.24";
+export const VERSION_GUARDIAN = "3.25";
 
 const n = (v: number, d = 2) => {
   const x = Number.isFinite(v) ? v : 0;
@@ -384,6 +384,14 @@ double FloatingPL()
 // bloqueo duro: cierra todo y no deja operar
 // Explicacion larga del ultimo bloqueo (para las alertas): por que te protegio y que hacer
 string g_detalle = "";
+string g_evs = "";           // avisos para el celular: se mandan a VICTOR en la siguiente sincronizacion (3.25)
+void Evt(string s)
+{
+   StringReplace(s, "\\", "");
+   StringReplace(s, "\"", "");
+   if(StringLen(g_evs) + StringLen(s) > 1500) return;
+   g_evs += (g_evs == "" ? "" : ",") + "\"" + s + "\"";
+}
 
 //------------------------------------------------------------------
 // Reglas vivas desde VICTOR (horario, dias, pausas, noticias y limites).
@@ -759,6 +767,9 @@ void Guard()
             if(cierraPorBloqueo) Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: ", g_detalle);
             else if(!SymbolAllowed(sym)) Alert("VictorGuard cerro tu trade de ", sym, ": esta en tus activos prohibidos o fuera de tu lista.");
             else Alert("VictorGuard cerro tu trade de ", sym, ": ya tenias ", IntegerToString(MaxOpenPositions), " trades abiertos, tu maximo.");
+            if(cierraPorBloqueo) Evt("Cerre tu trade de " + sym + ": " + g_detalle);
+            else if(!SymbolAllowed(sym)) Evt("Cerre tu trade de " + sym + ": esta en tus activos prohibidos.");
+            else Evt("Cerre tu trade de " + sym + ": ya tenias " + IntegerToString(MaxOpenPositions) + " trades abiertos, tu maximo.");
          }
          SafeClose(tk);
          continue;
@@ -816,6 +827,7 @@ void Guard()
          if(!CanOpenNew(sym, wn, tk, vol * LossPerLot(sym, lossDist)))
          {
             Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: ", g_detalle);
+            Evt("Cerre tu trade de " + sym + ": " + g_detalle);
             SafeClose(tk);
             continue;
          }
@@ -1373,12 +1385,52 @@ void SyncTick()
       ns++;
    }
 
+   // 2b) trades abiertos y estado del dia, para los avisos al celular (3.25)
+   string opn = "";
+   int nOpen = 0;
+   for(int q = 0; q < PositionsTotal() && nOpen < 20; q++)
+   {
+      ulong ptk = PositionGetTicket(q);
+      if(ptk == 0) continue;
+      string psym = PositionGetString(POSITION_SYMBOL);
+      bool pbuy = PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY;
+      double pvol = PositionGetDouble(POSITION_VOLUME);
+      double psl = PositionGetDouble(POSITION_SL), pop = PositionGetDouble(POSITION_PRICE_OPEN);
+      double prk = -1;
+      if(GlobalVariableCheck(P + "RK_" + (string)ptk)) prk = GlobalVariableGet(P + "RK_" + (string)ptk);
+      else if(psl > 0)
+      {
+         double pdd = pbuy ? pop - psl : psl - pop;
+         if(pdd > 0) prk = LossPerLot(psym, pdd) * pvol;
+      }
+      opn += (opn == "" ? "" : ",") + "{\"ticket\":" + JStr((string)ptk) + ",\"symbol\":" + JStr(psym)
+         + ",\"side\":" + JStr(pbuy ? "buy" : "sell") + ",\"volume\":" + DoubleToString(pvol, 2)
+         + (prk >= 0 ? ",\"risk\":" + DoubleToString(prk, 2) : "") + "}";
+      nOpen++;
+   }
+   string lockTxt = "";
+   double leftUsd = -1;
+   int dLos = 0, dMan = 0, dCl = 0; double dPl = 0; datetime dLL = 0;
+   if(g_cfgOk)
+   {
+      string dsv = g_detalle, lw = "";
+      if(IsBlocked(lw)) lockTxt = g_detalle;
+      g_detalle = dsv;
+      DayStats(dLos, dPl, dMan, dCl, dLL);
+      double sb = AccountInfoDouble(ACCOUNT_BALANCE) - dPl;
+      double mx = (MaxDailyLossUSD > 0) ? MaxDailyLossUSD : sb * MaxDailyLossPct / 100.0;
+      leftUsd = MathMax(0, mx + MathMin(0, dPl));
+   }
+
    // 3) enviar (siempre, aunque no haya trades nuevos: asi se actualiza el balance)
    string body = "{\"token\":" + JStr(g_token)
       + ",\"login\":" + JStr(IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)))
       + ",\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2)
       + ",\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
+      + ",\"lock\":" + JStr(lockTxt) + ",\"losers\":" + IntegerToString(dLos) + ",\"maxl\":" + IntegerToString(MaxLosersPerDay)
+      + ",\"left\":" + DoubleToString(leftUsd, 2) + ",\"open\":[" + opn + "],\"events\":[" + g_evs + "]"
       + ",\"trades\":[" + items + "]}";
+   string evsEnviados = g_evs;
    char data[], res[];
    string rh;
    StringToCharArray(body, data, 0, StringLen(body), CP_UTF8);
@@ -1388,6 +1440,7 @@ void SyncTick()
    else if(code == 200)
    {
       for(int q = 0; q < ns; q++) GlobalVariableSet(P + "SENT_" + (string)sentIds[q], 1);
+      if(g_evs == evsEnviados) g_evs = "";
       // reglas vivas que manda VICTOR: "cfg":"K=V;K=V"
       string resp = CharArrayToString(res, 0, WHOLE_ARRAY, CP_UTF8);
       int c0 = StringFind(resp, "\"cfg\":\"");
