@@ -17,7 +17,7 @@
 //|  Probar SIEMPRE en demo primero. No es asesoria financiera.       |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "3.23"
+#property version   "3.24"
 #include <Trade\Trade.mqh>
 
 CTrade trade;
@@ -525,8 +525,14 @@ bool NewsBlocked(string s, string &why)
 }
 
 
+// 3.24: que tipo de bloqueo es. Solo la perdida maxima del dia y el piso de la
+// cuenta cierran trades abiertos (y solo los que todavia arriesgan dinero). Los
+// demas bloqueos (perdedores del dia, cierre manual) solo impiden ABRIR nuevos.
+bool g_bloqueoCierra = false;
+
 bool IsBlocked(string &why)
 {
+   g_bloqueoCierra = false;
    int losers, manual, closed; double pl; datetime lastLoss;
    DayStats(losers, pl, manual, closed, lastLoss);
    double total = pl + FloatingPL();
@@ -549,12 +555,14 @@ bool IsBlocked(string &why)
    {
       why = "BLOQUEADO: llegaste a tu perdida del dia ($" + DoubleToString(maxLoss, 2) + ")";
       g_detalle = "llegaste a tu perdida maxima del dia ($" + DoubleToString(maxLoss, 2) + "). Te bloqueo hasta manana para que un mal dia no se convierta en una cuenta quemada.";
+      g_bloqueoCierra = true;
       return true;
    }
    if(AccountInfoDouble(ACCOUNT_EQUITY) <= minEq)
    {
       why = "BLOQUEADO: la cuenta llego a tu piso ($" + DoubleToString(minEq, 2) + ")";
       g_detalle = "tu cuenta bajo de tu piso de $" + DoubleToString(minEq, 2) + ". Todo queda bloqueado para que no la pierdas completa. Revisa tu plan antes de seguir.";
+      g_bloqueoCierra = true;
       return true;
    }
    why = "OK | perdedores hoy: " + IntegerToString(losers) + "/" + IntegerToString(MaxLosersPerDay)
@@ -673,14 +681,19 @@ void Guard()
       double sl  = PositionGetDouble(POSITION_SL);
       double tp  = PositionGetDouble(POSITION_TP);
 
+      // 3.24: un trade con el SL en ganancia o en break-even ya no arriesga dinero:
+      // nunca se cierra por un bloqueo. Y los bloqueos que no son de perdida
+      // maxima/piso (ej. 3 perdedores hoy) no cierran los trades ya abiertos.
+      bool slProtege = (sl != 0) && ((typ == POSITION_TYPE_BUY) ? (sl >= op) : (sl <= op));
+      bool cierraPorBloqueo = blocked && g_bloqueoCierra && !slProtege;
       // reglas que cierran el trade (se explica una sola vez por trade)
-      if(blocked || !SymbolAllowed(sym) || kept >= MaxOpenPositions)
+      if(cierraPorBloqueo || !SymbolAllowed(sym) || kept >= MaxOpenPositions)
       {
          string kav = P + "AV_" + (string)tk;
          if(!GlobalVariableCheck(kav))
          {
             GlobalVariableSet(kav, 1);
-            if(blocked) Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: ", g_detalle);
+            if(cierraPorBloqueo) Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: ", g_detalle);
             else if(!SymbolAllowed(sym)) Alert("VictorGuard cerro tu trade de ", sym, ": esta en tus activos prohibidos o fuera de tu lista.");
             else Alert("VictorGuard cerro tu trade de ", sym, ": ya tenias ", IntegerToString(MaxOpenPositions), " trades abiertos, tu maximo.");
          }
