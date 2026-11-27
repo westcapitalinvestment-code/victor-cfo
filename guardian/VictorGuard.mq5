@@ -17,7 +17,7 @@
 //|  Probar SIEMPRE en demo primero. No es asesoria financiera.       |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "3.25"
+#property version   "3.26"
 #include <Trade\Trade.mqh>
 
 CTrade trade;
@@ -651,8 +651,20 @@ bool CanOpenNew(string s, string &why, ulong skipTk = 0, double riskOverride = -
 // (un modo no aceptado por el broker deja ordenes de cierre atascadas).
 datetime lastCloseTry = 0;
 ulong    lastCloseTk  = 0;
+// 3.26: un aviso por trade (aunque el guardian este en varios graficos)
+bool AvisoUnaVez(ulong tk)
+{
+   string kav = P + "AV_" + (string)tk;
+   if(GlobalVariableCheck(kav)) return false;
+   GlobalVariableSet(kav, 1);
+   return true;
+}
+
 bool SafeClose(ulong tk)
 {
+   // 3.26: con el mercado cerrado no se insiste cada segundo; se reintenta cada 5 min
+   string kmc = P + "MC_" + (string)tk;
+   if(GlobalVariableCheck(kmc) && TimeLocal() < (datetime)GlobalVariableGet(kmc)) return false;
    if(tk == lastCloseTk && TimeCurrent() - lastCloseTry < 3) return false;
    lastCloseTk = tk; lastCloseTry = TimeCurrent();
    ENUM_ORDER_TYPE_FILLING modes[3] = {ORDER_FILLING_IOC, ORDER_FILLING_FOK, ORDER_FILLING_RETURN};
@@ -661,8 +673,17 @@ bool SafeClose(ulong tk)
       trade.SetTypeFilling(modes[m]);
       if(trade.PositionClose(tk)) return true;
       uint rc = trade.ResultRetcode();
-      if(rc == TRADE_RETCODE_MARKET_CLOSED || rc == TRADE_RETCODE_CONNECTION ||
-         rc == TRADE_RETCODE_TRADE_DISABLED) break;
+      if(rc == TRADE_RETCODE_MARKET_CLOSED || rc == TRADE_RETCODE_TRADE_DISABLED)
+      {
+         if(!GlobalVariableCheck(kmc))
+         {
+            string msym = PositionSelectByTicket(tk) ? PositionGetString(POSITION_SYMBOL) : "";
+            Alert("VictorGuard: el mercado de ", msym, " esta cerrado. Cierro ese trade en cuanto abra.");
+         }
+         GlobalVariableSet(kmc, (double)(TimeLocal() + 300));
+         break;
+      }
+      if(rc == TRADE_RETCODE_CONNECTION) break;
    }
    Print("VictorGuard: no pude cerrar #", tk, " retcode=", trade.ResultRetcode(), " ", trade.ResultRetcodeDescription());
    return false;
@@ -745,17 +766,19 @@ void Guard()
                      ". Lo deje en ", DoubleToString(okLot, 2), " lotes para arriesgar $", DoubleToString(okLot * lpl, 2), " (tu limite por trade es $", DoubleToString(allowed, 2), ").");
                continue;   // en el proximo ciclo se revisa con el lote nuevo
             }
-            Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: con ", DoubleToString(vol, 2), " lotes arriesgabas $",
-                  DoubleToString(vol * lpl, 2), " y tu limite por trade es $", DoubleToString(allowed, 2), ". Abre con el boton del guardian y te calcula el lote correcto.");
+            if(AvisoUnaVez(tk))
+               Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: con ", DoubleToString(vol, 2), " lotes arriesgabas $",
+                     DoubleToString(vol * lpl, 2), " y tu limite por trade es $", DoubleToString(allowed, 2), ". Abre con el boton del guardian y te calcula el lote correcto.");
             SafeClose(tk);
             continue;
          }
          // el lote minimo solo se permite si no pasa 1.5 veces tu riesgo (igual que los botones)
          if(vol <= minL + 0.0000001 && RiskTooHigh(sym, vol, lossDist))
          {
-            Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: hasta el lote mas pequeno (", DoubleToString(vol, 2), ") arriesgaba $",
-                  DoubleToString(vol * LossPerLot(sym, lossDist), 2), " y tu limite por trade es $", DoubleToString(allowed, 2),
-                  ". Ahora mismo este activo se mueve demasiado para tu cuenta.");
+            if(AvisoUnaVez(tk))
+               Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: hasta el lote mas pequeno (", DoubleToString(vol, 2), ") arriesgaba $",
+                     DoubleToString(vol * LossPerLot(sym, lossDist), 2), " y tu limite por trade es $", DoubleToString(allowed, 2),
+                     ". Ahora mismo este activo se mueve demasiado para tu cuenta.");
             SafeClose(tk);
             continue;
          }
@@ -763,8 +786,11 @@ void Guard()
          string wn;
          if(!CanOpenNew(sym, wn, tk, vol * LossPerLot(sym, lossDist)))
          {
-            Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: ", g_detalle);
-            Evt("Cerre tu trade de " + sym + ": " + g_detalle);
+            if(AvisoUnaVez(tk))
+            {
+               Alert("VictorGuard cerro tu trade de ", sym, " para protegerte: ", g_detalle);
+               Evt("Cerre tu trade de " + sym + ": " + g_detalle);
+            }
             SafeClose(tk);
             continue;
          }
