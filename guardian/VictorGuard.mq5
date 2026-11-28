@@ -17,7 +17,7 @@
 //|  Probar SIEMPRE en demo primero. No es asesoria financiera.       |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "3.26"
+#property version   "4.0"
 #include <Trade\Trade.mqh>
 
 CTrade trade;
@@ -87,6 +87,10 @@ int CooldownMin = 0;
 int    NewsMin = 0;          // minutos antes/despues de noticias de alto impacto (0 = apagado)
 int    TzOffsetMin = 0;      // tu zona horaria respecto a UTC (solo para mostrar horas)
 string g_horarioTxt = "";
+// ---- 4.0: linea de Stop Loss que se arrastra + reglas que se cambian aqui en MT5 ----
+string g_set = "";           // reglas cambiadas en el panel: se mandan a VICTOR en la proxima sincronizacion
+string g_setMsg1 = "", g_setMsg2 = "";
+bool   g_reglasAbiertas = false;
 string CFG0 = "";
 
 // --- Entrada automatica: retroceso a la media en tendencia (APAGADA por defecto) ---
@@ -744,8 +748,9 @@ void Guard()
          double lossDist = dist;
          if(sl != 0)
          {
+            // 4.0: el riesgo se mide a TU stop real (la linea de Stop Loss), este donde este
             double d = isBuy ? op - sl : sl - op;
-            if(d > 0 && d <= dist * 1.5) lossDist = d;
+            if(d > 0) lossDist = d;
          }
          // margen de 10% por deslizamiento y redondeo; el lote minimo siempre se permite
          double allowed = RiskAllowed();
@@ -822,10 +827,12 @@ void Guard()
       // SL/TP obligatorios y SL no mas lejos de 1.5x lo permitido
       bool buy = isBuy;
       double newSL = sl, newTP = tp;
-      if(sl == 0 || MathAbs(op - sl) > dist * 1.5)
+      // 4.0: un SL lejano ya no se mueve: el lote se reviso contra ese mismo SL arriba
+      if(sl == 0)
          newSL = buy ? op - dist : op + dist;
-      if(tp == 0 && RewardRatio > 0)
-         newTP = buy ? op + dist * RewardRatio : op - dist * RewardRatio;
+      double dsl = MathAbs(op - newSL);
+      if(tp == 0 && RewardRatio > 0 && dsl > 0)
+         newTP = buy ? op + dsl * RewardRatio : op - dsl * RewardRatio;
       newSL = NormalizeDouble(newSL, digits);
       newTP = NormalizeDouble(newTP, digits);
       if(newSL != sl || newTP != tp)
@@ -839,6 +846,75 @@ void Guard()
 }
 
 //------------------------------------------------------------------
+//------------------------------------------------------------------
+// 4.0: linea de Stop Loss. La arrastras a donde va tu stop y el lote se ajusta solo
+// para arriesgar siempre lo mismo. Debajo del precio = compra; arriba = venta.
+double PipDe(string s)
+{
+   int d = (int)SymbolInfoInteger(s, SYMBOL_DIGITS);
+   double pt = SymbolInfoDouble(s, SYMBOL_POINT);
+   return (d == 2 || d == 3 || d == 5) ? pt * 10 : pt;
+}
+string GvLinea() { return P + "SLL_" + (string)ChartID() + "_" + _Symbol; }
+
+void LineaPoner(double precio)
+{
+   string n = P + "SLL";
+   if(ObjectFind(0, n) < 0)
+   {
+      ObjectCreate(0, n, OBJ_HLINE, 0, 0, precio);
+      ObjectSetInteger(0, n, OBJPROP_COLOR, clrRed);
+      ObjectSetInteger(0, n, OBJPROP_STYLE, STYLE_DASH);
+      ObjectSetInteger(0, n, OBJPROP_WIDTH, 2);
+      ObjectSetInteger(0, n, OBJPROP_SELECTABLE, true);
+      ObjectSetInteger(0, n, OBJPROP_SELECTED, true);
+      ObjectSetString(0, n, OBJPROP_TEXT, "Stop Loss");
+      ObjectSetString(0, n, OBJPROP_TOOLTIP, "Stop Loss: arrastrala a donde va tu stop");
+   }
+   if(ObjectFind(0, P + "SLT") < 0)
+   {
+      ObjectCreate(0, P + "SLT", OBJ_TEXT, 0, 0, precio);
+      ObjectSetString(0, P + "SLT", OBJPROP_TEXT, "Stop Loss");
+      ObjectSetString(0, P + "SLT", OBJPROP_FONT, "Arial Bold");
+      ObjectSetInteger(0, P + "SLT", OBJPROP_FONTSIZE, 9);
+      ObjectSetInteger(0, P + "SLT", OBJPROP_COLOR, clrRed);
+      ObjectSetInteger(0, P + "SLT", OBJPROP_ANCHOR, ANCHOR_RIGHT_LOWER);
+      ObjectSetInteger(0, P + "SLT", OBJPROP_SELECTABLE, false);
+   }
+   ObjectSetDouble(0, n, OBJPROP_PRICE, NormalizeDouble(precio, _Digits));
+}
+
+// pone la linea a la distancia de tu regla de stop, debajo del precio
+void LineaReglas()
+{
+   double d = SLDist(_Symbol);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   if(d <= 0) d = 35 * PipDe(_Symbol);
+   if(bid > 0) LineaPoner(bid - d);
+}
+
+// 1 = compra (linea debajo), -1 = venta (linea arriba), 0 = la linea esta en el precio
+int LineaDir(double &dist)
+{
+   dist = 0;
+   if(ObjectFind(0, P + "SLL") < 0) return 0;
+   double sl  = ObjectGetDouble(0, P + "SLL", OBJPROP_PRICE);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID), ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   if(sl > 0 && sl < bid) { dist = ask - sl; return 1; }
+   if(sl > ask)           { dist = sl - bid; return -1; }
+   return 0;
+}
+
+// el nombre "Stop Loss" pegado a la linea, en el borde derecho del grafico
+void LineaTexto()
+{
+   if(ObjectFind(0, P + "SLL") < 0 || ObjectFind(0, P + "SLT") < 0) return;
+   int primera = (int)ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR);
+   int ancho   = (int)ChartGetInteger(0, CHART_WIDTH_IN_BARS);
+   int barra   = MathMax(0, primera - ancho + 3);
+   ObjectMove(0, P + "SLT", 0, iTime(_Symbol, _Period, barra), ObjectGetDouble(0, P + "SLL", OBJPROP_PRICE));
+}
+
 void OpenTrade(bool buy)
 {
    string why;
@@ -846,8 +922,18 @@ void OpenTrade(bool buy)
    if(!CanOpenNew(_Symbol, why)) { Alert("VictorGuard te protegio: ", g_detalle); return; }
    if(PositionsTotal() >= MaxOpenPositions) { Alert("VictorGuard te protegio: ya tienes ", IntegerToString(MaxOpenPositions), " trades abiertos, tu maximo. Cierra o espera uno antes de abrir otro."); return; }
 
-   double dist = SLDist(_Symbol);
-   if(dist <= 0) { Alert("VictorGuard: no pude calcular el stop de ", _Symbol); return; }
+   // 4.0: el stop es la linea roja de Stop Loss
+   double dist = 0;
+   int dir = LineaDir(dist);
+   if(dir == 0) { Alert("VictorGuard: pon la linea roja de Stop Loss debajo del precio para comprar, o arriba para vender."); return; }
+   if((buy && dir != 1) || (!buy && dir != -1))
+   {
+      Alert("VictorGuard: tu linea de Stop Loss esta ", (dir == 1 ? "debajo" : "arriba"), " del precio, eso es para ", (dir == 1 ? "COMPRAR" : "VENDER"),
+            ". Para ", (buy ? "comprar ponla debajo." : "vender ponla arriba."));
+      return;
+   }
+   long lvl = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   if(dist <= 0 || dist < lvl * SymbolInfoDouble(_Symbol, SYMBOL_POINT)) { Alert("VictorGuard: el Stop Loss esta demasiado cerca del precio en ", _Symbol); return; }
    double lot = CalcLot(_Symbol, dist);
    if(lot <= 0 || RiskTooHigh(_Symbol, lot, dist))
    {
@@ -855,15 +941,15 @@ void OpenTrade(bool buy)
       double lim = RiskAllowed();
       Alert("VictorGuard te protegio: en ", _Symbol, " el lote mas pequeno (", DoubleToString(lot, 2), ") con el stop a ", DoubleToString(dist, dg),
             " arriesgaria $", DoubleToString(lot * LossPerLot(_Symbol, dist), 2), " y tu limite por trade es $", DoubleToString(lim, 2),
-            ". Ahora mismo este activo se mueve demasiado para tu cuenta. Prueba stop Ajustado, otro activo, o sube tu riesgo por trade.");
+            ". Acerca la linea de Stop Loss, usa otro activo o sube tu riesgo por trade.");
       return;
    }
 
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
    double price = buy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   double sl = buy ? price - dist : price + dist;
+   double sl = NormalizeDouble(ObjectGetDouble(0, P + "SLL", OBJPROP_PRICE), digits);
+   dist = MathAbs(price - sl);
    double tp = (RewardRatio > 0) ? (buy ? price + dist * RewardRatio : price - dist * RewardRatio) : 0;
-   sl = NormalizeDouble(sl, digits);
    tp = NormalizeDouble(tp, digits);
 
    bool ok = buy ? trade.Buy(lot, _Symbol, 0, sl, tp, "VictorGuard")
@@ -1096,17 +1182,27 @@ void UpdatePanel()
       if(!SymbolAllowed(_Symbol)) why = _Symbol + " no esta permitido";
       else if(!CanOpenNew(_Symbol, w2)) why = w2;
    }
-   double dist = SLDist(_Symbol);
-   double lot = CalcLot(_Symbol, dist);
-   double rk  = lot * LossPerLot(_Symbol, dist);
+   // 4.0: lote segun la linea de Stop Loss (si la borraron, vuelve a tu regla)
+   if(ObjectFind(0, P + "SLL") < 0) LineaReglas();
+   double dist = 0;
+   int dir = LineaDir(dist);
+   double lot = dist > 0 ? CalcLot(_Symbol, dist) : 0;
+   double rk  = dist > 0 ? lot * LossPerLot(_Symbol, dist) : 0;
    double lim = RiskAllowed();
    // MT5 corta las etiquetas a 63 letras: estado y riesgo van en lineas separadas
    ObjectSetString(0, P + "ST", OBJPROP_TEXT, StringSubstr(why, 0, 63));
-   string lt = _Symbol + " lote " + DoubleToString(lot, 2) + " | stop " + DoubleToString(dist, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS))
-             + " | riesgo $" + DoubleToString(rk, 2) + " / $" + DoubleToString(lim, 2);
+   string lt = (dir == 0) ? "Pon la linea roja de Stop Loss arriba o abajo del precio"
+             : (dir == 1 ? "COMPRA " : "VENTA ") + DoubleToString(lot, 2) + " lotes | SL " + DoubleToString(dist / PipDe(_Symbol), 1)
+               + " pips | riesgo $" + DoubleToString(rk, 2) + " / $" + DoubleToString(lim, 2);
    ObjectSetString(0, P + "LT", OBJPROP_TEXT, StringSubstr(lt, 0, 63));
    // verde = el trade cabe en tu riesgo; rojo = ni el lote minimo cabe
-   ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, (rk > lim * 1.5) ? clrRed : clrForestGreen);
+   ObjectSetInteger(0, P + "LT", OBJPROP_COLOR, (dir == 0 || rk > lim * 1.5) ? clrRed : clrForestGreen);
+   // el boton del lado que marca la linea muestra el lote; el otro se apaga
+   ObjectSetString(0, P + "BUY",  OBJPROP_TEXT, dir == 1  ? "COMPRAR " + DoubleToString(lot, 2) : "COMPRAR");
+   ObjectSetString(0, P + "SELL", OBJPROP_TEXT, dir == -1 ? "VENDER " + DoubleToString(lot, 2) : "VENDER");
+   ObjectSetInteger(0, P + "BUY",  OBJPROP_BGCOLOR, dir == 1  ? clrSeaGreen : C'70,70,70');
+   ObjectSetInteger(0, P + "SELL", OBJPROP_BGCOLOR, dir == -1 ? clrFireBrick : C'70,70,70');
+   LineaTexto();
 
    // Cuenta regresiva para el cierre de la vela actual
    long left = (long)PeriodSeconds() - (long)(TimeCurrent() - iTime(_Symbol, _Period, 0));
@@ -1116,6 +1212,142 @@ void UpdatePanel()
              + StringFormat("%02d:%02d", (int)m, (int)s);
    ObjectSetString(0, P + "TM", OBJPROP_TEXT, "Cierra la vela en " + tm);
    UpdatePL();
+}
+
+//------------------------------------------------------------------
+// 4.0: tus reglas se cambian aqui mismo (boton Reglas). Se mandan a VICTOR, que las
+// guarda igual que la web: apretar aplica al instante; aflojar, desde manana.
+string R_TXT[6] = {"Riesgo por trade ($)", "Perdidas maximas al dia", "Trades maximos al dia (0 = sin limite)",
+                   "Trades abiertos a la vez", "TP: veces el riesgo (0 = sin TP)", "Espera tras perder (minutos)"};
+
+double ReglaActual(int i)
+{
+   if(i == 0) return RiskAllowed();
+   if(i == 1) return MaxLosersPerDay;
+   if(i == 2) return MaxTradesPerDay;
+   if(i == 3) return MaxOpenPositions;
+   if(i == 4) return RewardRatio;
+   return CooldownMin;
+}
+
+void RLabel(string n, int x, int y, string t, color c, int sz)
+{
+   if(ObjectFind(0, n) < 0)
+   {
+      ObjectCreate(0, n, OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, n, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, n, OBJPROP_SELECTABLE, false);
+   }
+   ObjectSetInteger(0, n, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, n, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, n, OBJPROP_COLOR, c);
+   ObjectSetInteger(0, n, OBJPROP_FONTSIZE, sz);
+   ObjectSetString(0, n, OBJPROP_TEXT, t == "" ? " " : t);
+}
+
+void RBoton(string n, string t, int x, int y, int w, color bg)
+{
+   ObjectCreate(0, n, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, n, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, n, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, n, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, n, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, n, OBJPROP_YSIZE, 28);
+   ObjectSetString(0, n, OBJPROP_TEXT, t);
+   ObjectSetInteger(0, n, OBJPROP_BGCOLOR, bg);
+   ObjectSetInteger(0, n, OBJPROP_COLOR, clrWhite);
+}
+
+int RY0() { return 160; }
+
+void ReglasPie()
+{
+   if(!g_reglasAbiertas) return;
+   double rm = StringToDouble(ObjectGetString(0, P + "RE0", OBJPROP_TEXT));
+   double ml = StringToDouble(ObjectGetString(0, P + "RE1", OBJPROP_TEXT));
+   int y = RY0() + 36 + 6 * 26;
+   RLabel(P + "RDL", 20, y + 3, "Perdida maxima del dia: $" + DoubleToString(rm * MathMax(0, MathRound(ml)), 2) + "  (riesgo x perdidas)", clrSilver, 9);
+   RLabel(P + "RM1", 20, y + 64, g_setMsg1, clrOrange, 9);
+   RLabel(P + "RM2", 20, y + 80, g_setMsg2, clrOrange, 9);
+   ChartRedraw();
+}
+
+void ReglasAbrir()
+{
+   g_reglasAbiertas = true;
+   int x = 10, y = RY0(), w = 340;
+   string bg = P + "RBG";
+   ObjectCreate(0, bg, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, bg, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, bg, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, bg, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, bg, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, bg, OBJPROP_YSIZE, 36 + 6 * 26 + 104);
+   ObjectSetInteger(0, bg, OBJPROP_BGCOLOR, C'18,22,30');
+   ObjectSetInteger(0, bg, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+   ObjectSetInteger(0, bg, OBJPROP_COLOR, C'40,180,110');
+   ObjectSetInteger(0, bg, OBJPROP_SELECTABLE, false);
+   RLabel(P + "RH", x + 10, y + 8, "Tus reglas (se guardan en VICTOR)", C'40,200,120', 11);
+   for(int i = 0; i < 6; i++)
+   {
+      int yy = y + 36 + i * 26;
+      RLabel(P + "RL" + IntegerToString(i), x + 10, yy + 3, R_TXT[i], clrWhite, 9);
+      string e = P + "RE" + IntegerToString(i);
+      ObjectCreate(0, e, OBJ_EDIT, 0, 0, 0);
+      ObjectSetInteger(0, e, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, e, OBJPROP_XDISTANCE, x + w - 80);
+      ObjectSetInteger(0, e, OBJPROP_YDISTANCE, yy);
+      ObjectSetInteger(0, e, OBJPROP_XSIZE, 70);
+      ObjectSetInteger(0, e, OBJPROP_YSIZE, 20);
+      ObjectSetInteger(0, e, OBJPROP_BGCOLOR, C'35,40,50');
+      ObjectSetInteger(0, e, OBJPROP_COLOR, clrWhite);
+      ObjectSetInteger(0, e, OBJPROP_ALIGN, ALIGN_RIGHT);
+      double v = ReglaActual(i);
+      ObjectSetString(0, e, OBJPROP_TEXT, (i == 0 || i == 4) ? DoubleToString(v, 2) : IntegerToString((int)v));
+   }
+   int yb = y + 36 + 6 * 26 + 26;
+   RBoton(P + "RSV", "Guardar", x + 10, yb, 150, clrSeaGreen);
+   RBoton(P + "RX", "Cerrar", x + 170, yb, 150, C'70,70,70');
+   ReglasPie();
+}
+
+void ReglasCerrar()
+{
+   g_reglasAbiertas = false;
+   ObjectsDeleteAll(0, P + "R");
+   ChartRedraw();
+}
+
+void ReglasMsg(string m)
+{
+   // MT5 corta cada etiqueta a 63 letras: el mensaje va en dos lineas
+   g_setMsg1 = m; g_setMsg2 = "";
+   if(StringLen(m) > 58)
+   {
+      int corte = 58;
+      while(corte > 20 && StringSubstr(m, corte, 1) != " ") corte--;
+      g_setMsg1 = StringSubstr(m, 0, corte);
+      g_setMsg2 = StringSubstr(m, corte + 1, 62);
+   }
+   ReglasPie();
+}
+
+void ReglasGuardar()
+{
+   if(g_token == "") { ReglasMsg("Primero conecta con VICTOR con tu codigo de 6 digitos."); return; }
+   double v[6];
+   for(int i = 0; i < 6; i++) v[i] = StringToDouble(ObjectGetString(0, P + "RE" + IntegerToString(i), OBJPROP_TEXT));
+   if(v[0] <= 0) { ReglasMsg("El riesgo por trade debe ser mayor que $0."); return; }
+   if(v[1] < 1 || v[1] > 50) { ReglasMsg("Perdidas maximas al dia: de 1 a 50."); return; }
+   if(v[2] < 0 || v[2] > 100) { ReglasMsg("Trades maximos al dia: de 0 (sin limite) a 100."); return; }
+   if(v[3] < 1 || v[3] > 20) { ReglasMsg("Trades abiertos a la vez: de 1 a 20."); return; }
+   if(v[4] < 0 || v[4] > 10) { ReglasMsg("TP: de 0 (sin TP) a 10 veces el riesgo."); return; }
+   if(v[5] < 0 || v[5] > 1440) { ReglasMsg("Espera tras perder: de 0 a 1440 minutos."); return; }
+   g_set = "{\"rm\":" + DoubleToString(v[0], 2) + ",\"ml\":" + IntegerToString((int)MathRound(v[1]))
+         + ",\"mt\":" + IntegerToString((int)MathRound(v[2])) + ",\"mo\":" + IntegerToString((int)MathRound(v[3]))
+         + ",\"rr\":" + DoubleToString(v[4], 2) + ",\"cd\":" + IntegerToString((int)MathRound(v[5])) + "}";
+   g_lastTry = 0;   // se manda en el proximo segundo
+   ReglasMsg("Enviando a VICTOR...");
 }
 
 //------------------------------------------------------------------
@@ -1392,8 +1624,10 @@ void SyncTick()
       + ",\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
       + ",\"lock\":" + JStr(lockTxt) + ",\"losers\":" + IntegerToString(dLos) + ",\"maxl\":" + IntegerToString(MaxLosersPerDay)
       + ",\"left\":" + DoubleToString(leftUsd, 2) + ",\"open\":[" + opn + "],\"events\":[" + g_evs + "]"
+      + (g_set != "" ? ",\"set\":" + g_set : "")
       + ",\"trades\":[" + items + "]}";
    string evsEnviados = g_evs;
+   string setEnviado = g_set;
    char data[], res[];
    string rh;
    StringToCharArray(body, data, 0, StringLen(body), CP_UTF8);
@@ -1412,6 +1646,16 @@ void SyncTick()
          c0 += 7;
          int c1 = StringFind(resp, "\"", c0);
          if(c1 > c0) ApplyCfg(StringSubstr(resp, c0, c1 - c0));
+      }
+      // 4.0: respuesta a las reglas que cambiaste en el panel
+      if(setEnviado != "")
+      {
+         if(g_set == setEnviado) g_set = "";
+         string sm = JGet(resp, "setmsg");
+         if(sm == "") sm = "Reglas enviadas a VICTOR.";
+         Alert("VictorGuard: ", sm);
+         if(g_reglasAbiertas) { ReglasCerrar(); ReglasAbrir(); }
+         ReglasMsg(sm);
       }
       g_sync = "Sync OK " + TimeToString(TimeLocal(), TIME_MINUTES) + " (" + IntegerToString(ns) + " nuevos)";
    }
@@ -1467,6 +1711,11 @@ int OnInit()
    hMA = iMA(_Symbol, MaTF, MaPeriod, 0, MaMethod, PRICE_CLOSE);
    MakeButton(P + "SELL", "VENDER",  10, 30, clrFireBrick);   // mismo orden que MT5: vender a la izquierda
    MakeButton(P + "BUY",  "COMPRAR", 130, 30, clrSeaGreen);
+   MakeButton(P + "BRG",  "Reglas", 250, 30, C'40,90,160');
+   MakeButton(P + "BSL",  "Traer SL", 370, 30, C'90,40,40');
+   // 4.0: linea de Stop Loss (si cambiaste de temporalidad, sigue donde la tenias)
+   if(GlobalVariableCheck(GvLinea())) { LineaPoner(GlobalVariableGet(GvLinea())); GlobalVariableDel(GvLinea()); }
+   else LineaReglas();
    ObjectCreate(0, P + "ST", OBJ_LABEL, 0, 0, 0);
    ObjectSetString(0, P + "ST", OBJPROP_TEXT, " ");
    ObjectSetInteger(0, P + "ST", OBJPROP_XDISTANCE, 10);
@@ -1509,6 +1758,9 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
+   if(reason == REASON_CHARTCHANGE && ObjectFind(0, P + "SLL") >= 0)
+      GlobalVariableSet(GvLinea(), ObjectGetDouble(0, P + "SLL", OBJPROP_PRICE));
+   g_reglasAbiertas = false;
    if(hMA != INVALID_HANDLE) IndicatorRelease(hMA);
    for(int i = 0; i < ArraySize(g_atrH); i++) if(g_atrH[i] != INVALID_HANDLE) IndicatorRelease(g_atrH[i]);
    ArrayResize(g_atrSym, 0); ArrayResize(g_atrH, 0);
@@ -1520,7 +1772,13 @@ void OnTick()   { Guard(); GuardOrders(); AutoEntryCheck(); }
 
 void OnChartEvent(const int id, const long &lp, const double &dp, const string &sp)
 {
+   if(id == CHARTEVENT_OBJECT_DRAG && sp == P + "SLL") { UpdatePanel(); return; }
+   if(id == CHARTEVENT_OBJECT_ENDEDIT && StringFind(sp, P + "RE") == 0) { ReglasPie(); return; }
    if(id != CHARTEVENT_OBJECT_CLICK) return;
+   if(sp == P + "BRG") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); if(g_reglasAbiertas) ReglasCerrar(); else ReglasAbrir(); return; }
+   if(sp == P + "RX")  { ReglasCerrar(); return; }
+   if(sp == P + "RSV") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); ReglasGuardar(); return; }
+   if(sp == P + "BSL") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); LineaReglas(); UpdatePanel(); return; }
    if(sp == P + "BUY")  { ObjectSetInteger(0, sp, OBJPROP_STATE, false); OpenTrade(true); }
    if(sp == P + "SELL") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); OpenTrade(false); }
    if(StringFind(sp, P + "XB") == 0)

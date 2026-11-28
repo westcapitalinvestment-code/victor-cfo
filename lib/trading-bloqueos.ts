@@ -368,6 +368,7 @@ export const ETIQUETA_CAMPO: Record<string, string> = {
   guard_daily_loss_usd: "pérdida máxima del día ($)",
   guard_min_equity_usd: "piso de la cuenta ($)",
   guard_max_open: "trades abiertos a la vez",
+  guard_reward_ratio: "TP (veces el riesgo)",
   guard_lock_mode: "bloqueo del stop",
   guard_block_manual_close: "bloqueo por cierre manual",
   guard_blocked_symbols: "activos prohibidos",

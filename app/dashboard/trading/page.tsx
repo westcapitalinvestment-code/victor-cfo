@@ -1492,7 +1492,7 @@ function TradingContenido() {
                 <div id="vg-instalar" className="scroll-mt-4 rounded-xl border-2 border-teal/40 p-4">
                   <p className="text-lg font-semibold text-[#1B3A5C]">Conecta el guardián en MT5</p>
                   {cuenta?.last_sync_at ? (
-                    <p className="mt-1 text-sm text-teal">✓ Conectado a <b>{cuenta.nombre}</b>. Tus reglas le llegan solas.</p>
+                    <p className="mt-1 text-sm text-teal">✓ Conectado a <b>{cuenta.nombre}</b>. Tus reglas le llegan solas, y también las puedes cambiar en MT5 con el botón <b>Reglas</b> del gráfico.</p>
                   ) : (
                     <p className="mt-1 text-sm text-muted">Una sola vez, unos 3 minutos.</p>
                   )}
@@ -1525,6 +1525,10 @@ function TradingContenido() {
                         </button>
                       </div>
                       {vincMsg && <p className={`mt-2 text-sm ${vincMsg.ok ? "text-teal" : "text-red"}`}>{vincMsg.texto}</p>}
+                    </li>
+                    <li>
+                      <b>5.</b> Listo. En el gráfico arrastra la <b>línea roja de Stop Loss</b> a donde va tu stop y el lote se ajusta solo a tu riesgo.
+                      Tus reglas (riesgo, pérdidas y trades al día, TP, espera) las cambias con el botón <b>Reglas</b> del gráfico o aquí; apretar aplica ya y aflojar, desde mañana.
                     </li>
                   </ol>
                 </div>

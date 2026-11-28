@@ -14,6 +14,7 @@ import {
 // APRETAR una regla aplica al instante; AFLOJARLA aplica desde mañana (medianoche
 // en la hora de la persona). Lo usan la web (/api/trading/reglas), el chat de
 // VICTOR y la sincronización del guardián (que aplica los pendientes que vencieron).
+// Desde el guardián 4.0 también el panel "Reglas" de MT5 (origen "mt5").
 
 // Columnas de risk_rules que se pueden cambiar
 const EDITABLES = new Set([
@@ -24,7 +25,7 @@ const EDITABLES = new Set([
   "prueba_inicio", "prueba_dias", "prueba_avisada", "prueba_revisada",
 ]);
 
-export type Origen = "web" | "chat" | "plan";
+export type Origen = "web" | "chat" | "plan" | "mt5";
 export type ResultadoGuardar = {
   ok: boolean;
   error?: string;

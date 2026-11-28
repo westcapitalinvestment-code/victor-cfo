@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cfgGuardian } from "@/lib/trading-bloqueos";
-import { aplicarPendientes } from "@/lib/trading-reglas-server";
+import { aplicarPendientes, guardarReglas } from "@/lib/trading-reglas-server";
 import { pedirVinculo } from "@/lib/trading-vinculo";
 import { avisosTrading } from "@/lib/trading-avisos";
 
@@ -21,6 +21,30 @@ const fecha = (v: unknown): string | null => {
   const s = typeof v === "string" ? v.trim() : "";
   return RE_FECHA.test(s) ? s.replace(/^(\d{4})\.(\d{2})\.(\d{2})/, "$1-$2-$3") : null;
 };
+
+// Guardián 4.0: las reglas también se cambian desde el panel "Reglas" en MT5. Llegan
+// en "set" y se guardan igual que en la web (apretar = ya; aflojar = desde mañana).
+// Riesgo por trade ($) x pérdidas al día = pérdida máxima del día en $.
+function cambiosDesdeMT5(s: Record<string, unknown>): Record<string, unknown> | null {
+  const v = (k: string) => {
+    const x = Number(s[k]);
+    return Number.isFinite(x) ? x : NaN;
+  };
+  const rm = v("rm"), ml = Math.round(v("ml")), mt = Math.round(v("mt")), mo = Math.round(v("mo")), rr = v("rr"), cd = Math.round(v("cd"));
+  if (!(rm > 0 && rm <= 1_000_000) || !(ml >= 1 && ml <= 50) || !(mt >= 0 && mt <= 100) || !(mo >= 1 && mo <= 20) || !(rr >= 0 && rr <= 10) || !(cd >= 0 && cd <= 1440))
+    return null;
+  return {
+    guard_daily_loss_usd: Math.round(rm * ml * 100) / 100,
+    max_perdedores_dia: ml,
+    max_trades_dia: mt,
+    guard_max_open: mo,
+    guard_reward_ratio: Math.round(rr * 100) / 100,
+    espera_tras_perdida_min: cd,
+  };
+}
+// El guardián lee el mensaje sin acentos ni comillas.
+const ascii = (t: string) =>
+  t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 .,:;()$%/+-]/g, "").slice(0, 120);
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -110,6 +134,32 @@ export async function POST(req: NextRequest) {
   // sincronización, así lo que se cambia en la web o en el chat llega a MT5 sin
   // volver a descargar el archivo. Primero se aplican los cambios "desde mañana"
   // que ya vencieron.
+  // Reglas cambiadas desde el panel de MT5 (4.0): se guardan ANTES de armar el cfg,
+  // así el guardián recibe en esta misma respuesta las reglas que quedaron vigentes.
+  let setmsg = "";
+  if (body?.set && typeof body.set === "object") {
+    const cambios = cambiosDesdeMT5(body.set as Record<string, unknown>);
+    if (!cambios) setmsg = "No se guardaron: revisa los numeros.";
+    else {
+      try {
+        const { data: existe } = await admin.from("risk_rules").select("owner_id").eq("owner_id", t.owner_id).maybeSingle();
+        // primera vez desde MT5: todos los activos y stop por ATR (la línea de Stop Loss manda)
+        const base = existe ? {} : { guard_symbol: "*", guard_sl_mode: "atr" };
+        const r = await guardarReglas(admin, t.owner_id, { ...base, ...cambios }, "mt5");
+        if (!r.ok) setmsg = `No se guardaron: ${r.error ?? "error"}`;
+        else if (!r.ahora.length && !r.manana.length) setmsg = "Guardado. No habia cambios.";
+        else
+          setmsg =
+            "Guardado." +
+            (r.ahora.length ? ` Ya aplica: ${r.ahora.join(", ")}.` : "") +
+            (r.manana.length ? ` Desde manana: ${r.manana.join(", ")}.` : "");
+      } catch {
+        setmsg = "No se pudieron guardar. Intenta otra vez.";
+      }
+    }
+    setmsg = ascii(setmsg);
+  }
+
   let cfg = "";
   try {
     await aplicarPendientes(admin, t.owner_id);
@@ -126,5 +176,5 @@ export async function POST(req: NextRequest) {
   // solo salen los de trades cerrados).
   await avisosTrading(admin, t, body as Record<string, unknown>, nuevos);
 
-  return NextResponse.json({ ok: true, recibidos: filas.length, cfg });
+  return NextResponse.json({ ok: true, recibidos: filas.length, cfg, ...(setmsg ? { setmsg } : {}) });
 }
