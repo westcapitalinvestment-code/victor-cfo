@@ -27,11 +27,11 @@ import { generarGuardianMQ5, type ModoStop, type TemporalidadATR } from "@/lib/t
 import { Anillo, BarrasMensuales, Calendario, CurvaCapital, nombreMes, type MesPct } from "./graficos";
 import Estadisticas from "./estadisticas";
 import ReglasPropias, { type ReglaPropia } from "./reglas-propias";
+import PlanSugeridoCard from "./plan-sugerido";
 import type { PlanSugerido } from "@/lib/trading-plan-sugerido";
-import BloqueosHorario from "./bloqueos-horario";
 import NotificacionesToggle from "../notificaciones-toggle";
 import { PruebaPlan, CambiosPendientes } from "./prueba-plan";
-import { BLOQUEOS_VACIOS, bloqueosAColumnas, cfgGuardian, describirBloqueos, fechaLocal, normalizarBloqueos, type Bloqueos } from "@/lib/trading-bloqueos";
+import { BLOQUEOS_VACIOS, ZONAS_COMUNES, bloqueosAColumnas, cfgGuardian, describirBloqueos, fechaLocal, normalizarBloqueos, type Bloqueos } from "@/lib/trading-bloqueos";
 
 type CambioPendiente = { id: string; cambios: Record<string, { antes: unknown; despues: unknown }>; aplicar_desde: string };
 
@@ -185,7 +185,7 @@ function TradingContenido() {
   const router = useRouter();
   const supabase = createClient();
   const [cargando, setCargando] = useState(true);
-  const [tab, setTab] = useState<"panel" | "bitacora" | "estadisticas" | "riesgo" | "horario">("panel");
+  const [tab, setTab] = useState<"panel" | "bitacora" | "estadisticas" | "riesgo">("panel");
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [cuentaId, setCuentaId] = useState<string | null>(null);
   const [trades, setTrades] = useState<FilaTrade[]>([]);
@@ -936,7 +936,7 @@ function TradingContenido() {
           )}
 
           <div className="mb-4 flex gap-2">
-            {([["panel", "Panel"], ["bitacora", "Bitácora"], ["estadisticas", "Estadísticas"], ["riesgo", "Reglas"], ["horario", "Horario"]] as const).map(([t, nombre]) => (
+            {([["panel", "Panel"], ["bitacora", "Bitácora"], ["estadisticas", "Estadísticas"], ["riesgo", "Reglas"]] as const).map(([t, nombre]) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -975,8 +975,8 @@ function TradingContenido() {
                   {
                     ok: tieneReglas,
                     titulo: "Pon tus reglas",
-                    detalle: tieneReglas ? "Listas" : "En MT5 con el botón Reglas del gráfico, o aquí",
-                    accion: () => setTab("riesgo"),
+                    detalle: tieneReglas ? "Listas" : "En MT5 con el botón Reglas del guardián. ¿No tienes? VICTOR te arma un plan en 1 minuto",
+                    accion: () => { setTab("riesgo"); setPlanAbierto(true); },
                   },
                 ] as { ok: boolean; titulo: string; detalle: string; accion: (() => void) | null }[]).map((paso, i) => (
                   <li key={i}>
@@ -1200,122 +1200,21 @@ function TradingContenido() {
 
               <CambiosPendientes lista={pendientes} onCancelar={cancelarPendiente} />
 
+              <PlanSugeridoCard
+                capitalInicial={balanceInicial}
+                tieneReglas={tieneReglas}
+                abierto={planAbierto}
+                onAbrir={setPlanAbierto}
+                onAplicar={aplicarPlan}
+              />
 
 
               <div className="vc-card mb-4 flex flex-col gap-3">
                 <p className="text-sm uppercase tracking-wide text-muted">Mis reglas</p>
                 <p className="text-[14px] text-muted">
-                  Ponlas aquí o en MT5 con el botón <b>Reglas</b> del gráfico. Tu stop lo pones arrastrando la línea roja de <b>Stop Loss</b> y el guardián calcula el lote, te bloquea al llegar al límite y la bitácora mide si las respetaste.
+                  Tus reglas y tu horario se cambian en MT5 con los botones <b>Reglas</b> y <b>Horario</b> del guardián (apretar aplica ya; aflojar, desde mañana). Aquí ves cómo quedaron.
+                  {!tieneReglas && <> ¿No tienes reglas? Arma tu plan arriba en 1 minuto.</>}
                 </p>
-                <div className="rounded-lg border border-[#1B3A5C]/30 bg-[#1B3A5C]/5 p-3">
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <label className="flex flex-col gap-1">
-                      <span className="font-medium">Cuánto puedo perder al día ($)</span>
-                      <NumInput value={guardian.guard_daily_loss_usd} onChange={(n) => setGuardian({ ...guardian, guard_daily_loss_usd: n })} placeholder="Ej. 21" />
-                    </label>
-                    <label className="flex flex-col gap-1">
-                      <span className="font-medium">Cuántas pérdidas aguanto al día</span>
-                      <NumInput value={reglas.max_perdedores_dia} onChange={(n) => setReglas({ ...reglas, max_perdedores_dia: Math.max(0, Math.round(n ?? 0)) })} placeholder="Ej. 3" />
-                    </label>
-                    <label className="col-span-2 flex flex-col gap-1">
-                      <span className="font-medium">Máximo de trades al día (ganando o perdiendo)</span>
-                      <NumInput value={reglas.max_trades_dia} onChange={(n) => setReglas({ ...reglas, max_trades_dia: Math.max(0, Math.round(n ?? 0)) })} placeholder="Ej. 6 (0 = sin límite)" />
-                    </label>
-                  </div>
-                  {riesgoFijoUSD > 0 ? (
-                    <p className="mt-2 text-[14px]">
-                      Cada trade arriesga <b>{formatMoney(riesgoFijoUSD)}</b>, en cualquier activo. Si pierdes {reglas.max_perdedores_dia} veces, llegas a{" "}
-                      <b>{formatMoney(guardian.guard_daily_loss_usd ?? 0)}</b> y el guardián te bloquea hasta mañana.
-                      {reglas.max_trades_dia > 0 ? <> Si vas ganando, sigues con el mismo riesgo hasta <b>{reglas.max_trades_dia} trades</b>.</> : <> Si vas ganando, sigues sin límite de trades.</>}{" "}
-                      El lote se calcula solo para que, si toca el stop, pierdas eso.
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-[14px] text-muted">Pon cuánto puedes perder y cuántas pérdidas aguantas: ej. $21 entre 3 pérdidas = $7 por trade.</p>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-                  <label className="flex flex-col gap-1"><span className="text-muted">Take profit</span>
-                    <select className="vc-input" value={String(guardian.guard_reward_ratio)} onChange={(e) => setGuardian({ ...guardian, guard_reward_ratio: Number(e.target.value) })}>
-                      <option value="0">Sin TP (lo cierro yo)</option>
-                      <option value="1">1 a 1</option>
-                      <option value="1.5">1.5 a 1</option>
-                      <option value="2">2 a 1</option>
-                      <option value="3">3 a 1</option>
-                      <option value="4">4 a 1</option>
-                      {![0, 1, 1.5, 2, 3, 4].includes(guardian.guard_reward_ratio) && <option value={String(guardian.guard_reward_ratio)}>{guardian.guard_reward_ratio} a 1</option>}
-                    </select>
-                  </label>
-                  <label className="flex flex-col gap-1"><span className="text-muted">Trades abiertos a la vez</span>
-                    <NumInput value={guardian.guard_max_open} onChange={(n) => setGuardian({ ...guardian, guard_max_open: n ?? 1 })} />
-                  </label>
-                  <label className="flex flex-col gap-1"><span className="text-muted">Espera tras perder (min)</span>
-                    <NumInput value={reglas.espera_tras_perdida_min} onChange={(n) => setReglas({ ...reglas, espera_tras_perdida_min: Math.max(0, Math.round(n ?? 0)) })} />
-                  </label>
-                </div>
-                <details className="rounded-lg border border-border p-3 text-sm">
-                  <summary className="cursor-pointer font-medium text-muted">Más reglas (opcional)</summary>
-                  <div className="mt-3 flex flex-col gap-3">
-                    <div className="grid grid-cols-2 gap-3">
-                  <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Qué puedo operar</span>
-                    <select
-                      className="vc-input"
-                      value={todosActivos ? "todos" : "lista"}
-                      onChange={(e) => setGuardian({ ...guardian, guard_symbol: e.target.value === "todos" ? "*" : "XAUUSD" })}
-                    >
-                      <option value="todos">Todos los activos (forex, oro, índices, acciones, futuros, cripto)</option>
-                      <option value="lista">Solo los símbolos que escoja</option>
-                    </select>
-                  </label>
-                  {!todosActivos && (
-                    <label className="col-span-2 flex flex-col gap-1"><span className="text-muted">Símbolos permitidos</span>
-                      <input
-                        className="vc-input"
-                        list="vt-simbolos"
-                        value={guardian.guard_symbol}
-                        onChange={(e) => {
-                          const v = e.target.value.toUpperCase();
-                          const inf = infoSimbolo(v.split(",")[0].trim());
-                          const primero = v.split(",")[0].trim();
-                          setGuardian({ ...guardian, guard_symbol: v, ...(primero ? { guard_pip_symbol: primero } : {}), ...(inf ? { guard_pip_size: inf.pip } : {}) });
-                        }}
-                      />
-                      <span className="text-[13px] text-muted">Como aparecen en tu broker, separados por coma (ej. XAUUSD, EURUSD, NAS100, BTCUSD, #AAPL). Acepta sufijos como .r o m.</span>
-                    </label>
-                  )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="flex flex-col gap-1"><span className="text-muted">Activos prohibidos</span>
-                        <input
-                          className="vc-input"
-                          placeholder="Ej. BTCUSD, GBPJPY"
-                          value={guardian.guard_blocked_symbols}
-                          onChange={(e) => setGuardian({ ...guardian, guard_blocked_symbols: e.target.value.toUpperCase() })}
-                        />
-                        <span className="text-[13px] text-muted">Si abres uno, el guardián lo cierra al instante.</span>
-                      </label>
-                      <label className="flex flex-col gap-1">
-                        <span className="text-muted">Piso de la cuenta ($)</span>
-                        <NumInput value={guardian.guard_min_equity_usd} onChange={(n) => setGuardian({ ...guardian, guard_min_equity_usd: n })} placeholder="Automático" />
-                        <span className="text-[13px] text-muted">Si la cuenta baja de aquí, se bloquea todo (como el drawdown máximo de una cuenta de fondeo).</span>
-                      </label>
-                    </div>
-                <label className="flex flex-col gap-1 text-sm">
-                  <span className="text-muted">Qué puedo hacer con el stop y el take profit</span>
-                  <select className="vc-input" value={guardian.guard_lock_mode} onChange={(e) => setGuardian({ ...guardian, guard_lock_mode: e.target.value as Guardian["guard_lock_mode"] })}>
-                    <option value="flexible">Flexible: el stop siempre puesto; lo muevo solo a mi favor y el TP libre</option>
-                    <option value="total">Estricto: no puedo mover ninguno</option>
-                    <option value="ninguno">Sin bloqueo: solo pone el stop al abrir</option>
-                  </select>
-                  <span className="text-[13px] text-muted">
-                    Flexible deja proteger la ganancia y perseguir el precio (subir el stop, ampliar el TP), pero nunca alejar el stop ni quitarlo. Con take profit en 0 el guardián no pone TP al abrir.
-                  </span>
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={guardian.guard_block_manual_close} onChange={(e) => setGuardian({ ...guardian, guard_block_manual_close: e.target.checked })} />
-                  Si cierro un trade a mano, bloquear el resto del día
-                </label>
-                  </div>
-                </details>
                 <div className="rounded-lg border border-teal/40 bg-teal/5 p-3 text-[14px]">
                   <p className="mb-2 font-medium">Tus límites de hoy (como una cuenta de fondeo)</p>
                   <div className="mb-3 flex flex-col gap-2">
@@ -1338,14 +1237,53 @@ function TradingContenido() {
                       );
                     })}
                   </div>
+                  <p className="mb-1 font-medium">Así te va a cuidar el guardián</p>
+                  <ul className="flex list-disc flex-col gap-0.5 pl-5">
+                    <li>
+                      Cada trade arriesga <b>{riesgoFijoUSD > 0 ? formatMoney(riesgoFijoUSD) : `${reglas.riesgo_por_trade_pct}% de tu cuenta`}</b>: el lote se calcula solo en cualquier activo.
+                    </li>
+                    <li>
+                      Stop puesto siempre al abrir{guardian.guard_sl_mode === "atr" ? <>, según cuánto se mueve cada activo (velas de {guardian.guard_atr_tf})</> : null}
+                      {guardian.guard_reward_ratio > 0 ? <>; take profit a {guardian.guard_reward_ratio} veces el stop.</> : "; sin take profit automático."}
+                    </li>
+                    <li>
+                      Te bloquea hasta mañana si pierdes <b>{reglas.max_perdedores_dia}</b> trades
+                      {guardian.guard_daily_loss_usd ? <> o llegas a <b>-{formatMoney(guardian.guard_daily_loss_usd)}</b> en el día</> : <> o pierdes el {reglas.perdida_max_dia_pct}% de la cuenta en el día</>}.
+                    </li>
+                    <li>
+                      Máximo <b>{reglas.max_trades_dia > 0 ? reglas.max_trades_dia : "sin límite de"}</b> trades al día y <b>{guardian.guard_max_open}</b> abiertos a la vez
+                      {reglas.espera_tras_perdida_min > 0 ? <>; espera {reglas.espera_tras_perdida_min} min después de una pérdida</> : null}.
+                    </li>
+                    {guardian.guard_blocked_symbols.trim() && <li>Prohibido operar: {guardian.guard_blocked_symbols}.</li>}
+                    {describirBloqueos(bloqueos).map((t) => (
+                      <li key={t}>{t}</li>
+                    ))}
+                    <li>
+                      {guardian.guard_lock_mode === "flexible"
+                        ? "El stop solo lo puedes mover a tu favor; nunca alejarlo ni quitarlo."
+                        : guardian.guard_lock_mode === "total"
+                          ? "No puedes mover el stop ni el take profit."
+                          : "Puedes mover el stop y el take profit libremente."}
+                      {guardian.guard_block_manual_close ? " Si cierras un trade a mano, se bloquea el resto del día." : ""}
+                    </li>
+                  </ul>
                 </div>
-                <div className="flex gap-2">
-                  <button className="vc-btn-primary" onClick={guardarReglas}>Guardar reglas</button>
+                <div className="flex flex-wrap items-end gap-2 text-sm">
+                  <label className="flex min-w-[220px] flex-1 flex-col gap-1">
+                    <span className="text-muted">Tu zona horaria (para las horas de tu horario)</span>
+                    <select className="vc-input" value={bloqueos.zona} onChange={(e) => setBloqueos({ ...bloqueos, zona: e.target.value })}>
+                      {!ZONAS_COMUNES.some((z) => z.tz === bloqueos.zona) && <option value={bloqueos.zona}>{bloqueos.zona}</option>}
+                      {ZONAS_COMUNES.map((z) => (
+                        <option key={z.tz} value={z.tz}>{z.nombre}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="rounded-lg border border-border px-3 py-2" onClick={guardarReglas}>Guardar zona</button>
                 </div>
                 <div id="vg-instalar" className="scroll-mt-4 rounded-xl border-2 border-teal/40 p-4">
                   <p className="text-lg font-semibold text-[#1B3A5C]">Conecta el guardián en MT5</p>
                   {cuenta?.last_sync_at ? (
-                    <p className="mt-1 text-sm text-teal">✓ Conectado a <b>{cuenta.nombre}</b>. Tus reglas le llegan solas, y también las puedes cambiar en MT5 con el botón <b>Reglas</b> del gráfico.</p>
+                    <p className="mt-1 text-sm text-teal">✓ Conectado a <b>{cuenta.nombre}</b>. Tus reglas se cambian en MT5 con los botones <b>Reglas</b> y <b>Horario</b> del gráfico.</p>
                   ) : (
                     <p className="mt-1 text-sm text-muted">Una sola vez, unos 3 minutos.</p>
                   )}
@@ -1380,8 +1318,8 @@ function TradingContenido() {
                       {vincMsg && <p className={`mt-2 text-sm ${vincMsg.ok ? "text-teal" : "text-red"}`}>{vincMsg.texto}</p>}
                     </li>
                     <li>
-                      <b>5.</b> Listo. En el gráfico arrastra la <b>línea roja de Stop Loss</b> a donde va tu stop y el lote se ajusta solo a tu riesgo.
-                      Tus reglas (riesgo, pérdidas y trades al día, TP, espera) las cambias con el botón <b>Reglas</b> del gráfico o aquí; apretar aplica ya y aflojar, desde mañana.
+                      <b>5.</b> Listo. En el gráfico, doble clic en la <b>línea roja de Stop Loss</b> y arrástrala a donde va tu stop: el lote se ajusta solo a tu riesgo y la línea sigue al precio.
+                      Tus reglas y tu horario los pones con los botones <b>Reglas</b> y <b>Horario</b> del gráfico; apretar aplica ya y aflojar, desde mañana.
                     </li>
                   </ol>
                 </div>
@@ -1419,17 +1357,6 @@ function TradingContenido() {
               <ReglasPropias reglas={reglasPropias} onCambio={setReglasPropias} />
 
             </>
-          )}
-
-          {/* ---------------- HORARIO ---------------- */}
-          {tab === "horario" && (
-            <div className="vc-card mb-4 flex flex-col gap-3">
-              <CambiosPendientes lista={pendientes} onCancelar={cancelarPendiente} />
-              <BloqueosHorario valor={bloqueos} onCambio={setBloqueos} />
-              <div className="flex gap-2">
-                <button className="vc-btn-primary" onClick={guardarReglas}>Guardar horario</button>
-              </div>
-            </div>
           )}
         </>
       )}

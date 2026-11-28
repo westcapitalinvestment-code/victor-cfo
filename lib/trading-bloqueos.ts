@@ -335,6 +335,14 @@ export function cfgGuardian(r: FilaReglas, ahora = Date.now(), opciones: { demo?
     ["NW", demo ? 0 : b.noticiasMin],
     ["TZO", offsetMin(b.zona, ahora)],
     ["HL", demo ? "Demo: sin limite de horario" : ascii(describirBloqueos({ ...b, noticiasMin: 0, pausas: [] }).join(" ") || "Sin limite de horario")],
+    // 4.1: el horario tal como está guardado, para el panel "Horario" del guardián
+    // (en demo también, aunque en demo no bloquee).
+    ["HS", b.sesiones.join(",")],
+    ["HV", b.ventanas[0] ? `${b.ventanas[0].ini}-${b.ventanas[0].fin}` : ""],
+    ["HD", b.dias.join(",")],
+    ["NR", b.noticiasMin],
+    ["PH", b.pausas.map((p) => p.hasta).filter((h) => h >= fechaLocal(b.zona, ahora)).sort().pop() ?? ""],
+    ["ZN", ascii(nombreZona(b.zona))],
     // Ajustes del guardián (desde la 3.20 llegan por sincronización: el .ex5
     // precompilado es igual para todos y toma todo de aquí).
     ["AS", simbolosCfg(r.guard_symbol, "XAUUSD")],

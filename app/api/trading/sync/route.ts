@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { cfgGuardian } from "@/lib/trading-bloqueos";
+import { aHM, aMin, cfgGuardian, fechaLocal, normalizarBloqueos, TODAS_SESIONES } from "@/lib/trading-bloqueos";
 import { aplicarPendientes, guardarReglas } from "@/lib/trading-reglas-server";
 import { pedirVinculo } from "@/lib/trading-vinculo";
 import { avisosTrading } from "@/lib/trading-avisos";
@@ -41,6 +41,29 @@ function cambiosDesdeMT5(s: Record<string, unknown>): Record<string, unknown> | 
     guard_reward_ratio: Math.round(rr * 100) / 100,
     espera_tras_perdida_min: cd,
   };
+}
+// Guardián 4.1: el horario también se cambia desde el panel "Horario" en MT5 ("hor").
+// Horas en la zona de la persona; una ventana, una pausa (de hoy hasta la fecha).
+function horarioDesdeMT5(h: Record<string, unknown>, zona: string): Record<string, unknown> | null {
+  const sesiones = String(h.ses ?? "").split(",").map((x) => x.trim()).filter((x) => (TODAS_SESIONES as string[]).includes(x));
+  let ventanas: { ini: string; fin: string }[] = [];
+  const ven = String(h.ven ?? "").trim();
+  if (ven) {
+    const m = /^(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/.exec(ven);
+    if (!m || aMin(m[1]) < 0 || aMin(m[2]) < 0 || aMin(m[1]) === aMin(m[2])) return null;
+    ventanas = [{ ini: aHM(aMin(m[1])), fin: aHM(aMin(m[2])) }];
+  }
+  const dias = [...new Set(String(h.dias ?? "").split(",").filter(Boolean).map(Number))].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  const news = Math.round(Number(h.news ?? 0));
+  if (!(news >= 0 && news <= 120)) return null;
+  const hasta = String(h.pausa ?? "").trim();
+  let pausas: { desde: string; hasta: string; motivo: string }[] = [];
+  if (hasta) {
+    const hoy = fechaLocal(zona, Date.now());
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(hasta) || hasta < hoy) return null;
+    pausas = [{ desde: hoy, hasta, motivo: "Pausa desde MT5" }];
+  }
+  return { horario_sesiones: sesiones, horario_ventanas: ventanas, dias_bloqueados: dias, noticias_min: news, pausas };
 }
 // El guardián lee el mensaje sin acentos ni comillas.
 const ascii = (t: string) =>
@@ -137,12 +160,17 @@ export async function POST(req: NextRequest) {
   // Reglas cambiadas desde el panel de MT5 (4.0): se guardan ANTES de armar el cfg,
   // así el guardián recibe en esta misma respuesta las reglas que quedaron vigentes.
   let setmsg = "";
-  if (body?.set && typeof body.set === "object") {
-    const cambios = cambiosDesdeMT5(body.set as Record<string, unknown>);
-    if (!cambios) setmsg = "No se guardaron: revisa los numeros.";
+  const pideSet = !!body?.set && typeof body.set === "object";
+  const pideHor = !!body?.hor && typeof body.hor === "object";
+  if (pideSet || pideHor) {
+    const { data: existe } = await admin.from("risk_rules").select("owner_id, zona_horaria").eq("owner_id", t.owner_id).maybeSingle();
+    const zona = normalizarBloqueos(existe ?? {}).zona;
+    const c1 = pideSet ? cambiosDesdeMT5(body.set as Record<string, unknown>) : {};
+    const c2 = pideHor ? horarioDesdeMT5(body.hor as Record<string, unknown>, zona) : {};
+    const cambios = c1 && c2 ? { ...c1, ...c2 } : null;
+    if (!cambios) setmsg = c1 ? "No se guardo el horario: revisa las horas y la fecha." : "No se guardaron: revisa los numeros.";
     else {
       try {
-        const { data: existe } = await admin.from("risk_rules").select("owner_id").eq("owner_id", t.owner_id).maybeSingle();
         // primera vez desde MT5: todos los activos y stop por ATR (la línea de Stop Loss manda)
         const base = existe ? {} : { guard_symbol: "*", guard_sl_mode: "atr" };
         const r = await guardarReglas(admin, t.owner_id, { ...base, ...cambios }, "mt5");

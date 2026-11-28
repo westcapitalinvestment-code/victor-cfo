@@ -17,7 +17,7 @@
 //|  Probar SIEMPRE en demo primero. No es asesoria financiera.       |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "4.0"
+#property version   "4.1"
 #include <Trade\Trade.mqh>
 
 CTrade trade;
@@ -91,6 +91,12 @@ string g_horarioTxt = "";
 string g_set = "";           // reglas cambiadas en el panel: se mandan a VICTOR en la proxima sincronizacion
 string g_setMsg1 = "", g_setMsg2 = "";
 bool   g_reglasAbiertas = false;
+// 4.1: horario y bloqueos tambien se cambian aqui (boton Horario)
+string g_hor = "";           // horario cambiado en el panel: se manda en la proxima sincronizacion
+bool   g_horAbierto = false;
+string g_hs = "", g_hv = "", g_hd = "", g_ph = "", g_zn = "";   // horario tal como esta en VICTOR
+int    g_nr = 0;
+double g_slOff = 0;          // 4.1: distancia de la linea al precio (+ debajo = compra, - arriba = venta)
 string CFG0 = "";
 
 // --- Entrada automatica: retroceso a la media en tendencia (APAGADA por defecto) ---
@@ -423,6 +429,12 @@ void ApplyCfg(string cfg)
       else if(key == "NW" && x >= 0) NewsMin = (int)x;
       else if(key == "TZO") TzOffsetMin = (int)StringToInteger(val);
       else if(key == "HL") g_horarioTxt = val;
+      else if(key == "HS") g_hs = val;
+      else if(key == "HV") g_hv = val;
+      else if(key == "HD") g_hd = val;
+      else if(key == "PH") g_ph = val;
+      else if(key == "ZN") g_zn = val;
+      else if(key == "NR" && x >= 0) g_nr = (int)x;
       else if(key == "AS") { if(val != AllowedSymbols) { AllowedSymbols = val; resym = true; } }
       else if(key == "BS") { if(val != BlockedSymbols) { BlockedSymbols = val; resym = true; } }
       else if(key == "SM" && x >= 0 && x <= 2) SLMode = (ENUM_SL_MODE)(int)x;
@@ -855,7 +867,7 @@ double PipDe(string s)
    double pt = SymbolInfoDouble(s, SYMBOL_POINT);
    return (d == 2 || d == 3 || d == 5) ? pt * 10 : pt;
 }
-string GvLinea() { return P + "SLL_" + (string)ChartID() + "_" + _Symbol; }
+string GvLinea() { return P + "SLO_" + (string)ChartID() + "_" + _Symbol; }
 
 void LineaPoner(double precio)
 {
@@ -867,9 +879,9 @@ void LineaPoner(double precio)
       ObjectSetInteger(0, n, OBJPROP_STYLE, STYLE_DASH);
       ObjectSetInteger(0, n, OBJPROP_WIDTH, 2);
       ObjectSetInteger(0, n, OBJPROP_SELECTABLE, true);
-      ObjectSetInteger(0, n, OBJPROP_SELECTED, true);
+      ObjectSetInteger(0, n, OBJPROP_SELECTED, false);
       ObjectSetString(0, n, OBJPROP_TEXT, "Stop Loss");
-      ObjectSetString(0, n, OBJPROP_TOOLTIP, "Stop Loss: arrastrala a donde va tu stop");
+      ObjectSetString(0, n, OBJPROP_TOOLTIP, "Stop Loss: doble clic y arrastrala a donde va tu stop. Sigue al precio.");
    }
    if(ObjectFind(0, P + "SLT") < 0)
    {
@@ -888,9 +900,33 @@ void LineaPoner(double precio)
 void LineaReglas()
 {
    double d = SLDist(_Symbol);
-   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    if(d <= 0) d = 35 * PipDe(_Symbol);
-   if(bid > 0) LineaPoner(bid - d);
+   g_slOff = d;
+   LineaSeguir();
+}
+
+// 4.1: la linea sigue al precio a la distancia que escogiste (asi siempre esta cerca).
+// Mientras la tienes seleccionada para arrastrarla, se queda quieta.
+void LineaSeguir()
+{
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID), ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   if(bid <= 0 || g_slOff == 0) return;
+   double objetivo = NormalizeDouble(g_slOff > 0 ? bid - g_slOff : ask - g_slOff, _Digits);
+   if(ObjectFind(0, P + "SLL") < 0) { LineaPoner(objetivo); return; }
+   if(ObjectGetInteger(0, P + "SLL", OBJPROP_SELECTED)) return;
+   if(MathAbs(ObjectGetDouble(0, P + "SLL", OBJPROP_PRICE) - objetivo) > _Point / 2)
+      ObjectSetDouble(0, P + "SLL", OBJPROP_PRICE, objetivo);
+}
+
+// la soltaste en otro lugar: esa es la nueva distancia
+void LineaSoltada()
+{
+   double sl  = ObjectGetDouble(0, P + "SLL", OBJPROP_PRICE);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID), ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   if(sl > 0 && sl < bid) g_slOff = bid - sl;
+   else if(sl > ask)      g_slOff = -(sl - ask);
+   ObjectSetInteger(0, P + "SLL", OBJPROP_SELECTED, false);
+   LineaSeguir();
 }
 
 // 1 = compra (linea debajo), -1 = venta (linea arriba), 0 = la linea esta en el precio
@@ -1183,7 +1219,8 @@ void UpdatePanel()
       else if(!CanOpenNew(_Symbol, w2)) why = w2;
    }
    // 4.0: lote segun la linea de Stop Loss (si la borraron, vuelve a tu regla)
-   if(ObjectFind(0, P + "SLL") < 0) LineaReglas();
+   if(ObjectFind(0, P + "SLL") < 0 && g_slOff == 0) LineaReglas();
+   else LineaSeguir();
    double dist = 0;
    int dir = LineaDir(dist);
    double lot = dist > 0 ? CalcLot(_Symbol, dist) : 0;
@@ -1272,8 +1309,18 @@ void ReglasPie()
    ChartRedraw();
 }
 
+void HorarioPie()
+{
+   if(!g_horAbierto) return;
+   RLabel(P + "HM1", 20, RY0() + 272, g_setMsg1, clrOrange, 9);
+   RLabel(P + "HM2", 20, RY0() + 288, g_setMsg2, clrOrange, 9);
+   ChartRedraw();
+}
+
+void HorarioCerrar();
 void ReglasAbrir()
 {
+   HorarioCerrar();
    g_reglasAbiertas = true;
    int x = 10, y = RY0(), w = 340;
    string bg = P + "RBG";
@@ -1330,6 +1377,7 @@ void ReglasMsg(string m)
       g_setMsg2 = StringSubstr(m, corte + 1, 62);
    }
    ReglasPie();
+   HorarioPie();
 }
 
 void ReglasGuardar()
@@ -1347,6 +1395,119 @@ void ReglasGuardar()
          + ",\"mt\":" + IntegerToString((int)MathRound(v[2])) + ",\"mo\":" + IntegerToString((int)MathRound(v[3]))
          + ",\"rr\":" + DoubleToString(v[4], 2) + ",\"cd\":" + IntegerToString((int)MathRound(v[5])) + "}";
    g_lastTry = 0;   // se manda en el proximo segundo
+   ReglasMsg("Enviando a VICTOR...");
+}
+
+//------------------------------------------------------------------
+// 4.1: horario y bloqueos (boton Horario). Las horas son en TU hora (la zona de VICTOR).
+string H_SES[4]  = {"asia", "londres", "solape", "nueva_york"};
+string H_SESN[4] = {"Asia", "Londres", "Lon+NY", "Nueva York"};
+string H_DIA[7]  = {"D", "L", "M", "X", "J", "V", "S"};
+
+bool EnLista(string lista, string x)
+{
+   string a[];
+   int k = StringSplit(lista, ',', a);
+   for(int i = 0; i < k; i++) if(a[i] == x) return true;
+   return false;
+}
+
+void HToggle(string n, string t, int x, int y, int w, bool on)
+{
+   RBoton(n, t, x, y, w, on ? C'31,157,116' : C'50,55,65');
+   ObjectSetInteger(0, n, OBJPROP_YSIZE, 24);
+   ObjectSetInteger(0, n, OBJPROP_STATE, on);
+}
+
+void HEdit(string n, int x, int y, int w, string t)
+{
+   ObjectCreate(0, n, OBJ_EDIT, 0, 0, 0);
+   ObjectSetInteger(0, n, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, n, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, n, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, n, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, n, OBJPROP_YSIZE, 20);
+   ObjectSetInteger(0, n, OBJPROP_BGCOLOR, C'35,40,50');
+   ObjectSetInteger(0, n, OBJPROP_COLOR, clrWhite);
+   ObjectSetInteger(0, n, OBJPROP_ALIGN, ALIGN_CENTER);
+   ObjectSetString(0, n, OBJPROP_TEXT, t);
+}
+
+void HorarioAbrir()
+{
+   if(g_reglasAbiertas) ReglasCerrar();
+   g_horAbierto = true;
+   int x = 10, y = RY0(), w = 340;
+   string bg = P + "HBG";
+   ObjectCreate(0, bg, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, bg, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, bg, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, bg, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, bg, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, bg, OBJPROP_YSIZE, 312);
+   ObjectSetInteger(0, bg, OBJPROP_BGCOLOR, C'18,22,30');
+   ObjectSetInteger(0, bg, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+   ObjectSetInteger(0, bg, OBJPROP_COLOR, C'40,180,110');
+   ObjectSetInteger(0, bg, OBJPROP_SELECTABLE, false);
+   RLabel(P + "HT", x + 10, y + 8, "Horario y bloqueos" + (g_zn != "" ? " (hora de " + g_zn + ")" : ""), C'40,200,120', 11);
+   RLabel(P + "HL1", x + 10, y + 34, "Solo operar en estas sesiones (ninguna = sin limite)", clrWhite, 9);
+   for(int i = 0; i < 4; i++) HToggle(P + "HS" + IntegerToString(i), H_SESN[i], x + 10 + i * 81, y + 52, 77, EnLista(g_hs, H_SES[i]));
+   string hv[];
+   string ini = "", fin = "";
+   if(StringSplit(g_hv, '-', hv) == 2) { ini = hv[0]; fin = hv[1]; }
+   RLabel(P + "HL2", x + 10, y + 89, "O en estas horas (HH:MM)", clrWhite, 9);
+   HEdit(P + "HV0", x + 180, y + 86, 60, ini);
+   RLabel(P + "HL3", x + 246, y + 89, "a", clrWhite, 9);
+   HEdit(P + "HV1", x + 262, y + 86, 60, fin);
+   RLabel(P + "HL4", x + 10, y + 117, "Dias sin operar", clrWhite, 9);
+   for(int d = 0; d < 7; d++) HToggle(P + "HD" + IntegerToString(d), H_DIA[d], x + 10 + d * 46, y + 135, 42, EnLista(g_hd, IntegerToString(d)));
+   RLabel(P + "HL5", x + 10, y + 172, "Noticias fuertes: min antes y despues (0 = no)", clrWhite, 9);
+   HEdit(P + "HN", x + 262, y + 169, 60, IntegerToString(g_nr));
+   RLabel(P + "HL6", x + 10, y + 200, "Pausa hasta (AAAA-MM-DD, vacio = sin pausa)", clrWhite, 9);
+   HEdit(P + "HP", x + 232, y + 197, 90, g_ph);
+   RBoton(P + "HSV", "Guardar", x + 10, y + 232, 150, clrSeaGreen);
+   RBoton(P + "HX", "Cerrar", x + 170, y + 232, 150, C'70,70,70');
+   HorarioPie();
+}
+
+void HorarioCerrar()
+{
+   if(!g_horAbierto) return;
+   g_horAbierto = false;
+   ObjectsDeleteAll(0, P + "H");
+   ChartRedraw();
+}
+
+bool HoraOk(string t)
+{
+   string p[];
+   if(StringSplit(t, ':', p) != 2) return false;
+   int h = (int)StringToInteger(p[0]), m = (int)StringToInteger(p[1]);
+   return StringLen(p[1]) == 2 && h >= 0 && h <= 23 && m >= 0 && m <= 59;
+}
+
+void HorarioGuardar()
+{
+   if(g_token == "") { ReglasMsg("Primero conecta con VICTOR con tu codigo de 6 digitos."); return; }
+   string ses = "", dias = "";
+   for(int i = 0; i < 4; i++) if(ObjectGetInteger(0, P + "HS" + IntegerToString(i), OBJPROP_STATE)) ses += (ses == "" ? "" : ",") + H_SES[i];
+   for(int d = 0; d < 7; d++) if(ObjectGetInteger(0, P + "HD" + IntegerToString(d), OBJPROP_STATE)) dias += (dias == "" ? "" : ",") + IntegerToString(d);
+   string ini = ObjectGetString(0, P + "HV0", OBJPROP_TEXT), fin = ObjectGetString(0, P + "HV1", OBJPROP_TEXT);
+   StringTrimLeft(ini); StringTrimRight(ini); StringTrimLeft(fin); StringTrimRight(fin);
+   string ven = "";
+   if(ini != "" || fin != "")
+   {
+      if(!HoraOk(ini) || !HoraOk(fin) || ini == fin) { ReglasMsg("Horas: escribelas como 08:00 y 14:00 (o deja las dos vacias)."); return; }
+      ven = ini + "-" + fin;
+   }
+   int nr = (int)StringToInteger(ObjectGetString(0, P + "HN", OBJPROP_TEXT));
+   if(nr < 0 || nr > 120) { ReglasMsg("Noticias: de 0 a 120 minutos."); return; }
+   string ph = ObjectGetString(0, P + "HP", OBJPROP_TEXT);
+   StringTrimLeft(ph); StringTrimRight(ph);
+   if(ph != "" && (StringLen(ph) != 10 || StringSubstr(ph, 4, 1) != "-" || StringSubstr(ph, 7, 1) != "-")) { ReglasMsg("Pausa: escribe la fecha como 2026-12-31."); return; }
+   g_hor = "{\"ses\":" + JStr(ses) + ",\"ven\":" + JStr(ven) + ",\"dias\":" + JStr(dias)
+         + ",\"news\":" + IntegerToString(nr) + ",\"pausa\":" + JStr(ph) + "}";
+   g_lastTry = 0;
    ReglasMsg("Enviando a VICTOR...");
 }
 
@@ -1625,9 +1786,11 @@ void SyncTick()
       + ",\"lock\":" + JStr(lockTxt) + ",\"losers\":" + IntegerToString(dLos) + ",\"maxl\":" + IntegerToString(MaxLosersPerDay)
       + ",\"left\":" + DoubleToString(leftUsd, 2) + ",\"open\":[" + opn + "],\"events\":[" + g_evs + "]"
       + (g_set != "" ? ",\"set\":" + g_set : "")
+      + (g_hor != "" ? ",\"hor\":" + g_hor : "")
       + ",\"trades\":[" + items + "]}";
    string evsEnviados = g_evs;
    string setEnviado = g_set;
+   string horEnviado = g_hor;
    char data[], res[];
    string rh;
    StringToCharArray(body, data, 0, StringLen(body), CP_UTF8);
@@ -1648,13 +1811,15 @@ void SyncTick()
          if(c1 > c0) ApplyCfg(StringSubstr(resp, c0, c1 - c0));
       }
       // 4.0: respuesta a las reglas que cambiaste en el panel
-      if(setEnviado != "")
+      if(setEnviado != "" || horEnviado != "")
       {
-         if(g_set == setEnviado) g_set = "";
+         if(setEnviado != "" && g_set == setEnviado) g_set = "";
+         if(horEnviado != "" && g_hor == horEnviado) g_hor = "";
          string sm = JGet(resp, "setmsg");
          if(sm == "") sm = "Reglas enviadas a VICTOR.";
          Alert("VictorGuard: ", sm);
          if(g_reglasAbiertas) { ReglasCerrar(); ReglasAbrir(); }
+         if(g_horAbierto) { HorarioCerrar(); HorarioAbrir(); }
          ReglasMsg(sm);
       }
       g_sync = "Sync OK " + TimeToString(TimeLocal(), TIME_MINUTES) + " (" + IntegerToString(ns) + " nuevos)";
@@ -1712,9 +1877,9 @@ int OnInit()
    MakeButton(P + "SELL", "VENDER",  10, 30, clrFireBrick);   // mismo orden que MT5: vender a la izquierda
    MakeButton(P + "BUY",  "COMPRAR", 130, 30, clrSeaGreen);
    MakeButton(P + "BRG",  "Reglas", 250, 30, C'40,90,160');
-   MakeButton(P + "BSL",  "Traer SL", 370, 30, C'90,40,40');
-   // 4.0: linea de Stop Loss (si cambiaste de temporalidad, sigue donde la tenias)
-   if(GlobalVariableCheck(GvLinea())) { LineaPoner(GlobalVariableGet(GvLinea())); GlobalVariableDel(GvLinea()); }
+   MakeButton(P + "BHO",  "Horario", 370, 30, C'40,90,160');
+   // linea de Stop Loss (si cambiaste de temporalidad, sigue a la misma distancia)
+   if(GlobalVariableCheck(GvLinea())) { g_slOff = GlobalVariableGet(GvLinea()); GlobalVariableDel(GvLinea()); LineaSeguir(); }
    else LineaReglas();
    ObjectCreate(0, P + "ST", OBJ_LABEL, 0, 0, 0);
    ObjectSetString(0, P + "ST", OBJPROP_TEXT, " ");
@@ -1758,9 +1923,9 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
-   if(reason == REASON_CHARTCHANGE && ObjectFind(0, P + "SLL") >= 0)
-      GlobalVariableSet(GvLinea(), ObjectGetDouble(0, P + "SLL", OBJPROP_PRICE));
+   if(reason == REASON_CHARTCHANGE && g_slOff != 0) GlobalVariableSet(GvLinea(), g_slOff);
    g_reglasAbiertas = false;
+   g_horAbierto = false;
    if(hMA != INVALID_HANDLE) IndicatorRelease(hMA);
    for(int i = 0; i < ArraySize(g_atrH); i++) if(g_atrH[i] != INVALID_HANDLE) IndicatorRelease(g_atrH[i]);
    ArrayResize(g_atrSym, 0); ArrayResize(g_atrH, 0);
@@ -1768,17 +1933,26 @@ void OnDeinit(const int reason)
 }
 
 void OnTimer()  { Guard(); GuardOrders(); UpdatePanel(); PairTick(); SyncTick(); }
-void OnTick()   { Guard(); GuardOrders(); AutoEntryCheck(); }
+void OnTick()   { Guard(); GuardOrders(); AutoEntryCheck(); LineaSeguir(); }
 
 void OnChartEvent(const int id, const long &lp, const double &dp, const string &sp)
 {
-   if(id == CHARTEVENT_OBJECT_DRAG && sp == P + "SLL") { UpdatePanel(); return; }
+   if(id == CHARTEVENT_OBJECT_DRAG && sp == P + "SLL") { LineaSoltada(); UpdatePanel(); return; }
    if(id == CHARTEVENT_OBJECT_ENDEDIT && StringFind(sp, P + "RE") == 0) { ReglasPie(); return; }
    if(id != CHARTEVENT_OBJECT_CLICK) return;
    if(sp == P + "BRG") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); if(g_reglasAbiertas) ReglasCerrar(); else ReglasAbrir(); return; }
    if(sp == P + "RX")  { ReglasCerrar(); return; }
    if(sp == P + "RSV") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); ReglasGuardar(); return; }
-   if(sp == P + "BSL") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); LineaReglas(); UpdatePanel(); return; }
+   if(sp == P + "BHO") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); if(g_horAbierto) HorarioCerrar(); else HorarioAbrir(); return; }
+   if(sp == P + "HX")  { HorarioCerrar(); return; }
+   if(sp == P + "HSV") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); HorarioGuardar(); return; }
+   if(StringFind(sp, P + "HS") == 0 || StringFind(sp, P + "HD") == 0)
+   {
+      bool on = (bool)ObjectGetInteger(0, sp, OBJPROP_STATE);
+      ObjectSetInteger(0, sp, OBJPROP_BGCOLOR, on ? C'31,157,116' : C'50,55,65');
+      ChartRedraw();
+      return;
+   }
    if(sp == P + "BUY")  { ObjectSetInteger(0, sp, OBJPROP_STATE, false); OpenTrade(true); }
    if(sp == P + "SELL") { ObjectSetInteger(0, sp, OBJPROP_STATE, false); OpenTrade(false); }
    if(StringFind(sp, P + "XB") == 0)
