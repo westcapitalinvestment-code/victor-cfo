@@ -926,9 +926,9 @@ function RegistroForm() {
                   ? "Entra gratis 7 días — sin tarjeta"
                   : emailFlujo.gratis
                   ? "Creando tu cuenta gratis"
-                  : `Creando tu cuenta ${
-                      emailFlujo.plan === "proplus" ? "Business" : emailFlujo.plan === "pro" ? "Pro" : "Core"
-                    }`}
+                  : `Tu cuenta ${
+                      emailFlujo.plan === "proplus" ? "Business" : emailFlujo.plan === "pro" ? "Pro" : esTrading ? "Core + Trading" : "Core"
+                    }${esReferido ? "" : " — 7 días gratis, sin tarjeta"}`}
               </p>
 
               {error && <p className="text-center text-sm text-red">{error}</p>}
@@ -959,7 +959,9 @@ function RegistroForm() {
                   ? "Creando cuenta..."
                   : emailFlujo.gratis || simple
                     ? "Crear cuenta gratis"
-                    : "Crear cuenta y pagar"}
+                    : esReferido
+                      ? "Crear mi cuenta"
+                      : "Empezar mis 7 días gratis"}
               </button>
 
               <button
