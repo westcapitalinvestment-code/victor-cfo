@@ -69,7 +69,9 @@ function MockPanel() {
 // 24 nov 2026: el anuncio "5 – Un mal día" trae casi todo el tráfico y habla
 // del trade de revancha; la portada hablaba de cuentas de fondeo. Quien llega de
 // ese anuncio (o con ?v=maldia) ve una portada con su mismo mensaje.
-const ANUNCIOS_MAL_DIA = ["52631811859045"];
+// 28 nov 2026: se suma el anuncio "6 – Mal día (video)" (el de más tráfico), que
+// estaba viendo la portada de inversionista en vez de la del mal día.
+const ANUNCIOS_MAL_DIA = ["52631811859045", "52632344307445"];
 
 export default function TradingLanding() {
   const [href, setHref] = useState("/registro?plan=core&ciclo=mensual&trading=1");
@@ -93,11 +95,10 @@ export default function TradingLanding() {
     setMalDia(q.get("v") === "maldia" || ANUNCIOS_MAL_DIA.includes(q.get("utm_content") ?? ""));
   }, []);
 
-  // Primer paso fácil (24 nov 2026): plan gratis sin registro, pensado para el celular.
-  const botonPlan = (texto: string) => (
+  const botonRegistro = (texto: string) => (
     <Link
-      href={planHref}
-      onClick={() => marcarEmbudo("clic_plan")}
+      href={href}
+      onClick={() => marcarEmbudo("clic_cta_trading")}
       className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#19E68C] px-9 py-4 text-lg font-bold text-[#07090D] shadow-[0_0_40px_-5px_rgba(25,230,140,0.6)] transition hover:brightness-110 sm:w-auto"
     >
       {texto} <span aria-hidden>→</span>
@@ -108,7 +109,7 @@ export default function TradingLanding() {
   const mensual = PRECIO_CORE_TRADING.mensual;
 
   const pasos = [
-    { t: "Arma tu plan", d: "Contestas 4 preguntas y VICTOR te propone cuánto arriesgar por trade, tu límite del día y cuándo parar. Gratis, sin registrarte.", s: "cuenta $3,000 · riesgo $30 · límite $90/día" },
+    { t: "Arma tu plan", d: "Contestas 4 preguntas y VICTOR te propone cuánto arriesgar por trade, tu límite del día y cuándo parar. En 1 minuto.", s: "cuenta $3,000 · riesgo $30 · límite $90/día" },
     { t: "Conecta tu MT5", d: "Instalas el guardián en tu MetaTrader 5 y lo vinculas con un código de 6 dígitos. Sin contraseñas ni configuraciones raras.", s: "Código: 482 913 ✓" },
     { t: "Opera como siempre", d: "Tú decides las entradas. El guardián calcula tu lote, pone tu stop y te frena cuando llegas a tu límite del día.", s: "lote 0.26 · stop 1.15 · riesgo $29.90" },
     { t: "Revisa con VICTOR", d: "Cada trade llega solo a tu bitácora. VICTOR revisa tus números contigo y te dice qué te funciona y qué ajustar.", s: "plan cumplido 92% este mes" },
@@ -118,7 +119,7 @@ export default function TradingLanding() {
     { t: "No mueve tu dinero", d: "Tu capital se queda en tu broker, a tu nombre. VICTOR no deposita, no retira ni mueve tu dinero." },
     { t: "No opera por ti", d: "No da señales ni abre trades. Solo aplica las reglas que tú pusiste, para que un mal día no te borre la semana." },
     { t: "Tus reglas, siempre", d: "Tú decides los límites y los puedes cambiar cuando quieras. VICTOR te sugiere, tú apruebas." },
-    { t: "Sin compromiso", d: "7 días gratis sin tarjeta. Si no es para ti, no haces nada y no pagas nada." },
+    { t: "Sin compromiso", d: "Pruébalo 7 días sin tarjeta. Si no es para ti, no haces nada y no pagas nada." },
   ];
 
   return (
@@ -179,11 +180,18 @@ export default function TradingLanding() {
                 </p>
               </>
             )}
-            {botonPlan("Arma tu plan gratis en 1 minuto")}
+            {/* 28 nov 2026 (Joel): el botón principal lleva directo a la cuenta
+                (antes al cuestionario: muchos pasos antes de ver valor), sin decir
+                "gratis" (huele a truco). Se aclara que es para MT5. */}
+            {botonRegistro("Comienza ahora")}
+            <p className="mt-3 text-sm text-[#C9D2DA]">Prueba 7 días · sin tarjeta · cancelas cuando quieras</p>
+            <p className={`${jb.className} mt-4 max-w-xl text-xs leading-relaxed text-[#7D8A96]`}>
+              Para MetaTrader 5 (Windows, Mac o VPS). ¿Estás en el celular? Crea tu cuenta ahora y lo conectas después desde tu computadora.
+            </p>
             <p className="mt-4 text-[#C9D2DA]">
-              ¿Ya tienes reglas?{" "}
-              <Link href={href} onClick={() => marcarEmbudo("clic_cta_trading")} className="font-bold text-[#19E68C] underline underline-offset-4">
-                Pruébalo 7 días gratis
+              ¿Prefieres ver tu plan primero?{" "}
+              <Link href={planHref} onClick={() => marcarEmbudo("clic_plan")} className="font-bold text-[#19E68C] underline underline-offset-4">
+                Ármalo en 1 minuto
               </Link>
             </p>
           </div>
@@ -194,7 +202,7 @@ export default function TradingLanding() {
             como un paso a paso, confiable y que den ganas de probarlo). */}
         <section className="mb-24 md:mb-32">
           <div className={`${jb.className} flex flex-wrap justify-center gap-3 text-sm font-bold`}>
-            {["Tu capital se queda en tu broker", "Tú decides cada trade", "7 días gratis, sin tarjeta"].map((x) => (
+            {["Tu capital se queda en tu broker", "Tú decides cada trade", "Prueba 7 días sin tarjeta"].map((x) => (
               <span key={x} className="rounded-full border border-[#19E68C]/40 bg-[#19E68C]/5 px-4 py-2 text-[#19E68C]">
                 ✓ {x}
               </span>
@@ -235,7 +243,7 @@ export default function TradingLanding() {
               </li>
             ))}
           </ol>
-          <div className="mt-10 text-center">{botonPlan("Empezar por el paso 1")}</div>
+          <div className="mt-10 text-center">{botonRegistro("Haz tu prueba")}</div>
         </section>
 
         {/* 4. TRANQUILIDAD */}
@@ -302,9 +310,9 @@ export default function TradingLanding() {
             Empieza tu negocio <span className="text-[#19E68C]">de trading.</span>
           </h2>
           <div className="flex flex-col items-center gap-3">
-            {botonPlan("Arma tu plan gratis en 1 minuto")}
-            <Link href={href} onClick={() => marcarEmbudo("clic_cta_trading")} className="text-[#C9D2DA] underline underline-offset-4">
-              o empieza tus 7 días gratis
+            {botonRegistro("Comienza ahora")}
+            <Link href={planHref} onClick={() => marcarEmbudo("clic_plan")} className="text-[#C9D2DA] underline underline-offset-4">
+              o arma tu plan primero en 1 minuto
             </Link>
           </div>
           <p className="mt-6 text-base font-bold text-[#F2F5F7]">

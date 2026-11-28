@@ -202,11 +202,11 @@ function RegistroForm() {
     return esReferido
       ? `Tu primer mes de ${nombre} es gratis, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
       : planId === "core" && esTrading
-        ? `7 días gratis, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
+        ? `Pruébalo 7 días sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
         : planId === "core"
           ? // La prueba tiene acceso Pro (24 nov 2026); se cobra Core solo si lo activa.
-            `7 días gratis con todo Pro, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
-          : `7 días gratis, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`;
+            `Prueba 7 días con todo Pro, sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`
+          : `Pruébalo 7 días sin tarjeta. Si te gusta, luego $${precioMostrar}${sufijo}. Cancela cuando quieras.`;
   }
 
   const [email, setEmail] = useState("");
@@ -413,7 +413,7 @@ function RegistroForm() {
           </div>
           <div className="vc-card flex flex-col gap-4 p-7">
             <div className="text-center">
-              <h1 className="text-2xl font-semibold text-text">Entra gratis 7 días</h1>
+              <h1 className="text-2xl font-semibold text-text">Pruébalo 7 días</h1>
               <p className="mt-1 text-sm text-muted">Sin tarjeta. Sin escoger plan. Sin compromiso.</p>
             </div>
             <ol className="flex flex-col gap-3 text-sm">
@@ -443,7 +443,7 @@ function RegistroForm() {
                 continuarConOAuth("google", false, planDestacado);
               }}
             >
-              {oauthEnCurso === "google" ? "..." : "Entrar gratis con Google"}
+              {oauthEnCurso === "google" ? "..." : "Comenzar con Google"}
             </button>
             <button
               type="button"
@@ -755,7 +755,7 @@ function RegistroForm() {
                           continuarConOAuth("google", false, "core");
                         }}
                       >
-                        {oauthEnCurso === "google" ? "..." : "Empezar gratis con Google"}
+                        {oauthEnCurso === "google" ? "..." : "Comenzar ahora con Google"}
                       </button>
                       <button
                         type="button"
@@ -923,12 +923,12 @@ function RegistroForm() {
             <form onSubmit={handleRegistro} className="vc-card flex flex-col gap-3 p-8">
               <p className="text-center text-sm font-medium text-text">
                 {simple
-                  ? "Entra gratis 7 días — sin tarjeta"
+                  ? "Pruébalo 7 días — sin tarjeta"
                   : emailFlujo.gratis
                   ? "Creando tu cuenta gratis"
                   : `Tu cuenta ${
                       emailFlujo.plan === "proplus" ? "Business" : emailFlujo.plan === "pro" ? "Pro" : esTrading ? "Core + Trading" : "Core"
-                    }${esReferido ? "" : " — 7 días gratis, sin tarjeta"}`}
+                    }${esReferido ? "" : " — prueba de 7 días, sin tarjeta"}`}
               </p>
 
               {error && <p className="text-center text-sm text-red">{error}</p>}
@@ -957,11 +957,13 @@ function RegistroForm() {
               <button type="submit" className="vc-btn-primary mt-1" disabled={loading || !terminos[claveEmail]}>
                 {loading
                   ? "Creando cuenta..."
-                  : emailFlujo.gratis || simple
+                  : simple
+                    ? "Comenzar ahora"
+                    : emailFlujo.gratis
                     ? "Crear cuenta gratis"
                     : esReferido
                       ? "Crear mi cuenta"
-                      : "Empezar mis 7 días gratis"}
+                      : "Comenzar ahora"}
               </button>
 
               <button
