@@ -1544,7 +1544,7 @@ export const VICTOR_TOOLS: Anthropic.Tool[] = [
       "Módulo Trading — GUARDA de verdad los cambios a las reglas del guardián. NUNCA la llames sin antes haber llamado " +
       "previsualizar_cambio_reglas_trading con EXACTAMENTE los mismos datos, haberle mostrado el resumen al usuario y que él confirme " +
       "explícitamente ('sí', 'dale', 'aplícalo'). Apretar aplica al instante; aflojar, desde mañana a medianoche en su hora. El guardián de " +
-      "MT5 recibe las reglas solo al sincronizar (si su guardián es de antes del 22 nov 2026, tiene que descargarlo una vez más en Trading → Riesgo).",
+      "MT5 recibe las reglas solo al sincronizar (si su guardián es de antes del 22 nov 2026, tiene que descargarlo una vez más en Trading → Reglas). Desde el guardián 4.1 el usuario también puede cambiar sus reglas y su horario directo en MT5 con los botones Reglas y Horario del gráfico (misma regla: apretar ya, aflojar desde mañana).",
     input_schema: {
       type: "object",
       properties: {
@@ -5747,7 +5747,7 @@ export async function executeVictorTool(
       const lineaPlan =
         (pruebaIni
           ? `Periodo de prueba: empezó ${pruebaIni}, ${pruebaDias} días, ${pruebaTerminada ? `TERMINÓ el ${pruebaFin}` : `termina ${pruebaFin}`}.\n`
-          : "Sin periodo de prueba activo (puede empezar uno con el cuestionario 'Armar mi plan' en Trading → Riesgo, o tú puedes reiniciarlo al aplicar cambios).\n") +
+          : "Sin periodo de prueba activo (puede empezar uno con el cuestionario 'Armar mi plan' en Trading → Reglas, o tú puedes reiniciarlo al aplicar cambios).\n") +
         `Bloqueos: ${describirBloqueos(bloq).join(" ") || "ninguno (puede operar a cualquier hora)."} Zona horaria: ${bloq.zona}. Ahora mismo: ${est.permitido ? "puede operar" : `bloqueado (${est.motivo})`}${est.cambiaA ? `, cambia ${cuandoLocal(bloq, est.cambiaA)}` : ""}.\n` +
         (pend.length ? `Cambios pendientes (aplican desde mañana): ${pend.map((p) => Object.keys(p.cambios).join(", ")).join("; ")}.\n` : "");
       const desde =
@@ -5917,8 +5917,8 @@ export async function executeVictorTool(
           `Reglas guardadas.${r.ahora.length ? ` Aplicado ya: ${r.ahora.join(", ")}.` : ""}` +
           (r.manana.length ? ` Desde mañana a medianoche (su hora): ${r.manana.join(", ")}.` : "") +
           (reiniciar ? ` Empezó un nuevo periodo de prueba de ${diasPrueba} días.` : "") +
-          " El guardián de MT5 las recibe solo al sincronizar (cada ~30 s con MT5 abierto). Si su guardián es de antes del 22 nov 2026, tiene que descargarlo una vez más en Trading → Riesgo." +
-          " El usuario puede ver o cancelar lo pendiente en Trading → Riesgo.",
+          " El guardián de MT5 las recibe solo al sincronizar (cada ~30 s con MT5 abierto). Si su guardián es de antes del 22 nov 2026, tiene que descargarlo una vez más en Trading → Reglas." +
+          " El usuario puede ver o cancelar lo pendiente en Trading → Reglas.",
       };
     }
 
